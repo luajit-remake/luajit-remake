@@ -1,0 +1,11 @@
+__llvm__
+build/
+toylang.cflags
+toylang.config
+toylang.creator
+toylang.creator.user
+toylang.cxxflags
+toylang.files
+toylang.includes
+main
+shared_libs

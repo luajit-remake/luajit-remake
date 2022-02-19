@@ -1,0 +1,162 @@
+#!/usr/bin/python3 
+
+import os
+import sys
+import shutil
+import multiprocessing
+from subprocess import Popen
+
+path = os.path.realpath(__file__)
+base_dir = os.path.dirname(path)
+script_name = os.path.basename(__file__)
+
+def PrintUsageGeneralAndDie():
+    print('Usage: %s <update-docker-image|env|make> [args...]' % (script_name))
+    print('Options:')
+    print('    update-docker-image:')
+    print("        Update the build environment after you modify 'dockerfile/Dockerfile'.")
+    print('    env: ')
+    print('        Launch an interactive shell in the build environment.')
+    print('    make: ')
+    print('        Execute the build process.')
+    sys.exit(1)
+
+def PrintUsageMakeAndDie():
+    print('Usage: %s make <debug|testrel|release> [clean]' % (script_name))
+    sys.exit(1)
+
+def GetBuildDir():
+    return os.path.join(base_dir, 'build')
+
+def GetCCacheDir():
+    return os.path.join(GetBuildDir(), 'ccache')
+
+def GetBuildDirFlavor(flavor):
+    assert(flavor == 'debug' or flavor == 'testrel' or flavor == 'release')
+    return os.path.join(GetBuildDir(), flavor)
+
+def GetGeneratedDir():
+    return os.path.join(base_dir, '__generated__')
+
+def GetGeneratedDirFlavor(flavor):
+    assert(flavor == 'debug' or flavor == 'testrel' or flavor == 'release')
+    return os.path.join(GetGeneratedDir(), flavor)
+    
+def CreateDirIfNotExist(dirname):
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+
+if (len(sys.argv) < 2):
+    PrintUsageGeneralAndDie()
+
+op = sys.argv[1]
+
+if (op != 'update-docker-image' and op != 'env' and op != 'make'):
+    print('Unknown operation "%s".' % op)
+    PrintUsageGeneralAndDie()
+
+if (op == 'env'):
+    cmd = "docker run -it -v %s:/home/u/project --workdir='/home/u/project' %s:latest" % (base_dir, script_name)
+    r = os.system(cmd)
+    sys.exit(r)
+
+def BuildOrUpdateDockerImage():
+    docker_dir = os.path.join(base_dir, 'dockerfile')
+    if not os.path.exists(os.path.join(docker_dir, 'Dockerfile')):
+        print('[ERROR] Dockerfile not found!')
+        sys.exit(1)
+    cmd = 'docker build --tag %s:latest %s' % (script_name, docker_dir)
+    r = os.system(cmd)
+    if (r != 0):
+        print('[ERROR] Failed to build docker image, exit code = %d' % r)
+        sys.exit(r)
+    
+    CreateDirIfNotExist(os.path.join(base_dir, 'shared_libs'))
+    all_shared_libs = [
+        '/lib/x86_64-linux-gnu/libtinfo.so.5'
+    ]
+    for shared_lib in all_shared_libs:
+        cmd = 'docker run -v%s:/home/u/project %s:latest cp %s /home/u/project/shared_libs' % (base_dir, script_name, shared_lib)
+        r = os.system(cmd)
+        if (r != 0):
+            print('[ERROR] Failed to copy shared library %s, exit code = %d' % (shared_lib, r))
+            sys.exit(r)
+
+if (op == 'update-docker-image'):
+    BuildOrUpdateDockerImage();
+    sys.exit(0)
+
+r = os.system('docker inspect --type=image %s:latest >/dev/null 2>&1' % (script_name))
+if (r != 0):
+    print("Docker image '%s:latest' does not exist." % (script_name))
+    print('Building docker image, this may take a while...')
+    BuildOrUpdateDockerImage();
+    print('Docker image successfully built.')
+    
+if (op == 'make'):
+    if (len(sys.argv) < 3 or len(sys.argv) > 4):
+        PrintUsageMakeAndDie()
+        
+    target = sys.argv[2]
+    if (target != 'debug' and target != 'testrel' and target != 'release'):
+        print('Unknown make target "%s".' % target)
+        PrintUsageMakeAndDie()
+    
+    isClean = False
+    if (len(sys.argv) == 4):
+        if (sys.argv[3] != 'clean'):
+            PrintUsageMakeAndDie()
+        isClean = True
+        
+    if (isClean):
+        dirname = GetBuildDirFlavor(target)
+        print('Removing directory: %s' % dirname)
+        shutil.rmtree(dirname)
+        sys.exit(0)
+    
+    CreateDirIfNotExist(GetBuildDir())
+    CreateDirIfNotExist(GetCCacheDir())
+    CreateDirIfNotExist(GetBuildDirFlavor(target))
+    CreateDirIfNotExist(GetGeneratedDir())
+    CreateDirIfNotExist(GetGeneratedDirFlavor(target))
+    CreateDirIfNotExist(os.path.join(GetGeneratedDirFlavor(target), 'generated'))
+    
+    cmd = "docker run -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, script_name, target, target.upper())
+    r = os.system(cmd)
+    if (r != 0):
+        sys.exit(r)
+    
+    if (not os.path.exists(GetBuildDirFlavor(target))):
+        print("[INTERNAL ERROR] Build directory 'build/%s' does not exist. A bug?" % target)
+        sys.exit(1)
+       
+    if (isClean):
+        option = "clean"
+    else:
+        parallelism = 1
+        num_cpus = multiprocessing.cpu_count()
+        if (2 <= num_cpus and num_cpus <= 4):
+            parallelism = num_cpus - 1
+        else:
+            if (num_cpus > 4):
+                parallelism = num_cpus - 2
+        option = ("-j%s" % str(parallelism))
+    cmd = "docker run -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && ninja %s'" % (base_dir, script_name, target, option)
+    r = os.system(cmd)
+    if (r != 0):
+        sys.exit(r)
+        
+    if (not isClean):
+        # copy executable to project root
+        print('Copying built artifact to project root directory..')
+        src = os.path.join(GetBuildDirFlavor(target), "main")
+        dst = os.path.join(base_dir, "main")
+        p = Popen(['cp', '-p', '--preserve', src, dst])
+        p.wait()
+        print('Build completed successfully.') 
+        
+    sys.exit(0)
+
+assert(False)
+
+
