@@ -11,9 +11,11 @@ constexpr int math_power(int base, int exp)
     return result;
 }
 
-constexpr int is_power_of_2(int value)
+template<typename T>
+constexpr bool is_power_of_2(T value)
 {
-    return value > 0 && (value & -value) == value;
+    static_assert(std::is_integral_v<T>, "must be integer");
+    return value > 0 && (value & (value - 1)) == 0;
 }
 
 }   // namespace CommonUtils

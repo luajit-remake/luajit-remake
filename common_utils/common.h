@@ -31,6 +31,8 @@
 #include <time.h>
 #include <unordered_set>
 #include <typeinfo>
+#include <random>
+#include <mutex>
 #include "function_ref.h"
 
 #define rep(i,l,r) for (int i=(l); i<=(r); i++)
@@ -200,3 +202,9 @@ protected:
 //     static_assert(type_dependent_false<T>::value, ...)
 //
 template<class T> struct type_dependent_false : std::false_type {};
+
+#define SUPRESS_FLOAT_EQUAL_WARNING(...)                    \
+    _Pragma("clang diagnostic push")                        \
+    _Pragma("clang diagnostic ignored \"-Wfloat-equal\"")   \
+    __VA_ARGS__                                             \
+    _Pragma("clang diagnostic pop")

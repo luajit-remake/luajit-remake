@@ -10,3 +10,4 @@
 #include "reflective_stringify_helper.h"
 #include "constexpr_array_concat_helper.h"
 #include "misc_type_helper.h"
+#include "misc_math_helper.h"

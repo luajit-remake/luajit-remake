@@ -96,4 +96,37 @@ void ConvertPointerTupleToVoidStarVector(const Tuple& t, std::vector<void*>* out
     internal::PointerTupleToVoidStarVectorImpl<Tuple>::template run<0>(t, output);
 }
 
+#define FOLD_CONSTEXPR(...) (__builtin_constant_p(__VA_ARGS__) ? (__VA_ARGS__) : (__VA_ARGS__))
+
+namespace internal
+{
+
+template<typename Base, typename Derived>
+constexpr uint64_t offsetof_base_impl()
+{
+    static_assert(std::is_base_of_v<Base, Derived>);
+    constexpr const Derived* d = FOLD_CONSTEXPR(reinterpret_cast<const Derived*>(sizeof(Derived)));
+    constexpr const Base* b = static_cast<const Base*>(d);
+
+    constexpr const uint8_t* du = FOLD_CONSTEXPR(reinterpret_cast<const uint8_t*>(d));
+    constexpr const uint8_t* bu = FOLD_CONSTEXPR(reinterpret_cast<const uint8_t*>(b));
+
+    static_assert(bu >= du);
+    return bu - du;
+}
+
+template<typename Base, typename Derived, typename Enable = void>
+struct offsetof_base { };
+
+template<typename Base, typename Derived>
+struct offsetof_base<Base, Derived, std::enable_if_t<std::is_base_of_v<Base, Derived>>>
+{
+    static constexpr uint64_t offset = offsetof_base_impl<Base, Derived>();
+};
+
+}   // namespace internal
+
+template<typename Base, typename Derived>
+constexpr uint64_t offsetof_base_v = internal::offsetof_base<Base, Derived>::offset;
+
 }   // namespace CommonUtils

@@ -56,7 +56,7 @@ if (op != 'update-docker-image' and op != 'env' and op != 'make'):
     PrintUsageGeneralAndDie()
 
 if (op == 'env'):
-    cmd = "docker run -it -v %s:/home/u/project --workdir='/home/u/project' %s:latest" % (base_dir, script_name)
+    cmd = "docker run -it -e CC='clang' -e CXX='clang++' -v %s:/home/u/project --workdir='/home/u/project' %s:latest" % (base_dir, script_name)
     r = os.system(cmd)
     sys.exit(r)
 
@@ -121,7 +121,7 @@ if (op == 'make'):
     CreateDirIfNotExist(GetGeneratedDirFlavor(target))
     CreateDirIfNotExist(os.path.join(GetGeneratedDirFlavor(target), 'generated'))
     
-    cmd = "docker run -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, script_name, target, target.upper())
+    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, script_name, target, target.upper())
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
@@ -141,7 +141,7 @@ if (op == 'make'):
             if (num_cpus > 4):
                 parallelism = num_cpus - 2
         option = ("-j%s" % str(parallelism))
-    cmd = "docker run -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && ninja %s'" % (base_dir, script_name, target, option)
+    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && ninja %s'" % (base_dir, script_name, target, option)
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
