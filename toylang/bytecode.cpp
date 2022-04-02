@@ -10,7 +10,8 @@ const InterpreterFn x_interpreter_dispatches[static_cast<size_t>(Opcode::X_END_O
         BcCall::Execute,
         BcAddVV::Execute,
         BcSubVV::Execute,
-        BcIsLTVV::Execute
+        BcIsLTVV::Execute,
+        BcConstant::Execute
 };
 
 }   // namespace ToyLang

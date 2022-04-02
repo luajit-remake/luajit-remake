@@ -156,11 +156,6 @@ struct GeneralHeapPointer
     int32_t m_value;
 };
 
-struct SpdsRegionPointer
-{
-    int32_t m_value;
-};
-
 template<typename T>
 struct SpdsPtr
 {
@@ -313,6 +308,11 @@ struct MiscImmediateValue
         return MiscImmediateValue { x_true };
     }
 
+    bool WARN_UNUSED ALWAYS_INLINE operator==(const MiscImmediateValue& rhs) const
+    {
+        return m_value == rhs.m_value;
+    }
+
     uint64_t m_value;
 };
 
@@ -443,6 +443,7 @@ public:
     static constexpr size_t x_vmLayoutLength = 12ULL << 30;
     static constexpr size_t x_vmLayoutAlignment = 4ULL << 30;
     static constexpr size_t x_vmBaseOffset = 8ULL << 30;
+    static constexpr size_t x_vmUserHeapSize = 4ULL << 30;
 
     template<typename... Args>
     static CRTP* WARN_UNUSED Create(Args&&... args)
@@ -551,6 +552,11 @@ public:
         return reinterpret_cast<CRTP*>(reinterpret_cast<HeapPtr<CRTP>>(0)->m_self);
     }
 
+    void SetUpSegmentationRegister()
+    {
+        X64_SetSegmentationRegister<X64SegmentationRegisterKind::GS>(m_self);
+    }
+
     SpdsAllocImpl<CRTP, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
     {
         return SpdsAllocImpl<CRTP, true /*isTempAlloc*/>(static_cast<CRTP*>(this));
@@ -572,23 +578,22 @@ public:
     //
     int32_t WARN_UNUSED ALWAYS_INLINE SpdsAllocatePage()
     {
-        int32_t out;
-        if (SpdsAllocateTryGetFreeListPage(&out))
         {
-            return out;
+            int32_t out;
+            if (SpdsAllocateTryGetFreeListPage(&out))
+            {
+                return out;
+            }
         }
-        else
-        {
-            return SpdsAllocatePageSlowPath();
-        }
+        return SpdsAllocatePageSlowPath();
     }
 
     void SpdsPutAllocatedPagesToFreeList(int32_t firstPage, int32_t lastPage)
     {
         std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(m_self + SignExtendTo<uint64_t>(lastPage) - 4);
+        uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_relaxed);
         while (true)
         {
-            uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_relaxed);
             uint32_t tag = BitwiseTruncateTo<uint32_t>(taggedValue >> 32);
             int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
             addr->store(head, std::memory_order_relaxed);
@@ -602,7 +607,48 @@ public:
         }
     }
 
+    // Allocate a chunk of memory from the user heap
+    // Only execution thread may do this
+    //
+    UserHeapPointer WARN_UNUSED ALWAYS_INLINE AllocFromUserHeap(uint32_t length)
+    {
+        assert(length > 0 && length % 8 == 0);
+        // TODO: we currently do not have GC, so it's only a bump allocator..
+        //
+        m_userHeapCurPtr -= static_cast<int64_t>(length);
+        if (unlikely(m_userHeapCurPtr < m_userHeapPtrLimit))
+        {
+            BumpUserHeap();
+        }
+        return UserHeapPointer { m_userHeapCurPtr };
+    }
+
 private:
+    void NO_INLINE BumpUserHeap()
+    {
+        assert(m_userHeapCurPtr < m_userHeapPtrLimit);
+        constexpr size_t x_allocationSize = 65536;
+        // TODO: consider allocating smaller sizes on the first few allocations
+        //
+        intptr_t newHeapLimit = m_userHeapCurPtr & (~static_cast<intptr_t>(x_allocationSize - 1));
+        assert(newHeapLimit <= m_userHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit < m_userHeapPtrLimit);
+        size_t lengthToAllocate = static_cast<size_t>(m_userHeapPtrLimit - newHeapLimit);
+        assert(lengthToAllocate % x_pageSize == 0);
+
+        uintptr_t allocAddr = m_self + static_cast<uint64_t>(newHeapLimit);
+        void* r = mmap(reinterpret_cast<void*>(allocAddr), static_cast<size_t>(lengthToAllocate), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
+        if (r == MAP_FAILED)
+        {
+            int e = errno;
+            fprintf(stderr, "Out of Memory: Allocation of length %d failed with error %d (%s), aborting.\n", static_cast<int>(lengthToAllocate), e, strerror(e));
+            ReleaseAssert(false);
+        }
+        assert(r == reinterpret_cast<void*>(allocAddr));
+
+        m_userHeapPtrLimit = newHeapLimit;
+        assert(m_userHeapPtrLimit <= m_userHeapCurPtr);
+    }
+
     bool WARN_UNUSED SpdsAllocateTryGetFreeListPage(int32_t* out)
     {
         uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_acquire);
@@ -622,7 +668,7 @@ private:
             tag++;
             uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(newHead);
 
-            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expect, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_acquire))
+            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expected, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_acquire))
             {
                 *out = head;
                 return true;
@@ -732,7 +778,6 @@ private:
 protected:
     VMLayout()
         : m_executionThreadSpdsAlloc(static_cast<CRTP*>(this))
-        , m_spdsPageFreeList(static_cast<uint64_t>(x_spdsAllocationPageSize))
         , m_compilerThreadSpdsAlloc(static_cast<CRTP*>(this))
     {
         static_assert(std::is_base_of_v<VMLayout, CRTP>, "wrong use of CRTP pattern");
@@ -743,23 +788,28 @@ protected:
 
         m_self = reinterpret_cast<uintptr_t>(static_cast<CRTP*>(this));
 
-        m_systemHeapPtr = static_cast<uint32_t>(RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP)));
+        m_userHeapPtrLimit = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
+        m_userHeapCurPtr = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
 
+        m_systemHeapPtr = static_cast<uint32_t>(RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP)));
+        m_systemHeapCurPtr = sizeof(CRTP);
+
+        m_spdsPageFreeList.store(static_cast<uint64_t>(x_spdsAllocationPageSize));
         m_spdsPageAllocLimit = 0;
     }
 
-    // must be first member
+    // must be first member, stores the value of static_cast<CRTP*>(this)
     //
     uintptr_t m_self;
 
     alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
 
-    // user heap region grows from low address to high address
-    // lowest physically unmapped address of the user heap region (offsets from m_self)
+    // user heap region grows from high address to low address
+    // highest physically mapped address of the user heap region (offsets from m_self)
     //
     int64_t m_userHeapPtrLimit;
 
-    // lowest logically available address of the user heap region (offsets from m_self)
+    // lowest logically used address of the user heap region (offsets from m_self)
     //
     int64_t m_userHeapCurPtr;
 
@@ -962,7 +1012,7 @@ public:
 };
 
 
-class FunctionObject : HeapObjectHeader
+class FunctionObject : public HeapObjectHeader
 {
 public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, FunctionObject>>>
@@ -1077,6 +1127,7 @@ enum class Opcode
     BcAddVV,
     BcSubVV,
     BcIsLTVV,
+    BcConstant,
     X_END_OF_ENUM
 };
 
@@ -1092,6 +1143,11 @@ _Pragma("clang diagnostic ignored \"-Wuninitialized\"")                         
         [[clang::musttail]] return x_interpreter_dispatches[dispatch_nextopcode]((rc), (stackframe), (instr), dispatch_unused);  \
 _Pragma("clang diagnostic pop")                                                                                                  \
     } while (false)
+
+inline void EnterInterpreter(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    Dispatch(rc, sfp, bcu);
+}
 
 // The return statement is required to fill nil up to x_minNilFillReturnValues values even if it returns less than that many values
 //
@@ -1153,7 +1209,6 @@ public:
     uint32_t m_numFixedParams;
     uint32_t m_numFixedRets;    // only used when m_keepVariadicRet == false
     BytecodeSlot m_funcSlot;   // params are [m_funcSlot + 1, ... m_funcSlot + m_numFixedParams]
-    BytecodeSlot m_retSlotBegin;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1257,7 +1312,7 @@ public:
                 // Set up the stack frame header
                 //
                 StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(baseForNextFrame) - 1;
-                sfh->m_caller = hdr;
+                sfh->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
                 sfh->m_retAddr = reinterpret_cast<void*>(OnReturn);
                 sfh->m_func = target;
 
@@ -1266,6 +1321,10 @@ public:
                 uint64_t unused;
                 [[clang::musttail]] return FunctionObject::GetInterpreterCodeBlock(target)->m_functionEntryPoint(rc, reinterpret_cast<RestrictPtr<void>>(baseForNextFrame), target->m_bytecode, unused);
                 _Pragma("clang diagnostic pop")
+            }
+            else
+            {
+                assert(false && "unimplemented");
             }
         }
         else
@@ -1277,7 +1336,7 @@ public:
     static void OnReturn(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> retValuesU, uint64_t numRetValues)
     {
         const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
-        StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(stackframe);
+        StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
         ConstRestrictPtr<uint8_t> bcu = hdr->m_func->m_bytecode + hdr->m_callerBytecodeOffset;
         const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
         assert(static_cast<Opcode>(bc->m_opcode) == Opcode::BcCall);
@@ -1395,6 +1454,22 @@ public:
         {
             assert(false && "unimplemented");
         }
+    }
+} __attribute__((__packed__));
+
+class BcConstant
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    TValue m_value;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcConstant* bc = reinterpret_cast<const BcConstant*>(bcu);
+        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcConstant));
+        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = bc->m_value;
+        Dispatch(rc, stackframe, bcu + sizeof(BcConstant));
     }
 } __attribute__((__packed__));
 

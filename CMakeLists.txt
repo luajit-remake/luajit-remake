@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 
 # set the project name
 #
@@ -48,6 +48,10 @@ endif()
 # 
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -pthread ")
 
+# add -mfsgsbase, we will check support at runtime before actually using those instructions, so always having the flag is fine
+#
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
+
 # -rdynamic so symbols are exposed to generated code
 # 
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic ")
@@ -70,7 +74,7 @@ add_subdirectory(gtest)
 
 # Append extra cxx warning flags
 #
-SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Werror ")
+SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Werror ")
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${EXTRA_WARNING_FLAGS} ")
 
 # llvm-specific flags
@@ -117,6 +121,7 @@ include_directories(${PROJECT_SOURCE_DIR})
 include_directories("${PROJECT_SOURCE_DIR}/common_utils")
 include_directories("${PROJECT_SOURCE_DIR}/toylang")
 
+add_subdirectory(common_utils)
 
 add_subdirectory(toylang)
 
@@ -125,10 +130,13 @@ add_subdirectory(toylang)
 add_executable(main
   main.cpp        
   test_boxing.cpp
+  test_interpreter.cpp
 )
 
 target_link_libraries(main PUBLIC
   gtest
+  common_utils
+  toylang
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )
 

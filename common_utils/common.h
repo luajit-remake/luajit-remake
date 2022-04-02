@@ -208,3 +208,5 @@ template<class T> struct type_dependent_false : std::false_type {};
     _Pragma("clang diagnostic ignored \"-Wfloat-equal\"")   \
     __VA_ARGS__                                             \
     _Pragma("clang diagnostic pop")
+
+#define COMPILER_REORDERING_BARRIER asm volatile("" ::: "memory")
