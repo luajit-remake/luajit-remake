@@ -33,6 +33,7 @@
 #include <typeinfo>
 #include <random>
 #include <mutex>
+#include "pp_common.h"
 #include "function_ref.h"
 
 #define rep(i,l,r) for (int i=(l); i<=(r); i++)
@@ -160,9 +161,72 @@ struct FalseOrNullptr
 };
 
 #define CHECK(expr) do { if (unlikely(!(expr))) return FalseOrNullptr(); } while (false)
-#define CHECK_ERR(expr) do { if (unlikely(!(expr))) { assert(thread_errorContext->HasError()); return FalseOrNullptr(); } } while (false)
 #define RETURN_TRUE do { assert(!thread_errorContext->HasError()); return true; } while (false)
 #define RETURN_FALSE do { assert(thread_errorContext->HasError()); return FalseOrNullptr(); } while (false)
+
+// Check for an error that we are unable to recover from
+// Currently when the check fails we simply abort, but in the future we should
+// gracefully free all memory and longjmp to a fault handler so the host application can continue
+//
+#define VM_FAIL_IF(expr, ...)                                                                                                   \
+    do { if (unlikely((expr))) {                                                                                                \
+        fprintf(stderr, "[FAIL] %s:%u: Irrecoverable error encountered due to unsatisfied check. VM is forced to abort.\n"      \
+        , __FILE__, __LINE__);                                                                                                  \
+        __VA_OPT__(fprintf(stderr, "[FAIL] Message: "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); )                  \
+        fflush(stderr); abort();                                                                                                \
+    } } while (false)
+
+#define VM_FAIL_WITH_ERRNO_IF(expr, format, ...)                                                                                \
+    do { if (unlikely((expr))) {                                                                                                \
+        int macro_vm_check_fail_tmp = errno;                                                                                    \
+        fprintf(stderr, "[FAIL] %s:%u: Irrecoverable error encountered due to unsatisfied check. VM is forced to abort.\n"      \
+        , __FILE__, __LINE__);                                                                                                  \
+        fprintf(stderr, "[FAIL] Message: " format " (Error %d: %s)\n" __VA_OPT__(,) __VA_ARGS__                                 \
+        , macro_vm_check_fail_tmp, strerror(macro_vm_check_fail_tmp));                                                          \
+        fflush(stderr); abort();                                                                                                \
+    } } while (false)
+
+#define DETAIL_LOG_INFO(prefix, format, ...)                    \
+    do { fprintf(stderr, prefix " %s:%u: " format "\n",         \
+    __FILE__, __LINE__                                          \
+    __VA_OPT__(,) __VA_ARGS__); } while (false)
+
+#define DETAIL_LOG_INFO_WITH_ERRNO(prefix, format, ...)     \
+    do { int macro_vm_log_warning_tmp = errno;              \
+    fprintf(stderr, prefix " %s:%u: " format                \
+    " (Error %d: %s)\n",                                    \
+    __FILE__, __LINE__                                      \
+    __VA_OPT__(,) __VA_ARGS__                               \
+    , macro_vm_log_warning_tmp                              \
+    , strerror(macro_vm_log_warning_tmp)); } while (false)
+
+#define LOG_WARNING(format, ...) DETAIL_LOG_INFO("[WARNING]", format, __VA_ARGS__)
+#define LOG_WARNING_WITH_ERRNO(format, ...) DETAIL_LOG_INFO_WITH_ERRNO("[WARNING]", format, __VA_ARGS__)
+
+#define LOG_WARNING_IF(expr, format, ...)                   \
+    do { if (unlikely((expr))) {                            \
+        LOG_WARNING(format, __VA_ARGS__);                   \
+    } } while (false)
+
+#define LOG_WARNING_WITH_ERRNO_IF(expr, format, ...)        \
+    do { if (unlikely((expr))) {                            \
+        LOG_WARNING_WITH_ERRNO(format, __VA_ARGS__);        \
+    } } while (false)
+
+#define LOG_ERROR(format, ...) DETAIL_LOG_INFO("[ERROR]", format, __VA_ARGS__)
+#define LOG_ERROR_WITH_ERRNO(format, ...) DETAIL_LOG_INFO_WITH_ERRNO("[ERROR]", format, __VA_ARGS__)
+
+#define CHECK_LOG_ERROR(expr, ...)                                                           \
+    do { if (unlikely(!(expr))) {                                                            \
+        LOG_ERROR(PP_OPTIONAL_DEFAULT_PARAM("Check '" #expr "' has failed." , __VA_ARGS__)); \
+        return FalseOrNullptr();                                                             \
+    } } while (false)
+
+#define CHECK_LOG_ERROR_WITH_ERRNO(expr, ...)                                                           \
+    do { if (unlikely(!(expr))) {                                                                       \
+        LOG_ERROR_WITH_ERRNO(PP_OPTIONAL_DEFAULT_PARAM("Check '" #expr "' has failed." , __VA_ARGS__)); \
+        return FalseOrNullptr();                                                                        \
+    } } while (false)
 
 #ifndef NDEBUG
 template<typename T, typename U>

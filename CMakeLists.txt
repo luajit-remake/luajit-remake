@@ -54,7 +54,7 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
 
 # -rdynamic so symbols are exposed to generated code
 # 
-SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic ")
+#SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic ")
 
 # If debug symbols are emitted, redirect them to point at the right location
 # The reference to source code files always have prefix ../../ (since we are building 
@@ -131,6 +131,7 @@ add_executable(main
   main.cpp        
   test_boxing.cpp
   test_interpreter.cpp
+  test_global_string_conser.cpp
 )
 
 target_link_libraries(main PUBLIC

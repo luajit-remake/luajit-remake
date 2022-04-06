@@ -1,0 +1,126 @@
+#include "bytecode.h"
+#include "gtest/gtest.h"
+
+using namespace ToyLang;
+
+namespace {
+
+void CheckStringObjectIsAsExpected(UserHeapPointer p, const void* expectedStr, size_t expectedLen)
+{
+    uint64_t expectedHash = HashString(expectedStr, expectedLen);
+    HeapPtr<HeapString> s = p.As<HeapString>();
+    ReleaseAssert(s->m_type == Type::STRING);
+    ReleaseAssert(static_cast<size_t>(s->m_length) == expectedLen);
+    ReleaseAssert(s->m_hashHigh == static_cast<uint16_t>(expectedHash >> 48));
+    ReleaseAssert(s->m_hashLow == static_cast<uint32_t>(expectedHash));
+    void* ptr = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(s->m_string);
+    ReleaseAssert(memcmp(ptr, expectedStr, expectedLen) == 0);
+}
+
+TEST(GlobalStringHashConser, Sanity)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    vm->SetUpSegmentationRegister();
+
+    UserHeapPointer p1 = vm->CreateStringObjectFromRawString("abc", 3);
+    CheckStringObjectIsAsExpected(p1, "abc", 3);
+    UserHeapPointer p2 = vm->CreateStringObjectFromRawString("defg", 4);
+    CheckStringObjectIsAsExpected(p2, "defg", 4);
+    ReleaseAssert(p1 != p2);
+
+    UserHeapPointer p3 = vm->CreateStringObjectFromRawString("abc", 3);
+    ReleaseAssert(p1 == p3);
+    UserHeapPointer p4 = vm->CreateStringObjectFromRawString("defg", 4);
+    ReleaseAssert(p2 == p4);
+
+    TValue vals[2] = { TValue::CreatePointer(p1), TValue::CreatePointer(p2) };
+    UserHeapPointer p5 = vm->CreateStringObjectFromConcatenation(vals, 2);
+    CheckStringObjectIsAsExpected(p5, "abcdefg", 7);
+
+    UserHeapPointer p6 = vm->CreateStringObjectFromConcatenation(p4, vals, 2);
+    CheckStringObjectIsAsExpected(p6, "defgabcdefg", 11);
+
+    UserHeapPointer p7 = vm->CreateStringObjectFromConcatenation(p2, vals, 2);
+    ReleaseAssert(p6 == p7);
+}
+
+TEST(GlobalStringHashConser, Stress)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    vm->SetUpSegmentationRegister();
+
+    std::map<std::string, UserHeapPointer> expectedMap;
+    std::vector<std::string> vec;
+
+    for (int testcase = 0; testcase < 30000; testcase++)
+    {
+        std::string finalString;
+        UserHeapPointer ptr;
+        if (testcase < 100 || rand() % 10 != 0)
+        {
+            int length = rand() % 10 + 1;
+            if (rand() % 1000 == 0) { length = 0; }
+            finalString = "";
+            for (int i = 0; i < length; i++) finalString += char('a' + rand() % 26);
+
+            ptr = vm->CreateStringObjectFromRawString(finalString.c_str(), static_cast<uint32_t>(finalString.length()));
+        }
+        else
+        {
+            int len = rand() % 5 + 1;
+            TValue v[5];
+            finalString = "";
+            for (int i = 0; i < len; i++)
+            {
+                std::string s;
+                while (true)
+                {
+                    size_t ord = static_cast<size_t>(rand()) % vec.size();
+                    if (vec[ord].length() > 20) continue;
+                    s = vec[ord];
+                    break;
+                }
+                ReleaseAssert(expectedMap.find(s) != expectedMap.end());
+                v[i] = TValue::CreatePointer(expectedMap[s]);
+                finalString += s;
+            }
+
+            if (rand() % 2 == 0)
+            {
+                ptr = vm->CreateStringObjectFromConcatenation(v, static_cast<size_t>(len));
+            }
+            else
+            {
+                ptr = vm->CreateStringObjectFromConcatenation(v[0].AsPointer(), v + 1, static_cast<size_t>(len - 1));
+            }
+        }
+
+        if (expectedMap.find(finalString) == expectedMap.end())
+        {
+            CheckStringObjectIsAsExpected(ptr, finalString.c_str(), finalString.length());
+            expectedMap[finalString] = ptr;
+            vec.push_back(finalString);
+        }
+        else
+        {
+            ReleaseAssert(ptr == expectedMap[finalString]);
+        }
+    }
+
+    for (auto& it : expectedMap)
+    {
+        std::string expectedString = it.first;
+        UserHeapPointer expectedPtr = it.second;
+
+        UserHeapPointer ptr = vm->CreateStringObjectFromRawString(expectedString.c_str(), static_cast<uint32_t>(expectedString.length()));
+        ReleaseAssert(expectedPtr == ptr);
+        CheckStringObjectIsAsExpected(ptr, expectedString.c_str(), expectedString.length());
+    }
+
+    ReleaseAssert(static_cast<size_t>(vm->GetGlobalStringHashConserCurrentElementCount()) == vec.size());
+    ReleaseAssert(vec.size() == expectedMap.size());
+}
+
+}   // anonymous namespace

@@ -5,7 +5,6 @@ using namespace ToyLang;
 
 TEST(NaNBoxing, Correctness)
 {
-    srand(static_cast<uint32_t>(time(nullptr)));
     // test int
     //
     for (int testcase = 0; testcase < 100000; testcase++)

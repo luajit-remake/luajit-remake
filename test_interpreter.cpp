@@ -8,9 +8,11 @@ namespace {
 InterpreterCodeBlock* AllocateInterpreterCodeBlockWithBytecodeSize(size_t bytecodeSize)
 {
     size_t allocationSize = sizeof(InterpreterCodeBlock) + bytecodeSize;
-    uint64_t* dst = new uint64_t[RoundUpToMultipleOf<8>(allocationSize) / 8];
-    InterpreterCodeBlock* ret = new (dst) InterpreterCodeBlock();
-    assert(reinterpret_cast<uintptr_t>(ret) == reinterpret_cast<uintptr_t>(dst));
+    allocationSize = RoundUpToMultipleOf<8>(allocationSize);
+    SystemHeapPointer ptr = VM::GetActiveVMForCurrentThread()->AllocFromSystemHeap(static_cast<uint32_t>(allocationSize));
+    void* retVoid = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(ptr.As<void>());
+    InterpreterCodeBlock* ret = new (retVoid) InterpreterCodeBlock();
+    assert(reinterpret_cast<uintptr_t>(ret) == reinterpret_cast<uintptr_t>(retVoid));
     ret->m_bytecodeLength = SafeIntegerCast<uint32_t>(bytecodeSize);
     return ret;
 }
@@ -135,7 +137,8 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
         ReleaseAssert(callerLocals[info->m_callerNumStackSlots + i].AsInt32() == static_cast<int32_t>(i + info->m_calleeNumFixedArgs + 1));
     }
 
-    ReleaseAssert(bcu == info->m_calleeFunc->m_bytecode);
+    SystemHeapPointer calleeFuncBytecode = info->m_calleeFunc->m_bytecode;
+    ReleaseAssert(bcu == VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(calleeFuncBytecode.As<uint8_t>()));
     ReleaseAssert(rc == info->m_expectedRc);
 }
 
@@ -144,6 +147,8 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetUpSegmentationRegister();
+
+    HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
 
     InterpreterCodeBlock* callerCb = AllocateInterpreterCodeBlockWithBytecodeSize(1000);
     callerCb->m_stackFrameNumSlots = 30;
@@ -157,14 +162,15 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
 
     HeapPtr<FunctionObject> callerFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
     callerFunc->m_type = Type::FUNCTION;
-    callerFunc->m_bytecode = callerCb->m_bytecode;
+    callerFunc->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(callerCb->m_bytecode).m_value;
 
     HeapPtr<FunctionObject> calleeFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
 
     calleeFunc->m_type = Type::FUNCTION;
-    calleeFunc->m_bytecode = calleeCb->m_bytecode;
+    calleeFunc->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(calleeCb->m_bytecode).m_value;
 
-    BcCall* callOp = reinterpret_cast<BcCall*>(callerFunc->m_bytecode);
+    SystemHeapPointer byt = callerFunc->m_bytecode;
+    BcCall* callOp = translator.TranslateToRawPtr<BcCall>(byt.As<BcCall>());
     callOp->m_opcode = static_cast<uint8_t>(Opcode::BcCall);
 
     CoroutineRuntimeContext rc;
@@ -280,6 +286,8 @@ TEST(Interpreter, SanityFibonacci)
     Auto(vm->Destroy());
     vm->SetUpSegmentationRegister();
 
+    HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
+
     InterpreterCodeBlock* fib = AllocateInterpreterCodeBlockWithBytecodeSize(1000);
     fib->m_stackFrameNumSlots = 4;
     fib->m_hasVariadicArguments = false;
@@ -289,7 +297,7 @@ TEST(Interpreter, SanityFibonacci)
 
     HeapPtr<FunctionObject> fibObj = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
     fibObj->m_type = Type::FUNCTION;
-    fibObj->m_bytecode = fib->m_bytecode;
+    fibObj->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(fib->m_bytecode).m_value;
 
     uint8_t* p = fib->m_bytecode;
 

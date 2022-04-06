@@ -47,6 +47,8 @@ int main(int argc, char **argv)
         }
     }
 
+    srand(static_cast<uint32_t>(time(nullptr)));
+
     return RUN_ALL_TESTS();
 }
 
