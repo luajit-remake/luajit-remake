@@ -5,7 +5,7 @@ using namespace ToyLang;
 
 namespace {
 
-void CheckStringObjectIsAsExpected(UserHeapPointer p, const void* expectedStr, size_t expectedLen)
+void CheckStringObjectIsAsExpected(UserHeapPointer<HeapString> p, const void* expectedStr, size_t expectedLen)
 {
     uint64_t expectedHash = HashString(expectedStr, expectedLen);
     HeapPtr<HeapString> s = p.As<HeapString>();
@@ -23,25 +23,25 @@ TEST(GlobalStringHashConser, Sanity)
     Auto(vm->Destroy());
     vm->SetUpSegmentationRegister();
 
-    UserHeapPointer p1 = vm->CreateStringObjectFromRawString("abc", 3);
+    UserHeapPointer<HeapString> p1 = vm->CreateStringObjectFromRawString("abc", 3);
     CheckStringObjectIsAsExpected(p1, "abc", 3);
-    UserHeapPointer p2 = vm->CreateStringObjectFromRawString("defg", 4);
+    UserHeapPointer<HeapString> p2 = vm->CreateStringObjectFromRawString("defg", 4);
     CheckStringObjectIsAsExpected(p2, "defg", 4);
     ReleaseAssert(p1 != p2);
 
-    UserHeapPointer p3 = vm->CreateStringObjectFromRawString("abc", 3);
+    UserHeapPointer<HeapString> p3 = vm->CreateStringObjectFromRawString("abc", 3);
     ReleaseAssert(p1 == p3);
-    UserHeapPointer p4 = vm->CreateStringObjectFromRawString("defg", 4);
+    UserHeapPointer<HeapString> p4 = vm->CreateStringObjectFromRawString("defg", 4);
     ReleaseAssert(p2 == p4);
 
     TValue vals[2] = { TValue::CreatePointer(p1), TValue::CreatePointer(p2) };
-    UserHeapPointer p5 = vm->CreateStringObjectFromConcatenation(vals, 2);
+    UserHeapPointer<HeapString> p5 = vm->CreateStringObjectFromConcatenation(vals, 2);
     CheckStringObjectIsAsExpected(p5, "abcdefg", 7);
 
-    UserHeapPointer p6 = vm->CreateStringObjectFromConcatenation(p4, vals, 2);
+    UserHeapPointer<HeapString> p6 = vm->CreateStringObjectFromConcatenation(p4, vals, 2);
     CheckStringObjectIsAsExpected(p6, "defgabcdefg", 11);
 
-    UserHeapPointer p7 = vm->CreateStringObjectFromConcatenation(p2, vals, 2);
+    UserHeapPointer<HeapString> p7 = vm->CreateStringObjectFromConcatenation(p2, vals, 2);
     ReleaseAssert(p6 == p7);
 }
 
@@ -51,13 +51,13 @@ TEST(GlobalStringHashConser, Stress)
     Auto(vm->Destroy());
     vm->SetUpSegmentationRegister();
 
-    std::map<std::string, UserHeapPointer> expectedMap;
+    std::map<std::string, UserHeapPointer<HeapString>> expectedMap;
     std::vector<std::string> vec;
 
     for (int testcase = 0; testcase < 30000; testcase++)
     {
         std::string finalString;
-        UserHeapPointer ptr;
+        UserHeapPointer<HeapString> ptr;
         if (testcase < 100 || rand() % 10 != 0)
         {
             int length = rand() % 10 + 1;
@@ -112,9 +112,9 @@ TEST(GlobalStringHashConser, Stress)
     for (auto& it : expectedMap)
     {
         std::string expectedString = it.first;
-        UserHeapPointer expectedPtr = it.second;
+        UserHeapPointer<HeapString> expectedPtr = it.second;
 
-        UserHeapPointer ptr = vm->CreateStringObjectFromRawString(expectedString.c_str(), static_cast<uint32_t>(expectedString.length()));
+        UserHeapPointer<HeapString> ptr = vm->CreateStringObjectFromRawString(expectedString.c_str(), static_cast<uint32_t>(expectedString.length()));
         ReleaseAssert(expectedPtr == ptr);
         CheckStringObjectIsAsExpected(ptr, expectedString.c_str(), expectedString.length());
     }

@@ -235,4 +235,17 @@ Dst WARN_UNUSED BitwiseTruncateTo(Src src)
     return static_cast<Dst>(static_cast<std::make_unsigned_t<Dst>>(static_cast<std::make_unsigned_t<Src>>(src)));
 }
 
+// From http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+constexpr uint32_t RoundUpToPowerOfTwo(uint32_t v)
+{
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+
 }   // namespace CommonUtils

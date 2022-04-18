@@ -9,7 +9,7 @@ InterpreterCodeBlock* AllocateInterpreterCodeBlockWithBytecodeSize(size_t byteco
 {
     size_t allocationSize = sizeof(InterpreterCodeBlock) + bytecodeSize;
     allocationSize = RoundUpToMultipleOf<8>(allocationSize);
-    SystemHeapPointer ptr = VM::GetActiveVMForCurrentThread()->AllocFromSystemHeap(static_cast<uint32_t>(allocationSize));
+    SystemHeapPointer<void> ptr = VM::GetActiveVMForCurrentThread()->AllocFromSystemHeap(static_cast<uint32_t>(allocationSize));
     void* retVoid = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(ptr.As<void>());
     InterpreterCodeBlock* ret = new (retVoid) InterpreterCodeBlock();
     assert(reinterpret_cast<uintptr_t>(ret) == reinterpret_cast<uintptr_t>(retVoid));
@@ -137,7 +137,7 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
         ReleaseAssert(callerLocals[info->m_callerNumStackSlots + i].AsInt32() == static_cast<int32_t>(i + info->m_calleeNumFixedArgs + 1));
     }
 
-    SystemHeapPointer calleeFuncBytecode = info->m_calleeFunc->m_bytecode;
+    SystemHeapPointer<void> calleeFuncBytecode = info->m_calleeFunc->m_bytecode;
     ReleaseAssert(bcu == VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(calleeFuncBytecode.As<uint8_t>()));
     ReleaseAssert(rc == info->m_expectedRc);
 }
@@ -160,16 +160,15 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
     calleeCb->m_numUpValues = 0;
     calleeCb->m_functionEntryPoint = CheckStackLayout;
 
-    HeapPtr<FunctionObject> callerFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
-    callerFunc->m_type = Type::FUNCTION;
+    HeapPtr<FunctionObject> callerFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();
+    HeapEntityCommonHeader::Populate(callerFunc);
     callerFunc->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(callerCb->m_bytecode).m_value;
 
-    HeapPtr<FunctionObject> calleeFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
-
-    calleeFunc->m_type = Type::FUNCTION;
+    HeapPtr<FunctionObject> calleeFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();
+    HeapEntityCommonHeader::Populate(calleeFunc);
     calleeFunc->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(calleeCb->m_bytecode).m_value;
 
-    SystemHeapPointer byt = callerFunc->m_bytecode;
+    SystemHeapPointer<void> byt = callerFunc->m_bytecode;
     BcCall* callOp = translator.TranslateToRawPtr<BcCall>(byt.As<BcCall>());
     callOp->m_opcode = static_cast<uint8_t>(Opcode::BcCall);
 
@@ -219,7 +218,7 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
                 info.m_numCallerFixedParams = numFixedParams;
 
                 int paramV = 1;
-                locals[funcStart] = TValue::CreatePointer(calleeFunc);
+                locals[funcStart] = TValue::CreatePointer(UserHeapPointer<FunctionObject> { calleeFunc });
                 for (uint32_t i = 0; i < numFixedParams; i++)
                 {
                     locals[funcStart + i + 1] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
@@ -295,8 +294,8 @@ TEST(Interpreter, SanityFibonacci)
     fib->m_numUpValues = 0;
     fib->m_functionEntryPoint = EnterInterpreter;
 
-    HeapPtr<FunctionObject> fibObj = vm->AllocFromUserHeap(sizeof(FunctionObject)).As<FunctionObject>();
-    fibObj->m_type = Type::FUNCTION;
+    HeapPtr<FunctionObject> fibObj = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();
+    HeapEntityCommonHeader::Populate(fibObj);
     fibObj->m_bytecode.m_value = translator.TranslateToSystemHeapPtr(fib->m_bytecode).m_value;
 
     uint8_t* p = fib->m_bytecode;
@@ -341,7 +340,7 @@ TEST(Interpreter, SanityFibonacci)
 
     instr3->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
     instr3->m_dst = BytecodeSlot::Local(1);
-    instr3->m_value = TValue::CreatePointer(fibObj);
+    instr3->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
 
     instr4->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
     instr4->m_dst = BytecodeSlot::Local(2);
@@ -361,7 +360,7 @@ TEST(Interpreter, SanityFibonacci)
 
     instr7->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
     instr7->m_dst = BytecodeSlot::Local(2);
-    instr7->m_value = TValue::CreatePointer(fibObj);
+    instr7->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
 
     instr8->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
     instr8->m_dst = BytecodeSlot::Local(3);

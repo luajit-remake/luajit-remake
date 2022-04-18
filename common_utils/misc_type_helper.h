@@ -129,4 +129,6 @@ struct offsetof_base<Base, Derived, std::enable_if_t<std::is_base_of_v<Base, Der
 template<typename Base, typename Derived>
 constexpr uint64_t offsetof_base_v = internal::offsetof_base<Base, Derived>::offset;
 
+#define offsetof_member(classname, membername) (FOLD_CONSTEXPR(reinterpret_cast<uintptr_t>(&(FOLD_CONSTEXPR(reinterpret_cast<const classname*>(sizeof(classname)))->membername))) - sizeof(classname))
+
 }   // namespace CommonUtils
