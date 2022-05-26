@@ -238,6 +238,7 @@ Dst WARN_UNUSED BitwiseTruncateTo(Src src)
 // From http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 constexpr uint32_t RoundUpToPowerOfTwo(uint32_t v)
 {
+    assert(v <= (1U << 31));
     v--;
     v |= v >> 1;
     v |= v >> 2;
@@ -246,6 +247,120 @@ constexpr uint32_t RoundUpToPowerOfTwo(uint32_t v)
     v |= v >> 16;
     v++;
     return v;
+}
+
+template<typename T>
+bool WARN_UNUSED ALWAYS_INLINE UnsafeFloatEqual(T a, T b)
+{
+    static_assert(std::is_floating_point_v<T>);
+    SUPRESS_FLOAT_EQUAL_WARNING(
+        return a == b;
+    )
+}
+
+template<typename T>
+bool WARN_UNUSED ALWAYS_INLINE IsNaN(T a)
+{
+    static_assert(std::is_floating_point_v<T>);
+    SUPRESS_FLOAT_EQUAL_WARNING(
+        return a != a;
+    )
+}
+
+namespace internal
+{
+
+template<typename T, uint32_t k>
+constexpr T GetMaskBitIsOneIfOrdinalBitKIsOne()
+{
+    static_assert(std::is_integral_v<T> && !std::is_signed_v<T> && !std::is_same_v<T, bool> && k < 6 && (1ULL << k) < sizeof(T) * 8);
+    T result = 0;
+    for (uint32_t i = 0; i < sizeof(T) * 8; i++)
+    {
+        if (i & (1U << k))
+        {
+            result |= static_cast<T>(1) << i;
+        }
+    }
+    return result;
+}
+
+}   // namespace internal
+
+// Get a mask which bit i is 1 iff i's bit k is 1.
+//
+template<typename T, uint32_t k>
+constexpr T x_maskBitIsOneIfOrdinalBitKIsOne = internal::GetMaskBitIsOneIfOrdinalBitKIsOne<T, k>();
+
+// A helper class to define bitfield members in classes
+// In C's bitfield definition (e.g. "uint8_t a : 1;"), where exactly the bit is stored is implementation-defined
+// This class removes this undefined behavior
+//
+template<typename CarrierType, typename SelfType, uint32_t start, uint32_t width>
+struct BitFieldMember
+{
+    // Carrier type must be unsigned integer
+    //
+    static_assert(std::is_integral_v<CarrierType> && !std::is_signed_v<CarrierType> && !std::is_same_v<CarrierType, bool>);
+
+    // Self type must be bool, enum, or unsigned integer
+    //
+    static_assert(std::is_enum_v<SelfType> || std::is_same_v<SelfType, bool> || (std::is_integral_v<SelfType> && !std::is_signed_v<SelfType>));
+
+    static_assert(start < sizeof(CarrierType) * 8);
+    static_assert(start + width <= sizeof(CarrierType) * 8);
+    static_assert(0 < width && width < 64);
+
+    static constexpr uint32_t x_fieldBitStart = start;
+    static constexpr uint32_t x_fieldBitWidth = width;
+    static constexpr CarrierType x_maskForGet = static_cast<CarrierType>(((static_cast<CarrierType>(1) << width) - 1) << start);
+    static constexpr CarrierType x_maskForSet = static_cast<CarrierType>(~x_maskForGet);
+
+    static void ALWAYS_INLINE Set(CarrierType& c, SelfType v)
+    {
+        CarrierType value;
+        if constexpr(std::is_enum_v<SelfType>)
+        {
+            if constexpr(std::is_signed_v<std::underlying_type_t<SelfType>>)
+            {
+                assert(static_cast<int64_t>(v) >= 0);
+            }
+            using T = std::make_unsigned_t<std::underlying_type_t<SelfType>>;
+            T raw = static_cast<T>(v);
+            assert(raw < (1ULL << width));
+            value = static_cast<CarrierType>(raw);
+        }
+        else
+        {
+            if constexpr(!std::is_same_v<SelfType, bool>)
+            {
+                assert(v < (1ULL << width));
+            }
+            value = static_cast<CarrierType>(v);
+        }
+        c = static_cast<CarrierType>((c & x_maskForSet) | (value << start));
+        assert(Get(c) == v);
+    }
+
+    static SelfType ALWAYS_INLINE WARN_UNUSED Get(const CarrierType& c)
+    {
+        if constexpr(std::is_same_v<SelfType, bool>)
+        {
+            return (c & x_maskForGet);
+        }
+        else
+        {
+            return static_cast<SelfType>((c & x_maskForGet) >> start);
+        }
+    }
+};
+
+// Equivalent to memcpy, but asserts that the address range does not overlap
+//
+inline void ALWAYS_INLINE SafeMemcpy(void* dst, const void* src, size_t len)
+{
+    assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
+    memcpy(dst, src, len);
 }
 
 }   // namespace CommonUtils

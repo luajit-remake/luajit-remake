@@ -36,26 +36,16 @@
 #include "pp_common.h"
 #include "function_ref.h"
 
-#define rep(i,l,r) for (int i=(l); i<=(r); i++)
-#define repd(i,r,l) for (int i=(r); i>=(l); i--)
-#define rept(i,c) for (__typeof((c).begin()) i=(c).begin(); i!=(c).end(); i++)
-
 #define MEM_PREFETCH(x) _mm_prefetch((char*)(&(x)),_MM_HINT_T0);
-
-#define PTRRAW(x) ((__typeof(x))(((uintptr_t)(x))&(~7)))
-#define PTRTAG(x) (((uintptr_t)(x))&7)
-#define PTRSET(x, b) ((__typeof(x))((((uintptr_t)(x))&(~7))|(b)))
 
 #define likely(expr)     __builtin_expect((expr) != 0, 1)
 #define unlikely(expr)   __builtin_expect((expr) != 0, 0)
-
-#define TOKEN_PASTEx(x, y) x ## y
-#define TOKEN_PASTE(x, y) TOKEN_PASTEx(x, y)
 
 #define NO_RETURN __attribute__((__noreturn__))
 #define ALWAYS_INLINE __attribute__((__always_inline__))
 #define NO_INLINE __attribute__((__noinline__))
 #define WARN_UNUSED __attribute__((__warn_unused_result__))
+#define PACKED_STRUCT __attribute__((__packed__))
 
 struct AutoTimer
 {
@@ -97,31 +87,25 @@ private:
 };
 	
 #define Auto_INTERNAL(Destructor, counter) \
-    auto TOKEN_PASTE(auto_func_, counter) = [&]() { Destructor; }; \
-    AutoOutOfScope<decltype(TOKEN_PASTE(auto_func_, counter))> TOKEN_PASTE(auto_, counter)(TOKEN_PASTE(auto_func_, counter))
+    auto PP_CAT(auto_func_, counter) = [&]() { Destructor; }; \
+    AutoOutOfScope<decltype(PP_CAT(auto_func_, counter))> PP_CAT(auto_, counter)(PP_CAT(auto_func_, counter))
 	
 #define Auto(Destructor) Auto_INTERNAL(Destructor, __COUNTER__)
 
-struct ReleaseAssertFailure
+inline void NO_RETURN FireReleaseAssert(const char* assertionExpr, const char* assertionFile,
+                                        unsigned int assertionLine, const char* assertionFunction)
 {
-    static void NO_RETURN Fire(const char *__assertion, const char *__file,
-	                 unsigned int __line, const char *__function)
-	{
-        fprintf(stderr, "%s:%u: %s: Assertion `%s' failed.\n", __file, __line, __function, __assertion);
-		abort();
-	}
-};
+    fprintf(stderr, "%s:%u: %s: Assertion `%s' failed.\n", assertionFile, assertionLine, assertionFunction, assertionExpr);
+    abort();
+}
 
 #define ReleaseAssert(expr)							\
      (static_cast <bool> (expr)						\
       ? void (0)							        \
-      : ReleaseAssertFailure::Fire(#expr, __FILE__, __LINE__, __extension__ __PRETTY_FUNCTION__))
+      : FireReleaseAssert(#expr, __FILE__, __LINE__, __extension__ __PRETTY_FUNCTION__))
 
 #ifdef TESTBUILD
-#define TestAssert(expr)                            \
-    (static_cast <bool> (expr)						\
-     ? void (0)							            \
-     : ReleaseAssertFailure::Fire(#expr, __FILE__, __LINE__, __extension__ __PRETTY_FUNCTION__))
+#define TestAssert(expr) ReleaseAssert(expr)
 #else
 #define TestAssert(expr) (static_cast<void>(0))
 #ifndef NDEBUG
@@ -137,19 +121,19 @@ static_assert(false, "NDEBUG should always be defined in non-testbuild");
 #define ReleaseAssertImp(a, b) ReleaseAssert((!(a)) || (b))
 
 #ifdef TESTBUILD
-const static bool x_isTestBuild = true;
+constexpr bool x_isTestBuild = true;
 #define TESTBUILD_ONLY(...) __VA_ARGS__
 #else
-const static bool x_isTestBuild = false;
+constexpr bool x_isTestBuild = false;
 #define TESTBUILD_ONLY(...)
 #endif
 
 #ifndef NDEBUG
-const static bool x_isDebugBuild = true;
+constexpr bool x_isDebugBuild = true;
 #define ALWAYS_INLINE_IN_NONDEBUG
 #define DEBUG_ONLY(...) __VA_ARGS__
 #else
-const static bool x_isDebugBuild = false;
+constexpr bool x_isDebugBuild = false;
 #define ALWAYS_INLINE_IN_NONDEBUG ALWAYS_INLINE
 #define DEBUG_ONLY(...)
 #endif
@@ -171,7 +155,7 @@ struct FalseOrNullptr
 #define VM_FAIL_IF(expr, ...)                                                                                                   \
     do { if (unlikely((expr))) {                                                                                                \
         fprintf(stderr, "[FAIL] %s:%u: Irrecoverable error encountered due to unsatisfied check. VM is forced to abort.\n"      \
-        , __FILE__, __LINE__);                                                                                                  \
+            , __FILE__, __LINE__);                                                                                              \
         __VA_OPT__(fprintf(stderr, "[FAIL] Message: "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); )                  \
         fflush(stderr); abort();                                                                                                \
     } } while (false)
@@ -180,9 +164,9 @@ struct FalseOrNullptr
     do { if (unlikely((expr))) {                                                                                                \
         int macro_vm_check_fail_tmp = errno;                                                                                    \
         fprintf(stderr, "[FAIL] %s:%u: Irrecoverable error encountered due to unsatisfied check. VM is forced to abort.\n"      \
-        , __FILE__, __LINE__);                                                                                                  \
+            , __FILE__, __LINE__);                                                                                              \
         fprintf(stderr, "[FAIL] Message: " format " (Error %d: %s)\n" __VA_OPT__(,) __VA_ARGS__                                 \
-        , macro_vm_check_fail_tmp, strerror(macro_vm_check_fail_tmp));                                                          \
+            , macro_vm_check_fail_tmp, strerror(macro_vm_check_fail_tmp));                                                      \
         fflush(stderr); abort();                                                                                                \
     } } while (false)
 
@@ -240,27 +224,13 @@ T assert_cast(U u)
 #define assert_cast static_cast
 #endif
 
-class NonCopyable
-{
-public:
-    NonCopyable(const NonCopyable&) = delete;
-    NonCopyable& operator=(const NonCopyable&) = delete;
+#define MAKE_NONCOPYABLE(ClassName)                 \
+    ClassName(const ClassName&) = delete;           \
+    ClassName& operator=(const ClassName&) = delete
 
-protected:
-    NonCopyable() = default;
-    ~NonCopyable() = default;
-};
-
-class NonMovable
-{
-public:
-    NonMovable(NonMovable&&) = delete;
-    NonMovable& operator=(NonMovable&&) = delete;
-
-protected:
-    NonMovable() = default;
-    ~NonMovable() = default;
-};
+#define MAKE_NONMOVABLE(ClassName)                  \
+    ClassName(ClassName&&) = delete;                \
+    ClassName& operator=(ClassName&&) = delete
 
 // constexpr-if branch static_assert(false, ...) workaround:
 //     static_assert(type_dependent_false<T>::value, ...)

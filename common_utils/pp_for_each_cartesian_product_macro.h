@@ -67,6 +67,12 @@
 #define DETAIL_FOR_EACH_HELPER(macro, a1, ...) macro(a1) __VA_OPT__(DETAIL_FOR_EACH_AGAIN PP_PARENS (macro, __VA_ARGS__))
 #define DETAIL_FOR_EACH_AGAIN() DETAIL_FOR_EACH_HELPER
 
+// Same as 'FOR_EACH', except that it expects that each element in the list is a tuple, and it unpacks the tuple before feeding to 'macro'
+//
+#define PP_FOR_EACH_UNPACK_TUPLE(macro, ...) __VA_OPT__(PP_EXPAND(DETAIL_FOR_EACH_UNPACK_TUPLE_HELPER(macro, __VA_ARGS__)))
+#define DETAIL_FOR_EACH_UNPACK_TUPLE_HELPER(macro, a1, ...) macro a1 __VA_OPT__(DETAIL_FOR_EACH_UNPACK_TUPLE_AGAIN PP_PARENS (macro, __VA_ARGS__))
+#define DETAIL_FOR_EACH_UNPACK_TUPLE_AGAIN() DETAIL_FOR_EACH_UNPACK_TUPLE_HELPER
+
 // FOR_EACH_CARTESIAN_PRODUCT(macro, lists...)
 // See comment at beginning of this file
 //

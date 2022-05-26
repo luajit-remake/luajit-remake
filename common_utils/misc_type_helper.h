@@ -105,7 +105,7 @@ template<typename Base, typename Derived>
 constexpr uint64_t offsetof_base_impl()
 {
     static_assert(std::is_base_of_v<Base, Derived>);
-    constexpr const Derived* d = FOLD_CONSTEXPR(reinterpret_cast<const Derived*>(sizeof(Derived)));
+    constexpr const Derived* d = FOLD_CONSTEXPR(reinterpret_cast<const Derived*>(0x4000));
     constexpr const Base* b = static_cast<const Base*>(d);
 
     constexpr const uint8_t* du = FOLD_CONSTEXPR(reinterpret_cast<const uint8_t*>(d));
@@ -129,6 +129,85 @@ struct offsetof_base<Base, Derived, std::enable_if_t<std::is_base_of_v<Base, Der
 template<typename Base, typename Derived>
 constexpr uint64_t offsetof_base_v = internal::offsetof_base<Base, Derived>::offset;
 
-#define offsetof_member(classname, membername) (FOLD_CONSTEXPR(reinterpret_cast<uintptr_t>(&(FOLD_CONSTEXPR(reinterpret_cast<const classname*>(sizeof(classname)))->membername))) - sizeof(classname))
+namespace internal
+{
+
+template<typename T> struct MemberObjectPointerClassImpl { };
+
+template<typename C, typename V>
+struct MemberObjectPointerClassImpl<V C::*>
+{
+    using class_type = C;
+    using value_type = V;
+};
+
+}   // namespace internal
+
+template<typename T>
+using class_type_of_member_object_pointer_t = typename internal::MemberObjectPointerClassImpl<T>::class_type;
+
+template<typename T>
+using value_type_of_member_object_pointer_t = typename internal::MemberObjectPointerClassImpl<T>::value_type;
+
+namespace internal
+{
+
+template<auto member_object_ptr>
+constexpr uint64_t offsetof_member_impl()
+{
+    using T = decltype(member_object_ptr);
+    static_assert(std::is_member_object_pointer_v<T>);
+    using C = class_type_of_member_object_pointer_t<T>;
+    using V = value_type_of_member_object_pointer_t<T>;
+
+    constexpr C* c = FOLD_CONSTEXPR(reinterpret_cast<C*>(0x4000));
+    constexpr V* v = FOLD_CONSTEXPR(&(c->*member_object_ptr));
+
+    constexpr uint64_t cu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(c));
+    constexpr uint64_t vu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(v));
+    return vu - cu;
+}
+
+}   // namespace internal
+
+template<auto member_object_ptr>
+constexpr uint64_t offsetof_member_v = internal::offsetof_member_impl<member_object_ptr>();
+
+// The C++ placement-new is not type-safe: the pointer to 'new' is taken as a void*, so it will silently corrupt memory if
+// the pointer type does not match the object type (e.g. if you accidentally pass in a T** instead of T*). Fix this problem.
+//
+template<typename T, typename... Args>
+void ALWAYS_INLINE ConstructInPlace(T* ptr, Args&&... args)
+{
+    static_assert(!std::is_pointer_v<T>, "You don't have to call placement-new for primitive types");
+    new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+}
+
+namespace internal
+{
+
+// This is a 2^n implementation but probably it's good enough for now
+//
+template<typename... Types>
+struct is_typelist_pairwise_distinct_impl;
+
+template<typename T1, typename T2, typename... Types>
+struct is_typelist_pairwise_distinct_impl<T1, T2, Types...>
+ : std::integral_constant<bool,
+        !std::is_same<T1, T2>::value &&
+        is_typelist_pairwise_distinct_impl<T1, Types...>::value &&
+        is_typelist_pairwise_distinct_impl<T2, Types...>::value> { };
+
+template<typename T1>
+struct is_typelist_pairwise_distinct_impl<T1> : std::true_type { };
+
+}   // namespace internal
+
+template<typename... Types>
+constexpr bool is_typelist_pairwise_distinct = internal::is_typelist_pairwise_distinct_impl<Types...>::value;
+
+
+template<int N, typename... Types>
+using parameter_pack_nth_t = std::tuple_element_t<N, std::tuple<Types...>>;
 
 }   // namespace CommonUtils

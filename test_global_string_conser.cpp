@@ -93,7 +93,7 @@ TEST(GlobalStringHashConser, Stress)
             }
             else
             {
-                ptr = vm->CreateStringObjectFromConcatenation(v[0].AsPointer(), v + 1, static_cast<size_t>(len - 1));
+                ptr = vm->CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> { v[0].AsPointer().As() }, v + 1, static_cast<size_t>(len - 1));
             }
         }
 

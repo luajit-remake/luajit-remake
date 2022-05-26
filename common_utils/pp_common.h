@@ -23,6 +23,11 @@
 #define PP_IS_ZERO(x) PP_IS_EXACTLY_TWO_ARGS(PP_PRIMITIVE_CAT(DETAIL_IS_ZERO_IMPL_TAG_, x))
 #define DETAIL_IS_ZERO_IMPL_TAG_0 0, 0
 
+// PP_IS_ONE(x): Expands to 1 if x is 1, otherwise expands to 0
+//
+#define PP_IS_ONE(x) PP_IS_EXACTLY_TWO_ARGS(PP_PRIMITIVE_CAT(DETAIL_IS_ONE_IMPL_TAG_, x))
+#define DETAIL_IS_ONE_IMPL_TAG_1 0, 0
+
 // PP_EXPAND_LIST((list)): Expands to list (i.e. the parenthesis is removed)
 //
 #define PP_EXPAND_LIST_IMPL(...) __VA_ARGS__
@@ -34,6 +39,13 @@
 #define PP_IF_EQUAL_ZERO(cond) PP_CAT(DETAIL_IF_EQUAL_ZERO_IMPL_TAG_, PP_IS_ZERO(cond))
 #define DETAIL_IF_EQUAL_ZERO_IMPL_TAG_1(truebr, falsebr) PP_EXPAND_LIST(truebr)
 #define DETAIL_IF_EQUAL_ZERO_IMPL_TAG_0(truebr, falsebr) PP_EXPAND_LIST(falsebr)
+
+// PP_IF_EQUAL_ONE(cond)((true_br), (false_br))
+// Expands to true_br if cond is 1, otherwise expands to false_br
+//
+#define PP_IF_EQUAL_ONE(cond) PP_CAT(DETAIL_IF_EQUAL_ONE_IMPL_TAG_, PP_IS_ONE(cond))
+#define DETAIL_IF_EQUAL_ONE_IMPL_TAG_1(truebr, falsebr) PP_EXPAND_LIST(truebr)
+#define DETAIL_IF_EQUAL_ONE_IMPL_TAG_0(truebr, falsebr) PP_EXPAND_LIST(falsebr)
 
 // PP_INC(x) increments x
 //
@@ -167,6 +179,69 @@
     ), (                                                \
         __VA_ARGS__                                     \
     ))
+
+#define PP_NATURAL_NUMBERS_LIST                                                                                             \
+    0 , 1 , 2 , 3 , 4 , 5 , 6 , 7 , 8 , 9 , 10 , 11 , 12 , 13 , 14 , 15 , 16 , 17 , 18 , 19 , 20 ,                          \
+    21 , 22 , 23 , 24 , 25 , 26 , 27 , 28 , 29 , 30 , 31 , 32 , 33 , 34 , 35 , 36 , 37 , 38 , 39 , 40 ,                     \
+    41 , 42 , 43 , 44 , 45 , 46 , 47 , 48 , 49 , 50 , 51 , 52 , 53 , 54 , 55 , 56 , 57 , 58 , 59 , 60 ,                     \
+    61 , 62 , 63 , 64 , 65 , 66 , 67 , 68 , 69 , 70 , 71 , 72 , 73 , 74 , 75 , 76 , 77 , 78 , 79 , 80 ,                     \
+    81 , 82 , 83 , 84 , 85 , 86 , 87 , 88 , 89 , 90 , 91 , 92 , 93 , 94 , 95 , 96 , 97 , 98 , 99 , 100 ,                    \
+    101 , 102 , 103 , 104 , 105 , 106 , 107 , 108 , 109 , 110 , 111 , 112 , 113 , 114 , 115 , 116 , 117 , 118 , 119 , 120 , \
+    121 , 122 , 123 , 124 , 125 , 126 , 127 , 128 , 129 , 130 , 131 , 132 , 133 , 134 , 135 , 136 , 137 , 138 , 139 , 140 , \
+    141 , 142 , 143 , 144 , 145 , 146 , 147 , 148 , 149 , 150 , 151 , 152 , 153 , 154 , 155 , 156 , 157 , 158 , 159 , 160 , \
+    161 , 162 , 163 , 164 , 165 , 166 , 167 , 168 , 169 , 170 , 171 , 172 , 173 , 174 , 175 , 176 , 177 , 178 , 179 , 180 , \
+    181 , 182 , 183 , 184 , 185 , 186 , 187 , 188 , 189 , 190 , 191 , 192 , 193 , 194 , 195 , 196 , 197 , 198 , 199 , 200
+
+// Expands to 1 if the tuple is non-empty, 0 otherwise
+// E.g. PP_IS_TUPLE_NONEMPTY(()) expands to 0, PP_IS_TUPLE_NONEMPTY((1, 2)) expands to 1
+//
+#define PP_IS_TUPLE_NONEMPTY(tup)           \
+    PP_IF_EQUAL_ZERO(PP_COUNT_ARGS tup)((   \
+        0                                   \
+    ), (                                    \
+        1                                   \
+    ))
+
+// Expands to 1 if the tuple contains exactly one element, 0 otherwise
+// E.g. PP_IS_TUPLE_LENGTH_ONE(()) expands to 0,
+//      PP_IS_TUPLE_LENGTH_ONE((a)) expands to 1,
+//      PP_IS_TUPLE_LENGTH_ONE((1, 2)) expands to 0
+//
+#define PP_IS_TUPLE_LENGTH_ONE(tup)         \
+    PP_IF_EQUAL_ONE(PP_COUNT_ARGS tup)((    \
+        1                                   \
+    ), (                                    \
+        0                                   \
+    ))
+
+// Given two lists (a1, ..., an) and (b1, ... bm)
+// Expands to (a1, b1), (a2, b2), .. , (ak, bk) where k = min(n, m)
+// E.g. PP_ZIP_TWO_LISTS((a, b), (1, 2, 3)) expands to (a, 1), (b, 2)
+//
+#define PP_ZIP_TWO_LISTS(lista, listb) PP_EXPAND(DETAIL_ZIP_TWO_LISTS_IMPL(lista, listb))
+
+#define DETAIL_ZIP_POP(a1, ...) __VA_OPT__( (__VA_ARGS__) , )
+#define DETAIL_ZIP_TWO_LISTS_IMPL(tuplea, tupleb)                   \
+    PP_IF_EQUAL_ONE(PP_IS_TUPLE_NONEMPTY(tuplea))((                 \
+        PP_IF_EQUAL_ONE(PP_IS_TUPLE_NONEMPTY(tupleb))((             \
+            (PP_TUPLE_GET_1(tuplea), PP_TUPLE_GET_1(tupleb))        \
+            PP_IF_EQUAL_ZERO(PP_IS_TUPLE_LENGTH_ONE(tuplea))((      \
+                PP_IF_EQUAL_ZERO(PP_IS_TUPLE_LENGTH_ONE(tupleb))((  \
+                    ,                                               \
+                ), (                                                \
+                ))                                                  \
+            ), (                                                    \
+            ))                                                      \
+        ), (                                                        \
+        ))                                                          \
+    ), (                                                            \
+    ))                                                              \
+    DETAIL_ZIP_TWO_LISTS_HELPER_AGAIN PP_PARENS                     \
+        (DETAIL_ZIP_POP tuplea DETAIL_ZIP_POP tupleb 1)
+
+#define DETAIL_ZIP_TWO_LISTS_HELPER_AGAIN() DETAIL_ZIP_TWO_LISTS_HELPER
+#define DETAIL_ZIP_TWO_LISTS_HELPER(lista, ...)	__VA_OPT__(DETAIL_ZIP_TWO_LISTS_HELPER_2(lista, __VA_ARGS__))
+#define DETAIL_ZIP_TWO_LISTS_HELPER_2(lista, listb, ...) __VA_OPT__(DETAIL_ZIP_TWO_LISTS_IMPL(lista, listb))
 
 #else	// __cplusplus >= 202002L
 static_assert(false, "C++20 __VA_OPT__ is required for this header file to work");

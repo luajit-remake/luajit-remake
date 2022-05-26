@@ -1,1625 +1,112 @@
 #pragma once
 
 #include "common_utils.h"
+#include "memory_ptr.h"
+#include "vm.h"
+#include "vm_string.h"
 
 namespace ToyLang {
 
 using namespace CommonUtils;
 
-template<typename T>
-using RestrictPtr = T* __restrict__;
-
-template<typename T>
-using ConstRestrictPtr = RestrictPtr<const T>;
-
-#define CLANG_GS_ADDRESS_SPACE_IDENTIFIER 256
-#define CLANG_FS_ADDRESS_SPACE_IDENTIFIER 257
-
-template<typename T>
-using HeapPtr = T __attribute__((address_space(CLANG_GS_ADDRESS_SPACE_IDENTIFIER))) *;
-
-template<typename T>
-using HeapRef = T __attribute__((address_space(CLANG_GS_ADDRESS_SPACE_IDENTIFIER))) &;
-
-template<typename P, typename T>
-inline constexpr bool IsPtrOrHeapPtr = std::is_same_v<P, T*> || std::is_same_v<P, HeapPtr<T>>;
-
-template<typename T> struct IsHeapPtrType : std::false_type { };
-template<typename T> struct IsHeapPtrType<HeapPtr<T>> : std::true_type { };
-
-template<typename DstPtr, typename SrcPtr>
-struct ReinterpretCastPreservingAddressSpaceTypeImpl
-{
-    static_assert(std::is_pointer_v<DstPtr>, "DstPtr should be a pointer type");
-    static_assert(std::is_pointer_v<SrcPtr>, "SrcPtr should be a pointer type");
-    static_assert(!IsHeapPtrType<DstPtr>::value, "DstPtr should not be a HeapPtr pointer");
-
-    using type = DstPtr;
-};
-
-template<typename DstPtr, typename Src>
-struct ReinterpretCastPreservingAddressSpaceTypeImpl<DstPtr, HeapPtr<Src>>
-{
-    static_assert(std::is_pointer_v<DstPtr>, "Dst should be a pointer type");
-    static_assert(!IsHeapPtrType<DstPtr>::value, "DstPtr should not be a HeapPtr pointer");
-
-    using Dst = std::remove_pointer_t<DstPtr>;
-    using type = HeapPtr<Dst>;
-};
-
-template<typename DstPtr, typename SrcPtr>
-using ReinterpretCastPreservingAddressSpaceType = typename ReinterpretCastPreservingAddressSpaceTypeImpl<DstPtr, SrcPtr>::type;
-
-template<typename DstPtr, typename SrcPtr>
-ReinterpretCastPreservingAddressSpaceType<DstPtr, SrcPtr> ReinterpretCastPreservingAddressSpace(SrcPtr p)
-{
-    return reinterpret_cast<ReinterpretCastPreservingAddressSpaceType<DstPtr, SrcPtr>>(p);
-}
-
-template<typename T>
-struct remove_heap_ptr
-{
-    static_assert(std::is_pointer_v<T>);
-    using type = T;
-};
-
-template<typename T>
-struct remove_heap_ptr<HeapPtr<T>>
-{
-    using type = T*;
-};
-
-template<typename T>
-using remove_heap_ptr_t = typename remove_heap_ptr<T>::type;
-
-// Equivalent to memcpy, but asserts that the address range does not overlap
+// An array is implemented by a vector part and a sparse map part
+// This class describes the policy of when to use vector part and when to use sparse map part
 //
-inline void ALWAYS_INLINE SafeMemcpy(void* dst, const void* src, size_t len)
+struct ArrayGrowthPolicy
 {
-    assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
-    memcpy(dst, src, len);
-}
-
-#define HOI_SYS_HEAP 1
-#define HOI_USR_HEAP 2
-#define HEAP_OBJECT_INFO_LIST                                                           \
-  /* Enum Name                      C++ name                        Lives in       */   \
-    (STRING,                        HeapString,                     HOI_USR_HEAP)       \
-  , (FUNCTION,                      FunctionObject,                 HOI_USR_HEAP)       \
-  , (USERDATA,                      HeapCDataObject,                HOI_USR_HEAP)       \
-  , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
-  , (TABLE,                         HeapTableObject,                HOI_USR_HEAP)       \
-  , (StructuredHiddenClass,         StructuredHiddenClass,          HOI_SYS_HEAP)       \
-  , (DictionaryHiddenClass,         DictionaryHiddenClass,          HOI_SYS_HEAP)       \
-  , (HiddenClassAnchorHashTable,    HiddenClassAnchorHashTable,     HOI_SYS_HEAP)
-
-#define HOI_ENUM_NAME(hoi) PP_TUPLE_GET_1(hoi)
-#define HOI_CLASS_NAME(hoi) PP_TUPLE_GET_2(hoi)
-#define HOI_HEAP_KIND(hoi) (PP_TUPLE_GET_3(hoi))
-
-// Forward declare all the classes
-//
-#define macro(hoi) class HOI_CLASS_NAME(hoi);
-PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
-#undef macro
-
-enum class Type : uint8_t
-{
-    NIL,
-    BOOLEAN,
-    DOUBLE,
-
-    // Declare enum for heap object types
+    // Lua has 1-based array
     //
-#define macro(hoi) HOI_ENUM_NAME(hoi),
-PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
-#undef macro
+    constexpr static int32_t x_arrayBaseOrd = 1;
 
-    X_END_OF_ENUM
+    // When we need to grow array for an index, if the index is <= x_alwaysVectorCutoff,
+    // we always grow the vector to accommodate the index, regardless of how sparse the array is
+    //
+    constexpr static int32_t x_alwaysVectorCutoff = 1000;
+
+    // If the index is > x_sparseMapUnlessContinuousCutoff,
+    // unless the array is continuous, we always store the index to sparse map
+    //
+    // Note that if a sparse map contains an integer index >= x_arrayBaseOrd, the vector part never grows.
+    //
+    constexpr static int32_t x_sparseMapUnlessContinuousCutoff = 100000;
+
+    // If the index falls between the two cutoffs, we count the # of elements in the array,
+    // and grow the vector if there are at least index / x_densityCutoff elements after the growth.
+    //
+    constexpr static uint32_t x_densityCutoff = 8;
+
+    // If the index is greater than this cutoff, it unconditionally goes to the sparse map
+    // to prevent potential arithmetic overflow in addressing
+    //
+    constexpr static int32_t x_unconditionallySparseMapCutoff = 1U << 27;
+
+    // The growth factor for vector part
+    //
+    constexpr static double x_vectorGrowthFactor = 2;
 };
 
-template<typename T>
-struct TypeEnumForHeapObjectImpl
+struct ArrayType
 {
-    static constexpr Type value = Type::X_END_OF_ENUM;
-};
+    ArrayType() : m_asValue(0) { }
+    ArrayType(uint8_t value) : m_asValue(value) { }
 
-#define macro(hoi)                                                     \
-    template<> struct TypeEnumForHeapObjectImpl<HOI_CLASS_NAME(hoi)> { \
-        static constexpr Type value = Type::HOI_ENUM_NAME(hoi);        \
+    enum Kind : uint8_t  // must fit in 2 bits
+    {
+        NoButterflyArrayPart,
+        Int32,
+        Double,
+        Any
     };
-PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
-#undef macro
 
-// Type mapping from class name to enum name
-//
-template<typename T>
-constexpr Type TypeEnumForHeapObject = TypeEnumForHeapObjectImpl<T>::value;
+    using BitFieldCarrierType = uint8_t;
 
-template<typename T>
-constexpr bool IsHeapObjectType = (TypeEnumForHeapObject<T> != Type::X_END_OF_ENUM);
+    // The storage value is interpreted as the following:
+    //
+    // bit 0: bool m_isContinuous
+    //   Whether the array is continuous, i.e., entry is non-nil iff index in [x_arrayBaseOrd, len). Notes:
+    //   (1) If Kind is NoButterflyArrayPart, m_isContinuous is false
+    //   (2) m_isContinuous = true also implies m_hasSparseMap = false
+    //
+    using BFM_isContinuous = BitFieldMember<BitFieldCarrierType, bool /*type*/, 0 /*start*/, 1 /*width*/>;
+    bool IsContinuous() { return BFM_isContinuous::Get(m_asValue); }
+    void SetIsContinuous(bool v) { return BFM_isContinuous::Set(m_asValue, v); }
 
-template<typename T>
-struct TypeMayLiveInSystemHeapImpl : std::true_type { };
+    // bit 1-2: Kind m_kind
+    //   Whether all non-hole values in the array has the same type
+    //   If m_kind is Int32 or Double, then m_mayHaveMetatable must be false
+    //
+    using BFM_arrayKind = BitFieldMember<BitFieldCarrierType, Kind /*type*/, 1 /*start*/, 2 /*width*/>;
+    Kind ArrayKind() { return BFM_arrayKind::Get(m_asValue); }
+    void SetArrayKind(Kind v) { return BFM_arrayKind::Set(m_asValue, v); }
 
-#define macro(hoi)                                                                      \
-    template<> struct TypeMayLiveInSystemHeapImpl<HOI_CLASS_NAME(hoi)>                  \
-        : std::integral_constant<bool, ((HOI_HEAP_KIND(hoi) & HOI_SYS_HEAP) > 0)> { };
-PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
-#undef macro
+    // bit 3: bool m_hasSparseMap
+    //   Whether there is a sparse map
+    //
+    using BFM_hasSparseMap = BitFieldMember<BitFieldCarrierType, bool /*type*/, 3 /*start*/, 1 /*width*/>;
+    bool HasSparseMap() { return BFM_hasSparseMap::Get(m_asValue); }
+    void SetHasSparseMap(bool v) { return BFM_hasSparseMap::Set(m_asValue, v); }
 
-template<typename T>
-constexpr bool TypeMayLiveInSystemHeap = TypeMayLiveInSystemHeapImpl<T>::value;
+    // bit 4: bool m_sparseMapContainsVectorIndex
+    //   Whether the sparse map contains index between [x_arrayBaseOrd, MaxInt32]
+    //   When this is true, the vector part can no longer grow
+    //
+    using BFM_sparseMapContainsVectorIndex = BitFieldMember<BitFieldCarrierType, bool /*type*/, 4 /*start*/, 1 /*width*/>;
+    bool SparseMapContainsVectorIndex() { return BFM_sparseMapContainsVectorIndex::Get(m_asValue); }
+    void SetSparseMapContainsVectorIndex(bool v) { return BFM_sparseMapContainsVectorIndex::Set(m_asValue, v); }
 
-template<typename T>
-struct TypeMayLiveInUserHeapImpl : std::true_type { };
+    // bit 5: bool m_mayHaveMetatable
+    //   Whether the object may have a non-null metatable
+    //   When this is true, nil values have to be handled specially since it may invoke metatable methods
+    //
+    using BFM_mayHaveMetatable = BitFieldMember<BitFieldCarrierType, bool /*type*/, 5 /*start*/, 1 /*width*/>;
+    bool MayHaveMetatable() { return BFM_mayHaveMetatable::Get(m_asValue); }
+    void SetMayHaveMetatable(bool v) { return BFM_mayHaveMetatable::Set(m_asValue, v); }
 
-#define macro(hoi)                                                                      \
-    template<> struct TypeMayLiveInUserHeapImpl<HOI_CLASS_NAME(hoi)>                    \
-        : std::integral_constant<bool, ((HOI_HEAP_KIND(hoi) & HOI_USR_HEAP) > 0)> { };
-PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
-#undef macro
-
-template<typename T>
-constexpr bool TypeMayLiveInUserHeap = TypeMayLiveInUserHeapImpl<T>::value;
-
-class HeapEntityCommonHeader
-{
-public:
-    Type m_type;
-    uint8_t m_padding1;     // reserved for GC
-
-    template<typename T>
-    static void Populate(T self)
-    {
-        using RawTypePtr = remove_heap_ptr_t<T>;
-        static_assert(std::is_pointer_v<RawTypePtr>);
-        using RawType = std::remove_pointer_t<RawTypePtr>;
-        static_assert(IsHeapObjectType<RawType>);
-        static_assert(std::is_base_of_v<HeapEntityCommonHeader, RawType>);
-        self->m_type = TypeEnumForHeapObject<RawType>;
-        self->m_padding1 = 0;
-    }
+    // bit 6-7: always zero
+    //
+    BitFieldCarrierType m_asValue;
 };
-static_assert(sizeof(HeapEntityCommonHeader) == 2);
-
-template<typename T = void>
-struct UserHeapPointer
-{
-    UserHeapPointer() : m_value(0) { }
-    UserHeapPointer(int64_t value)
-        : m_value(value)
-    {
-        static_assert(TypeMayLiveInUserHeap<T>);
-        assert(x_minValue <= m_value && m_value <= x_maxValue);
-        if constexpr(!std::is_same_v<T, void>)
-        {
-            assert(m_value % static_cast<int64_t>(std::alignment_of_v<T>) == 0);
-        }
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(HeapPtr<U> value)
-        : UserHeapPointer(reinterpret_cast<intptr_t>(value))
-    {
-        assert(As<U>() == value);
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(UserHeapPointer<U>& other)
-        : UserHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(UserHeapPointer<U>&& other)
-        : UserHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(HeapRef<UserHeapPointer<U>> other)
-        : UserHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer& operator=(UserHeapPointer<U> other)
-    {
-        m_value = other.m_value;
-        return *this;
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
-    {
-        static_assert(TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(m_value);
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
-    {
-        static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
-                      std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
-                      std::is_same_v<T, U>, "should either keep the type, or reinterpret from/to void*/uint8_t*");
-        if constexpr(IsHeapObjectType<U>)
-        {
-            static_assert(std::is_base_of_v<HeapEntityCommonHeader, U>);
-            static_assert(offsetof_base_v<HeapEntityCommonHeader, U> == 0);
-            // UserHeapPointer should only come from boxed values, so they should never be nullptr
-            //
-            assert(AsNoAssert<HeapEntityCommonHeader>()->m_type == TypeEnumForHeapObject<U>);
-        }
-        return AsNoAssert<U>();
-    }
-
-    bool WARN_UNUSED operator==(const UserHeapPointer& rhs) const
-    {
-        return m_value == rhs.m_value;
-    }
-
-    static constexpr int64_t x_minValue = static_cast<int64_t>(0xFFFFFFFE00000000ULL);
-    static constexpr int64_t x_maxValue = static_cast<int64_t>(0xFFFFFFFEFFFFFFFFULL);
-
-    intptr_t m_value;
-};
-
-// A conservative estimation of valid heap address value
-// We assume all address in [0, x_minimum_valid_heap_address) must be invalid pointer
-//
-constexpr uint32_t x_minimum_valid_heap_address = 64;
-
-template<typename T = void>
-struct SystemHeapPointer
-{
-    SystemHeapPointer() : m_value(0) { }
-    SystemHeapPointer(uint32_t value)
-        : m_value(value)
-    {
-        static_assert(TypeMayLiveInSystemHeap<T>);
-        if constexpr(!std::is_same_v<T, void>)
-        {
-            assert(m_value % std::alignment_of_v<T> == 0);
-        }
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer(HeapPtr<U> value)
-        : SystemHeapPointer(SafeIntegerCast<uint32_t>(reinterpret_cast<intptr_t>(value)))
-    {
-        assert(As<U>() == value);
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer(SystemHeapPointer<U>& other)
-        : SystemHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer(SystemHeapPointer<U>&& other)
-        : SystemHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer(HeapRef<SystemHeapPointer<U>> other)
-        : SystemHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer& operator=(SystemHeapPointer<U> other)
-    {
-        m_value = other.m_value;
-        return *this;
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
-    {
-        static_assert(TypeMayLiveInSystemHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(static_cast<uint64_t>(m_value));
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
-    {
-        static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
-                      std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
-                      std::is_same_v<T, U>, "should either keep the type, or reinterpret from/to void*/uint8_t*");
-        if constexpr(IsHeapObjectType<U>)
-        {
-            static_assert(std::is_base_of_v<HeapEntityCommonHeader, U>);
-            static_assert(offsetof_base_v<HeapEntityCommonHeader, U> == 0);
-            AssertImp(m_value >= x_minimum_valid_heap_address, AsNoAssert<HeapEntityCommonHeader>()->m_type == TypeEnumForHeapObject<U>);
-        }
-        return AsNoAssert<U>();
-    }
-
-    bool WARN_UNUSED operator==(const SystemHeapPointer& rhs) const
-    {
-        return m_value == rhs.m_value;
-    }
-
-    uint32_t m_value;
-};
-
-template<typename T = void>
-struct GeneralHeapPointer
-{
-    GeneralHeapPointer() : m_value(0) { }
-    GeneralHeapPointer(int32_t value)
-        : m_value(value)
-    {
-        if constexpr(!std::is_same_v<T, void>)
-        {
-            static_assert(std::alignment_of_v<T> % (1 << x_shiftFromRawOffset) == 0);
-            assert(value % static_cast<int64_t>(std::alignment_of_v<T> / (1 << x_shiftFromRawOffset)) == 0);
-        }
-        AssertImp(m_value < 0, x_negMinValue <= m_value && m_value <= x_negMaxValue);
-        AssertImp(m_value >= 0, m_value <= x_posMaxValue);
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(HeapPtr<U> value)
-        : GeneralHeapPointer(SafeIntegerCast<int32_t>(ArithmeticShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
-    {
-        assert(As<U>() == value);
-    }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(GeneralHeapPointer<U>& other)
-        : GeneralHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(GeneralHeapPointer<U>&& other)
-        : GeneralHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(HeapRef<GeneralHeapPointer<U>> other)
-        : GeneralHeapPointer(other.m_value)
-    { }
-
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer& operator=(GeneralHeapPointer<U> other)
-    {
-        m_value = other.m_value;
-        return *this;
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
-    {
-        static_assert(TypeMayLiveInSystemHeap<U> || TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(ArithmeticShiftLeft(static_cast<int64_t>(m_value), x_shiftFromRawOffset));
-    }
-
-    template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
-    {
-        static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
-                      std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
-                      std::is_same_v<T, U>, "should either keep the type, or reinterpret from/to void*/uint8_t*");
-        if constexpr(IsHeapObjectType<U>)
-        {
-            static_assert(std::is_base_of_v<HeapEntityCommonHeader, U>);
-            static_assert(offsetof_base_v<HeapEntityCommonHeader, U> == 0);
-            AssertImp(m_value >= static_cast<int32_t>(x_minimum_valid_heap_address >> x_shiftFromRawOffset),
-                      AsNoAssert<HeapEntityCommonHeader>()->m_type == TypeEnumForHeapObject<U>);
-        }
-        return AsNoAssert<U>();
-    }
-
-    bool WARN_UNUSED operator==(const GeneralHeapPointer& rhs) const
-    {
-        return m_value == rhs.m_value;
-    }
-
-    static constexpr uint32_t x_shiftFromRawOffset = 2;
-    static constexpr int32_t x_negMinValue = static_cast<int32_t>(0x80000000);
-    static constexpr int32_t x_negMaxValue = static_cast<int32_t>(0xBFFFFFFF);
-    static constexpr int32_t x_posMaxValue = static_cast<int32_t>(0x3FFFFFFF);
-
-    int32_t m_value;
-};
-
-template<typename T>
-struct SpdsPtr
-{
-    SpdsPtr() : m_value(0) { }
-    SpdsPtr(int32_t value)
-        : m_value(value)
-    {
-        assert(m_value < 0);
-    }
-
-    SpdsPtr(SpdsPtr& other)
-        : SpdsPtr(other.m_value)
-    { }
-
-    SpdsPtr(HeapRef<SpdsPtr> other)
-        : SpdsPtr(other.m_value)
-    { }
-
-    SpdsPtr& operator=(const SpdsPtr& other)
-    {
-        m_value = other.m_value;
-        return *this;
-    }
-
-    HeapPtr<T> WARN_UNUSED ALWAYS_INLINE Get() const
-    {
-        return reinterpret_cast<HeapPtr<T>>(static_cast<int64_t>(m_value));
-    }
-
-    int32_t m_value;
-};
-
-class HeapPtrTranslator
-{
-public:
-    HeapPtrTranslator(uint64_t segRegBase) : m_segRegBase(segRegBase) { }
-
-    template<typename T>
-    T* WARN_UNUSED TranslateToRawPtr(HeapPtr<T> ptr) const
-    {
-        static_assert(!IsHeapPtrType<T*>::value);
-        return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) + m_segRegBase);
-    }
-
-    template<typename T>
-    UserHeapPointer<T> WARN_UNUSED TranslateToUserHeapPtr(T* ptr) const
-    {
-        return UserHeapPointer<T> { TranslateToHeapPtr(ptr) };
-    }
-
-    template<typename T>
-    SystemHeapPointer<T> WARN_UNUSED TranslateToSystemHeapPtr(T* ptr) const
-    {
-        return SystemHeapPointer<T> { TranslateToHeapPtr(ptr) };
-    }
-
-    template<typename T>
-    SpdsPtr<T> WARN_UNUSED TranslateToSpdsPtr(T* ptr) const
-    {
-        return SpdsPtr<T> { TranslateToHeapPtr(ptr) };
-    }
-
-    template<typename T>
-    GeneralHeapPointer<T> WARN_UNUSED TranslateToGeneralHeapPtr(T* ptr) const
-    {
-        return GeneralHeapPointer<T> { TranslateToHeapPtr(ptr) };
-    }
-
-private:
-    template<typename T>
-    HeapPtr<T> TranslateToHeapPtr(T* ptr) const
-    {
-        static_assert(!IsHeapPtrType<T*>::value);
-        return reinterpret_cast<HeapPtr<T>>(reinterpret_cast<uint64_t>(ptr) - m_segRegBase);
-    }
-
-    uint64_t m_segRegBase;
-};
-
-constexpr size_t x_spdsAllocationPageSize = 4096;
-static_assert(is_power_of_2(x_spdsAllocationPageSize));
-
-// If 'isTempAlloc' is true, we give the memory pages back to VM when the struct is destructed
-// Singlethread use only.
-// Currently chunk size is always 4KB, so allocate small objects only.
-//
-template<typename Host, bool isTempAlloc>
-class SpdsAllocImpl : NonCopyable, NonMovable
-{
-public:
-    SpdsAllocImpl(Host* host)
-        : m_host(host)
-        , m_curChunk(0)
-        , m_lastChunkInTheChain(0)
-    { }
-
-    SpdsAllocImpl()
-        : SpdsAllocImpl(nullptr)
-    { }
-
-    ~SpdsAllocImpl()
-    {
-        if constexpr(isTempAlloc)
-        {
-            ReturnMemory();
-        }
-    }
-
-    void SetHost(Host* host)
-    {
-        m_host = host;
-    }
-
-    template<typename T>
-    SpdsPtr<T> ALWAYS_INLINE WARN_UNUSED Alloc()
-    {
-        static_assert(sizeof(T) <= x_spdsAllocationPageSize - RoundUpToMultipleOf<alignof(T)>(isTempAlloc ? 4ULL : 0ULL));
-        return SpdsPtr<T> { AllocMemory<alignof(T)>(static_cast<uint32_t>(sizeof(T))) };
-    }
-
-private:
-    template<size_t alignment>
-    int32_t ALWAYS_INLINE WARN_UNUSED AllocMemory(uint32_t length)
-    {
-        static_assert(is_power_of_2(alignment) && alignment <= 32);
-        assert(m_curChunk <= 0 && length > 0 && length % alignment == 0);
-
-        m_curChunk &= ~static_cast<int>(alignment - 1);
-        assert(m_curChunk % alignment == 0);
-        if (likely((static_cast<uint32_t>(m_curChunk) & (x_spdsAllocationPageSize - 1)) >= length))
-        {
-            m_curChunk -= length;
-            return m_curChunk;
-        }
-        else
-        {
-            int32_t oldChunk = (m_curChunk & (~static_cast<int>(x_spdsAllocationPageSize - 1))) + static_cast<int>(x_spdsAllocationPageSize);
-            m_curChunk = m_host->SpdsAllocatePage();
-            assert(m_curChunk <= 0);
-            if (oldChunk > 0)
-            {
-                m_lastChunkInTheChain = m_curChunk;
-            }
-            assert(m_curChunk % x_spdsAllocationPageSize == 0);
-            if constexpr(isTempAlloc)
-            {
-                m_curChunk -= 4;
-                *reinterpret_cast<int32_t*>(reinterpret_cast<intptr_t>(m_host) + m_curChunk) = oldChunk;
-                m_curChunk &= ~static_cast<int>(alignment - 1);
-            }
-            m_curChunk -= length;
-            return m_curChunk;
-        }
-    }
-
-    void ReturnMemory()
-    {
-        int32_t chunk = (m_curChunk & (~static_cast<int>(x_spdsAllocationPageSize - 1))) + static_cast<int>(x_spdsAllocationPageSize);
-        if (chunk != static_cast<int>(x_spdsAllocationPageSize))
-        {
-            m_host->SpdsPutAllocatedPagesToFreeList(chunk, m_lastChunkInTheChain);
-        }
-    }
-
-    Host* m_host;
-    int32_t m_curChunk;
-    int32_t m_lastChunkInTheChain;
-};
-
-struct MiscImmediateValue
-{
-    // All misc immediate values must be between [0, 127]
-    // 0 is more efficient to use than the others in that a XOR instruction is not needed to create the value
-    //
-    static constexpr uint64_t x_nil = 0;
-    static constexpr uint64_t x_false = 2;
-    static constexpr uint64_t x_true = 3;
-
-    MiscImmediateValue() : m_value(0) { }
-    MiscImmediateValue(uint64_t value)
-        : m_value(value)
-    {
-        assert(m_value == x_nil || m_value == x_true || m_value == x_false);
-    }
-
-    bool ALWAYS_INLINE IsNil() const
-    {
-        return m_value == 0;
-    }
-
-    bool ALWAYS_INLINE IsBoolean() const
-    {
-        return m_value != 0;
-    }
-
-    bool ALWAYS_INLINE GetBooleanValue() const
-    {
-        assert(IsBoolean());
-        return m_value & 1;
-    }
-
-    MiscImmediateValue WARN_UNUSED ALWAYS_INLINE FlipBooleanValue() const
-    {
-        assert(IsBoolean());
-        return MiscImmediateValue { m_value ^ 1 };
-    }
-
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateNil()
-    {
-        return MiscImmediateValue { x_nil };
-    }
-
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateFalse()
-    {
-        return MiscImmediateValue { x_false };
-    }
-
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateTrue()
-    {
-        return MiscImmediateValue { x_true };
-    }
-
-    bool WARN_UNUSED ALWAYS_INLINE operator==(const MiscImmediateValue& rhs) const
-    {
-        return m_value == rhs.m_value;
-    }
-
-    uint64_t m_value;
-};
-
-struct TValue
-{
-    // We use the following NaN boxing scheme:
-    //         / 0000 **** **** ****
-    // double {          ...
-    //         \ FFFA **** **** ****
-    // int       FFFB FFFF **** ****
-    // other     FFFC FFFF 0000 00** (00 - 7F only)
-    // pointer   FFFF FFFE **** ****
-    //
-    // The FFFE word in pointer may carry tagging info (fine as long as it's not 0xFFFF), but currently we don't need it.
-    //
-
-    TValue() : m_value(0) { }
-    TValue(uint64_t value) : m_value(value) { }
-
-    static constexpr uint64_t x_int32Tag = 0xFFFBFFFF00000000ULL;
-    static constexpr uint64_t x_mivTag = 0xFFFCFFFF0000007FULL;
-
-    // Translates to a single ANDN instruction with BMI1 support
-    //
-    bool ALWAYS_INLINE IsInt32(uint64_t int32Tag) const
-    {
-        assert(int32Tag == x_int32Tag);
-        bool result = (m_value & int32Tag) == int32Tag;
-        AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
-        return result;
-    }
-
-    // Translates to imm8 LEA instruction + ANDN instruction with BMI1 support
-    //
-    bool ALWAYS_INLINE IsMIV(uint64_t mivTag) const
-    {
-        assert(mivTag == x_mivTag);
-        bool result = (m_value & (mivTag - 0x7F)) == (mivTag - 0x7F);
-        AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsPointer(uint64_t mivTag) const
-    {
-        assert(mivTag == x_mivTag);
-        bool result = (m_value > mivTag);
-        AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFFFFFEU);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsDouble(uint64_t int32Tag) const
-    {
-        assert(int32Tag == x_int32Tag);
-        bool result = m_value < int32Tag;
-        AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
-        return result;
-    }
-
-    double ALWAYS_INLINE AsDouble() const
-    {
-        assert(IsDouble(x_int32Tag) && !IsMIV(x_mivTag) && !IsPointer(x_mivTag) && !IsInt32(x_int32Tag));
-        return cxx2a_bit_cast<double>(m_value);
-    }
-
-    int32_t ALWAYS_INLINE AsInt32() const
-    {
-        assert(IsInt32(x_int32Tag) && !IsMIV(x_mivTag) && !IsPointer(x_mivTag) && !IsDouble(x_int32Tag));
-        return BitwiseTruncateTo<int32_t>(m_value);
-    }
-
-    template<typename T = void>
-    UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
-    {
-        assert(IsPointer(x_mivTag) && !IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag));
-        return UserHeapPointer<T> { static_cast<int64_t>(m_value) };
-    }
-
-    MiscImmediateValue ALWAYS_INLINE AsMIV(uint64_t mivTag) const
-    {
-        assert(mivTag == x_mivTag && IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag) && !IsPointer(x_mivTag));
-        return MiscImmediateValue { m_value ^ mivTag };
-    }
-
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateInt32(int32_t value, uint64_t int32Tag)
-    {
-        assert(int32Tag == x_int32Tag);
-        TValue result { int32Tag | ZeroExtendTo<uint64_t>(value) };
-        assert(result.AsInt32() == value);
-        return result;
-    }
-
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateDouble(double value)
-    {
-        TValue result { cxx2a_bit_cast<uint64_t>(value) };
-        SUPRESS_FLOAT_EQUAL_WARNING(
-            AssertImp(!std::isnan(value), result.AsDouble() == value);
-            AssertIff(std::isnan(value), std::isnan(result.AsDouble()));
-        )
-        return result;
-    }
-
-    template<typename T>
-    static TValue WARN_UNUSED ALWAYS_INLINE CreatePointer(UserHeapPointer<T> ptr)
-    {
-        TValue result { static_cast<uint64_t>(ptr.m_value) };
-        assert(result.AsPointer<T>() == ptr);
-        return result;
-    }
-
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateMIV(MiscImmediateValue miv, uint64_t mivTag)
-    {
-        assert(mivTag == x_mivTag);
-        TValue result { miv.m_value ^ mivTag };
-        assert(result.AsMIV(mivTag).m_value == miv.m_value);
-        return result;
-    }
-
-    uint64_t m_value;
-};
-
-// [ 4GB user heap ] [ 2GB padding ] [ 2GB short-pointer data structures ] [ up to 4GB system heap ]
-//                                                                         ^
-//    userheap                                   SPDS region      4GB aligned baseptr     systemheap
-//
-template<typename CRTP>
-class VMMemoryManager
-{
-public:
-    static constexpr size_t x_pageSize = 4096;
-    static constexpr size_t x_vmLayoutLength = 12ULL << 30;
-    static constexpr size_t x_vmLayoutAlignment = 4ULL << 30;
-    static constexpr size_t x_vmBaseOffset = 8ULL << 30;
-    static constexpr size_t x_vmUserHeapSize = 4ULL << 30;
-
-    template<typename... Args>
-    static CRTP* WARN_UNUSED Create(Args&&... args)
-    {
-        void* ptrVoid = mmap(nullptr, x_vmLayoutLength + x_vmLayoutAlignment, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-        CHECK_LOG_ERROR_WITH_ERRNO(ptrVoid != MAP_FAILED, "Failed to reserve VM address range");
-
-        // cut out the 4GB-aligned 12GB space, and unmap the remaining
-        //
-        {
-            uintptr_t ptr = reinterpret_cast<uintptr_t>(ptrVoid);
-            uintptr_t alignedPtr = RoundUpToMultipleOf<x_vmLayoutAlignment>(ptr);
-            assert(alignedPtr >= ptr && alignedPtr % x_vmLayoutAlignment == 0 && alignedPtr - ptr < x_vmLayoutAlignment);
-
-            // If any unmap failed, log a warning, but continue execution.
-            //
-            if (alignedPtr > ptr)
-            {
-                int r = munmap(reinterpret_cast<void*>(ptr), alignedPtr - ptr);
-                LOG_WARNING_WITH_ERRNO_IF(r != 0, "Failed to unmap unnecessary VM address range");
-            }
-
-            {
-                uintptr_t addr = alignedPtr + x_vmLayoutLength;
-                int r = munmap(reinterpret_cast<void*>(addr), x_vmLayoutAlignment - (alignedPtr - ptr));
-                LOG_WARNING_WITH_ERRNO_IF(r != 0, "Failed to unmap unnecessary VM address range");
-            }
-
-            ptrVoid = reinterpret_cast<void*>(alignedPtr);
-        }
-
-        bool success = false;
-        void* unmapPtrOnFailure = ptrVoid;
-        size_t unmapLengthOnFailure = x_vmLayoutLength;
-
-        Auto(
-            if (!success)
-            {
-                int r = munmap(unmapPtrOnFailure, unmapLengthOnFailure);
-                LOG_WARNING_WITH_ERRNO_IF(r != 0, "Cannot unmap VM on failure cleanup");
-            }
-        );
-
-        // Map memory and initialize the VM struct
-        //
-        void* vmVoid = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptrVoid) + x_vmBaseOffset);
-        constexpr size_t sizeToMap = RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP));
-        {
-            void* r = mmap(vmVoid, sizeToMap, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-            CHECK_LOG_ERROR_WITH_ERRNO(r != MAP_FAILED, "Failed to allocate VM struct");
-            TestAssert(vmVoid == r);
-        }
-
-        CRTP* vm = new (vmVoid) CRTP();
-        assert(vm == vmVoid);
-        Auto(
-            if (!success)
-            {
-                vm->~CRTP();
-            }
-        );
-
-        CHECK_LOG_ERROR(vm->Initialize(std::forward<Args>(args)...));
-        Auto(
-            if (!success)
-            {
-                vm->Cleanup();
-            }
-        );
-
-        success = true;
-        return vm;
-    }
-
-    void Destroy()
-    {
-        CRTP* ptr = static_cast<CRTP*>(this);
-        ptr->Cleanup();
-        ptr->~CRTP();
-
-        void* unmapAddr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) - x_vmBaseOffset);
-        int r = munmap(unmapAddr, x_vmLayoutLength);
-        LOG_WARNING_WITH_ERRNO_IF(r != 0, "Cannot unmap VM");
-    }
-
-    static CRTP* GetActiveVMForCurrentThread()
-    {
-        return reinterpret_cast<CRTP*>(reinterpret_cast<HeapPtr<CRTP>>(0)->m_self);
-    }
-
-    HeapPtrTranslator GetHeapPtrTranslator() const
-    {
-        return HeapPtrTranslator { VMBaseAddress() };
-    }
-
-    void SetUpSegmentationRegister()
-    {
-        X64_SetSegmentationRegister<X64SegmentationRegisterKind::GS>(VMBaseAddress());
-    }
-
-    SpdsAllocImpl<CRTP, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
-    {
-        return SpdsAllocImpl<CRTP, true /*isTempAlloc*/>(static_cast<CRTP*>(this));
-    }
-
-    SpdsAllocImpl<CRTP, false /*isTempAlloc*/>& WARN_UNUSED GetCompilerThreadSpdsAlloc()
-    {
-        return m_compilerThreadSpdsAlloc;
-    }
-
-    SpdsAllocImpl<CRTP, false /*isTempAlloc*/>& WARN_UNUSED GetExecutionThreadSpdsAlloc()
-    {
-        return m_executionThreadSpdsAlloc;
-    }
-
-    // Grab one 4K page from the SPDS region.
-    // The page can be given back via SpdsPutAllocatedPagesToFreeList()
-    // NOTE: if the page is [begin, end), this returns 'end', not 'begin'! SpdsReturnMemoryFreeList also expects 'end', not 'begin'
-    //
-    int32_t WARN_UNUSED ALWAYS_INLINE SpdsAllocatePage()
-    {
-        {
-            int32_t out;
-            if (SpdsAllocateTryGetFreeListPage(&out))
-            {
-                return out;
-            }
-        }
-        return SpdsAllocatePageSlowPath();
-    }
-
-    void SpdsPutAllocatedPagesToFreeList(int32_t firstPage, int32_t lastPage)
-    {
-        std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(lastPage) - 4);
-        uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_relaxed);
-        while (true)
-        {
-            uint32_t tag = BitwiseTruncateTo<uint32_t>(taggedValue >> 32);
-            int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
-            addr->store(head, std::memory_order_relaxed);
-
-            tag++;
-            uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(firstPage);
-            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expected, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_relaxed))
-            {
-                break;
-            }
-        }
-    }
-
-    // Allocate a chunk of memory from the user heap
-    // Only execution thread may do this
-    //
-    UserHeapPointer<void> WARN_UNUSED AllocFromUserHeap(uint32_t length)
-    {
-        assert(length > 0 && length % 8 == 0);
-        // TODO: we currently do not have GC, so it's only a bump allocator..
-        //
-        m_userHeapCurPtr -= static_cast<int64_t>(length);
-        if (unlikely(m_userHeapCurPtr < m_userHeapPtrLimit))
-        {
-            BumpUserHeap();
-        }
-        return UserHeapPointer<void> { m_userHeapCurPtr };
-    }
-
-    // Allocate a chunk of memory from the system heap
-    // Only execution thread may do this
-    //
-    SystemHeapPointer<void> WARN_UNUSED AllocFromSystemHeap(uint32_t length)
-    {
-        assert(length > 0 && length % 8 == 0);
-        // TODO: we currently do not have GC, so it's only a bump allocator..
-        //
-        uint32_t result = m_systemHeapCurPtr;
-        VM_FAIL_IF(AddWithOverflowCheck(m_systemHeapCurPtr, length, &m_systemHeapCurPtr),
-            "Resource limit exceeded: system heap overflowed 4GB memory limit.");
-
-        if (unlikely(m_systemHeapCurPtr > m_systemHeapPtrLimit))
-        {
-            BumpSystemHeap();
-        }
-        return SystemHeapPointer<void> { result };
-    }
-
-    bool WARN_UNUSED Initialize()
-    {
-        static_assert(std::is_base_of_v<VMMemoryManager, CRTP>, "wrong use of CRTP pattern");
-        // These restrictions might not be necessary, but just to make things safe and simple
-        //
-        static_assert(!std::is_polymorphic_v<CRTP>, "must be not polymorphic");
-        static_assert(offsetof_base_v<VMMemoryManager, CRTP> == 0, "VM must inherit VMMemoryManager as the first inherited class");
-
-        m_self = reinterpret_cast<uintptr_t>(static_cast<CRTP*>(this));
-
-        m_userHeapPtrLimit = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
-        m_userHeapCurPtr = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
-
-        static_assert(sizeof(CRTP) >= x_minimum_valid_heap_address);
-        m_systemHeapPtrLimit = static_cast<uint32_t>(RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP)));
-        m_systemHeapCurPtr = sizeof(CRTP);
-
-        m_spdsPageFreeList.store(static_cast<uint64_t>(x_spdsAllocationPageSize));
-        m_spdsPageAllocLimit = 0;
-
-        m_executionThreadSpdsAlloc.SetHost(static_cast<CRTP*>(this));
-        m_compilerThreadSpdsAlloc.SetHost(static_cast<CRTP*>(this));
-
-        return true;
-    }
-
-    void Cleanup() { }
-
-private:
-    uintptr_t VMBaseAddress() const
-    {
-        uintptr_t result = reinterpret_cast<uintptr_t>(static_cast<const CRTP*>(this));
-        assert(result == m_self);
-        return result;
-    }
-
-    void NO_INLINE BumpUserHeap()
-    {
-        assert(m_userHeapCurPtr < m_userHeapPtrLimit);
-        VM_FAIL_IF(m_userHeapCurPtr < -static_cast<intptr_t>(x_vmBaseOffset),
-            "Resource limit exceeded: user heap overflowed 4GB memory limit.");
-
-        constexpr size_t x_allocationSize = 65536;
-        // TODO: consider allocating smaller sizes on the first few allocations
-        //
-        intptr_t newHeapLimit = m_userHeapCurPtr & (~static_cast<intptr_t>(x_allocationSize - 1));
-        assert(newHeapLimit <= m_userHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit < m_userHeapPtrLimit);
-        size_t lengthToAllocate = static_cast<size_t>(m_userHeapPtrLimit - newHeapLimit);
-        assert(lengthToAllocate % x_pageSize == 0);
-
-        uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(newHeapLimit);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        m_userHeapPtrLimit = newHeapLimit;
-        assert(m_userHeapPtrLimit <= m_userHeapCurPtr);
-        assert(m_userHeapPtrLimit >= -static_cast<intptr_t>(x_vmBaseOffset));
-    }
-
-    void NO_INLINE BumpSystemHeap()
-    {
-        assert(m_systemHeapCurPtr > m_systemHeapPtrLimit);
-        constexpr uint32_t x_allocationSize = 65536;
-
-        VM_FAIL_IF(m_systemHeapCurPtr > std::numeric_limits<uint32_t>::max() - x_allocationSize,
-            "Resource limit exceeded: system heap overflowed 4GB memory limit.");
-
-        // TODO: consider allocating smaller sizes on the first few allocations
-        //
-        uint32_t newHeapLimit = RoundUpToMultipleOf<x_allocationSize>(m_systemHeapCurPtr);
-        assert(newHeapLimit >= m_systemHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit > m_systemHeapPtrLimit);
-
-        size_t lengthToAllocate = static_cast<size_t>(newHeapLimit - m_systemHeapPtrLimit);
-        assert(lengthToAllocate % x_pageSize == 0);
-
-        uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(m_systemHeapPtrLimit);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        m_systemHeapPtrLimit = newHeapLimit;
-        assert(m_systemHeapPtrLimit >= m_systemHeapCurPtr);
-    }
-
-    bool WARN_UNUSED SpdsAllocateTryGetFreeListPage(int32_t* out)
-    {
-        uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_acquire);
-        while (true)
-        {
-            int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
-            assert(head % x_spdsAllocationPageSize == 0);
-            if (head == x_spdsAllocationPageSize)
-            {
-                return false;
-            }
-            uint32_t tag = BitwiseTruncateTo<uint32_t>(taggedValue >> 32);
-
-            std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(head) - 4);
-            int32_t newHead = addr->load(std::memory_order_relaxed);
-            assert(newHead % x_spdsAllocationPageSize == 0);
-            tag++;
-            uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(newHead);
-
-            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expected, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_acquire))
-            {
-                *out = head;
-                return true;
-            }
-        }
-    }
-
-    int32_t NO_INLINE WARN_UNUSED SpdsAllocatePageSlowPath()
-    {
-        while (true)
-        {
-            if (m_spdsAllocationMutex.try_lock())
-            {
-                int32_t result = SpdsAllocatePageSlowPathImpl();
-                m_spdsAllocationMutex.unlock();
-                return result;
-            }
-            else
-            {
-                // Someone else has took the lock, we wait until they finish, and retry
-                //
-                {
-                    std::lock_guard<std::mutex> blinkLock(m_spdsAllocationMutex);
-                }
-                int32_t out;
-                if (SpdsAllocateTryGetFreeListPage(&out))
-                {
-                    return out;
-                }
-            }
-        }
-    }
-
-    // Allocate a chunk of memory, return one of the pages, and put the rest into free list
-    //
-    int32_t WARN_UNUSED SpdsAllocatePageSlowPathImpl()
-    {
-        constexpr int32_t x_allocationSize = 65536;
-
-        // Compute how much memory we should allocate
-        // We allocate 4K, 4K, 8K, 16K, 32K first
-        // After that we allocate 64K each time
-        //
-        assert(m_spdsPageAllocLimit % x_pageSize == 0 && m_spdsPageAllocLimit % x_spdsAllocationPageSize == 0);
-        size_t lengthToAllocate = x_allocationSize;
-        if (unlikely(m_spdsPageAllocLimit > -x_allocationSize))
-        {
-            if (m_spdsPageAllocLimit == 0)
-            {
-                lengthToAllocate = 4096;
-            }
-            else
-            {
-                assert(m_spdsPageAllocLimit < 0);
-                lengthToAllocate = static_cast<size_t>(-m_spdsPageAllocLimit);
-                assert(lengthToAllocate <= x_allocationSize);
-            }
-        }
-        assert(lengthToAllocate > 0 && lengthToAllocate % x_pageSize == 0 && lengthToAllocate % x_spdsAllocationPageSize == 0);
-
-        VM_FAIL_IF(SubWithOverflowCheck(m_spdsPageAllocLimit, static_cast<int32_t>(lengthToAllocate), &m_spdsPageAllocLimit),
-            "Resource limit exceeded: SPDS region overflowed 2GB memory limit.");
-
-        // Allocate memory
-        //
-        uintptr_t allocAddr = VMBaseAddress() + SignExtendTo<uint64_t>(m_spdsPageAllocLimit);
-        assert(allocAddr % x_pageSize == 0 && allocAddr % x_spdsAllocationPageSize == 0);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), static_cast<size_t>(lengthToAllocate), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        // The first page is returned to caller
-        //
-        int32_t result = m_spdsPageAllocLimit + x_spdsAllocationPageSize;
-
-        // Insert the other pages, if any, into free list
-        //
-        size_t numPages = lengthToAllocate / x_spdsAllocationPageSize;
-        if (numPages > 1)
-        {
-            int32_t cur = result + static_cast<int32_t>(x_spdsAllocationPageSize);
-            int32_t firstPage = cur;
-            for (size_t i = 1; i < numPages - 1; i++)
-            {
-                int32_t next = cur + static_cast<int32_t>(x_spdsAllocationPageSize);
-                std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(cur) - 4);
-                addr->store(next, std::memory_order_relaxed);
-                cur = next;
-            }
-
-            int32_t lastPage = cur;
-            assert(lastPage == m_spdsPageAllocLimit + lengthToAllocate);
-
-            SpdsPutAllocatedPagesToFreeList(firstPage, lastPage);
-        }
-        return result;
-    }
-
-protected:
-    VMMemoryManager() { }
-
-    // must be first member, stores the value of static_cast<CRTP*>(this)
-    //
-    uintptr_t m_self;
-
-    alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
-
-    // user heap region grows from high address to low address
-    // highest physically mapped address of the user heap region (offsets from m_self)
-    //
-    int64_t m_userHeapPtrLimit;
-
-    // lowest logically used address of the user heap region (offsets from m_self)
-    //
-    int64_t m_userHeapCurPtr;
-
-    // system heap region grows from low address to high address
-    // lowest physically unmapped address of the system heap region (offsets from m_self)
-    //
-    uint32_t m_systemHeapPtrLimit;
-
-    // lowest logically available address of the system heap region (offsets from m_self)
-    //
-    uint32_t m_systemHeapCurPtr;
-
-    alignas(64) std::mutex m_spdsAllocationMutex;
-
-    // SPDS region grows from high address to low address
-    //
-    std::atomic<uint64_t> m_spdsPageFreeList;
-    int32_t m_spdsPageAllocLimit;
-
-    alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_compilerThreadSpdsAlloc;
-};
-
-class alignas(8) HeapString final : public HeapEntityCommonHeader
-{
-public:
-    // This is the high 16 bits of the XXHash64 value, for quick comparison
-    //
-    uint16_t m_hashHigh;
-    // This is the low 32 bits of the XXHash64 value, for hash table indexing and quick comparison
-    //
-    uint32_t m_hashLow;
-    // The length of the string
-    //
-    uint32_t m_length;
-    // The string itself
-    //
-    uint8_t m_string[0];
-
-    void PopulateHeader(StringLengthAndHash slah)
-    {
-        HeapEntityCommonHeader::Populate(this);
-        m_hashHigh = static_cast<uint16_t>(slah.m_hashValue >> 48);
-        m_hashLow = BitwiseTruncateTo<uint32_t>(slah.m_hashValue);
-        m_length = SafeIntegerCast<uint32_t>(slah.m_length);
-    }
-
-    // Returns the allocation length to store a string of length 'length'
-    //
-    static size_t ComputeAllocationLengthForString(size_t length)
-    {
-        constexpr size_t x_inStructAvailableLength = 4;
-        static_assert(sizeof(HeapString) - offsetof(HeapString, m_string) == x_inStructAvailableLength);
-        size_t tailLength = RoundUpToMultipleOf<8>(length + 8 - x_inStructAvailableLength) - 8;
-        return sizeof(HeapString) + tailLength;
-    }
-};
-static_assert(sizeof(HeapString) == 16);
-
-// In Lua all strings are hash-consed
-//
-template<typename CRTP>
-class GlobalStringHashConser
-{
-private:
-    // The hash table stores GeneralHeapPointer
-    // We know that they must be UserHeapPointer, so the below values should never appear as valid values
-    //
-    static constexpr int32_t x_nonexistentValue = 0;
-    static constexpr int32_t x_deletedValue = 4;
-
-    static bool WARN_UNUSED IsNonExistentOrDeleted(GeneralHeapPointer<HeapString> ptr)
-    {
-        AssertIff(ptr.m_value >= 0, ptr.m_value == x_nonexistentValue || ptr.m_value == x_deletedValue);
-        return ptr.m_value >= 0;
-    }
-
-    static bool WARN_UNUSED IsNonExistent(GeneralHeapPointer<HeapString> ptr)
-    {
-        return ptr.m_value == x_nonexistentValue;
-    }
-
-    // max load factor is x_loadfactor_numerator / (2^x_loadfactor_denominator_shift)
-    //
-    static constexpr uint32_t x_loadfactor_denominator_shift = 1;
-    static constexpr uint32_t x_loadfactor_numerator = 1;
-
-    // Compare if 's' is equal to the abstract multi-piece string represented by 'iterator'
-    //
-    // The iterator should provide two methods:
-    // (1) bool HasMore() returns true if it has not yet reached the end
-    // (2) std::pair<const void*, uint32_t> GetAndAdvance() returns the current string piece and advance the iterator
-    //
-    template<typename Iterator>
-    static bool WARN_UNUSED CompareMultiPieceStringEqual(Iterator iterator, const HeapString* s)
-    {
-        uint32_t length = s->m_length;
-        const uint8_t* ptr = s->m_string;
-        while (iterator.HasMore())
-        {
-            const void* curStr;
-            uint32_t curLen;
-            std::tie(curStr, curLen) = iterator.GetAndAdvance();
-
-            if (curLen > length)
-            {
-                return false;
-            }
-            if (memcmp(ptr, curStr, curLen) != 0)
-            {
-                return false;
-            }
-            ptr += curLen;
-            length -= curLen;
-        }
-        return length == 0;
-    }
-
-    template<typename Iterator>
-    HeapString* WARN_UNUSED MaterializeMultiPieceString(Iterator iterator, StringLengthAndHash slah)
-    {
-        size_t allocationLength = HeapString::ComputeAllocationLengthForString(slah.m_length);
-        VM_FAIL_IF(!IntegerCanBeRepresentedIn<uint32_t>(allocationLength),
-            "Cannot create a string longer than 4GB (attempted length: %llu bytes).", static_cast<unsigned long long>(allocationLength));
-
-        HeapPtrTranslator translator = static_cast<CRTP*>(this)->GetHeapPtrTranslator();
-        UserHeapPointer<void> uhp = static_cast<CRTP*>(this)->AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
-
-        HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
-        ptr->PopulateHeader(slah);
-
-        uint8_t* curDst = ptr->m_string;
-        while (iterator.HasMore())
-        {
-            const void* curStr;
-            uint32_t curLen;
-            std::tie(curStr, curLen) = iterator.GetAndAdvance();
-
-            SafeMemcpy(curDst, curStr, curLen);
-            curDst += curLen;
-        }
-
-        // Assert that the provided length and hash value matches reality
-        //
-        assert(curDst - ptr->m_string == static_cast<intptr_t>(slah.m_length));
-        assert(HashString(ptr->m_string, ptr->m_length) == slah.m_hashValue);
-        return ptr;
-    }
-
-    static void ReinsertDueToResize(GeneralHeapPointer<HeapString>* hashTable, uint32_t hashTableSizeMask, GeneralHeapPointer<HeapString> e)
-    {
-        uint32_t slot = e.As<HeapString>()->m_hashLow & hashTableSizeMask;
-        while (hashTable[slot].m_value != x_nonexistentValue)
-        {
-            slot = (slot + 1) & hashTableSizeMask;
-        }
-        hashTable[slot] = e;
-    }
-
-    // TODO: when we have GC thread we need to figure out how this interacts with GC
-    //
-    void ExpandHashTableIfNeeded()
-    {
-        if (likely(m_elementCount <= (m_hashTableSizeMask >> x_loadfactor_denominator_shift) * x_loadfactor_numerator))
-        {
-            return;
-        }
-
-        assert(m_hashTable != nullptr && is_power_of_2(m_hashTableSizeMask + 1));
-        VM_FAIL_IF(m_hashTableSizeMask >= (1U << 29),
-            "Global string hash table has grown beyond 2^30 slots");
-        uint32_t newSize = (m_hashTableSizeMask + 1) * 2;
-        uint32_t newMask = newSize - 1;
-        GeneralHeapPointer<HeapString>* newHt = new (std::nothrow) GeneralHeapPointer<HeapString>[newSize];
-        VM_FAIL_IF(newHt == nullptr,
-            "Out of memory, failed to resize global string hash table to size %u", static_cast<unsigned>(newSize));
-
-        static_assert(x_nonexistentValue == 0, "we are relying on this to do memset");
-        memset(newHt, 0, sizeof(GeneralHeapPointer<HeapString>) * newSize);
-
-        GeneralHeapPointer<HeapString>* cur = m_hashTable;
-        GeneralHeapPointer<HeapString>* end = m_hashTable + m_hashTableSizeMask + 1;
-        while (cur < end)
-        {
-            if (!IsNonExistentOrDeleted(cur->m_value))
-            {
-                ReinsertDueToResize(newHt, newMask, *cur);
-            }
-            cur++;
-        }
-        delete [] m_hashTable;
-        m_hashTable = newHt;
-        m_hashTableSizeMask = newMask;
-    }
-
-    // Insert an abstract multi-piece string into the hash table if it does not exist
-    // Return the HeapString
-    //
-    template<typename Iterator>
-    UserHeapPointer<HeapString> WARN_UNUSED InsertMultiPieceString(Iterator iterator)
-    {
-        HeapPtrTranslator translator = static_cast<CRTP*>(this)->GetHeapPtrTranslator();
-
-        StringLengthAndHash lenAndHash = HashMultiPieceString(iterator);
-        uint64_t hash = lenAndHash.m_hashValue;
-        size_t length = lenAndHash.m_length;
-        uint16_t expectedHashHigh = static_cast<uint16_t>(hash >> 48);
-        uint32_t expectedHashLow = BitwiseTruncateTo<uint32_t>(hash);
-
-        uint32_t slotForInsertion = static_cast<uint32_t>(-1);
-        uint32_t slot = static_cast<uint32_t>(hash) & m_hashTableSizeMask;
-        while (true)
-        {
-            {
-                GeneralHeapPointer<HeapString> ptr = m_hashTable[slot];
-                if (IsNonExistentOrDeleted(ptr))
-                {
-                    // If this string turns out to be non-existent, this can be a slot to insert the string
-                    //
-                    if (slotForInsertion == static_cast<uint32_t>(-1))
-                    {
-                        slotForInsertion = slot;
-                    }
-                    if (IsNonExistent(ptr))
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        goto next_slot;
-                    }
-                }
-
-                HeapPtr<HeapString> s = ptr.As<HeapString>();
-                if (s->m_hashHigh != expectedHashHigh || s->m_hashLow != expectedHashLow || s->m_length != length)
-                {
-                    goto next_slot;
-                }
-
-                HeapString* rawPtr = translator.TranslateToRawPtr(s);
-                if (!CompareMultiPieceStringEqual(iterator, rawPtr))
-                {
-                    goto next_slot;
-                }
-
-                // We found the string
-                //
-                return translator.TranslateToUserHeapPtr(rawPtr);
-            }
-next_slot:
-            slot = (slot + 1) & m_hashTableSizeMask;
-        }
-
-        // The string is not found, insert it into the hash table
-        //
-        assert(slotForInsertion != static_cast<uint32_t>(-1));
-        assert(IsNonExistentOrDeleted(m_hashTable[slotForInsertion]));
-
-        m_elementCount++;
-        HeapString* element = MaterializeMultiPieceString(iterator, lenAndHash);
-        m_hashTable[slotForInsertion] = translator.TranslateToGeneralHeapPtr(element);
-
-        ExpandHashTableIfNeeded();
-
-        return translator.TranslateToUserHeapPtr(element);
-    }
-
-public:
-    // Create a string by concatenating start[0] ~ start[len-1]
-    // Each TValue must be a string
-    //
-    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(TValue* start, size_t len)
-    {
-#ifndef NDEBUG
-        for (size_t i = 0; i < len; i++)
-        {
-            assert(start[i].IsPointer(TValue::x_mivTag));
-            assert(start[i].AsPointer().As<HeapEntityCommonHeader>()->m_type == Type::STRING);
-        }
-#endif
-        struct Iterator
-        {
-            bool HasMore()
-            {
-                return m_cur < m_end;
-            }
-
-            std::pair<const uint8_t*, uint32_t> GetAndAdvance()
-            {
-                assert(m_cur < m_end);
-                HeapString* e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
-                m_cur++;
-                return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
-            }
-
-            TValue* m_cur;
-            TValue* m_end;
-            HeapPtrTranslator m_translator;
-        };
-
-        return InsertMultiPieceString(Iterator {
-            .m_cur = start,
-            .m_end = start + len,
-            .m_translator = static_cast<CRTP*>(this)->GetHeapPtrTranslator()
-        });
-    }
-
-    // Create a string by concatenating str1 .. start[0] ~ start[len-1]
-    // str1 and each TValue must be a string
-    //
-    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len)
-    {
-#ifndef NDEBUG
-        assert(str1.As()->m_type == Type::STRING);
-        for (size_t i = 0; i < len; i++)
-        {
-            assert(start[i].IsPointer(TValue::x_mivTag));
-            assert(start[i].AsPointer().As<HeapEntityCommonHeader>()->m_type == Type::STRING);
-        }
-#endif
-
-        struct Iterator
-        {
-            Iterator(UserHeapPointer<HeapString> str1, TValue* start, size_t len, HeapPtrTranslator translator)
-                : m_isFirst(true)
-                , m_firstString(str1)
-                , m_cur(start)
-                , m_end(start + len)
-                , m_translator(translator)
-            { }
-
-            bool HasMore()
-            {
-                return m_isFirst || m_cur < m_end;
-            }
-
-            std::pair<const uint8_t*, uint32_t> GetAndAdvance()
-            {
-                HeapString* e;
-                if (m_isFirst)
-                {
-                    m_isFirst = false;
-                    e = m_translator.TranslateToRawPtr(m_firstString.As<HeapString>());
-                }
-                else
-                {
-                    assert(m_cur < m_end);
-                    e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
-                    m_cur++;
-                }
-                return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
-            }
-
-            bool m_isFirst;
-            UserHeapPointer<HeapString> m_firstString;
-            TValue* m_cur;
-            TValue* m_end;
-            HeapPtrTranslator m_translator;
-        };
-
-        return InsertMultiPieceString(Iterator(str1, start, len, static_cast<CRTP*>(this)->GetHeapPtrTranslator()));
-    }
-
-    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromRawString(const void* str, uint32_t len)
-    {
-        struct Iterator
-        {
-            Iterator(const void* str, uint32_t len)
-                : m_str(str)
-                , m_len(len)
-                , m_isFirst(true)
-            { }
-
-            bool HasMore()
-            {
-                return m_isFirst;
-            }
-
-            std::pair<const void*, uint32_t> GetAndAdvance()
-            {
-                assert(m_isFirst);
-                m_isFirst = false;
-                return std::make_pair(m_str, m_len);
-            }
-
-            const void* m_str;
-            uint32_t m_len;
-            bool m_isFirst;
-        };
-
-        return InsertMultiPieceString(Iterator(str, len));
-    }
-
-    uint32_t GetGlobalStringHashConserCurrentHashTableSize() const
-    {
-        return m_hashTableSizeMask + 1;
-    }
-
-    uint32_t GetGlobalStringHashConserCurrentElementCount() const
-    {
-        return m_elementCount;
-    }
-
-    bool WARN_UNUSED Initialize()
-    {
-        static constexpr uint32_t x_initialSize = 1024;
-        m_hashTable = new (std::nothrow) GeneralHeapPointer<HeapString>[x_initialSize];
-        CHECK_LOG_ERROR(m_hashTable != nullptr, "Failed to allocate space for initial hash table");
-
-        static_assert(x_nonexistentValue == 0, "required for memset");
-        memset(m_hashTable, 0, sizeof(GeneralHeapPointer<HeapString>) * x_initialSize);
-
-        m_hashTableSizeMask = x_initialSize - 1;
-        m_elementCount = 0;
-        return true;
-    }
-
-    void Cleanup()
-    {
-        if (m_hashTable != nullptr)
-        {
-            delete [] m_hashTable;
-        }
-    }
-
-private:
-    uint32_t m_hashTableSizeMask;
-    uint32_t m_elementCount;
-    // use GeneralHeapPointer because it's 4 bytes
-    // All pointers are actually always HeapPtr<HeapString>
-    //
-    GeneralHeapPointer<HeapString>* m_hashTable;
-};
+static_assert(sizeof(ArrayType) == 1);
 
 class VM;
 
@@ -1657,104 +144,22 @@ class VM;
 constexpr uint32_t x_log2_hiddenClassBlockSize = 4;
 constexpr uint32_t x_hiddenClassBlockSize = (1 << x_log2_hiddenClassBlockSize);
 
-enum class StructuredHiddenClassTransitionKind : uint8_t
-{
-    BadTransitionKind,
-    AddProperty,
-    AddPropertyAndGrowPropertyStorageCapacity,
-    AddMetaTable,
-    TransitToPolyMetaTable,
-    RemoveMetaTable,
-    GrowArrayStorageCapacity,
-    TransitArrayToSparseMap
-};
+class Structure;
 
-struct StructuredHiddenClassWritePropertyResult
-{
-    // Denote if the transition resulted in a different HiddenClass pointer
-    // If true, the caller should update the object's HiddenClass pointer
-    //
-    bool m_transitionedToNewHiddenClass;
-
-    // If true, the hidden class just transitioned into dictionary mode
-    //
-    bool m_transitionedToDictionaryMode;
-
-    // If true, the caller should grow the object's butterfly property part
-    //
-    bool m_shouldGrowButterfly;
-
-    // The slot ordinal to write into
-    //
-    uint32_t m_slotOrdinal;
-
-    // Filled if m_transitionedToNewHiddenClass is true
-    // This is a StructuredHiddenClass if m_transitionedToDictionaryMode is false,
-    // or a DictionaryHiddenClass if m_transitionedToDictionaryMode is true
-    //
-    SystemHeapPointer<void> m_newHiddenClass;
-};
-
-struct StructuredHiddenClassAddOrRemoveMetatableResult
-{
-    // Denote if the transition resulted in a different HiddenClass pointer
-    // If true, the caller should update the object's HiddenClass pointer
-    //
-    bool m_transitionedToNewHiddenClass;
-
-    // If true, the HiddenClass is in PolyMetatable mode, m_slotOrdinal is filled to contain the slot ordinal for the metatable,
-    // and the user should fill the metatable (or 'nil' for remove metatable) into that slot
-    //
-    bool m_shouldInsertMetatable;
-
-    // If true, the caller should grow the object's butterfly property part
-    //
-    bool m_shouldGrowButterfly;
-
-    // If 'm_shouldInsertMetatable' is true, the slot ordinal to write into
-    //
-    uint32_t m_slotOrdinal;
-
-    // Filled if m_transitionedToNewHiddenClass is true
-    //
-    SystemHeapPointer<StructuredHiddenClass> m_newHiddenClass;
-};
-
-// Only used for array write when the array part is not in sparse map mode
-//
-struct StructuredHiddenClassWriteArrayResult
-{
-    // Denote if the transition resulted in a different HiddenClass pointer
-    // If true, the caller should update the object's HiddenClass pointer
-    //
-    bool m_transitionedToNewHiddenClass;
-
-    // If true, the caller should convert the array part to a sparse map
-    //
-    bool m_shouldConvertToSparseMapIndexing;
-
-    // If true, the caller should grow the object's butterfly array part
-    // Only relavent if m_shouldConvertToSparseMapIndexing is false
-    //
-    bool m_shouldGrowButterfly;
-
-    // Filled if m_transitionedToNewHiddenClass is true
-    //
-    SystemHeapPointer<StructuredHiddenClass> m_newHiddenClass;
-};
-
-class alignas(8) HiddenClassOutlinedTransitionTable
+class alignas(8) StructureTransitionTable
 {
 public:
     struct HashTableEntry
     {
         int32_t m_key;
-        SystemHeapPointer<void> m_value;
+        SystemHeapPointer<Structure> m_value;
     };
+
+    static constexpr int32_t x_key_invalid = 0;
+    static constexpr int32_t x_key_deleted = 1;
 
     // Special keys for operations other than AddProperty
     //
-    static constexpr int32_t x_key_invalid = 0;
     // First time we add a metatable, this key points to the Structure with new metatable
     // Next time we add a metatable, if we found the metatable is different from the existing one,
     // we create a new Structure with PolyMetatable, and replace the value corresponding to
@@ -1762,24 +167,105 @@ public:
     //
     static constexpr int32_t x_key_add_or_to_poly_metatable = 2;
     static constexpr int32_t x_key_remove_metatable = 3;
-    static constexpr int32_t x_key_grow_array_capacity = 4;
+    // For ChangeArrayType operations, the key is tag | newArrayType
+    // Note that string property always correspond to negative keys, so there's no collision possible
+    //
+    static constexpr int32_t x_key_change_array_type_tag = 256;
 
     static constexpr uint32_t x_initialHashTableSize = 4;
 
-    bool ShouldResizeForThisInsertion()
+    static uint32_t ComputeAllocationSize(uint32_t hashTableSize)
     {
-        return m_numElementsInHashTable >= m_hashTableMask / 2 + 2;
+        assert(is_power_of_2(hashTableSize));
+        size_t allocationSize = x_trailingArrayOffset + hashTableSize * sizeof(HashTableEntry);
+        return static_cast<uint32_t>(allocationSize);
     }
 
+    static StructureTransitionTable* AllocateUninitialized(uint32_t hashTableSize)
+    {
+        uint32_t allocationSize = ComputeAllocationSize(hashTableSize);
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        StructureTransitionTable* result = vm->GetHeapPtrTranslator().TranslateToRawPtr(vm->AllocFromSystemHeap(allocationSize).As<StructureTransitionTable>());
+        ConstructInPlace(result);
+        return result;
+    }
+
+    static StructureTransitionTable* AllocateInitialTable(int32_t key, SystemHeapPointer<Structure> value)
+    {
+        StructureTransitionTable* r = AllocateUninitialized(x_initialHashTableSize);
+        r->m_hashTableMask = x_initialHashTableSize - 1;
+        r->m_numElementsInHashTable = 1;
+        memset(r->m_hashTable, 0, sizeof(HashTableEntry) * x_initialHashTableSize);
+        bool found;
+        HeapPtr<HashTableEntry> e = Find(SystemHeapPointer<StructureTransitionTable>(r).As(), key, found /*out*/);
+        assert(!found);
+        TCSet(e->m_key, key);
+        TCSet(e->m_value, value);
+        return r;
+    }
+
+    bool ShouldResizeForThisInsertion()
+    {
+        return m_numElementsInHashTable >= m_hashTableMask / 2 + 1;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureTransitionTable>>>
+    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> WARN_UNUSED Find(T self, int32_t key, bool& found)
+    {
+        assert(key != x_key_invalid);
+        uint32_t hashMask = self->m_hashTableMask;
+        uint32_t slot = static_cast<uint32_t>(HashPrimitiveTypes(key)) & hashMask;
+        while (true)
+        {
+            int32_t slotKey = self->m_hashTable[slot].m_key;
+            if (slotKey == key)
+            {
+                found = true;
+                return &self->m_hashTable[slot];
+            }
+            if (slotKey == x_key_invalid || slotKey == x_key_deleted)
+            {
+                found = false;
+                return &self->m_hashTable[slot];
+            }
+            slot = (slot + 1) & hashMask;
+        }
+    }
+
+    StructureTransitionTable* WARN_UNUSED Expand()
+    {
+        assert(ShouldResizeForThisInsertion());
+        uint32_t newHashMask = m_hashTableMask * 2 + 1;
+        StructureTransitionTable* newTable = AllocateUninitialized(newHashMask + 1);
+        newTable->m_hashTableMask = newHashMask;
+        newTable->m_numElementsInHashTable = m_numElementsInHashTable;
+        static_assert(x_key_invalid == 0);
+        memset(newTable->m_hashTable, 0, sizeof(HashTableEntry) * (newHashMask + 1));
+
+        for (uint32_t i = 0; i <= m_hashTableMask; i++)
+        {
+            HashTableEntry entry = m_hashTable[i];
+            if (entry.m_key != x_key_invalid && entry.m_key != x_key_deleted)
+            {
+                uint32_t slot = static_cast<uint32_t>(HashPrimitiveTypes(entry.m_key)) & newHashMask;
+                while (newTable->m_hashTable[slot].m_key != x_key_invalid)
+                {
+                    slot = (slot + 1) & newHashMask;
+                }
+                newTable->m_hashTable[slot] = entry;
+            }
+        }
+        return newTable;
+    }
 
     uint32_t m_hashTableMask;
     uint32_t m_numElementsInHashTable;
     HashTableEntry m_hashTable[0];
+
+    static constexpr size_t x_trailingArrayOffset = offsetof_member_v<&StructureTransitionTable::m_hashTable>;
 };
 
-class StructuredHiddenClass;
-
-struct HiddenClassKeyHashHelper
+struct StructureKeyHashHelper
 {
     static uint32_t GetHashValueForStringKey(UserHeapPointer<HeapString> stringKey)
     {
@@ -1790,10 +276,10 @@ struct HiddenClassKeyHashHelper
 
     static uint32_t GetHashValueForMaybeNonStringKey(UserHeapPointer<void> key)
     {
-        HeapPtr<HeapEntityCommonHeader> hdr = key.As<HeapEntityCommonHeader>();
+        HeapPtr<UserHeapGcObjectHeader> hdr = key.As<UserHeapGcObjectHeader>();
         if (hdr->m_type == Type::STRING)
         {
-            return GetHashValueForStringKey(UserHeapPointer<HeapString>(key));
+            return GetHashValueForStringKey(UserHeapPointer<HeapString>(key.As()));
         }
         else
         {
@@ -1808,7 +294,7 @@ struct HiddenClassKeyHashHelper
 //                ^
 //                pointer to object
 //
-class alignas(8) HiddenClassAnchorHashTable final : public HeapEntityCommonHeader
+class alignas(8) StructureAnchorHashTable final : public SystemHeapGcObjectHeader
 {
 public:
     struct HashTableEntry
@@ -1822,29 +308,29 @@ public:
 
     static constexpr size_t OffsetOfTrailingVarLengthArray()
     {
-        return offsetof_member(HiddenClassAnchorHashTable, m_blockPointers);
+        return offsetof_member_v<&StructureAnchorHashTable::m_blockPointers>;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HiddenClassAnchorHashTable>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
     static GeneralHeapPointer<void> GetPropertyNameAtSlot(T self, uint8_t ordinal)
     {
         assert(ordinal < self->m_numBlocks * x_hiddenClassBlockSize);
         uint8_t blockOrd = ordinal >> x_log2_hiddenClassBlockSize;
         uint8_t offset = ordinal & static_cast<uint8_t>(x_hiddenClassBlockSize - 1);
-        SystemHeapPointer<GeneralHeapPointer<void>> p = self->m_blockPointers[blockOrd];
-        return p.As()[offset];
+        SystemHeapPointer<GeneralHeapPointer<void>> p = TCGet(self->m_blockPointers[blockOrd]);
+        return TCGet(p.As()[offset]);
     }
 
-    static HiddenClassAnchorHashTable* WARN_UNUSED Create(VM* vm, StructuredHiddenClass* shc);
+    static StructureAnchorHashTable* WARN_UNUSED Create(VM* vm, Structure* shc);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HiddenClassAnchorHashTable>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
     static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> GetHashTableBegin(T self)
     {
         uint32_t hashTableSize = GetHashTableSizeFromHashTableMask(self->m_hashTableMask);
         return GetHashTableEnd(self) - hashTableSize;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HiddenClassAnchorHashTable>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
     static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> GetHashTableEnd(T self)
     {
         return ReinterpretCastPreservingAddressSpace<HashTableEntry*>(self);
@@ -1852,7 +338,7 @@ public:
 
     void CloneHashTableTo(HashTableEntry* htStart, uint32_t htSize);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HiddenClassAnchorHashTable>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
     static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(T self, GeneralHeapPointer<void> key, uint32_t hashValue, uint32_t& result /*out*/)
     {
         int64_t hashTableMask = static_cast<int64_t>(self->m_hashTableMask);
@@ -1904,9 +390,9 @@ public:
 
     SystemHeapPointer<GeneralHeapPointer<void>> m_blockPointers[0];
 };
-static_assert(sizeof(HiddenClassAnchorHashTable) == 8);
+static_assert(sizeof(StructureAnchorHashTable) == 8);
 
-// A structured hidden class
+// A structure hidden class
 //
 // Future work: we can use one structure to store a chain of PropertyAdd transitions (and user
 // use pointer tag to distinguish which node in the chain it is referring to). This should further reduce memory consumption.
@@ -1915,22 +401,33 @@ static_assert(sizeof(HiddenClassAnchorHashTable) == 8);
 //                ^
 //                pointer to object
 //
-class alignas(8) StructuredHiddenClass final : public HeapEntityCommonHeader
+class alignas(8) Structure final : public SystemHeapGcObjectHeader
 {
 public:
+    enum class Operation : uint8_t
+    {
+        AddProperty,
+        SetMetatable,
+        RemoveMetatable,
+        UpdateArrayType
+    };
+
+    enum class TransitionKind : uint8_t
+    {
+        BadTransitionKind,
+        AddProperty,
+        AddPropertyAndGrowPropertyStorageCapacity,
+        AddMetaTable,
+        TransitToPolyMetaTable,
+        TransitToPolyMetaTableAndGrowPropertyStorageCapacity,
+        RemoveMetaTable,
+        UpdateArrayType
+    };
+
     static constexpr size_t OffsetOfTrailingVarLengthArray()
     {
-        return offsetof_member(StructuredHiddenClass, m_values);
+        return offsetof_member_v<&Structure::m_values>;
     }
-
-    // The total number of in-use slots in the represented object (this is different from the capacity!)
-    //
-    uint8_t m_numSlots;
-
-    // The length for the non-full block
-    // Can be computed from m_numSlots but we store it for simplicity since we have a byte to spare here
-    //
-    uint8_t m_nonFullBlockLen;
 
     static uint8_t ComputeNonFullBlockLength(uint8_t numSlots)
     {
@@ -1939,86 +436,29 @@ public:
         return nonFullBlockLen;
     }
 
-    // The anchor hash table, 0 if not exist
-    // Anchor hash table only exists if there are at least 2 * x_hiddenClassBlockSize entries,
-    // so hidden class smaller than that doesn't query anchor hash table
+    // TODO: refine butterfly growth strategy
     //
-    SystemHeapPointer<HiddenClassAnchorHashTable> m_anchorHashTable;
-
-    // Lua doesn't need to consider delete
-    // If we need to support delete, we need to use a special record to denote an entry is deleted
-    // by the inline hash table, we probably will also need a free list to recycle the deleted slots
-    //
-
-    // The array capacity in the butterfly object
-    //
-    uint32_t m_arrayStorageCapacity;
-
-    // The hash mask of the inline hash table
-    // The inline hash table contains entries for the last full block and all entries in the non-full block
-    //
-    uint8_t m_inlineHashTableMask;
-
-    // The object's inline named property storage capacity
-    // slot [0, m_inlineNamedStorageCapacity) goes in the inline storage
-    //
-    uint8_t m_inlineNamedStorageCapacity;
-
-    // The object's butterfly named property storage capacity
-    // slot >= m_inlineNamedStorageCapacity goes here
-    //
-    uint8_t m_butterflyNamedStorageCapacity;
-
-    // The kind of the transition that transitioned from the parent to this node
-    //
-    StructuredHiddenClassTransitionKind m_parentEdgeTransitionKind;
-
-    // The parent of this node
-    //
-    SystemHeapPointer<StructuredHiddenClass> m_parent;
-
-    static constexpr int32_t x_noMetaTable = 0;
-    static constexpr int32_t x_polyMetaTable = 2;
-
-    // The metatable of the object (it is always a pointer to userheap)
-    // x_noMetaTable if not exist, x_polyMetaTable if there are two objects with otherwise the same
-    // structure but different metatables (i.e. must inspect the object to retrieve the metatable)
-    //
-    GeneralHeapPointer<void> m_metatable;
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static bool IsTransitionTableEmpty(T self)
+    static uint8_t WARN_UNUSED ComputeInitialButterflyCapacity(uint8_t inlineNamedStorageCapacity)
     {
-        return self->m_transitionTable == 0;
+        constexpr uint8_t x_initialMinimumButterflyCapacity = 4;
+        constexpr uint8_t x_butterflyCapacityFromInlineCapacityFactor = 2;
+        uint8_t capacity = inlineNamedStorageCapacity / x_butterflyCapacityFromInlineCapacityFactor;
+        capacity = std::max(capacity, x_initialMinimumButterflyCapacity);
+        // It needs to grow to up to x_maxNumSlot + 1: that's the real max capacity considering PolyMetatable
+        //
+        capacity = std::min(capacity, static_cast<uint8_t>(x_maxNumSlots + 1 - inlineNamedStorageCapacity));
+        return capacity;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static bool IsSingletonTransitionTarget(T self)
+    static uint8_t WARN_UNUSED ComputeNextButterflyCapacity(uint8_t inlineNamedStorageCapacity, uint8_t curButterflyCapacity)
     {
-        return self->m_transitionTable & 1U;
+        constexpr uint8_t x_butterflyCapacityGrowthFactor = 2;
+        uint32_t capacity = static_cast<uint32_t>(curButterflyCapacity) * x_butterflyCapacityGrowthFactor;
+        // It needs to grow to up to x_maxNumSlot + 1: that's the real max capacity considering PolyMetatable
+        //
+        capacity = std::min(capacity, static_cast<uint32_t>(x_maxNumSlots + 1 - inlineNamedStorageCapacity));
+        return static_cast<uint8_t>(capacity);
     }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static SystemHeapPointer<StructuredHiddenClass> GetSingletonTransitionTarget(T self)
-    {
-        assert(IsSingletonTransitionTarget(self));
-        return SystemHeapPointer<StructuredHiddenClass> { self->m_transitionTable ^ 1U };
-    }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static HeapPtr<HiddenClassOutlinedTransitionTable> GetTransitionTable(T self)
-    {
-        assert(!IsTransitionTableEmpty(self) && !IsSingletonTransitionTarget(self));
-        SystemHeapPointer<HiddenClassOutlinedTransitionTable> p { self->m_transitionTable };
-        return p.As();
-    }
-
-    // This is a tagged SystemHeapPointer
-    // When the tag is 1, it is a StructuredHiddenClass/DictionaryHiddenClass pointer, denoting that currently existing
-    //     transition is uniquely to that pointer. The type of the pointer can be distinguished by checking m_numSlots == 254.
-    // When the tag is 0, it is a HiddenClassTransitionTable pointer
-    //
-    uint32_t m_transitionTable;
 
     static constexpr int8_t x_inlineHashTableEmptyValue = 0x7f;
 
@@ -2029,14 +469,14 @@ public:
     };
     static_assert(sizeof(InlineHashTableEntry) == 2);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, T> GetInlineHashTableBegin(T self)
     {
         uint32_t hashTableSize = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask);
         return GetInlineHashTableEnd(self) - hashTableSize;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, T> GetInlineHashTableEnd(T self)
     {
         return ReinterpretCastPreservingAddressSpace<InlineHashTableEntry*>(self);
@@ -2049,21 +489,61 @@ public:
         return v;
     }
 
-    static constexpr uint8_t x_maxNumSlots = 254;
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static GeneralHeapPointer<void> GetLastAddedKey(T self)
+    {
+        assert(self->m_parentEdgeTransitionKind == TransitionKind::AddProperty ||
+               self->m_parentEdgeTransitionKind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
+        assert(self->m_numSlots > 0);
+        uint8_t nonFullBlockLen = ComputeNonFullBlockLength(self->m_numSlots);
+        assert(nonFullBlockLen > 0);
+        return TCGet(self->m_values[nonFullBlockLen - 1]);
+    }
 
-    // Return false if the structure is transitioned to a dictionary, and no field in 'result' is filled.
-    // Otherwise, return true and 'result' is filled accordingly:
-    // (1) m_slotOrdinal represent the slot ordinal to write.
-    // (2) m_transitionedToNewStructure represent whether the structure transitioned to a new one.
-    //     If yes, m_shouldGrowButterfly and m_newStructure are filled accordingly.
-    //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static bool WARN_UNUSED AddStringProperty(T self, UserHeapPointer<HeapString> stringKey, AddPropertyResult& result /*out*/ );
+    static constexpr uint8_t x_maxNumSlots = 253;
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    struct AddNewPropertyResult
+    {
+        // If true, the Structure just transitioned into dictionary mode
+        //
+        bool m_transitionedToDictionaryMode;
+
+        // If true, the caller should grow the object's butterfly property part
+        //
+        bool m_shouldGrowButterfly;
+
+        // The slot ordinal to write into
+        //
+        uint32_t m_slotOrdinal;
+
+        void* m_newStructureOrDictionary;
+    };
+
+    void AddNonExistentProperty(VM* vm, UserHeapPointer<void> key, AddNewPropertyResult& result /*out*/);
+
+    struct AddOrRemoveMetatableResult
+    {
+        // If true, the Structure is in PolyMetatable mode, m_slotOrdinal is filled to contain the slot ordinal for the metatable,
+        // and the user should fill the metatable (or 'nil' for remove metatable) into that slot
+        //
+        bool m_shouldInsertMetatable;
+
+        // If true, the caller should grow the object's butterfly property part
+        // Only relavent if m_transitionedToNewHiddenClass is true
+        //
+        bool m_shouldGrowButterfly;
+
+        // If 'm_shouldInsertMetatable' is true, the slot ordinal to write into
+        //
+        uint32_t m_slotOrdinal;
+
+        SystemHeapPointer<Structure> m_newStructure;
+    };
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED IsAnchorTableContainsFinalBlock(T self)
     {
-        SystemHeapPointer<HiddenClassAnchorHashTable> p = self->m_anchorHashTable;
+        SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
         if (p.m_value == 0)
         {
             return false;
@@ -2073,26 +553,58 @@ public:
         return p.As()->m_numTotalSlots == lim;
     }
 
-    // Perform an AddProperty transition, fill in 'result' accordingly.
+    enum class SlotAdditionKind
+    {
+        AddSlotForProperty,
+        AddSlotForPolyMetatable,
+        NoSlotAdded
+    };
+
+    // Create the structure obtained after a transition
+    // If slotAdditionKind is 'AddSlotForProperty' or 'AddSlotForPolyMetatable':
+    //   A slot for 'key' or metatable is added, and the created structure is fully initialized.
+    // Otherwise:
+    //   1. Parameter 'key' is useless.
+    //   2. We only perform a clone of the structure, except that the new structure's 'm_parentEdgeTransitionType' is not filled.
+    //   3. Caller should actually perform the transition by modifying the returned structure.
     //
-    void PerformAddPropertyTransition(VM* vm, UserHeapPointer<void> key, AddPropertyResult& result /*out*/);
+    // In either case, the caller is responsible for updating the parent's transition table.
+    //
+    Structure* WARN_UNUSED CreateStructureForTransitionImpl(VM* vm, SlotAdditionKind slotAdditionKind, UserHeapPointer<void> key);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static SystemHeapPointer<HiddenClassAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(T self);
+    Structure* WARN_UNUSED CreateStructureForAddPropertyTransition(VM* vm, UserHeapPointer<void> key)
+    {
+        assert(key.m_value != 0);
+        return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForProperty, key);
+    }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    Structure* WARN_UNUSED CreateStructureForPolyMetatableTransition(VM* vm)
+    {
+        assert(m_metatable <= 0);
+        return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForPolyMetatable, vm->GetSpecialKeyForMetadataSlot());
+    }
+
+    Structure* WARN_UNUSED CloneStructure(VM* vm)
+    {
+        return CreateStructureForTransitionImpl(vm, SlotAdditionKind::NoSlotAdded, UserHeapPointer<void>());
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(T self);
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> stringKey, uint32_t& result /*out*/)
     {
-        return GetSlotOrdinalFromPropertyNameAndHash(self, stringKey, HiddenClassKeyHashHelper::GetHashValueForStringKey(stringKey), result /*out*/);
+        return GetSlotOrdinalFromPropertyNameAndHash(self, stringKey, StructureKeyHashHelper::GetHashValueForStringKey(stringKey), result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(T self, UserHeapPointer<void> key, uint32_t& result /*out*/)
     {
-        return GetSlotOrdinalFromPropertyNameAndHash(self, key, HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(key), result /*out*/);
+        return GetSlotOrdinalFromPropertyNameAndHash(self, key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(T self, UserHeapPointer<void> key, uint32_t hashvalue, uint32_t& result /*out*/)
     {
         GeneralHeapPointer<void> keyG = GeneralHeapPointer<void> { key.As<void>() };
@@ -2100,15 +612,15 @@ public:
         {
             return true;
         }
-        SystemHeapPointer<HiddenClassAnchorHashTable> anchorHt = self->m_anchorHashTable;
+        SystemHeapPointer<StructureAnchorHashTable> anchorHt = self->m_anchorHashTable;
         if (likely(anchorHt.m_value == 0))
         {
             return false;
         }
-        return HiddenClassAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(anchorHt.As(), keyG, hashvalue, result /*out*/);
+        return StructureAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(anchorHt.As(), keyG, hashvalue, result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED QueryInlineHashTable(T self, GeneralHeapPointer<void> key, uint16_t hashvalue, uint32_t& result /*out*/)
     {
         int64_t hashMask = ~ZeroExtendTo<int64_t>(self->m_inlineHashTableMask);
@@ -2148,21 +660,21 @@ public:
         return numSlots >= x_hiddenClassBlockSize && numSlots % x_hiddenClassBlockSize != 0;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static ReinterpretCastPreservingAddressSpaceType<SystemHeapPointer<GeneralHeapPointer<void>>*, T> GetFinalFullBlockPointerAddress(T self)
     {
         assert(HasFinalFullBlockPointer(self->m_numSlots));
         return ReinterpretCastPreservingAddressSpace<SystemHeapPointer<GeneralHeapPointer<void>>*>(self->m_values + self->m_nonFullBlockLen);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static SystemHeapPointer<GeneralHeapPointer<void>> GetFinalFullBlockPointer(T self)
     {
-        return *GetFinalFullBlockPointerAddress(self);
+        return TCGet(*GetFinalFullBlockPointerAddress(self));
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
-    static SystemHeapPointer<StructuredHiddenClass> GetHiddenClassOfFullBlockPointer(T self)
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static SystemHeapPointer<Structure> GetHiddenClassOfFullBlockPointer(T self)
     {
         // The full block pointer points at one past the end of the block
         //
@@ -2176,10 +688,10 @@ public:
         //
         addr -= static_cast<uint32_t>(OffsetOfTrailingVarLengthArray());
 
-        return SystemHeapPointer<StructuredHiddenClass> { addr };
+        return SystemHeapPointer<Structure> { addr };
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static GeneralHeapPointer<void> GetPropertyNameFromInlineHashTableOrdinal(T self, int8_t ordinal)
     {
         if (ordinal >= 0)
@@ -2197,11 +709,11 @@ public:
             assert(HasFinalFullBlockPointer(self->m_numSlots));
             assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal);
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
-            return u.As()[ordinal];
+            return TCGet(u.As()[ordinal]);
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructuredHiddenClass>>>
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static uint32_t GetPropertySlotFromInlineHashTableOrdinal(T self, int8_t ordinal)
     {
         assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal && ordinal < self->m_nonFullBlockLen);
@@ -2221,22 +733,447 @@ public:
         return result;
     }
 
+    // Get the key that transitioned from parent to self
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static int32_t WARN_UNUSED GetParentEdgeTransitionKey(T self)
+    {
+        assert(self->m_parentEdgeTransitionKind != TransitionKind::BadTransitionKind);
+
+        switch (self->m_parentEdgeTransitionKind)
+        {
+        case TransitionKind::AddProperty: [[fallthrough]];
+        case TransitionKind::AddPropertyAndGrowPropertyStorageCapacity:
+        {
+            int32_t transitionKey = GetLastAddedKey(self).m_value;
+            assert(transitionKey < 0);
+            return transitionKey;
+        }
+        case TransitionKind::AddMetaTable: [[fallthrough]];
+        case TransitionKind::TransitToPolyMetaTable: [[fallthrough]];
+        case TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity:
+        {
+            return StructureTransitionTable::x_key_add_or_to_poly_metatable;
+        }
+        case TransitionKind::RemoveMetaTable:
+        {
+            return StructureTransitionTable::x_key_remove_metatable;
+        }
+        case TransitionKind::UpdateArrayType:
+        {
+            ArrayType arrayType = TCGet(self->m_arrayType);
+            return StructureTransitionTable::x_key_change_array_type_tag | static_cast<int32_t>(arrayType.m_asValue);
+        }
+        case TransitionKind::BadTransitionKind:
+        {
+            __builtin_unreachable();
+        }
+        }   // end switch
+    }
+
+    StructureTransitionTable* WARN_UNUSED InitializeOutlinedTransitionTable(int32_t keyForOnlyChild, SystemHeapPointer<Structure> onlyChild)
+    {
+        assert(m_transitionTable.IsType<Structure>());
+        assert(m_transitionTable.As<Structure>() == onlyChild.As());
+        assert(GetParentEdgeTransitionKey(m_transitionTable.As<Structure>()) == keyForOnlyChild);
+        StructureTransitionTable* newTable = StructureTransitionTable::AllocateInitialTable(keyForOnlyChild, onlyChild);
+        m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable> { newTable });
+        return newTable;
+    }
+
+    // Query if the transition key exists in the transition table
+    // If not, call 'createNewStructureFunc' to create a new structure and insert it into transition table
+    // In either case, return the structure after the transition
+    //
+    template<typename Func>
+    Structure* WARN_UNUSED ALWAYS_INLINE QueryTransitionTableAndInsert(VM* vm, int32_t transitionKey, const Func& createNewStructureFunc)
+    {
+        if (m_transitionTable.IsNullPtr())
+        {
+            Structure* newStructure = createNewStructureFunc();
+            m_transitionTable.Store(SystemHeapPointer<Structure>(newStructure));
+            return newStructure;
+        }
+        else if (m_transitionTable.IsType<Structure>())
+        {
+            HeapPtr<Structure> onlyChild = m_transitionTable.As<Structure>();
+            assert(TCGet(onlyChild->m_parent) == SystemHeapPointer<Structure>(this));
+            int32_t keyForOnlyChild = GetParentEdgeTransitionKey(onlyChild);
+            if (keyForOnlyChild == transitionKey)
+            {
+                return TranslateToRawPointer(vm, onlyChild);
+            }
+            else
+            {
+                // We need to create an outlined transition table
+                //
+                StructureTransitionTable* newTable = InitializeOutlinedTransitionTable(keyForOnlyChild, onlyChild);
+                bool found;
+                StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(newTable, transitionKey, found /*out*/);
+                assert(!found);
+
+                Structure* newStructure = createNewStructureFunc();
+
+                e->m_key = transitionKey;
+                e->m_value = newStructure;
+                newTable->m_numElementsInHashTable++;
+
+                // InitializeOutlinedTransitionTable updates m_transitionTable, but just to make sure
+                //
+                assert(m_transitionTable.IsType<StructureTransitionTable>() &&
+                       TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>()) == newTable);
+
+                return newStructure;
+            }
+        }
+        else
+        {
+            assert(m_transitionTable.IsType<StructureTransitionTable>());
+            StructureTransitionTable* table = TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>());
+            bool found;
+            StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(table, transitionKey, found /*out*/);
+            if (!found)
+            {
+                Structure* newStructure = createNewStructureFunc();
+
+                e->m_key = transitionKey;
+                e->m_value = newStructure;
+                table->m_numElementsInHashTable++;
+
+                if (unlikely(table->ShouldResizeForThisInsertion()))
+                {
+                    StructureTransitionTable* newTable = table->Expand();
+                    m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable>(newTable));
+                    assert(!newTable->ShouldResizeForThisInsertion());
+                    // FIXME: delete old table!
+                }
+
+                return newStructure;
+            }
+            else
+            {
+                return TranslateToRawPointer(vm, e->m_value.As());
+            }
+        }
+    }
+
+    // The total number of in-use slots in the represented object (this is different from the capacity!)
+    //
+    uint8_t m_numSlots;
+
+    // The length for the non-full block
+    // Can be computed from m_numSlots but we store it for simplicity since we have a byte to spare here
+    //
+    uint8_t m_nonFullBlockLen;
+
+    // The anchor hash table, 0 if not exist
+    // Anchor hash table only exists if there are at least 2 * x_hiddenClassBlockSize entries,
+    // so hidden class smaller than that doesn't query anchor hash table
+    //
+    SystemHeapPointer<StructureAnchorHashTable> m_anchorHashTable;
+
+    // For now we don't consider delete (so we need to check for nil if metatable may be non-nil)
+    // If we need to support delete, we need to use a special record to denote an entry is deleted
+    // by the inline hash table, we probably will also need a free list to recycle the deleted slots
+    //
+
+    ArrayType m_arrayType;
+
+    // TODO: replace by actual implementation
+    //
+    uint8_t m_lock;
+
+    uint16_t m_reserved;
+
+    // The hash mask of the inline hash table
+    // The inline hash table contains entries for the last full block and all entries in the non-full block
+    //
+    uint8_t m_inlineHashTableMask;
+
+    // The object's inline named property storage capacity
+    // slot [0, m_inlineNamedStorageCapacity) goes in the inline storage
+    //
+    uint8_t m_inlineNamedStorageCapacity;
+
+    // The object's butterfly named property storage capacity
+    // slot >= m_inlineNamedStorageCapacity goes here
+    //
+    uint8_t m_butterflyNamedStorageCapacity;
+
+    // The kind of the transition that transitioned from the parent to this node
+    //
+    TransitionKind m_parentEdgeTransitionKind;
+
+    // The parent of this node
+    //
+    SystemHeapPointer<Structure> m_parent;
+
+    static constexpr int32_t x_noMetaTable = 0;
+
+    // The metatable of the object
+    // If < 0, this should be interpreted as a GeneralHeapPointer, denoting the metatable shared by all objects with this structure.
+    // If = 0, it means all objects with this structure has no metatable.
+    // If > 0, it means the structure is in PolyMetatable mode: objects with this structure do not all have the identical metatable,
+    // and 'm_metatable - 1' is the slot ordinal where the metatable is stored in the object.
+    //
+    int32_t m_metatable;
+
+    // If it is a Structure pointer, it means that currently there exists only one transition, which is to that pointer.
+    //
+    using TransitionTableType = SystemHeapPointerTaggedUnion<Structure, StructureTransitionTable>;
+    TransitionTableType m_transitionTable;
+
     // The value var-length array contains the non-full block, and,
     // if m_numSlots >= x_hiddenClassBlockSize && m_numSlot % x_hiddenClassBlockSize != 0, the pointer to the last full block
     //
     GeneralHeapPointer<void> m_values[0];
 };
-static_assert(sizeof(StructuredHiddenClass) == 32);
+static_assert(sizeof(Structure) == 32);
 
-class StructuredHiddenClassIterator
+class alignas(8) ArraySparseMap
 {
 public:
-    StructuredHiddenClassIterator(StructuredHiddenClass* hiddenClass);
-    StructuredHiddenClassIterator(SystemHeapPointer<StructuredHiddenClass> hc)
+    struct HashTableEntry
     {
-        HeapPtr<StructuredHiddenClass> hiddenClass = hc.As();
-        assert(hiddenClass->m_type == Type::StructuredHiddenClass);
-        SystemHeapPointer<HiddenClassAnchorHashTable> aht = hiddenClass->m_anchorHashTable;
+        double m_key;
+        TValue m_value;
+    };
+    static_assert(sizeof(HashTableEntry) == 16);
+
+    TValue GetByVal(double key)
+    {
+        auto it = m_map.find(key);
+        if (it == m_map.end())
+        {
+            return TValue::Nil();
+        }
+        else
+        {
+            return it->second;
+        }
+    }
+
+    // Currently we just use an outlined STL hash table for simplicity, we expect well-written code to not trigger SparseMap any way
+    //
+    std::unordered_map<double, TValue> m_map;
+};
+
+class alignas(8) ButterflyHeader
+{
+public:
+    bool IsContinuous()
+    {
+        return m_arrayLengthIfContinuous >= ArrayGrowthPolicy::x_arrayBaseOrd;
+    }
+
+    bool CanUseFastPathGetForContinuousArray(int32_t idx)
+    {
+        assert(ArrayGrowthPolicy::x_arrayBaseOrd <= idx);
+        return idx < m_arrayLengthIfContinuous;
+    }
+
+    bool IndexFitsInVectorCapacity(int32_t idx)
+    {
+        assert(ArrayGrowthPolicy::x_arrayBaseOrd <= idx);
+        return idx < m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd;
+    }
+
+    bool HasSparseMap()
+    {
+        return m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+    }
+
+    HeapPtr<ArraySparseMap> GetSparseMap()
+    {
+        assert(HasSparseMap());
+        assert(m_arrayLengthIfContinuous < 0);
+        return GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As();
+    }
+
+    // If == x_arrayBaseOrd - 1, it means the vector part is not continuous
+    // If < x_arrayBaseOrd - 1, it means the vector part is not continuous and there is a sparse map,
+    //     and the value can be interpreted as a GeneralHeapPointer<ArraySparseMap>
+    // If >= x_arrayBaseOrd, it means the vector part is continuous and has no sparse map.
+    //     That is, range [x_arrayBaseOrd, m_arrayLengthIfContinuous) are all non-nil values, and everything else are nils
+    //     (note that in Lua arrays are 1-based)
+    //
+    int32_t m_arrayLengthIfContinuous;
+
+    // The capacity of the array vector storage part
+    //
+    int32_t m_arrayStorageCapacity;
+};
+// This is very hacky: ButterflyHeader has a size of 1 slot, the Butterfly pointer points at the start of ButterflyHeader, and in Lua array is 1-based.
+// This allows us to directly use ((TValue*)butterflyPtr)[index] to do array indexing
+// If we want to port to a language with 0-based array, we can make Butterfly point to the end of ButterflyHeader instead, and the scheme will still work
+//
+static_assert(sizeof(ButterflyHeader) == 8 && sizeof(TValue) == 8, "see comment above");
+
+class alignas(8) Butterfly
+{
+public:
+    ButterflyHeader* GetHeader()
+    {
+        return reinterpret_cast<ButterflyHeader*>(this) - (1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+    }
+
+    TValue* UnsafeGetInVectorIndexAddr(int32_t index)
+    {
+        assert(GetHeader()->IndexFitsInVectorCapacity(index));
+        return reinterpret_cast<TValue*>(this) + index;
+    }
+};
+
+class alignas(8) TableObject
+{
+public:
+    // Check if the index qualifies for array indexing
+    //
+    static bool WARN_UNUSED ALWAYS_INLINE IsQualifiedForVectorIndex(double vidx, int32_t& idx /*out*/)
+    {
+        assert(!IsNaN(vidx));
+        int64_t asInt64 = static_cast<int64_t>(vidx);
+        if (!UnsafeFloatEqual(static_cast<double>(asInt64), vidx))
+        {
+            // The conversion is not lossless, return
+            //
+            return false;
+        }
+        if (asInt64 < ArrayGrowthPolicy::x_arrayBaseOrd || asInt64 > std::numeric_limits<int32_t>::max())
+        {
+            return false;
+        }
+        idx = SafeIntegerCast<int32_t>(asInt64);
+        return true;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue GetByVal(T self, TValue tidx);
+
+    // Handle the case that index is int32_t and >= x_arrayBaseOrd
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue ALWAYS_INLINE GetByValVectorIndex(T self, TValue tidx, int32_t idx)
+    {
+        assert(idx >= ArrayGrowthPolicy::x_arrayBaseOrd);
+
+        ArrayType arrType { self->m_arrayType };
+
+        // Check fast path: continuous array
+        //
+        if (likely(arrType.IsContinuous()))
+        {
+            assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
+            if (likely(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
+            {
+                // index is in range, we know the result must not be nil, no need to check metatable, return directly
+                //
+                TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
+                assert(!res.IsNil());
+                AssertImp(arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
+                AssertImp(arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+                return res;
+            }
+            else
+            {
+                // index is out of range, raw result must be nil
+                //
+                return GetByValHandleMetatableKnowingNil(self, tidx);
+            }
+        }
+
+        // Check case: No array at all
+        //
+        if (arrType.ArrayKind() == ArrayType::NoButterflyArrayPart)
+        {
+            return GetByValHandleMetatableKnowingNil(self, tidx);
+        }
+
+        // Check case: Array is not continuous, but index fits in the vector
+        //
+        if (self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index))
+        {
+            TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+            return GetByValHandleMetatable(self, tidx, res);
+        }
+
+        // Check case: has sparse map
+        // Even if there is a sparse map, if it doesn't contain vector-qualifying index,
+        // since in this function 'idx' is vector-qualifying, it must be non-existent
+        //
+        if (unlikely(arrType.SparseMapContainsVectorIndex()))
+        {
+            assert(arrType.HasSparseMap());
+            return GetByValArraySparseMap(self, tidx, static_cast<double>(idx));
+        }
+        else
+        {
+            return GetByValHandleMetatableKnowingNil(self, tidx);
+        }
+    }
+
+    // Handle the case that index is known to be not in the vector part
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue GetByValArraySparseMap(T self, TValue tidx, double index);
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue ALWAYS_INLINE GetByValHandleMetatableKnowingNil(T self, TValue tidx)
+    {
+        ArrayType arrType { self->m_arrayType };
+        if (likely(!arrType.MayHaveMetatable()))
+        {
+            return TValue::Nil();
+        }
+
+        return GetByValCheckAndCallMetatableMethod(self, tidx);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue ALWAYS_INLINE GetByValHandleMetatable(T self, TValue tidx, TValue rawResult)
+    {
+        ArrayType arrType { self->m_arrayType };
+        if (likely(!arrType.MayHaveMetatable()))
+        {
+            return TValue::Nil();
+        }
+
+        if (likely(!rawResult.IsNil()))
+        {
+            return rawResult;
+        }
+
+        return GetByValCheckAndCallMetatableMethod(self, tidx);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue GetByValCheckAndCallMetatableMethod(T self, TValue tidx);
+
+    // Object header
+    //
+    SystemHeapPointer<void> m_structure;
+    Type m_type;
+    GcCellState m_cellState;
+
+    ArrayType m_arrayType;
+    uint8_t m_reserved;
+
+    Butterfly* m_butterfly;
+    TValue m_inlineStorage[0];
+};
+static_assert(sizeof(TableObject) == 16);
+
+class StructureIterator
+{
+public:
+    StructureIterator(Structure* hiddenClass);
+    StructureIterator(SystemHeapPointer<Structure> hc)
+    {
+        HeapPtr<Structure> hiddenClass = hc.As();
+        assert(hiddenClass->m_type == Type::Structure);
+        SystemHeapPointer<StructureAnchorHashTable> aht = TCGet(hiddenClass->m_anchorHashTable);
 
         m_hiddenClass = hc;
         m_anchorTable = aht;
@@ -2245,21 +1182,21 @@ public:
 
         if (aht.m_value != 0)
         {
-            HeapPtr<HiddenClassAnchorHashTable> anchorHashTable = aht.As();
+            HeapPtr<StructureAnchorHashTable> anchorHashTable = aht.As();
             assert(anchorHashTable->m_numBlocks > 0);
-            m_curPtr = anchorHashTable->m_blockPointers[0];
+            m_curPtr = TCGet(anchorHashTable->m_blockPointers[0]);
             m_anchorTableMaxOrd = anchorHashTable->m_numTotalSlots;
         }
         else
         {
             m_anchorTableMaxOrd = 0;
-            if (StructuredHiddenClass::HasFinalFullBlockPointer(hiddenClass->m_numSlots))
+            if (Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots))
             {
-                m_curPtr = StructuredHiddenClass::GetFinalFullBlockPointer(hiddenClass);
+                m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass);
             }
             else
             {
-                m_curPtr = m_hiddenClass.As<uint8_t>() + StructuredHiddenClass::OffsetOfTrailingVarLengthArray();
+                m_curPtr = m_hiddenClass.As<uint8_t>() + Structure::OffsetOfTrailingVarLengthArray();
             }
         }
     }
@@ -2288,31 +1225,31 @@ public:
         {
             if (m_ord < m_maxOrd)
             {
-                HeapPtr<StructuredHiddenClass> hiddenClass = m_hiddenClass.As<StructuredHiddenClass>();
+                HeapPtr<Structure> hiddenClass = m_hiddenClass.As<Structure>();
                 if (m_ord == m_anchorTableMaxOrd)
                 {
-                    if (StructuredHiddenClass::HasFinalFullBlockPointer(m_maxOrd) &&
-                        !StructuredHiddenClass::IsAnchorTableContainsFinalBlock(hiddenClass))
+                    if (Structure::HasFinalFullBlockPointer(m_maxOrd) &&
+                        !Structure::IsAnchorTableContainsFinalBlock(hiddenClass))
                     {
-                        m_curPtr = StructuredHiddenClass::GetFinalFullBlockPointer(hiddenClass);
+                        m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass);
                     }
                     else
                     {
-                        m_curPtr = m_hiddenClass.m_value + static_cast<uint32_t>(StructuredHiddenClass::OffsetOfTrailingVarLengthArray());
+                        m_curPtr = m_hiddenClass.m_value + static_cast<uint32_t>(Structure::OffsetOfTrailingVarLengthArray());
                     }
                 }
                 else if (m_ord > m_anchorTableMaxOrd)
                 {
                     assert(m_ord == m_anchorTableMaxOrd + x_hiddenClassBlockSize);
-                    assert(StructuredHiddenClass::HasFinalFullBlockPointer(hiddenClass->m_numSlots) &&
-                           !StructuredHiddenClass::IsAnchorTableContainsFinalBlock(hiddenClass));
-                    assert(m_curPtr == StructuredHiddenClass::GetFinalFullBlockPointer(hiddenClass).As() + x_hiddenClassBlockSize);
-                    m_curPtr = m_hiddenClass.As<uint8_t>() + StructuredHiddenClass::OffsetOfTrailingVarLengthArray();
+                    assert(Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots) &&
+                           !Structure::IsAnchorTableContainsFinalBlock(hiddenClass));
+                    assert(m_curPtr == Structure::GetFinalFullBlockPointer(hiddenClass).As() + x_hiddenClassBlockSize);
+                    m_curPtr = m_hiddenClass.As<uint8_t>() + Structure::OffsetOfTrailingVarLengthArray();
                 }
                 else
                 {
-                    HeapPtr<HiddenClassAnchorHashTable> anchorTable = m_anchorTable.As<HiddenClassAnchorHashTable>();
-                    m_curPtr = anchorTable->m_blockPointers[m_ord >> x_log2_hiddenClassBlockSize];
+                    HeapPtr<StructureAnchorHashTable> anchorTable = m_anchorTable.As<StructureAnchorHashTable>();
+                    m_curPtr = TCGet(anchorTable->m_blockPointers[m_ord >> x_log2_hiddenClassBlockSize]);
                 }
             }
         }
@@ -2323,63 +1260,22 @@ public:
     }
 
 private:
-    SystemHeapPointer<StructuredHiddenClass> m_hiddenClass;
+    SystemHeapPointer<Structure> m_hiddenClass;
     // It's important to store m_anchorTable here since it may change
     //
-    SystemHeapPointer<HiddenClassAnchorHashTable> m_anchorTable;
+    SystemHeapPointer<StructureAnchorHashTable> m_anchorTable;
     SystemHeapPointer<GeneralHeapPointer<void>> m_curPtr;
     uint8_t m_ord;
     uint8_t m_maxOrd;
     uint8_t m_anchorTableMaxOrd;
 };
-static_assert(sizeof(StructuredHiddenClassIterator) == 16);
+static_assert(sizeof(StructureIterator) == 16);
 
-class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>
-{
-public:
-
-    bool WARN_UNUSED Initialize()
-    {
-        bool success = false;
-
-        CHECK_LOG_ERROR(static_cast<VMMemoryManager<VM>*>(this)->Initialize());
-        Auto(if (!success) static_cast<VMMemoryManager<VM>*>(this)->Cleanup());
-
-        CHECK_LOG_ERROR(static_cast<GlobalStringHashConser<VM>*>(this)->Initialize());
-        Auto(if (!success) static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup());
-
-        success = true;
-        return true;
-    }
-
-    void Cleanup()
-    {
-        static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup();
-        static_cast<VMMemoryManager<VM>*>(this)->Cleanup();
-    }
-
-
-};
-
-template<typename T>
-remove_heap_ptr_t<T> TranslateToRawPointer(VM* vm, T ptr)
-{
-    if constexpr(IsHeapPtrType<T>::value)
-    {
-        return vm->GetHeapPtrTranslator().TranslateToRawPtr(ptr);
-    }
-    else
-    {
-        static_assert(std::is_pointer_v<T>);
-        return ptr;
-    }
-}
-
-inline StructuredHiddenClassIterator::StructuredHiddenClassIterator(StructuredHiddenClass* hiddenClass)
-    : StructuredHiddenClassIterator(VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToSystemHeapPtr(hiddenClass))
+inline StructureIterator::StructureIterator(Structure* hiddenClass)
+    : StructureIterator(VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToSystemHeapPtr(hiddenClass))
 { }
 
-inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Create(VM* vm, StructuredHiddenClass* shc)
+inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM* vm, Structure* shc)
 {
     uint8_t numElements = shc->m_numSlots;
     assert(numElements % x_hiddenClassBlockSize == 0);
@@ -2401,14 +1297,15 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
     //
     HashTableEntry* hashTableStart = TranslateToRawPointer(vm, objectAddressStart.As<HashTableEntry>());
     HashTableEntry* hashTableEnd = hashTableStart + hashTableSize;
-    HiddenClassAnchorHashTable* r = reinterpret_cast<HiddenClassAnchorHashTable*>(hashTableEnd);
-    HeapEntityCommonHeader::Populate(r);
+    StructureAnchorHashTable* r = reinterpret_cast<StructureAnchorHashTable*>(hashTableEnd);
+    ConstructInPlace(r);
+    SystemHeapGcObjectHeader::Populate(r);
     r->m_numBlocks = numBlocks;
     r->m_numTotalSlots = numElements;
     r->m_hashTableMask = static_cast<int32_t>(hashTableMask);
     assert(GetHashTableSizeFromHashTableMask(r->m_hashTableMask) == hashTableSize);
 
-    SystemHeapPointer<HiddenClassAnchorHashTable> oldAnchorTableV = shc->m_anchorHashTable;
+    SystemHeapPointer<StructureAnchorHashTable> oldAnchorTableV = shc->m_anchorHashTable;
     AssertImp(oldAnchorTableV.m_value == 0, numElements == x_hiddenClassBlockSize);
     AssertImp(oldAnchorTableV.m_value != 0, oldAnchorTableV.As()->m_numBlocks == numBlocks - 1);
 
@@ -2418,7 +1315,7 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
     {
         // Copy in the hash table
         //
-        HiddenClassAnchorHashTable* oldAnchorTable = TranslateToRawPointer(vm, oldAnchorTableV.As<HiddenClassAnchorHashTable>());
+        StructureAnchorHashTable* oldAnchorTable = TranslateToRawPointer(vm, oldAnchorTableV.As<StructureAnchorHashTable>());
         oldAnchorTable->CloneHashTableTo(hashTableStart, hashTableSize);
 
         // Copy in the block pointer list
@@ -2432,7 +1329,7 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
     {
         GeneralHeapPointer<void> e  = shc->m_values[i];
         UserHeapPointer<void> eu { e.As<void>() };
-        uint32_t hashValue = HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
+        uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
         int64_t hashSlot = static_cast<int64_t>(hashValue >> 8) | hashTableMask;
@@ -2451,10 +1348,10 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
     // And finally fill in the pointer for the new block
     //
     {
-        SystemHeapPointer<uint8_t> base = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(shc);
-        base = base.As() + static_cast<uint32_t>(StructuredHiddenClass::OffsetOfTrailingVarLengthArray());
+        SystemHeapPointer<uint8_t> base = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(shc).As<uint8_t>();
+        base = base.As() + static_cast<uint32_t>(Structure::OffsetOfTrailingVarLengthArray());
         base = base.As() + static_cast<uint32_t>(sizeof(GeneralHeapPointer<void>)) * x_hiddenClassBlockSize;
-        r->m_blockPointers[numBlocks - 1] = base;
+        r->m_blockPointers[numBlocks - 1] = base.As<GeneralHeapPointer<void>>();
     }
 
     // In debug mode, check that the anchor hash table contains all the expected elements, no more and no less
@@ -2468,15 +1365,15 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
         std::set<int64_t> elementSet;
         for (uint8_t i = 0; i < r->m_numTotalSlots; i++)
         {
-            GeneralHeapPointer<void> p = HiddenClassAnchorHashTable::GetPropertyNameAtSlot(r, i);
+            GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, i);
             UserHeapPointer<void> key { p.As() };
             ReleaseAssert(!elementSet.count(key.m_value));
             elementSet.insert(key.m_value);
             elementCount++;
 
             uint32_t querySlot = static_cast<uint32_t>(-1);
-            bool found = HiddenClassAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(
-                        r, p, HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(key), querySlot /*out*/);
+            bool found = StructureAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(
+                        r, p, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), querySlot /*out*/);
             ReleaseAssert(found);
             ReleaseAssert(querySlot == i);
         }
@@ -2491,7 +1388,7 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
             HashTableEntry e = GetHashTableBegin(r)[i];
             if (e.m_ordinal != x_hashTableEmptyValue)
             {
-                GeneralHeapPointer<void> p = HiddenClassAnchorHashTable::GetPropertyNameAtSlot(r, e.m_ordinal);
+                GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, e.m_ordinal);
                 UserHeapPointer<void> key { p.As() };
                 ReleaseAssert(elementSet.count(key.m_value));
                 ReleaseAssert(!elementSetHt.count(key.m_value));
@@ -2507,7 +1404,7 @@ inline HiddenClassAnchorHashTable* WARN_UNUSED HiddenClassAnchorHashTable::Creat
     return r;
 }
 
-inline void HiddenClassAnchorHashTable::CloneHashTableTo(HiddenClassAnchorHashTable::HashTableEntry* htStart, uint32_t htSize)
+inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable::HashTableEntry* htStart, uint32_t htSize)
 {
     uint32_t selfHtSize = GetHashTableSizeFromHashTableMask(m_hashTableMask);
     assert(htSize >= selfHtSize);
@@ -2533,9 +1430,9 @@ inline void HiddenClassAnchorHashTable::CloneHashTableTo(HiddenClassAnchorHashTa
             HeapPtr<GeneralHeapPointer<void>> p = m_blockPointers[blockOrd].As();
             for (uint8_t offset = 0; offset < x_hiddenClassBlockSize; offset++)
             {
-                GeneralHeapPointer<void> e = p[offset];
+                GeneralHeapPointer<void> e = TCGet(p[offset]);
                 UserHeapPointer<void> eu { e.As() };
-                uint32_t hashValue = HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
+                uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
                 uint8_t checkHash = static_cast<uint8_t>(hashValue);
                 int64_t hashSlot = static_cast<int64_t>(hashValue >> 8) | htMask;
@@ -2555,36 +1452,11 @@ inline void HiddenClassAnchorHashTable::CloneHashTableTo(HiddenClassAnchorHashTa
 }
 
 template<typename T, typename>
-bool WARN_UNUSED StructuredHiddenClass::AddStringProperty(T self, UserHeapPointer<HeapString> stringKey, AddPropertyResult& result /*out*/ )
-{
-    // TODO: check for existing transition
-
-    if (GetSlotOrdinalFromStringProperty(self, stringKey, result.m_slotOrdinal /*out*/))
-    {
-        result.m_transitionedToNewHiddenClass = false;
-        return true;
-    }
-
-    assert(self->m_numSlots <= x_maxNumSlots);
-    if (self->m_numSlots == x_maxNumSlots)
-    {
-        return false;   // transition to dictionary
-    }
-
-
-
-    VM* vm = VM::GetActiveVMForCurrentThread();
-    StructuredHiddenClass* selfRaw = TranslateToRawPointer(vm, self);
-    selfRaw->PerformAddPropertyTransition(vm, stringKey, result /*out*/);
-    return true;
-}
-
-template<typename T, typename>
-SystemHeapPointer<HiddenClassAnchorHashTable> WARN_UNUSED StructuredHiddenClass::BuildNewAnchorTableIfNecessary(T self)
+SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildNewAnchorTableIfNecessary(T self)
 {
     assert(self->m_nonFullBlockLen == x_hiddenClassBlockSize);
     assert(self->m_numSlots > 0 && self->m_numSlots % x_hiddenClassBlockSize == 0);
-    SystemHeapPointer<HiddenClassAnchorHashTable> anchorHt = self->m_anchorHashTable;
+    SystemHeapPointer<StructureAnchorHashTable> anchorHt = TCGet(self->m_anchorHashTable);
     AssertIff(!IsAnchorTableContainsFinalBlock(self), anchorHt.m_value == 0 || anchorHt.As()->m_numTotalSlots != self->m_numSlots);
     if (!IsAnchorTableContainsFinalBlock(self))
     {
@@ -2592,8 +1464,8 @@ SystemHeapPointer<HiddenClassAnchorHashTable> WARN_UNUSED StructuredHiddenClass:
         // The updated anchor hash table has not been built, we need to build it now
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
-        StructuredHiddenClass* selfRaw = TranslateToRawPointer(vm, self);
-        HiddenClassAnchorHashTable* newAnchorTable = HiddenClassAnchorHashTable::Create(vm, selfRaw);
+        Structure* selfRaw = TranslateToRawPointer(vm, self);
+        StructureAnchorHashTable* newAnchorTable = StructureAnchorHashTable::Create(vm, selfRaw);
         selfRaw->m_anchorHashTable = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(newAnchorTable);
         anchorHt = selfRaw->m_anchorHashTable;
 
@@ -2608,62 +1480,77 @@ SystemHeapPointer<HiddenClassAnchorHashTable> WARN_UNUSED StructuredHiddenClass:
     return anchorHt;
 }
 
-inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeapPointer<void> key, AddPropertyResult& result /*out*/)
+inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm, SlotAdditionKind slotAdditionKind, UserHeapPointer<void> key)
 {
-    assert(m_numSlots < x_maxNumSlots);
+    bool shouldAddKey = (slotAdditionKind != SlotAdditionKind::NoSlotAdded);
+
+    AssertIff(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable, key == vm->GetSpecialKeyForMetadataSlot());
+
+    // Doesn't make sense to transit to PolyMetatable mode if we are already in PolyMetatable mode
+    //
+    AssertImp(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable, m_metatable <= 0);
+
+    AssertImp(shouldAddKey, m_numSlots < x_maxNumSlots || (m_numSlots == x_maxNumSlots && slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable));
     assert(m_numSlots <= static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity);
     assert(m_nonFullBlockLen <= x_hiddenClassBlockSize);
 
     // Work out various properties of the new hidden class
     //
-    SystemHeapPointer<HiddenClassAnchorHashTable> anchorTableForNewNode;
+    SystemHeapPointer<StructureAnchorHashTable> anchorTableForNewNode;
     uint8_t nonFullBlockCopyLengthForNewNode;
     bool hasFinalBlockPointer;
     bool mayMemcpyOldInlineHashTable;
     bool inlineHashTableMustContainFinalBlock;
     SystemHeapPointer<GeneralHeapPointer<void>> finalBlockPointerValue;    // only filled if hasFinalBlockPointer
 
-    if (m_nonFullBlockLen == x_hiddenClassBlockSize - 1)
+    if (shouldAddKey)
     {
-        // We are about to fill our current non-full block to full capacity, so the previous full block's node now qualifies to become an anchor
-        // If it has not become an anchor yet, build it.
-        //
-        AssertIff(m_numSlots >= x_hiddenClassBlockSize, HasFinalFullBlockPointer(m_numSlots));
-        AssertIff(m_numSlots >= x_hiddenClassBlockSize, m_anchorHashTable.m_value != 0);
-        if (m_numSlots >= x_hiddenClassBlockSize)
+        if (m_nonFullBlockLen == x_hiddenClassBlockSize - 1)
         {
-            SystemHeapPointer<StructuredHiddenClass> anchorTargetHiddenClass = GetHiddenClassOfFullBlockPointer(this);
-            anchorTableForNewNode = BuildNewAnchorTableIfNecessary(anchorTargetHiddenClass.As());
+            // We are about to fill our current non-full block to full capacity, so the previous full block's node now qualifies to become an anchor
+            // If it has not become an anchor yet, build it.
+            //
+            AssertIff(m_numSlots >= x_hiddenClassBlockSize, HasFinalFullBlockPointer(m_numSlots));
+            AssertIff(m_numSlots >= x_hiddenClassBlockSize, m_anchorHashTable.m_value != 0);
+            if (m_numSlots >= x_hiddenClassBlockSize)
+            {
+                SystemHeapPointer<Structure> anchorTargetHiddenClass = GetHiddenClassOfFullBlockPointer(this);
+                anchorTableForNewNode = BuildNewAnchorTableIfNecessary(anchorTargetHiddenClass.As());
+            }
+            else
+            {
+                anchorTableForNewNode.m_value = 0;
+            }
+            nonFullBlockCopyLengthForNewNode = x_hiddenClassBlockSize - 1;
+            hasFinalBlockPointer = false;
+            inlineHashTableMustContainFinalBlock = false;
+            // The new node's inline hash table should only contain the last x_hiddenClassBlockSize elements
+            // If our hash table doesn't contain the final block, then our hash table only contains the last x_hiddenClassBlockSize - 1 elements, only in this case we can copy
+            //
+            mayMemcpyOldInlineHashTable = !IsAnchorTableContainsFinalBlock(this);
+            goto end_setup;
         }
-        else
+        else if (m_nonFullBlockLen == x_hiddenClassBlockSize)
         {
-            anchorTableForNewNode.m_value = 0;
+            // The current node's non-full block is full. The new node will have a new non-full block, and its final block pointer will point to us.
+            //
+            anchorTableForNewNode = m_anchorHashTable;
+            nonFullBlockCopyLengthForNewNode = 0;
+            hasFinalBlockPointer = true;
+            SystemHeapPointer<uint8_t> val = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(this).As<uint8_t>();
+            val = val.As() + static_cast<uint32_t>(OffsetOfTrailingVarLengthArray());
+            val = val.As() + x_hiddenClassBlockSize * static_cast<uint32_t>(sizeof(GeneralHeapPointer<void>));
+            finalBlockPointerValue = val.As<GeneralHeapPointer<void>>();
+            inlineHashTableMustContainFinalBlock = !IsAnchorTableContainsFinalBlock(this);
+            mayMemcpyOldInlineHashTable = false;
+            goto end_setup;
         }
-        nonFullBlockCopyLengthForNewNode = x_hiddenClassBlockSize - 1;
-        hasFinalBlockPointer = false;
-        inlineHashTableMustContainFinalBlock = false;
-        // The new node's inline hash table should only contain the last x_hiddenClassBlockSize elements
-        // If our hash table doesn't contain the final block, then our hash table only contains the last x_hiddenClassBlockSize - 1 elements, only in this case we can copy
-        //
-        mayMemcpyOldInlineHashTable = !IsAnchorTableContainsFinalBlock(this);
     }
-    else if (m_nonFullBlockLen == x_hiddenClassBlockSize)
+
     {
-        // The current node's non-full block is full. The new node will have a new non-full block, and its final block pointer will point to us.
-        //
-        anchorTableForNewNode = m_anchorHashTable;
-        nonFullBlockCopyLengthForNewNode = 0;
-        hasFinalBlockPointer = true;
-        SystemHeapPointer<uint8_t> val = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(this);
-        val = val.As() + static_cast<uint32_t>(OffsetOfTrailingVarLengthArray());
-        val = val.As() + x_hiddenClassBlockSize * static_cast<uint32_t>(sizeof(GeneralHeapPointer<void>));
-        finalBlockPointerValue = val;
-        inlineHashTableMustContainFinalBlock = !IsAnchorTableContainsFinalBlock(this);
-        mayMemcpyOldInlineHashTable = false;
-    }
-    else
-    {
-        // The current node's non-full block will not reach full capcity after the transition.
+        // General case:
+        // Either we are adding a key, but the current node's non-full block will not reach full capcity after the transition,
+        // or we are not adding a key so we just want to clone the current node
         //
         nonFullBlockCopyLengthForNewNode = m_nonFullBlockLen;
         // The new node has a final block pointer iff we do
@@ -2688,16 +1575,16 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
             // If yes, then the new node can set its anchor to that node instead of our anchor so it doesn't have to contain the final block
             //
             bool useUpdatedAnchor = false;
-            SystemHeapPointer<HiddenClassAnchorHashTable> updatedAnchor;
+            SystemHeapPointer<StructureAnchorHashTable> updatedAnchor;
             if (hasFinalBlockPointer)
             {
-                HeapPtr<StructuredHiddenClass> anchorClass = GetHiddenClassOfFullBlockPointer(this).As<StructuredHiddenClass>();
+                HeapPtr<Structure> anchorClass = GetHiddenClassOfFullBlockPointer(this).As<Structure>();
                 assert(anchorClass->m_numSlots > 0 && anchorClass->m_numSlots % x_hiddenClassBlockSize == 0);
                 assert(anchorClass->m_numSlots == m_numSlots - m_nonFullBlockLen);
                 if (IsAnchorTableContainsFinalBlock(anchorClass))
                 {
                     useUpdatedAnchor = true;
-                    updatedAnchor = anchorClass->m_anchorHashTable;
+                    updatedAnchor = TCGet(anchorClass->m_anchorHashTable);
                 }
             }
             if (!useUpdatedAnchor)
@@ -2714,49 +1601,50 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
             }
         }
     }
-    assert(0 <= nonFullBlockCopyLengthForNewNode && nonFullBlockCopyLengthForNewNode < x_log2_hiddenClassBlockSize);
+
+end_setup:
+    AssertImp(shouldAddKey, nonFullBlockCopyLengthForNewNode < x_log2_hiddenClassBlockSize);
+    AssertImp(!shouldAddKey, nonFullBlockCopyLengthForNewNode <= x_log2_hiddenClassBlockSize);
     AssertImp(inlineHashTableMustContainFinalBlock, hasFinalBlockPointer);
 
     // Check if a butterfly space expansion is needed
-    // TODO: refine the growth strategy
     //
     assert(m_inlineNamedStorageCapacity < x_maxNumSlots);
     bool needButterflyExpansion = false;
-    uint8_t newButterflyCapacity = 0;
-    if (m_butterflyNamedStorageCapacity == 0)
+    uint8_t expandedButterflyCapacity = 0;
+    if (shouldAddKey)
     {
-        assert(m_numSlots <= m_inlineNamedStorageCapacity);
-        if (m_numSlots == m_inlineNamedStorageCapacity)
+        if (m_butterflyNamedStorageCapacity == 0)
         {
-            needButterflyExpansion = true;
-            constexpr uint8_t x_initialMinimumButterflyCapacity = 4;
-            constexpr uint8_t x_butterflyCapacityFromInlineCapacityFactor = 2;
-            uint8_t capacity = m_inlineNamedStorageCapacity / x_butterflyCapacityFromInlineCapacityFactor;
-            capacity = std::max(capacity, x_initialMinimumButterflyCapacity);
-            capacity = std::min(capacity, static_cast<uint8_t>(x_maxNumSlots - m_inlineNamedStorageCapacity));
-            newButterflyCapacity = capacity;
+            assert(m_numSlots <= m_inlineNamedStorageCapacity);
+            if (m_numSlots == m_inlineNamedStorageCapacity)
+            {
+                needButterflyExpansion = true;
+                expandedButterflyCapacity = ComputeInitialButterflyCapacity(m_inlineNamedStorageCapacity);
+            }
         }
+        else
+        {
+            assert(m_numSlots > m_inlineNamedStorageCapacity);
+            uint8_t usedLen = m_numSlots - m_inlineNamedStorageCapacity;
+            assert(usedLen <= m_butterflyNamedStorageCapacity);
+            if (usedLen == m_butterflyNamedStorageCapacity)
+            {
+                needButterflyExpansion = true;
+                expandedButterflyCapacity = ComputeNextButterflyCapacity(m_inlineNamedStorageCapacity, m_butterflyNamedStorageCapacity);
+            }
+        }
+        AssertImp(needButterflyExpansion, static_cast<uint32_t>(expandedButterflyCapacity) + m_inlineNamedStorageCapacity > m_numSlots);
+        AssertIff(!needButterflyExpansion, static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity > m_numSlots);
     }
     else
     {
-        assert(m_numSlots > m_inlineNamedStorageCapacity);
-        constexpr uint8_t x_butterflyCapacityGrowthFactor = 2;
-        uint8_t usedLen = m_numSlots - m_inlineNamedStorageCapacity;
-        assert(usedLen <= m_butterflyNamedStorageCapacity);
-        if (usedLen == m_butterflyNamedStorageCapacity)
-        {
-            needButterflyExpansion = true;
-            uint32_t capacity = static_cast<uint32_t>(m_butterflyNamedStorageCapacity) * x_butterflyCapacityGrowthFactor;
-            capacity = std::min(capacity, static_cast<uint32_t>(x_maxNumSlots - m_inlineNamedStorageCapacity));
-            newButterflyCapacity = static_cast<uint8_t>(capacity);
-        }
+        assert(static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity >= m_numSlots);
     }
-    AssertImp(needButterflyExpansion, static_cast<uint32_t>(newButterflyCapacity) + m_inlineNamedStorageCapacity > m_numSlots);
-    AssertIff(!needButterflyExpansion, static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity > m_numSlots);
 
     // Work out the space needed for the new hidden class and perform allocation
     //
-    uint8_t numElementsInInlineHashTable = nonFullBlockCopyLengthForNewNode + 1;
+    uint8_t numElementsInInlineHashTable = nonFullBlockCopyLengthForNewNode + static_cast<uint8_t>(shouldAddKey);
     if (hasFinalBlockPointer && inlineHashTableMustContainFinalBlock)
     {
         numElementsInInlineHashTable += static_cast<uint8_t>(x_hiddenClassBlockSize);
@@ -2770,10 +1658,11 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
     int64_t htMask = ~ZeroExtendTo<int64_t>(htMaskToStore);
     assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
 
-    AssertIff(hasFinalBlockPointer, HasFinalFullBlockPointer(m_numSlots + 1));
+    uint8_t newNumSlots = m_numSlots + static_cast<uint8_t>(shouldAddKey);
+    AssertIff(hasFinalBlockPointer, HasFinalFullBlockPointer(newNumSlots));
 
     uint32_t hashTableLengthBytes = static_cast<uint32_t>(sizeof(InlineHashTableEntry)) * htSize;
-    uint32_t trailingVarLenArrayLengthBytes = ComputeTrailingVarLengthArrayLengthBytes(m_numSlots + 1);
+    uint32_t trailingVarLenArrayLengthBytes = ComputeTrailingVarLengthArrayLengthBytes(newNumSlots);
     uint32_t totalObjectLengthBytes = hashTableLengthBytes + static_cast<uint32_t>(OffsetOfTrailingVarLengthArray()) + trailingVarLenArrayLengthBytes;
     totalObjectLengthBytes = RoundUpToMultipleOf<8>(totalObjectLengthBytes);
 
@@ -2783,29 +1672,63 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
     //
     InlineHashTableEntry* htBegin = vm->GetHeapPtrTranslator().TranslateToRawPtr(objectAddressStart.As<InlineHashTableEntry>());
     InlineHashTableEntry* htEnd = htBegin + htSize;
-    StructuredHiddenClass* r = reinterpret_cast<StructuredHiddenClass*>(htEnd);
+    Structure* r = reinterpret_cast<Structure*>(htEnd);
 
-    HeapEntityCommonHeader::Populate(r);
-    r->m_numSlots = m_numSlots + 1;
-    r->m_nonFullBlockLen = nonFullBlockCopyLengthForNewNode + 1;
+    ConstructInPlace(r);
+
+    SystemHeapGcObjectHeader::Populate(r);
+    r->m_numSlots = newNumSlots;
+    r->m_nonFullBlockLen = nonFullBlockCopyLengthForNewNode + static_cast<uint8_t>(shouldAddKey);
     assert(r->m_nonFullBlockLen == ComputeNonFullBlockLength(r->m_numSlots));
     r->m_anchorHashTable = anchorTableForNewNode;
-    r->m_arrayStorageCapacity = m_arrayStorageCapacity;
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
     if (needButterflyExpansion)
     {
-        r->m_butterflyNamedStorageCapacity = newButterflyCapacity;
-        r->m_parentEdgeTransitionKind = StructuredHiddenClassTransitionKind::AddPropertyAndGrowButterflyStorage;
+        r->m_butterflyNamedStorageCapacity = expandedButterflyCapacity;
+        if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty)
+        {
+            r->m_parentEdgeTransitionKind = TransitionKind::AddPropertyAndGrowPropertyStorageCapacity;
+        }
+        else
+        {
+            assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
+            r->m_parentEdgeTransitionKind = TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity;
+        }
     }
     else
     {
         r->m_butterflyNamedStorageCapacity = m_butterflyNamedStorageCapacity;
-        r->m_parentEdgeTransitionKind = StructuredHiddenClassTransitionKind::AddProperty;
+        if (slotAdditionKind == SlotAdditionKind::NoSlotAdded)
+        {
+            // The caller is responsible for setting up the correct transition kind
+            //
+            r->m_parentEdgeTransitionKind = TransitionKind::BadTransitionKind;
+        }
+        else if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty)
+        {
+            r->m_parentEdgeTransitionKind = TransitionKind::AddProperty;
+        }
+        else
+        {
+            assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
+            r->m_parentEdgeTransitionKind = TransitionKind::TransitToPolyMetaTable;
+        }
     }
+    assert(static_cast<uint32_t>(r->m_inlineNamedStorageCapacity) + r->m_butterflyNamedStorageCapacity <= x_maxNumSlots + 1);
+
     r->m_parent = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(this);
-    r->m_metatable = m_metatable;
-    r->m_transitionTable = 0;
+    if (slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable)
+    {
+        // Note that 'm_metatable - 1' is the slot ordinal storing the metatable
+        //
+        r->m_metatable = r->m_numSlots;
+    }
+    else
+    {
+        r->m_metatable = m_metatable;
+    }
+    r->m_transitionTable.m_value = 0;
 
     // Populate the element list
     //
@@ -2814,9 +1737,12 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
         //
         SafeMemcpy(r->m_values, m_values, sizeof(GeneralHeapPointer<void>) * nonFullBlockCopyLengthForNewNode);
 
-        // Insert the new element
-        //
-        r->m_values[nonFullBlockCopyLengthForNewNode] = key.As<void>();
+        if (shouldAddKey)
+        {
+            // Insert the new element
+            //
+            r->m_values[nonFullBlockCopyLengthForNewNode] = key.As<void>();
+        }
 
         // Write the final block pointer if needed
         //
@@ -2830,7 +1756,7 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
     auto insertNonExistentElementIntoInlineHashTable = [&htEnd, &htMask, &htSize]
             (UserHeapPointer<void> element, int8_t ordinalOfElement) ALWAYS_INLINE
     {
-        uint16_t hashOfElement = static_cast<uint16_t>(HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(element));
+        uint16_t hashOfElement = static_cast<uint16_t>(StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(element));
         uint8_t checkHash = static_cast<uint8_t>(hashOfElement);
         int64_t hashSlot = ZeroExtendTo<int64_t>(hashOfElement >> 8) | htMask;
 
@@ -2849,16 +1775,19 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
 
     // Populate the inline hash table
     //
-    // If we are allowed to memcpy the hash table (i.e. the new table is always old table + 1 element), do it if possible.
+    // If we are allowed to memcpy the hash table (i.e. the new table is always old table + potentially the new element), do it if possible.
     //
     if (mayMemcpyOldInlineHashTable && htMaskToStore == m_inlineHashTableMask)
     {
         assert(ComputeHashTableSizeFromHashTableMask(m_inlineHashTableMask) == htSize);
         SafeMemcpy(htBegin, GetInlineHashTableBegin(this), hashTableLengthBytes);
 
-        // Insert the newly-added element
-        //
-        insertNonExistentElementIntoInlineHashTable(key, static_cast<int8_t>(nonFullBlockCopyLengthForNewNode));
+        if (shouldAddKey)
+        {
+            // Insert the newly-added element
+            //
+            insertNonExistentElementIntoInlineHashTable(key, static_cast<int8_t>(nonFullBlockCopyLengthForNewNode));
+        }
     }
     else
     {
@@ -2873,17 +1802,18 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
             HeapPtr<GeneralHeapPointer<void>> p = GetFinalFullBlockPointer(r).As();
             for (int8_t i = -static_cast<int8_t>(x_hiddenClassBlockSize); i < 0; i++)
             {
-                GeneralHeapPointer<void> e = p[i];
+                GeneralHeapPointer<void> e = TCGet(p[i]);
                 insertNonExistentElementIntoInlineHashTable(e.As(), i /*ordinalOfElement*/);
             }
         }
 
         // Then insert the non-full block
         //
-        for (int8_t i = 0; i <= nonFullBlockCopyLengthForNewNode; i++)
+        size_t len = r->m_nonFullBlockLen;
+        for (size_t i = 0; i < len; i++)
         {
             GeneralHeapPointer<void> e = r->m_values[i];
-            insertNonExistentElementIntoInlineHashTable(e.As(), i /*ordinalOfElement*/);
+            insertNonExistentElementIntoInlineHashTable(e.As(), static_cast<int8_t>(i) /*ordinalOfElement*/);
         }
     }
 
@@ -2893,7 +1823,7 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
     {
         uint32_t elementCount = 0;
         std::set<int64_t> elementSet;
-        StructuredHiddenClassIterator iterator(r);
+        StructureIterator iterator(r);
         while (iterator.HasMore())
         {
             GeneralHeapPointer<void> keyG = iterator.GetCurrentKey();
@@ -2922,14 +1852,14 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
             {
                 uint32_t querySlot = static_cast<uint32_t>(-1);
                 bool found = GetSlotOrdinalFromMaybeNonStringProperty(this, keyToLookup, querySlot /*out*/);
-                if (keyToLookup != key)
+                if (shouldAddKey && keyToLookup == key)
                 {
-                    ReleaseAssert(found);
-                    ReleaseAssert(querySlot == slot);
+                    ReleaseAssert(!found);
                 }
                 else
                 {
-                    ReleaseAssert(!found);
+                    ReleaseAssert(found);
+                    ReleaseAssert(querySlot == slot);
                 }
             }
         }
@@ -2937,7 +1867,10 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
         // Check that the iterator returned exactly the expected number of keys, and the newly inserted key is inside it
         //
         ReleaseAssert(elementCount == r->m_numSlots && elementSet.size() == elementCount);
-        ReleaseAssert(elementSet.count(key.m_value));
+        if (shouldAddKey)
+        {
+            ReleaseAssert(elementSet.count(key.m_value));
+        }
 
         // Check the inline hash table, make sure it contains nothing unexpected
         // We don't have to check the anchor hash table because it has its own self-check
@@ -2961,10 +1894,10 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
                 if (r->m_anchorHashTable.m_value != 0)
                 {
                     uint32_t querySlot = static_cast<uint32_t>(-1);
-                    bool found = HiddenClassAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(
-                                r->m_anchorHashTable.As<HiddenClassAnchorHashTable>(),
+                    bool found = StructureAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(
+                                r->m_anchorHashTable.As<StructureAnchorHashTable>(),
                                 keyG,
-                                HiddenClassKeyHashHelper::GetHashValueForMaybeNonStringKey(keyToLookup),
+                                StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(keyToLookup),
                                 querySlot /*out*/);
                     ReleaseAssert(!found);
                 }
@@ -2981,17 +1914,143 @@ inline void StructuredHiddenClass::PerformAddPropertyTransition(VM* vm, UserHeap
     }
 #endif
 
-    // Update the transition table
-    //
+    return r;
+}
 
-    // TODO
-
-    // Populate 'result'
+inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key, AddNewPropertyResult& result /*out*/)
+{
+#ifndef NDEBUG
+    // Confirm that the key doesn't exist
     //
-    result.m_transitionedToNewHiddenClass = true;
-    result.m_shouldGrowButterfly = needButterflyExpansion;
+    {
+        uint32_t tmp;
+        assert(GetSlotOrdinalFromMaybeNonStringProperty(this, key, tmp /*out*/) == false);
+    }
+#endif
+
+    // m_numSlots == x_maxNumSlots + 1 is possible due to PolyMetatable
+    //
+    if (m_numSlots >= x_maxNumSlots)
+    {
+        // TODO: transit to dictionary
+        //
+        ReleaseAssert(false);
+    }
+
+    int32_t transitionKey = GeneralHeapPointer<void>(key.As()).m_value;
+    assert(transitionKey < 0);
+
+    // Get the structure after transition, creating it and insert it into transition table if needed
+    //
+    Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
+        return CreateStructureForAddPropertyTransition(vm, key);
+    });
+    assert(transitionStructure != nullptr);
+    // Make sure we didn't botch the transition: the exact structure should be returned if we query the same key again
+    //
+    assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+
+    TransitionKind tkind = transitionStructure->m_parentEdgeTransitionKind;
+    assert(tkind == TransitionKind::AddProperty || tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
+
+    result.m_transitionedToDictionaryMode = false;
+    result.m_shouldGrowButterfly = (tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
+    assert(transitionStructure->m_numSlots == m_numSlots + 1);
     result.m_slotOrdinal = m_numSlots;
-    result.m_newHiddenClass = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(r);
+    result.m_newStructureOrDictionary = transitionStructure;
+
+#ifndef NDEBUG
+    // Confirm that the key exists in the new structure
+    //
+    {
+        uint32_t tmp;
+        assert(GetSlotOrdinalFromMaybeNonStringProperty(transitionStructure, key, tmp /*out*/) == true);
+        assert(tmp == result.m_slotOrdinal);
+    }
+#endif
+}
+
+template<typename T, typename>
+TValue TableObject::GetByVal(T self, TValue tidx)
+{
+    if (tidx.IsInt32(TValue::x_int32Tag))
+    {
+        int32_t idx = tidx.AsInt32();
+
+        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx))
+        {
+            return GetByValVectorIndex(self, tidx, idx);
+        }
+        else
+        {
+            ArrayType arrType { self->m_arrayType };
+
+            // Not vector-qualifying index
+            // If it exists, it must be in the sparse map
+            //
+            if (unlikely(arrType.HasSparseMap()))
+            {
+                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
+                return GetByValArraySparseMap(self, tidx, static_cast<double>(idx));
+            }
+            else
+            {
+                return GetByValHandleMetatableKnowingNil(self, tidx);
+            }
+        }
+    }
+
+    if (tidx.IsDouble(TValue::x_int32Tag))
+    {
+        double dblIdx = tidx.AsDouble();
+        if (IsNaN(dblIdx))
+        {
+            // TODO: throw error NaN as table index
+            ReleaseAssert(false);
+        }
+
+        int32_t idx;
+        if (likely(IsQualifiedForVectorIndex(dblIdx, idx /*out*/)))
+        {
+            return GetByValVectorIndex(self, tidx, idx);
+        }
+        else
+        {
+            ArrayType arrType { self->m_arrayType };
+
+            // Not vector-qualifying index
+            // If it exists, it must be in the sparse map
+            //
+            if (unlikely(arrType.HasSparseMap()))
+            {
+                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
+                return GetByValArraySparseMap(self, tidx, dblIdx);
+            }
+            else
+            {
+                return GetByValHandleMetatableKnowingNil(self, tidx);
+            }
+        }
+    }
+
+    if (tidx.IsPointer(TValue::x_mivTag))
+    {
+
+    }
+
+}
+
+template<typename T, typename>
+TValue TableObject::GetByValArraySparseMap(T self, TValue tidx, double index)
+{
+    HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
+    TValue rawResult = TranslateToRawPointer(VM::GetActiveVMForCurrentThread(), sparseMap)->GetByVal(index);
+#ifndef NDEBUG
+    ArrayType arrType { self->m_arrayType };
+    AssertImp(!rawResult.IsNil() && arrType.ArrayKind() == ArrayType::Int32, rawResult.IsInt32(TValue::x_int32Tag));
+    AssertImp(!rawResult.IsNil() && arrType.ArrayKind() == ArrayType::Double, rawResult.IsDouble(TValue::x_int32Tag));
+#endif
+    return GetByValHandleMetatable(self, tidx, rawResult);
 }
 
 class IRNode
@@ -3088,21 +2147,6 @@ private:
     int m_value;
 };
 
-enum class CodeBlockType
-{
-    INTERPRETER,
-    BASELINE,
-    FIRST_LEVEL_OPT
-};
-
-class CodeBlock
-{
-public:
-    virtual ~CodeBlock() = default;
-    virtual CodeBlockType GetCodeBlockType() const = 0;
-
-};
-
 class GlobalObject;
 class alignas(64) CoroutineRuntimeContext
 {
@@ -3115,7 +2159,7 @@ public:
     //
     GlobalObject* m_globalObject;
 
-    // slot [m_variadicRetSlotBase + ord] holds variadic return value 'ord'
+    // slot [m_variadicRetSlotBegin + ord] holds variadic return value 'ord'
     //
     uint32_t m_numVariadicRets;
     uint32_t m_variadicRetSlotBegin;
@@ -3129,46 +2173,120 @@ public:
 
 using InterpreterFn = void(*)(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*stackframe*/, ConstRestrictPtr<uint8_t> /*instr*/, uint64_t /*unused*/);
 
+// Base class for some executable, either an intrinsic, or a bytecode function with some fixed global object, or a user C function
+//
+class ExecutableCode : public SystemHeapGcObjectHeader
+{
+public:
+    bool IsIntrinsic() const { return m_bytecode == nullptr; }
+    bool IsUserCFunction() const { return reinterpret_cast<intptr_t>(m_bytecode) < 0; }
+    bool IsBytecodeFunction() const { return reinterpret_cast<intptr_t>(m_bytecode) > 0; }
+
+    using UserCFunctionPrototype = int(*)(void*);
+
+    UserCFunctionPrototype GetCFunctionPtr() const
+    {
+        assert(IsUserCFunction());
+        return reinterpret_cast<UserCFunctionPrototype>(~reinterpret_cast<uintptr_t>(m_bytecode));
+    }
+
+    uint8_t m_reserved;
+
+    // The # of fixed arguments and whether it accepts variadic arguments
+    // User C function always have m_numFixedArguments == 0 and m_hasVariadicArguments == true
+    //
+    bool m_hasVariadicArguments;
+    uint32_t m_numFixedArguments;
+
+    // This is nullptr iff it is an intrinsic, and negative iff it is a user-provided C function
+    //
+    uint8_t* m_bytecode;
+
+    // For intrinsic, this is the entrypoint of the intrinsic function
+    // For bytecode function, this is the most optimized implementation (interpreter or some JIT tier)
+    // For user C function, this is a trampoline that calls the function
+    // The 'codeBlock' parameter and 'curBytecode' parameter is not needed for intrinsic or JIT but we have them anyway for a unified interface
+    //
+    InterpreterFn m_bestEntryPoint;
+};
+static_assert(sizeof(ExecutableCode) == 24);
+
 class BaselineCodeBlock;
 class FLOCodeBlock;
 
-class InterpreterCodeBlock final : public CodeBlock
+class FunctionExecutable;
+
+// This uniquely corresponds to each pair of <FunctionExecutable, GlobalObject>
+// It owns the bytecode and the corresponding metadata (the bytecode is copied from the FunctionExecutable,
+// we need our own copy because we do bytecode opcode specialization optimization)
+//
+class CodeBlock final : public ExecutableCode
 {
 public:
-    virtual CodeBlockType GetCodeBlockType() const override final
-    {
-        return CodeBlockType::INTERPRETER;
-    }
+    GlobalObject* m_globalObject;
 
     uint32_t m_stackFrameNumSlots;
-    uint32_t m_numFixedArguments;
     uint32_t m_numUpValues;
     uint32_t m_bytecodeLength;
-
-    bool m_hasVariadicArguments;
-
-    // The entry point of the function, can be interpreter or jit
-    //
-    InterpreterFn m_functionEntryPoint;
+    uint32_t m_bytecodeMetadataLength;
 
     BaselineCodeBlock* m_baselineCodeBlock;
     FLOCodeBlock* m_floCodeBlock;
 
-    uint8_t m_bytecode[0];
+    FunctionExecutable* m_owner;
+
+    uint64_t m_bytecodeMetadata[0];
+
+    static constexpr size_t x_trailingArrayOffset = offsetof_member_v<&CodeBlock::m_bytecodeMetadata>;
 };
 
-class FunctionObject : public HeapEntityCommonHeader
+// This uniquely corresponds to a piece of source code that defines a function
+//
+class FunctionExecutable
 {
 public:
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, FunctionObject>>>
-    static HeapPtr<InterpreterCodeBlock> ALWAYS_INLINE GetInterpreterCodeBlock(T self)
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, FunctionExecutable>>>
+    static CodeBlock* ALWAYS_INLINE GetCodeBlock(T self, GeneralHeapPointer<void> globalObject)
     {
-        SystemHeapPointer<void> bytecode = self->m_bytecode;
-        return bytecode.As<InterpreterCodeBlock>() - 1;
+        if (likely(globalObject == self->m_defaultGlobalObject))
+        {
+            return self->m_defaultCodeBlock;
+        }
+        assert(self->m_rareGOtoCBMap != nullptr);
+        RareGlobalObjectToCodeBlockMap* rareMap = self->m_rareGOtoCBMap;
+        auto iter = rareMap->find(globalObject.m_value);
+        assert(iter != rareMap->end());
+        return iter->second;
     }
 
-    uint16_t m_padding;
-    SystemHeapPointer<void> m_bytecode;
+    uint8_t* m_bytecode;
+    uint32_t m_bytecodeLength;
+    GeneralHeapPointer<void> m_defaultGlobalObject;
+    CodeBlock* m_defaultCodeBlock;
+    using RareGlobalObjectToCodeBlockMap = std::unordered_map<int32_t, CodeBlock*>;
+    RareGlobalObjectToCodeBlockMap* m_rareGOtoCBMap;
+
+    uint32_t m_numUpValues;
+    uint32_t m_bytecodeMetadataLength;
+    uint32_t m_stackFrameNumSlots;
+
+
+};
+
+class FunctionObject
+{
+public:
+    // Object header
+    //
+    // Note that a CodeBlock defines both FunctionExecutable and GlobalObject,
+    // so the upValue list does not contain the global object (if the ExecutableCode is not a CodeBlock, then the global object doesn't matter either)
+    //
+    SystemHeapPointer<ExecutableCode> m_executable;
+    Type m_type;
+    GcCellState m_cellState;
+
+    uint16_t m_reserved;
+
     TValue m_upValues[0];
 };
 static_assert(sizeof(FunctionObject) == 8);
@@ -3363,9 +2481,12 @@ public:
         const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
         assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcCall));
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
-        HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
-        SystemHeapPointer<uint8_t> callerBytecodeStart = hdr->m_func->m_bytecode;
-        hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(reinterpret_cast<const uint8_t*>(bc) - translator.TranslateToRawPtr(callerBytecodeStart.As()));
+
+        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+        HeapPtr<CodeBlock> callerCb = static_cast<HeapPtr<CodeBlock>>(callerEc);
+        uint8_t* callerBytecodeStart = callerCb->m_bytecode;
+        hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(bcu - callerBytecodeStart);
 
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
@@ -3374,11 +2495,11 @@ public:
 
         if (func.IsPointer(TValue::x_mivTag))
         {
-            if (func.AsPointer().As<HeapEntityCommonHeader>()->m_type == Type::FUNCTION)
+            if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
             {
                 HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
 
-                TValue* sfEnd = reinterpret_cast<TValue*>(sfp) + FunctionObject::GetInterpreterCodeBlock(hdr->m_func)->m_stackFrameNumSlots;
+                TValue* sfEnd = reinterpret_cast<TValue*>(sfp) + callerCb->m_stackFrameNumSlots;
                 TValue* baseForNextFrame = sfEnd + x_sizeOfStackFrameHeaderInTermsOfTValue;
 
                 uint32_t numFixedArgsToPass = bc->m_numFixedParams;
@@ -3388,8 +2509,10 @@ public:
                     totalArgs += rc->m_numVariadicRets;
                 }
 
-                uint32_t numCalleeExpectingArgs = FunctionObject::GetInterpreterCodeBlock(target)->m_numFixedArguments;
-                bool calleeTakesVarArgs = FunctionObject::GetInterpreterCodeBlock(target)->m_hasVariadicArguments;
+                HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+
+                uint32_t numCalleeExpectingArgs = calleeEc->m_numFixedArguments;
+                bool calleeTakesVarArgs = calleeEc->m_hasVariadicArguments;
 
                 // If the callee takes varargs and it is not empty, set up the varargs
                 //
@@ -3469,8 +2592,9 @@ public:
                 _Pragma("clang diagnostic push")
                 _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
                 uint64_t unused;
-                SystemHeapPointer<void> targetBytecodeStart = target->m_bytecode;
-                [[clang::musttail]] return FunctionObject::GetInterpreterCodeBlock(target)->m_functionEntryPoint(rc, reinterpret_cast<RestrictPtr<void>>(baseForNextFrame), translator.TranslateToRawPtr(targetBytecodeStart.As<uint8_t>()), unused);
+                uint8_t* calleeBytecode = calleeEc->m_bytecode;
+                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, unused);
                 _Pragma("clang diagnostic pop")
             }
             else
@@ -3488,9 +2612,10 @@ public:
     {
         const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-        HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
-        SystemHeapPointer<uint8_t> callerBytecodeStart = hdr->m_func->m_bytecode;
-        ConstRestrictPtr<uint8_t> bcu = translator.TranslateToRawPtr(callerBytecodeStart.As()) + hdr->m_callerBytecodeOffset;
+        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+        uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+        ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
         const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
         assert(static_cast<Opcode>(bc->m_opcode) == Opcode::BcCall);
         if (bc->m_keepVariadicRet)
