@@ -102,6 +102,11 @@ struct ArrayType
     bool MayHaveMetatable() { return BFM_mayHaveMetatable::Get(m_asValue); }
     void SetMayHaveMetatable(bool v) { return BFM_mayHaveMetatable::Set(m_asValue, v); }
 
+    static ArrayType GetInitialArrayType()
+    {
+        return ArrayType(0);
+    }
+
     // bit 6-7: always zero
     //
     BitFieldCarrierType m_asValue;
@@ -388,6 +393,8 @@ public:
     //
     int32_t m_hashTableMask;
 
+    // These block pointer point at the beginning of each x_hiddenClassBlockSize block
+    //
     SystemHeapPointer<GeneralHeapPointer<void>> m_blockPointers[0];
 };
 static_assert(sizeof(StructureAnchorHashTable) == 8);
@@ -400,6 +407,9 @@ static_assert(sizeof(StructureAnchorHashTable) == 8);
 // [ hash table ] [ header ] [ non-full block elements ] [ optional last full block pointer ]
 //                ^
 //                pointer to object
+//
+// The LastFullBlockPointer points at the END of the x_hiddenClassBlockSize block (unlike StructureAnchorHashTable which points at the beginning)
+// This is really ugly, but I don't want to change this code any more..
 //
 class alignas(8) Structure final : public SystemHeapGcObjectHeader
 {
@@ -588,6 +598,8 @@ public:
     {
         return CreateStructureForTransitionImpl(vm, SlotAdditionKind::NoSlotAdded, UserHeapPointer<void>());
     }
+
+    static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity, uint8_t initialButterflyCapacity);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(T self);
@@ -856,6 +868,10 @@ public:
             }
         }
     }
+
+    // DEVNOTE: If you add a field, make sure to update both CreateInitialStructure
+    // and CreateStructureForTransitionImpl to initialize the field!
+    //
 
     // The total number of in-use slots in the represented object (this is different from the capacity!)
     //
@@ -1192,7 +1208,7 @@ public:
             m_anchorTableMaxOrd = 0;
             if (Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots))
             {
-                m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass);
+                m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass).As() - x_hiddenClassBlockSize;
             }
             else
             {
@@ -1209,7 +1225,7 @@ public:
     GeneralHeapPointer<void> GetCurrentKey()
     {
         assert(m_ord < m_maxOrd);
-        return m_curPtr.As();
+        return TCGet(*m_curPtr.As());
     }
 
     uint8_t GetCurrentSlotOrdinal()
@@ -1231,7 +1247,7 @@ public:
                     if (Structure::HasFinalFullBlockPointer(m_maxOrd) &&
                         !Structure::IsAnchorTableContainsFinalBlock(hiddenClass))
                     {
-                        m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass);
+                        m_curPtr = Structure::GetFinalFullBlockPointer(hiddenClass).As() - x_hiddenClassBlockSize;
                     }
                     else
                     {
@@ -1243,7 +1259,7 @@ public:
                     assert(m_ord == m_anchorTableMaxOrd + x_hiddenClassBlockSize);
                     assert(Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots) &&
                            !Structure::IsAnchorTableContainsFinalBlock(hiddenClass));
-                    assert(m_curPtr == Structure::GetFinalFullBlockPointer(hiddenClass).As() + x_hiddenClassBlockSize);
+                    assert(m_curPtr.As() == Structure::GetFinalFullBlockPointer(hiddenClass).As() - 1);
                     m_curPtr = m_hiddenClass.As<uint8_t>() + Structure::OffsetOfTrailingVarLengthArray();
                 }
                 else
@@ -1322,6 +1338,10 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
         //
         SafeMemcpy(r->m_blockPointers, oldAnchorTable->m_blockPointers, sizeof(SystemHeapPointer<GeneralHeapPointer<void>>) * oldAnchorTable->m_numBlocks);
     }
+    else
+    {
+        memset(hashTableStart, x_hashTableEmptyValue, sizeof(HashTableEntry) * hashTableSize);
+    }
 
     // Now, insert the new full block into the hash table
     //
@@ -1350,7 +1370,6 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
     {
         SystemHeapPointer<uint8_t> base = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(shc).As<uint8_t>();
         base = base.As() + static_cast<uint32_t>(Structure::OffsetOfTrailingVarLengthArray());
-        base = base.As() + static_cast<uint32_t>(sizeof(GeneralHeapPointer<void>)) * x_hiddenClassBlockSize;
         r->m_blockPointers[numBlocks - 1] = base.As<GeneralHeapPointer<void>>();
     }
 
@@ -1511,11 +1530,12 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
             // If it has not become an anchor yet, build it.
             //
             AssertIff(m_numSlots >= x_hiddenClassBlockSize, HasFinalFullBlockPointer(m_numSlots));
-            AssertIff(m_numSlots >= x_hiddenClassBlockSize, m_anchorHashTable.m_value != 0);
+            AssertImp(m_anchorHashTable.m_value == 0, m_numSlots < x_hiddenClassBlockSize * 2);
             if (m_numSlots >= x_hiddenClassBlockSize)
             {
                 SystemHeapPointer<Structure> anchorTargetHiddenClass = GetHiddenClassOfFullBlockPointer(this);
                 anchorTableForNewNode = BuildNewAnchorTableIfNecessary(anchorTargetHiddenClass.As());
+                assert(anchorTableForNewNode.m_value != 0);
             }
             else
             {
@@ -1603,8 +1623,8 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
     }
 
 end_setup:
-    AssertImp(shouldAddKey, nonFullBlockCopyLengthForNewNode < x_log2_hiddenClassBlockSize);
-    AssertImp(!shouldAddKey, nonFullBlockCopyLengthForNewNode <= x_log2_hiddenClassBlockSize);
+    AssertImp(shouldAddKey, nonFullBlockCopyLengthForNewNode < x_hiddenClassBlockSize);
+    AssertImp(!shouldAddKey, nonFullBlockCopyLengthForNewNode <= x_hiddenClassBlockSize);
     AssertImp(inlineHashTableMustContainFinalBlock, hasFinalBlockPointer);
 
     // Check if a butterfly space expansion is needed
@@ -1680,6 +1700,7 @@ end_setup:
     r->m_numSlots = newNumSlots;
     r->m_nonFullBlockLen = nonFullBlockCopyLengthForNewNode + static_cast<uint8_t>(shouldAddKey);
     assert(r->m_nonFullBlockLen == ComputeNonFullBlockLength(r->m_numSlots));
+    r->m_arrayType = m_arrayType;
     r->m_anchorHashTable = anchorTableForNewNode;
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
@@ -1905,7 +1926,7 @@ end_setup:
         }
 
         uint32_t expectedElementsInInlineHt = r->m_nonFullBlockLen;
-        if (IsAnchorTableContainsFinalBlock(r))
+        if (HasFinalFullBlockPointer(r->m_numSlots) && !IsAnchorTableContainsFinalBlock(r))
         {
             expectedElementsInInlineHt += x_hiddenClassBlockSize;
         }
@@ -1913,6 +1934,49 @@ end_setup:
         ReleaseAssert(inlineHtElementSet.size() == inlineHtElementCount);
     }
 #endif
+
+    return r;
+}
+
+inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity, uint8_t initialButterflyCapacity)
+{
+    assert(static_cast<uint32_t>(initialButterflyCapacity) + initialButterflyCapacity <= x_maxNumSlots + 1);
+
+    // Work out the space needed for the new hidden class and perform allocation
+    //
+    uint32_t htSize = 8;
+    uint8_t htMaskToStore = static_cast<uint8_t>(htSize - 1);
+    assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
+
+    uint32_t hashTableLengthBytes = static_cast<uint32_t>(sizeof(InlineHashTableEntry)) * htSize;
+    uint32_t trailingVarLenArrayLengthBytes = ComputeTrailingVarLengthArrayLengthBytes(0 /*numSlots*/);
+    uint32_t totalObjectLengthBytes = hashTableLengthBytes + static_cast<uint32_t>(OffsetOfTrailingVarLengthArray()) + trailingVarLenArrayLengthBytes;
+    totalObjectLengthBytes = RoundUpToMultipleOf<8>(totalObjectLengthBytes);
+
+    SystemHeapPointer<void> objectAddressStart = vm->AllocFromSystemHeap(totalObjectLengthBytes);
+
+    // Populate the structure
+    //
+    InlineHashTableEntry* htBegin = vm->GetHeapPtrTranslator().TranslateToRawPtr(objectAddressStart.As<InlineHashTableEntry>());
+    InlineHashTableEntry* htEnd = htBegin + htSize;
+    Structure* r = reinterpret_cast<Structure*>(htEnd);
+
+    memset(htBegin, x_inlineHashTableEmptyValue, hashTableLengthBytes);
+
+    ConstructInPlace(r);
+
+    SystemHeapGcObjectHeader::Populate(r);
+    r->m_numSlots = 0;
+    r->m_nonFullBlockLen = 0;
+    r->m_arrayType = ArrayType::GetInitialArrayType();
+    r->m_anchorHashTable.m_value = 0;
+    r->m_inlineHashTableMask = htMaskToStore;
+    r->m_inlineNamedStorageCapacity = initialInlineCapacity;
+    r->m_butterflyNamedStorageCapacity = initialButterflyCapacity;
+    r->m_parentEdgeTransitionKind = TransitionKind::BadTransitionKind;
+    r->m_parent.m_value = 0;
+    r->m_metatable = 0;
+    r->m_transitionTable.m_value = 0;
 
     return r;
 }

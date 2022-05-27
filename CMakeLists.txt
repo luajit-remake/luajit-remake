@@ -132,6 +132,7 @@ add_executable(main
   test_boxing.cpp
   test_interpreter.cpp
   test_global_string_conser.cpp
+  test_structure.cpp
 )
 
 target_link_libraries(main PUBLIC
