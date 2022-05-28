@@ -107,6 +107,8 @@ struct ArrayType
         return ArrayType(0);
     }
 
+    constexpr static BitFieldCarrierType x_usefulBitsMask = static_cast<BitFieldCarrierType>((1 << 6) - 1);
+
     // bit 6-7: always zero
     //
     BitFieldCarrierType m_asValue;
@@ -186,18 +188,17 @@ public:
         return static_cast<uint32_t>(allocationSize);
     }
 
-    static StructureTransitionTable* AllocateUninitialized(uint32_t hashTableSize)
+    static StructureTransitionTable* AllocateUninitialized(VM* vm, uint32_t hashTableSize)
     {
         uint32_t allocationSize = ComputeAllocationSize(hashTableSize);
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        StructureTransitionTable* result = vm->GetHeapPtrTranslator().TranslateToRawPtr(vm->AllocFromSystemHeap(allocationSize).As<StructureTransitionTable>());
+        StructureTransitionTable* result = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(allocationSize).As<StructureTransitionTable>());
         ConstructInPlace(result);
         return result;
     }
 
-    static StructureTransitionTable* AllocateInitialTable(int32_t key, SystemHeapPointer<Structure> value)
+    static StructureTransitionTable* AllocateInitialTable(VM* vm, int32_t key, SystemHeapPointer<Structure> value)
     {
-        StructureTransitionTable* r = AllocateUninitialized(x_initialHashTableSize);
+        StructureTransitionTable* r = AllocateUninitialized(vm, x_initialHashTableSize);
         r->m_hashTableMask = x_initialHashTableSize - 1;
         r->m_numElementsInHashTable = 1;
         memset(r->m_hashTable, 0, sizeof(HashTableEntry) * x_initialHashTableSize);
@@ -217,7 +218,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureTransitionTable>>>
     static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> WARN_UNUSED Find(T self, int32_t key, bool& found)
     {
-        assert(key != x_key_invalid);
+        assert(key != x_key_invalid && key != x_key_deleted);
         uint32_t hashMask = self->m_hashTableMask;
         uint32_t slot = static_cast<uint32_t>(HashPrimitiveTypes(key)) & hashMask;
         while (true)
@@ -237,11 +238,11 @@ public:
         }
     }
 
-    StructureTransitionTable* WARN_UNUSED Expand()
+    StructureTransitionTable* WARN_UNUSED Expand(VM* vm)
     {
         assert(ShouldResizeForThisInsertion());
         uint32_t newHashMask = m_hashTableMask * 2 + 1;
-        StructureTransitionTable* newTable = AllocateUninitialized(newHashMask + 1);
+        StructureTransitionTable* newTable = AllocateUninitialized(vm, newHashMask + 1);
         newTable->m_hashTableMask = newHashMask;
         newTable->m_numElementsInHashTable = m_numElementsInHashTable;
         static_assert(x_key_invalid == 0);
@@ -529,26 +530,48 @@ public:
         void* m_newStructureOrDictionary;
     };
 
+    // Perform an AddProperty transition, the added property must be non-existent
+    //
     void AddNonExistentProperty(VM* vm, UserHeapPointer<void> key, AddNewPropertyResult& result /*out*/);
 
-    struct AddOrRemoveMetatableResult
+    struct AddMetatableResult
     {
-        // If true, the Structure is in PolyMetatable mode, m_slotOrdinal is filled to contain the slot ordinal for the metatable,
-        // and the user should fill the metatable (or 'nil' for remove metatable) into that slot
+        // If true, the Structure is in PolyMetatable mode,
+        // and the user should fill the metatable into m_slotOrdinal
         //
         bool m_shouldInsertMetatable;
 
         // If true, the caller should grow the object's butterfly property part
-        // Only relavent if m_transitionedToNewHiddenClass is true
+        // Only relavent if m_shouldInsertMetatable == true
         //
         bool m_shouldGrowButterfly;
 
-        // If 'm_shouldInsertMetatable' is true, the slot ordinal to write into
-        //
         uint32_t m_slotOrdinal;
-
         SystemHeapPointer<Structure> m_newStructure;
     };
+
+    // Perform a SetMetatable transition
+    //
+    void SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/);
+
+    struct RemoveMetatableResult
+    {
+        // If true, the Structure is in PolyMetatable mode,
+        // and the user should fill 'nil' into m_slotOrdinal
+        //
+        bool m_shouldInsertMetatable;
+        uint32_t m_slotOrdinal;
+        SystemHeapPointer<Structure> m_newStructure;
+    };
+
+    // Perform a RemoveMetatable transition
+    //
+    void RemoveMetatable(VM* vm, RemoveMetatableResult& result /*out*/);
+
+    // Perform an UpdateArrayType transition, returns the new structure.
+    // The array type MUST be different from what we have currently.
+    //
+    Structure* WARN_UNUSED UpdateArrayType(VM* vm, ArrayType newArrayType);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED IsAnchorTableContainsFinalBlock(T self)
@@ -594,9 +617,33 @@ public:
         return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForPolyMetatable, vm->GetSpecialKeyForMetadataSlot());
     }
 
+    // Create a child by making a clone of 'this'. That is, the structure is cloned, except that:
+    // 1. m_transitionTable is empty
+    // 2. m_parent is set to 'this'
+    // 3. m_parentEdgeTransitionType is BadTransitionKind: caller is responsible to set it
+    //
     Structure* WARN_UNUSED CloneStructure(VM* vm)
     {
         return CreateStructureForTransitionImpl(vm, SlotAdditionKind::NoSlotAdded, UserHeapPointer<void>());
+    }
+
+    Structure* WARN_UNUSED CreateStructureForMonomorphicMetatableTransition(VM* vm, GeneralHeapPointer<void> metatable)
+    {
+        assert(m_metatable == 0);
+        assert(metatable.m_value < 0);
+        Structure* newStructure = CloneStructure(vm);
+        newStructure->m_parentEdgeTransitionKind = TransitionKind::AddMetaTable;
+        newStructure->m_metatable = metatable.m_value;
+        return newStructure;
+    }
+
+    Structure* WARN_UNUSED CreateStructureForRemoveMetatableTransition(VM* vm)
+    {
+        assert(HasMonomorphicMetatable(this));
+        Structure* newStructure = CloneStructure(vm);
+        newStructure->m_parentEdgeTransitionKind = TransitionKind::RemoveMetaTable;
+        newStructure->m_metatable = 0;
+        return newStructure;
     }
 
     static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity, uint8_t initialButterflyCapacity);
@@ -783,49 +830,69 @@ public:
         }   // end switch
     }
 
-    StructureTransitionTable* WARN_UNUSED InitializeOutlinedTransitionTable(int32_t keyForOnlyChild, SystemHeapPointer<Structure> onlyChild)
+    StructureTransitionTable* WARN_UNUSED InitializeOutlinedTransitionTable(VM* vm, int32_t keyForOnlyChild, SystemHeapPointer<Structure> onlyChild)
     {
         assert(m_transitionTable.IsType<Structure>());
         assert(m_transitionTable.As<Structure>() == onlyChild.As());
         assert(GetParentEdgeTransitionKey(m_transitionTable.As<Structure>()) == keyForOnlyChild);
-        StructureTransitionTable* newTable = StructureTransitionTable::AllocateInitialTable(keyForOnlyChild, onlyChild);
+        StructureTransitionTable* newTable = StructureTransitionTable::AllocateInitialTable(vm, keyForOnlyChild, onlyChild);
         m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable> { newTable });
         return newTable;
     }
 
-    // Query if the transition key exists in the transition table
-    // If not, call 'createNewStructureFunc' to create a new structure and insert it into transition table
-    // In either case, return the structure after the transition
-    //
-    template<typename Func>
-    Structure* WARN_UNUSED ALWAYS_INLINE QueryTransitionTableAndInsert(VM* vm, int32_t transitionKey, const Func& createNewStructureFunc)
+    template<bool isInsert, typename Func>
+    Structure* WARN_UNUSED ALWAYS_INLINE QueryTransitionTableAndInsertOrUpsertImpl(VM* vm, int32_t transitionKey, const Func& insertOrUpsertStructureFunc)
     {
-        if (m_transitionTable.IsNullPtr())
+        auto getNewStructureForNotFoundCase = [&]() ALWAYS_INLINE -> Structure*
         {
-            Structure* newStructure = createNewStructureFunc();
+            if constexpr(isInsert)
+            {
+                return insertOrUpsertStructureFunc();
+            }
+            else
+            {
+                return insertOrUpsertStructureFunc(nullptr /*curStructure*/);
+            }
+        };
+
+        if (unlikely(m_transitionTable.IsNullPtr()))
+        {
+            Structure* newStructure = getNewStructureForNotFoundCase();
             m_transitionTable.Store(SystemHeapPointer<Structure>(newStructure));
             return newStructure;
         }
-        else if (m_transitionTable.IsType<Structure>())
+        else if (likely(m_transitionTable.IsType<Structure>()))
         {
             HeapPtr<Structure> onlyChild = m_transitionTable.As<Structure>();
             assert(TCGet(onlyChild->m_parent) == SystemHeapPointer<Structure>(this));
             int32_t keyForOnlyChild = GetParentEdgeTransitionKey(onlyChild);
             if (keyForOnlyChild == transitionKey)
             {
-                return TranslateToRawPointer(vm, onlyChild);
+                // Found. For insert, just return. For upsert, call upsert function and update value
+                //
+                Structure* curStructure = TranslateToRawPointer(vm, onlyChild);
+                if constexpr(isInsert)
+                {
+                    return curStructure;
+                }
+                else
+                {
+                    Structure* newStructure = insertOrUpsertStructureFunc(curStructure);
+                    assert(newStructure != nullptr);
+                    m_transitionTable.Store(SystemHeapPointer<Structure> { newStructure });
+                    return newStructure;
+                }
             }
             else
             {
                 // We need to create an outlined transition table
                 //
-                StructureTransitionTable* newTable = InitializeOutlinedTransitionTable(keyForOnlyChild, onlyChild);
+                StructureTransitionTable* newTable = InitializeOutlinedTransitionTable(vm, keyForOnlyChild, onlyChild);
                 bool found;
                 StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(newTable, transitionKey, found /*out*/);
                 assert(!found);
 
-                Structure* newStructure = createNewStructureFunc();
-
+                Structure* newStructure = getNewStructureForNotFoundCase();
                 e->m_key = transitionKey;
                 e->m_value = newStructure;
                 newTable->m_numElementsInHashTable++;
@@ -846,15 +913,14 @@ public:
             StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(table, transitionKey, found /*out*/);
             if (!found)
             {
-                Structure* newStructure = createNewStructureFunc();
-
+                Structure* newStructure = getNewStructureForNotFoundCase();
                 e->m_key = transitionKey;
                 e->m_value = newStructure;
                 table->m_numElementsInHashTable++;
 
                 if (unlikely(table->ShouldResizeForThisInsertion()))
                 {
-                    StructureTransitionTable* newTable = table->Expand();
+                    StructureTransitionTable* newTable = table->Expand(vm);
                     m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable>(newTable));
                     assert(!newTable->ShouldResizeForThisInsertion());
                     // FIXME: delete old table!
@@ -864,9 +930,68 @@ public:
             }
             else
             {
-                return TranslateToRawPointer(vm, e->m_value.As());
+                assert(e->m_key == transitionKey);
+                // Found. For insert, just return. For upsert, call upsert function and update value
+                //
+                Structure* curStructure = TranslateToRawPointer(vm, e->m_value.As());
+                assert(TranslateToRawPointer(vm, curStructure->m_parent.As()) == this);
+                if constexpr(isInsert)
+                {
+                    return curStructure;
+                }
+                else
+                {
+                    Structure* newStructure = insertOrUpsertStructureFunc(curStructure);
+                    assert(newStructure != nullptr);
+                    e->m_value = newStructure;
+                    return newStructure;
+                }
             }
         }
+    }
+
+    // 'insertStructureFunc' should take no parameter and return Structure*
+    //
+    // Query if the transition key exists in the transition table
+    // If not, call 'insertStructureFunc' and insert the returned Structure into transition table
+    // In either case, returns the structure after the transition
+    //
+    template<typename Func>
+    Structure* WARN_UNUSED ALWAYS_INLINE QueryTransitionTableAndInsert(VM* vm, int32_t transitionKey, const Func& insertStructureFunc)
+    {
+        return QueryTransitionTableAndInsertOrUpsertImpl<true /*isInsert*/>(vm, transitionKey, insertStructureFunc);
+    }
+
+    // 'upsertStructureFunc' should take Structure* and return Structure*
+    //
+    // Query if the transition key exists in the transition table
+    // If yes, call 'upsertStructureFunc' with the current value, and replace it with the returned value
+    // If not, call 'upsertStructureFunc' with 'nullptr', and insert the returned Structure into transition table
+    // In either case, returns the structure returned by 'upsertStructureFunc'
+    //
+    template<typename Func>
+    Structure* WARN_UNUSED ALWAYS_INLINE QueryTransitionTableAndUpsert(VM* vm, int32_t transitionKey, const Func& upsertStructureFunc)
+    {
+        return QueryTransitionTableAndInsertOrUpsertImpl<false /*isInsert*/>(vm, transitionKey, upsertStructureFunc);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static bool WARN_UNUSED IsPolyMetatable(T self)
+    {
+        return self->m_metatable > 0;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static bool WARN_UNUSED HasMonomorphicMetatable(T self)
+    {
+        return self->m_metatable < 0;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static uint32_t WARN_UNUSED GetPolyMetatableSlot(T self)
+    {
+        assert(IsPolyMetatable(self));
+        return static_cast<uint32_t>(self->m_metatable - 1);
     }
 
     // DEVNOTE: If you add a field, make sure to update both CreateInitialStructure
@@ -1738,7 +1863,7 @@ end_setup:
     }
     assert(static_cast<uint32_t>(r->m_inlineNamedStorageCapacity) + r->m_butterflyNamedStorageCapacity <= x_maxNumSlots + 1);
 
-    r->m_parent = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(this);
+    r->m_parent = this;
     if (slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable)
     {
         // Note that 'm_metatable - 1' is the slot ordinal storing the metatable
@@ -2032,6 +2157,211 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
         assert(tmp == result.m_slotOrdinal);
     }
 #endif
+}
+
+inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/)
+{
+    // TODO: assert that 'key' is a table object
+
+    GeneralHeapPointer<void> metatable { key.As() };
+    constexpr int32_t transitionKey = StructureTransitionTable::x_key_add_or_to_poly_metatable;
+    Structure* transitionStructure;
+
+    if (likely(m_metatable == 0))
+    {
+        // We currently have no metatable.
+        // We should check if we already have a AddMetatable transition.
+        // If yes, and the transition is for the same metatable as we are adding, we can just use it.
+        // If yes, but the transition is for a different metatable, we should make it transit to PolyMetatable instead.
+        // If no, we should create a transition that transit to monomorphic metatable.
+        //
+        transitionStructure = QueryTransitionTableAndUpsert(vm, transitionKey, [&](Structure* oldStructure) -> Structure* {
+            if (unlikely(oldStructure == nullptr))
+            {
+                // Transit to monomorphic metatable
+                //
+                return CreateStructureForMonomorphicMetatableTransition(vm, metatable);
+            }
+            assert(oldStructure->m_metatable != 0);
+            if (HasMonomorphicMetatable(oldStructure))
+            {
+                if (likely(oldStructure->m_metatable == metatable.m_value))
+                {
+                    // Monomorphic and same metatable, we should just transit to it
+                    //
+                    return oldStructure;
+                }
+                else
+                {
+                    // Monomorphic but different metatable, we should replace the transition to transit to PolyMetatable instead
+                    //
+                    return CreateStructureForPolyMetatableTransition(vm);
+                }
+            }
+            else
+            {
+                assert(IsPolyMetatable(oldStructure));
+                // Already PolyMetatable, we should just transit to it
+                //
+                return oldStructure;
+            }
+        });
+        assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+    }
+    else if (IsPolyMetatable(this))
+    {
+        // We are already in PolyMetatable mode, so the Structure isn't responsible for storing the metatable
+        // Just ask the caller to update the slot value
+        //
+        result.m_newStructure = this;
+        result.m_shouldInsertMetatable = true;
+        result.m_shouldGrowButterfly = false;
+        result.m_slotOrdinal = GetPolyMetatableSlot(this);
+        return;
+    }
+    else
+    {
+        assert(HasMonomorphicMetatable(this));
+        assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTable);
+        assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
+        if (metatable.m_value == m_metatable)
+        {
+            // SetMetatable attempted to set the same monomorphic metatable as we already have, so no-op
+            //
+            result.m_newStructure = this;
+            result.m_shouldInsertMetatable = false;
+            result.m_shouldGrowButterfly = false;
+            return;
+        }
+
+        if (m_parentEdgeTransitionKind == TransitionKind::AddMetaTable)
+        {
+            assert(HasMonomorphicMetatable(this));
+            // Our parent transit to us by adding a different metatable
+            // so we should make parent's AddMetatable operation transit to PolyMetatable instead
+            //
+            Structure* base = TranslateToRawPointer(vm, m_parent.As());
+            transitionStructure = base->QueryTransitionTableAndUpsert(vm, transitionKey, [&](Structure* oldStructure) -> Structure* {
+                assert(oldStructure != nullptr);
+                if (oldStructure == this)
+                {
+                    assert(!IsPolyMetatable(oldStructure));
+                    return base->CreateStructureForPolyMetatableTransition(vm);
+                }
+                else
+                {
+                    assert(IsPolyMetatable(oldStructure));
+                    return oldStructure;
+                }
+            });
+            assert(IsPolyMetatable(transitionStructure));
+            assert(base->QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == base);
+        }
+        else
+        {
+            // We already have a different metatable, but this is not immediately added by our parent
+            // so we just create a transition that transit to PolyMetatable
+            //
+            // Note that if the transition exists, it must be a PolyMetatable transition so we don't need to overwrite it
+            //
+            assert(HasMonomorphicMetatable(this));
+            assert(m_metatable != metatable.m_value);
+            transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
+                return CreateStructureForPolyMetatableTransition(vm);
+            });
+            assert(IsPolyMetatable(transitionStructure));
+            assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        }
+    }
+
+    assert(transitionStructure != nullptr);
+    TransitionKind transitionKind = transitionStructure->m_parentEdgeTransitionKind;
+    assert(transitionKind == TransitionKind::AddMetaTable ||
+           transitionKind == TransitionKind::TransitToPolyMetaTable ||
+           transitionKind == TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
+
+    result.m_newStructure = transitionStructure;
+    if (transitionKind == TransitionKind::AddMetaTable)
+    {
+        result.m_shouldInsertMetatable = false;
+        result.m_shouldGrowButterfly = false;
+    }
+    else
+    {
+        result.m_shouldInsertMetatable = true;
+        result.m_shouldGrowButterfly = (transitionKind == TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
+        result.m_slotOrdinal = GetPolyMetatableSlot(transitionStructure);
+    }
+}
+
+inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*out*/)
+{
+    if (m_metatable == 0)
+    {
+        // We don't have metatable, so no-op
+        //
+        result.m_shouldInsertMetatable = false;
+        result.m_newStructure = this;
+    }
+    else if (m_parentEdgeTransitionKind == TransitionKind::AddMetaTable)
+    {
+        assert(HasMonomorphicMetatable(this) && m_parent.As()->m_metatable == 0);
+        // We can simply transit back to parent. Note that we only do this for monomorphic case,
+        // since PolyMetatable may have involved a butterfly expansion. Just make things simple for now.
+        //
+        result.m_shouldInsertMetatable = false;
+        result.m_newStructure = TranslateToRawPointer(vm, m_parent.As());
+    }
+    else if (IsPolyMetatable(this))
+    {
+        // We are in poly metatable mode, ask the caller to overwrite the slot
+        //
+        result.m_shouldInsertMetatable = true;
+        result.m_slotOrdinal = GetPolyMetatableSlot(this);
+        result.m_newStructure = this;
+    }
+    else
+    {
+        assert(HasMonomorphicMetatable(this));
+        // We are in monomorphic metatable mode, perform a RemoveMetatable transition
+        //
+        constexpr int32_t transitionKey = StructureTransitionTable::x_key_remove_metatable;
+        Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
+            return CreateStructureForRemoveMetatableTransition(vm);
+        });
+        assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+
+        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        assert(transitionStructure->m_metatable == 0);
+        assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::RemoveMetaTable);
+
+        result.m_shouldInsertMetatable = false;
+        result.m_newStructure = transitionStructure;
+    }
+}
+
+inline Structure* WARN_UNUSED Structure::UpdateArrayType(VM* vm, ArrayType newArrayType)
+{
+    assert(m_arrayType.m_asValue <= ArrayType::x_usefulBitsMask);
+    assert(newArrayType.m_asValue <= ArrayType::x_usefulBitsMask);
+    assert(m_arrayType.m_asValue != newArrayType.m_asValue);
+
+    int32_t transitionKey = StructureTransitionTable::x_key_change_array_type_tag | static_cast<int32_t>(newArrayType.m_asValue);
+    Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
+        Structure* newStructure = CloneStructure(vm);
+        newStructure->m_parentEdgeTransitionKind = TransitionKind::UpdateArrayType;
+        newStructure->m_arrayType.m_asValue = newArrayType.m_asValue;
+        return newStructure;
+    });
+    assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+
+    assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+    assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::UpdateArrayType);
+    assert(transitionStructure->m_arrayType.m_asValue == newArrayType.m_asValue);
+    return transitionStructure;
 }
 
 template<typename T, typename>
