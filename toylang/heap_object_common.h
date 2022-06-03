@@ -16,7 +16,7 @@ using namespace CommonUtils;
   , (FUNCTION,                      FunctionObject,                 HOI_USR_HEAP)       \
   , (USERDATA,                      HeapCDataObject,                HOI_USR_HEAP)       \
   , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
-  , (TABLE,                         HeapTableObject,                HOI_USR_HEAP)       \
+  , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (DictionaryHiddenClass,         DictionaryHiddenClass,          HOI_SYS_HEAP)       \
   , (HiddenClassAnchorHashTable,    StructureAnchorHashTable,       HOI_SYS_HEAP)

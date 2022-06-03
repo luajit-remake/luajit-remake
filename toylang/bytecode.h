@@ -2050,10 +2050,22 @@ end_setup:
             }
         }
 
-        uint32_t expectedElementsInInlineHt = r->m_nonFullBlockLen;
-        if (HasFinalFullBlockPointer(r->m_numSlots) && !IsAnchorTableContainsFinalBlock(r))
+        uint32_t expectedElementsInInlineHt;
+        if (r->m_nonFullBlockLen != x_hiddenClassBlockSize)
         {
-            expectedElementsInInlineHt += x_hiddenClassBlockSize;
+            expectedElementsInInlineHt = r->m_nonFullBlockLen;
+            if (HasFinalFullBlockPointer(r->m_numSlots) && !IsAnchorTableContainsFinalBlock(r))
+            {
+                expectedElementsInInlineHt += x_hiddenClassBlockSize;
+            }
+        }
+        else
+        {
+            expectedElementsInInlineHt = 0;
+            if (!IsAnchorTableContainsFinalBlock(r))
+            {
+                expectedElementsInInlineHt += x_hiddenClassBlockSize;
+            }
         }
         ReleaseAssert(inlineHtElementCount == expectedElementsInInlineHt);
         ReleaseAssert(inlineHtElementSet.size() == inlineHtElementCount);

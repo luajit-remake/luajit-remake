@@ -114,10 +114,15 @@ struct TestContext
     std::vector<Structure*> m_structures;
 };
 
-void CheckIsAsExpected(TestContext& ctx, size_t cur)
+void CheckIsAsExpected(TestContext& ctx, size_t cur, Structure* specifiedStructure = nullptr)
 {
     Structure* structure = ctx.m_structures[cur];
     ReleaseAssert(structure != nullptr);
+
+    if (specifiedStructure != nullptr)
+    {
+        structure = specifiedStructure;
+    }
 
     // Confirm that all the expected keys are there
     //
@@ -405,6 +410,207 @@ TEST(Structure, SanityPropertyAdd14)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 3000 /*degreeParam*/);
+}
+
+void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    // TODO: when we make some more assertions in SetMetatable, we will need to make them more real
+    //
+    HeapPtr<TableObject> t1 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(t1);
+    HeapPtr<TableObject> t2 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(t2);
+    HeapPtr<TableObject> t3 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(t3);
+
+    for (size_t i = 0; i < numNodes; i++)
+    {
+        Structure* structure = ctx.m_structures[i];
+        Structure::AddMetatableResult result;
+        structure->SetMetatable(vm, t1, result /*out*/);
+        ReleaseAssert(result.m_shouldInsertMetatable == false);
+        Structure* n1 = TranslateToRawPointer(vm, result.m_newStructure.As());
+        ReleaseAssert(n1 != structure);
+        ReleaseAssert(n1->m_parent == structure);
+        ReleaseAssert(n1->m_parentEdgeTransitionKind == Structure::TransitionKind::AddMetaTable);
+        ReleaseAssert(n1->m_metatable == GeneralHeapPointer<TableObject>(t1).m_value);
+        CheckIsAsExpected(ctx, i, n1);
+
+        {
+            Structure::AddMetatableResult result2;
+            structure->SetMetatable(vm, t1, result2 /*out*/);
+            ReleaseAssert(result2.m_shouldInsertMetatable == false);
+            ReleaseAssert(result2.m_newStructure == result.m_newStructure);
+        }
+
+        Structure::AddMetatableResult result2;
+        if (rand() % 2 == 1)
+        {
+            n1->SetMetatable(vm, t2, result2 /*out*/);
+        }
+        else
+        {
+            structure->SetMetatable(vm, t2, result2 /*out*/);
+        }
+        ReleaseAssert(result2.m_shouldInsertMetatable == true);
+        ReleaseAssert(result2.m_slotOrdinal == ctx.m_tree.m_expectedContents[i].size());
+        ReleaseAssert(result2.m_shouldGrowButterfly == (ctx.m_tree.m_expectedContents[i].size() == structure->m_inlineNamedStorageCapacity + structure->m_butterflyNamedStorageCapacity));
+
+        Structure* n2 = TranslateToRawPointer(vm, result2.m_newStructure.As());
+        ReleaseAssert(n2 != structure);
+        ReleaseAssert(n2->m_parent == structure);
+        if (result2.m_shouldGrowButterfly)
+        {
+            ReleaseAssert(n2->m_parentEdgeTransitionKind == Structure::TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
+        }
+        else
+        {
+            ReleaseAssert(n2->m_parentEdgeTransitionKind == Structure::TransitionKind::TransitToPolyMetaTable);
+        }
+        ReleaseAssert(n2->m_metatable == static_cast<int32_t>(result2.m_slotOrdinal + 1));
+        CheckIsAsExpected(ctx, i, n2);
+
+        Structure::AddMetatableResult result3;
+        bool fromN2 = false;
+        if (rand() % 3 == 1)
+        {
+            structure->SetMetatable(vm, t3, result3 /*out*/);
+        }
+        else if (rand() % 2 == 1)
+        {
+            n1->SetMetatable(vm, t3, result3 /*out*/);
+        }
+        else
+        {
+            fromN2 = true;
+            n2->SetMetatable(vm, t3, result3 /*out*/);
+        }
+
+        ReleaseAssert(result3.m_shouldInsertMetatable == true);
+        if (!fromN2)
+        {
+            ReleaseAssert(result3.m_shouldGrowButterfly == result2.m_shouldGrowButterfly);
+        }
+        else
+        {
+            ReleaseAssert(result3.m_shouldGrowButterfly == false);
+        }
+        ReleaseAssert(result3.m_slotOrdinal == result2.m_slotOrdinal);
+        ReleaseAssert(result3.m_newStructure == result2.m_newStructure);
+
+        {
+            Structure::AddMetatableResult result4;
+            n1->SetMetatable(vm, t1, result4 /*out*/);
+            ReleaseAssert(result4.m_shouldInsertMetatable == false);
+            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == n1);
+        }
+
+        {
+            Structure::RemoveMetatableResult result4;
+            structure->RemoveMetatable(vm, result4 /*out*/);
+            ReleaseAssert(result4.m_shouldInsertMetatable == false);
+            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == structure);
+        }
+
+        {
+            Structure::RemoveMetatableResult result4;
+            n1->RemoveMetatable(vm, result4 /*out*/);
+            ReleaseAssert(result4.m_shouldInsertMetatable == false);
+            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == structure);
+        }
+
+        {
+            Structure::RemoveMetatableResult result4;
+            n2->RemoveMetatable(vm, result4 /*out*/);
+            ReleaseAssert(result4.m_shouldInsertMetatable == true);
+            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == n2);
+        }
+    }
+}
+
+void DoMetatableTransitionTest(size_t numStrings, size_t numNodes, size_t degreeParam)
+{
+    TestContext ctx;
+    ctx.m_strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
+    ctx.m_tree = BuildTree(numNodes, degreeParam, ctx.m_strings);
+    ctx.m_visited.resize(numNodes);
+    ctx.m_structures.resize(numNodes);
+
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    ctx.m_structures[0] = initStructure;
+
+    DfsTree(ctx, 0);
+    DoMetatableTestOnTree(ctx, numNodes);
+}
+
+TEST(Structure, MetatableTransition)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    DoMetatableTransitionTest(400 /*numStrings*/, 1500 /*numNodes*/, 3 /*degreeParam*/);
+}
+
+void DoArrayTypeTestOnTree(TestContext& ctx, size_t numNodes)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    ArrayType at1;
+    at1.SetIsContinuous(true);
+    at1.SetArrayKind(ArrayType::Kind::Any);
+
+    ArrayType at2;
+    at2.SetIsContinuous(true);
+    at2.SetArrayKind(ArrayType::Kind::Double);
+
+    ArrayType at3;
+    at2.SetIsContinuous(false);
+    at2.SetArrayKind(ArrayType::Kind::Double);
+
+    for (size_t i = 0; i < numNodes; i++)
+    {
+        Structure* structure = ctx.m_structures[i];
+        Structure::AddMetatableResult result;
+        Structure* res1 = structure->UpdateArrayType(vm, at1);
+        Structure* res2 = structure->UpdateArrayType(vm, at2);
+        Structure* res3 = structure->UpdateArrayType(vm, at1);
+        Structure* res4 = structure->UpdateArrayType(vm, at2);
+        ReleaseAssert(res1 == res3);
+        ReleaseAssert(res1->m_arrayType.m_asValue == at1.m_asValue);
+        ReleaseAssert(res2 == res4);
+        ReleaseAssert(res2->m_arrayType.m_asValue == at2.m_asValue);
+
+        Structure* res5 = res2->UpdateArrayType(vm, at3);
+        Structure* res6 = res2->UpdateArrayType(vm, at3);
+        ReleaseAssert(res5 == res6);
+        ReleaseAssert(res5->m_arrayType.m_asValue == at3.m_asValue);
+
+        CheckIsAsExpected(ctx, i, res1);
+        CheckIsAsExpected(ctx, i, res2);
+        CheckIsAsExpected(ctx, i, res5);
+    }
+}
+
+void DoArrayTypeTransitionTest(size_t numStrings, size_t numNodes, size_t degreeParam)
+{
+    TestContext ctx;
+    ctx.m_strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
+    ctx.m_tree = BuildTree(numNodes, degreeParam, ctx.m_strings);
+    ctx.m_visited.resize(numNodes);
+    ctx.m_structures.resize(numNodes);
+
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    ctx.m_structures[0] = initStructure;
+
+    BfsTree(ctx);
+    DoArrayTypeTestOnTree(ctx, numNodes);
+}
+
+TEST(Structure, ArrayTypeTransition)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    DoArrayTypeTransitionTest(400 /*numStrings*/, 1500 /*numNodes*/, 3 /*degreeParam*/);
 }
 
 }   // anonymous namespace
