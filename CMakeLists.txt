@@ -57,11 +57,11 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
 #SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic ")
 
 # If debug symbols are emitted, redirect them to point at the right location
-# The reference to source code files always have prefix ../../ (since we are building 
-# in directory build/flavor/), remove this prefix
+# The reference to source code files always have prefix /home/u/project/ 
+# (because that is our build directory in docker), so remove it
 #
 if((BUILD_FLAVOR STREQUAL "DEBUG") OR (BUILD_FLAVOR STREQUAL "TESTREL"))
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffile-prefix-map=../../= ")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffile-prefix-map=/home/u/project/= ")
 endif()
 
 # gtest header
