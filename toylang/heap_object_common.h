@@ -19,7 +19,8 @@ using namespace CommonUtils;
   , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (DictionaryHiddenClass,         DictionaryHiddenClass,          HOI_SYS_HEAP)       \
-  , (HiddenClassAnchorHashTable,    StructureAnchorHashTable,       HOI_SYS_HEAP)
+  , (HiddenClassAnchorHashTable,    StructureAnchorHashTable,       HOI_SYS_HEAP)       \
+  , (CacheableDictionary,           CacheableDictionary,            HOI_SYS_HEAP)
 
 #define HOI_ENUM_NAME(hoi) PP_TUPLE_GET_1(hoi)
 #define HOI_CLASS_NAME(hoi) PP_TUPLE_GET_2(hoi)
@@ -94,8 +95,7 @@ constexpr bool TypeMayLiveInUserHeap = TypeMayLiveInUserHeapImpl<T>::value;
 enum class GcCellState: uint8_t
 {
     Black = 0,
-    Grey = 1,
-    White = 2
+    White = 1
 };
 static constexpr GcCellState x_defaultCellState = GcCellState::White;
 

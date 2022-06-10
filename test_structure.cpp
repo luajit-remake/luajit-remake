@@ -292,7 +292,7 @@ void DoDfsTest(size_t numStrings, size_t numNodes, size_t degreeParam)
     ctx.m_visited.resize(numNodes);
     ctx.m_structures.resize(numNodes);
 
-    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/);
     ctx.m_structures[0] = initStructure;
 
     DfsTree(ctx, 0);
@@ -307,7 +307,7 @@ void DoBfsTest(size_t numStrings, size_t numNodes, size_t degreeParam)
     ctx.m_visited.resize(numNodes);
     ctx.m_structures.resize(numNodes);
 
-    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/);
     ctx.m_structures[0] = initStructure;
 
     BfsTree(ctx);
@@ -537,7 +537,7 @@ void DoMetatableTransitionTest(size_t numStrings, size_t numNodes, size_t degree
     ctx.m_visited.resize(numNodes);
     ctx.m_structures.resize(numNodes);
 
-    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/);
     ctx.m_structures[0] = initStructure;
 
     DfsTree(ctx, 0);
@@ -599,7 +599,7 @@ void DoArrayTypeTransitionTest(size_t numStrings, size_t numNodes, size_t degree
     ctx.m_visited.resize(numNodes);
     ctx.m_structures.resize(numNodes);
 
-    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/, 0 /*initialButterflyCap*/);
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 2 /*initialInlineCap*/);
     ctx.m_structures[0] = initStructure;
 
     BfsTree(ctx);

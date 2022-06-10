@@ -133,6 +133,7 @@ add_executable(main
   test_interpreter.cpp
   test_global_string_conser.cpp
   test_structure.cpp
+  test_object_get_put_by_id.cpp
 )
 
 target_link_libraries(main PUBLIC

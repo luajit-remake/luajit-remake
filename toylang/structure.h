@@ -53,6 +53,11 @@ struct ArrayType
 
     enum Kind : uint8_t  // must fit in 2 bits
     {
+        // NoButterflyArrayPart means one of the following:
+        // (1) The butterfly doesn't exist at all
+        // (2) The butterfly exists but the array part contains nothing (specifically, the sparse map must not exist, but the vector storage capacity might be > 0)
+        // In either case, it means any access to the array index must yeild nil
+        //
         NoButterflyArrayPart,
         Int32,
         Double,
@@ -73,7 +78,7 @@ struct ArrayType
     void SetIsContinuous(bool v) { return BFM_isContinuous::Set(m_asValue, v); }
 
     // bit 1-2: Kind m_kind
-    //   Whether all non-hole values in the array has the same type
+    //   Whether all non-hole values in the array has the same type (including sparse map part)
     //   If m_kind is Int32 or Double, then m_mayHaveMetatable must be false
     //
     using BFM_arrayKind = BitFieldMember<BitFieldCarrierType, Kind /*type*/, 1 /*start*/, 2 /*width*/>;
@@ -639,7 +644,7 @@ public:
         return newStructure;
     }
 
-    static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity, uint8_t initialButterflyCapacity);
+    static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(T self);
@@ -647,7 +652,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> stringKey, uint32_t& result /*out*/)
     {
-        return GetSlotOrdinalFromPropertyNameAndHash(self, stringKey, StructureKeyHashHelper::GetHashValueForStringKey(stringKey), result /*out*/);
+        return GetSlotOrdinalFromPropertyNameAndHash(self, stringKey.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(stringKey), result /*out*/);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
@@ -664,7 +669,7 @@ public:
         {
             return true;
         }
-        SystemHeapPointer<StructureAnchorHashTable> anchorHt = self->m_anchorHashTable;
+        SystemHeapPointer<StructureAnchorHashTable> anchorHt = TCGet(self->m_anchorHashTable);
         if (likely(anchorHt.m_value == 0))
         {
             return false;
@@ -751,7 +756,7 @@ public:
             // A non-negative offset denote the offset into the non-full block
             //
             assert(ordinal < self->m_nonFullBlockLen);
-            return GeneralHeapPointer<void> { self->m_values[ordinal] };
+            return TCGet(self->m_values[ordinal]);
         }
         else
         {
@@ -1861,9 +1866,9 @@ end_setup:
     return r;
 }
 
-inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity, uint8_t initialButterflyCapacity)
+inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t inlineCapacity)
 {
-    assert(static_cast<uint32_t>(initialButterflyCapacity) + initialButterflyCapacity <= x_maxNumSlots + 1);
+    assert(inlineCapacity <= x_maxNumSlots + 1);
 
     // Work out the space needed for the new hidden class and perform allocation
     //
@@ -1894,8 +1899,8 @@ inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t 
     r->m_arrayType = ArrayType::GetInitialArrayType();
     r->m_anchorHashTable.m_value = 0;
     r->m_inlineHashTableMask = htMaskToStore;
-    r->m_inlineNamedStorageCapacity = initialInlineCapacity;
-    r->m_butterflyNamedStorageCapacity = initialButterflyCapacity;
+    r->m_inlineNamedStorageCapacity = inlineCapacity;
+    r->m_butterflyNamedStorageCapacity = 0;
     r->m_parentEdgeTransitionKind = TransitionKind::BadTransitionKind;
     r->m_parent.m_value = 0;
     r->m_metatable = 0;

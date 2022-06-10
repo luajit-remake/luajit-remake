@@ -13,13 +13,6 @@ using namespace CommonUtils;
 class alignas(8) ArraySparseMap
 {
 public:
-    struct HashTableEntry
-    {
-        double m_key;
-        TValue m_value;
-    };
-    static_assert(sizeof(HashTableEntry) == 16);
-
     TValue GetByVal(double key)
     {
         auto it = m_map.find(key);
@@ -102,6 +95,125 @@ public:
         assert(GetHeader()->IndexFitsInVectorCapacity(index));
         return reinterpret_cast<TValue*>(this) + index;
     }
+
+    TValue* GetNamedPropertyAddr(int32_t ord)
+    {
+        assert(ord < 0);
+        return &(reinterpret_cast<TValue*>(this)[ord]);
+    }
+
+    TValue GetNamedProperty(int32_t ord)
+    {
+        return *GetNamedPropertyAddr(ord);
+    }
+};
+
+struct GetByIdICInfo
+{
+    // Condition on the fixed hidden class (structure or dictionary), whether the GetById can use inline cache
+    //
+    enum class ICKind : uint8_t
+    {
+        // The hidden class is a UncachableDictionary
+        //
+        UncachableDictionary,
+        // The GetById must return nil because the property doesn't exist
+        //
+        MustBeNil,
+        // The property is in the inlined storage in m_slot
+        //
+        InlinedStorage,
+        // The property is in the outlined storage in m_slot
+        //
+        OutlinedStorage
+    };
+
+    ICKind m_icKind;
+    // If 'm_mayHaveMetatable = true', the table may have a metatable containing a '__index' handler
+    // so if the result turns out to be nil, we must inspect the metatable
+    //
+    bool m_mayHaveMetatable;
+    int32_t m_slot;
+    SystemHeapPointer<void> m_hiddenClass;
+};
+
+struct GetByNumericICInfo
+{
+    enum class ICKind: uint8_t
+    {
+        // It must return nil because we have no butterfly array part
+        //
+        MustBeNil,
+        // It must be in the vector storage if it exists
+        // So if the index is not a vector index or not within range, the result must be nil
+        //
+        VectorStorage,
+        // The array has a sparse map but the sparse map doesn't contain vector-qualifying index
+        // So for vector-qualifying index it must be in vector range if exists, but otherwise it must be in sparse map if exists
+        //
+        VectorStorageXorSparseMap,
+        // The array has a sparse map and the sparse map contains vector-qualifying index
+        // So for vector-qualifying index we must check both
+        //
+        VectorStorageOrSparseMap
+    };
+
+    ICKind m_icKind;
+    // If 'm_mayHaveMetatable = true', the table may have a metatable containing a '__index' handler
+    // so if the result turns out to be nil, we must inspect the metatable
+    //
+    bool m_mayHaveMetatable;
+    SystemHeapPointer<void> m_hiddenClass;
+};
+
+struct PutByIdICInfo
+{
+    // Condition on the fixed structure, whether the GetById can use inline cache
+    // Note that if the table is in dictionary mode, or will transit to dictionary mode by this PutById,
+    // then this operation is never inline cachable
+    //
+    enum class ICKind : uint8_t
+    {
+        // The PutById transitioned the table from Structure mode to CacheableDictionary mode
+        //
+        TransitionedToDictionaryMode,
+        // The table is in UncacheableDictionary mode
+        //
+        UncacheableDictionary,
+        // The table is in CacheableDictionary mode, and the property should be written to outlined storage in m_slot
+        // (note that in dictionary mode we never make use of the inline storage for simplicity)
+        //
+        CacheableDictionary,
+        // The property should be written to the inlined storage in m_slot
+        //
+        InlinedStorage,
+        // The property should be written to the outlined storage in m_slot
+        //
+        OutlinedStorage
+    };
+
+    ICKind m_icKind;
+    // Whether or not the property exists
+    // Note that iff m_propertyExists == false, the PutById will transit the current structure to a new structure,
+    // and the new structure is stored in m_newStructure
+    //
+    bool m_propertyExists;
+    // Whether or not we will need to grow the butterfly
+    // Only possible if m_propertyExists == false
+    //
+    bool m_shouldGrowButterfly;
+    // If 'm_mayHaveMetatable = true', the table may have a metatable containing a '__newindex' handler
+    // so we must check if the property contains value nil to decide if we need to inspect the metatable
+    //
+    bool m_mayHaveMetatable;
+    SystemHeapPointer<Structure> m_structure;
+    int32_t m_slot;
+    SystemHeapPointer<Structure> m_newStructure;
+};
+
+struct PutByNumericICInfo
+{
+
 };
 
 class alignas(8) TableObject
@@ -111,7 +223,11 @@ public:
     //
     static bool WARN_UNUSED ALWAYS_INLINE IsQualifiedForVectorIndex(double vidx, int32_t& idx /*out*/)
     {
-        assert(!IsNaN(vidx));
+        // FIXME: converting NaN to integer is UB and clang can actually generate faulty code
+        // if it can deduce that for some call the 'vidx' is NaN! However, if we manually check isnan,
+        // while it worksaround the UB, clang cannot optimize the check away and generates inferior code,
+        // so we leave the code with the UB as for now.
+        //
         int64_t asInt64 = static_cast<int64_t>(vidx);
         if (!UnsafeFloatEqual(static_cast<double>(asInt64), vidx))
         {
@@ -128,112 +244,546 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByVal(T self, TValue tidx);
-
-    // Handle the case that index is int32_t and >= x_arrayBaseOrd
-    //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue ALWAYS_INLINE GetByValVectorIndex(T self, TValue tidx, int32_t idx)
+    static TValue GetByInt32Val(T self, TValue tidx, GetByNumericICInfo icInfo)
     {
-        assert(idx >= ArrayGrowthPolicy::x_arrayBaseOrd);
+        assert(tidx.IsInt32(TValue::x_int32Tag));
 
-        ArrayType arrType { self->m_arrayType };
-
-        // Check fast path: continuous array
-        //
-        if (likely(arrType.IsContinuous()))
+        int32_t idx = tidx.AsInt32();
+        TValue res;
+        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx))
         {
-            assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
-            if (likely(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
+            res = GetByValVectorIndex(self, idx, icInfo);
+            if (likely(!icInfo.m_mayHaveMetatable))
             {
-                // index is in range, we know the result must not be nil, no need to check metatable, return directly
-                //
-                TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
-                assert(!res.IsNil());
-                AssertImp(arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
-                AssertImp(arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
                 return res;
+            }
+        }
+        else
+        {
+#ifndef NDEBUG
+            ArrayType arrType { self->m_arrayType };
+#endif
+
+            // Not vector-qualifying index
+            // If it exists, it must be in the sparse map
+            //
+            if (icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorageOrSparseMap ||
+                icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorageXorSparseMap)
+            {
+                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
+                res = QuerySparseMap(self, tidx, static_cast<double>(idx));
             }
             else
             {
-                // index is out of range, raw result must be nil
-                //
-                return GetByValHandleMetatableKnowingNil(self, tidx);
+                res = TValue::Nil();
             }
+
+            if (likely(!icInfo.m_mayHaveMetatable))
+            {
+                return res;
+            }
+        }
+
+        if (likely(!res.IsNil()))
+        {
+            return res;
+        }
+
+        // Check metatable
+        //
+        ReleaseAssert(false && "unimplemented");
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue GetByDoubleVal(T self, TValue tidx, GetByNumericICInfo icInfo)
+    {
+        assert(tidx.IsDouble(TValue::x_int32Tag));
+        double dblIdx = tidx.AsDouble();
+        int32_t idx;
+        TValue res;
+        if (likely(IsQualifiedForVectorIndex(dblIdx, idx /*out*/)))
+        {
+            res = GetByValVectorIndex(self, idx, icInfo);
+            if (likely(!icInfo.m_mayHaveMetatable))
+            {
+                return res;
+            }
+        }
+        else
+        {
+            if (IsNaN(dblIdx))
+            {
+                // TODO: throw error NaN as table index
+                ReleaseAssert(false);
+            }
+
+#ifndef NDEBUG
+            ArrayType arrType { self->m_arrayType };
+#endif
+            // Not vector-qualifying index
+            // If it exists, it must be in the sparse map
+            //
+            if (icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorageOrSparseMap ||
+                icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorageXorSparseMap)
+            {
+                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
+                res = QuerySparseMap(self, dblIdx);
+            }
+            else
+            {
+                res = TValue::Nil();
+            }
+
+            if (likely(!icInfo.m_mayHaveMetatable))
+            {
+                return res;
+            }
+        }
+
+        if (likely(!res.IsNil()))
+        {
+            return res;
+        }
+
+        // Check metatable
+        //
+        ReleaseAssert(false && "unimplemented");
+    }
+
+    // TODO: we should make this function a static mapping from arrType to GetByNumericICInfo for better perf
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void ALWAYS_INLINE PrepareGetByNumeric(T self, GetByNumericICInfo& icInfo /*out*/)
+    {
+        ArrayType arrType = TCGet(self->m_arrayType);
+
+        icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
+        icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
+
+        // Check case: continuous array
+        //
+        if (likely(arrType.IsContinuous()))
+        {
+            icInfo.m_icKind = GetByNumericICInfo::ICKind::VectorStorage;
+            return;
         }
 
         // Check case: No array at all
         //
         if (arrType.ArrayKind() == ArrayType::NoButterflyArrayPart)
         {
-            return GetByValHandleMetatableKnowingNil(self, tidx);
+            assert(!arrType.HasSparseMap());
+            icInfo.m_icKind = GetByNumericICInfo::ICKind::MustBeNil;
+            return;
         }
 
-        // Check case: Array is not continuous, but index fits in the vector
+        // Now, we know the array type contains a vector part and potentially a sparse map
         //
-        if (self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index))
+        if (unlikely(arrType.SparseMapContainsVectorIndex()))
         {
-            TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
-            return GetByValHandleMetatable(self, tidx, res);
+            icInfo.m_icKind = GetByNumericICInfo::ICKind::VectorStorageOrSparseMap;
+        }
+        else if (unlikely(arrType.HasSparseMap()))
+        {
+            icInfo.m_icKind = GetByNumericICInfo::ICKind::VectorStorageXorSparseMap;
+        }
+        else
+        {
+            icInfo.m_icKind = GetByNumericICInfo::ICKind::VectorStorage;
+        }
+    }
+
+    // Handle the case that index is int32_t and >= x_arrayBaseOrd
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue ALWAYS_INLINE GetByValVectorIndex(T self, int32_t idx, GetByNumericICInfo icInfo)
+    {
+        assert(idx >= ArrayGrowthPolicy::x_arrayBaseOrd);
+#ifndef NDEBUG
+        ArrayType arrType = TCGet(self->m_arrayType);
+#endif
+
+        if (icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorage)
+        {
+            // TODO: for continuous vector, we should have a way to tell our caller that metatable check
+            // may be skipped without checking if the result is nil. For simplicity we don't do it now.
+            //
+            if (likely(self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
+            {
+                TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
+                // If the array is actually continuous, result must be non-nil
+                //
+                AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.IsNil());
+                AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
+                AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+                return res;
+            }
+            else
+            {
+                // index is out of range, raw result must be nil
+                //
+                return TValue::Nil();
+            }
+        }
+
+        if (icInfo.m_icKind == GetByNumericICInfo::ICKind::MustBeNil)
+        {
+            assert(!arrType.HasSparseMap());
+            return TValue::Nil();
         }
 
         // Check case: has sparse map
         // Even if there is a sparse map, if it doesn't contain vector-qualifying index,
         // since in this function 'idx' is vector-qualifying, it must be non-existent
         //
-        if (unlikely(arrType.SparseMapContainsVectorIndex()))
+        if (icInfo.m_icKind == GetByNumericICInfo::ICKind::VectorStorageOrSparseMap)
         {
             assert(arrType.HasSparseMap());
-            return GetByValArraySparseMap(self, tidx, static_cast<double>(idx));
+            TValue res = QuerySparseMap(self, idx);
+            return res;
         }
         else
         {
-            return GetByValHandleMetatableKnowingNil(self, tidx);
+            return TValue::Nil();
         }
     }
 
-    // Handle the case that index is known to be not in the vector part
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue QuerySparseMap(T self, double idx)
+    {
+#ifndef NDEBUG
+        ArrayType arrType = TCGet(self->m_arrayType);
+        assert(arrType.HasSparseMap());
+#endif
+        HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
+        TValue res = TranslateToRawPointer(sparseMap)->GetByVal(idx);
+#ifndef NDEBUG
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+#endif
+        return res;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void PrepareGetById(T self, UserHeapPointer<HeapString> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
+        Type ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary);
+        icInfo.m_hiddenClass = hiddenClass;
+
+        if (likely(ty == Type::Structure))
+        {
+            HeapPtr<Structure> structure = hiddenClass.As<Structure>();
+            icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
+
+            uint32_t slotOrd;
+            bool found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
+            if (found)
+            {
+                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                if (slotOrd < inlineStorageCapacity)
+                {
+                    icInfo.m_icKind = GetByIdICInfo::ICKind::InlinedStorage;
+                    icInfo.m_slot = static_cast<int32_t>(slotOrd);
+                }
+                else
+                {
+                    icInfo.m_icKind = GetByIdICInfo::ICKind::OutlinedStorage;
+                    icInfo.m_slot = static_cast<int32_t>(inlineStorageCapacity - slotOrd - 1);
+                }
+            }
+            else
+            {
+                icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
+            }
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue WARN_UNUSED ALWAYS_INLINE GetById(T self, UserHeapPointer<HeapString> /*propertyName*/, GetByIdICInfo icInfo)
+    {
+        // TODO: handle metatable
+
+        if (icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNil)
+        {
+            return TValue::Nil();
+        }
+
+        if (icInfo.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
+        {
+            return TCGet(self->m_inlineStorage[icInfo.m_slot]);
+        }
+
+        if (icInfo.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
+        {
+            return self->m_butterfly->GetNamedProperty(icInfo.m_slot);
+        }
+
+        ReleaseAssert(false && "not implemented");
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void PreparePutById(T self, UserHeapPointer<HeapString> propertyName, PutByIdICInfo& icInfo /*out*/)
+    {
+        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
+        Type ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary);
+
+        if (likely(ty == Type::Structure))
+        {
+            HeapPtr<Structure> structure = hiddenClass.As<Structure>();
+            icInfo.m_structure = structure;
+            icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
+
+            uint32_t slotOrd;
+            bool found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
+            icInfo.m_propertyExists = found;
+            if (found)
+            {
+                icInfo.m_shouldGrowButterfly = false;
+                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                if (slotOrd < inlineStorageCapacity)
+                {
+                    icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
+                    icInfo.m_slot = static_cast<int32_t>(slotOrd);
+
+                }
+                else
+                {
+                    icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
+                    icInfo.m_slot = static_cast<int32_t>(inlineStorageCapacity - slotOrd - 1);
+                }
+            }
+            else
+            {
+                VM* vm = VM::GetActiveVMForCurrentThread();
+                Structure::AddNewPropertyResult addNewPropResult;
+                TranslateToRawPointer(vm, structure)->AddNonExistentProperty(vm, propertyName.As(), addNewPropResult /*out*/);
+                if (unlikely(addNewPropResult.m_transitionedToDictionaryMode))
+                {
+                    icInfo.m_icKind = PutByIdICInfo::ICKind::TransitionedToDictionaryMode;
+                    ReleaseAssert(false && "unimplemented");
+                }
+                else
+                {
+                    slotOrd = addNewPropResult.m_slotOrdinal;
+                    uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                    icInfo.m_shouldGrowButterfly = addNewPropResult.m_shouldGrowButterfly;
+                    icInfo.m_newStructure = addNewPropResult.m_newStructureOrDictionary;
+                    if (slotOrd < inlineStorageCapacity)
+                    {
+                        icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
+                        icInfo.m_slot = static_cast<int32_t>(slotOrd);
+                    }
+                    else
+                    {
+                        assert(slotOrd < icInfo.m_newStructure.As()->m_numSlots);
+                        icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
+                        icInfo.m_slot = static_cast<int32_t>(inlineStorageCapacity - slotOrd - 1);
+                    }
+                }
+            }
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    // If isGrowNamedStorage == true, grow named storage capacity to 'newCapacity', and keep current array storage
+    // Otherwise, grow array storage capacity to 'newCapcity', and keep current named storage
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByValArraySparseMap(T self, TValue tidx, double index);
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue ALWAYS_INLINE GetByValHandleMetatableKnowingNil(T self, TValue tidx)
+    // This function must be called before changing the structure
+    //
+    template<bool isGrowNamedStorage>
+    void ALWAYS_INLINE GrowButterfly(uint32_t newCapacity)
     {
-        ArrayType arrType { self->m_arrayType };
-        if (likely(!arrType.MayHaveMetatable()))
+        if (m_butterfly == nullptr)
         {
-            return TValue::Nil();
-        }
+            uint64_t* butterflyStart = new uint64_t[newCapacity + 1];
+            uint32_t offset;
+            if constexpr(isGrowNamedStorage)
+            {
+                offset = newCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+            }
+            else
+            {
+                offset = static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+            }
+            Butterfly* butterfly = reinterpret_cast<Butterfly*>(butterflyStart + offset);
+            if constexpr(isGrowNamedStorage)
+            {
+                butterfly->GetHeader()->m_arrayStorageCapacity = 0;
+                butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
 
-        return GetByValCheckAndCallMetatableMethod(self, tidx);
+                uint64_t nilVal = TValue::Nil().m_value;
+                uint64_t* nilFillBegin = butterflyStart;
+                uint64_t* nilFillEnd = butterflyStart + newCapacity;
+                while (nilFillBegin < nilFillEnd)
+                {
+                    *nilFillBegin = nilVal;
+                    nilFillBegin++;
+                }
+            }
+            else
+            {
+                butterfly->GetHeader()->m_arrayStorageCapacity = static_cast<int32_t>(newCapacity);
+                butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
+
+                uint64_t nilVal = TValue::Nil().m_value;
+                uint64_t* nilFillBegin = butterflyStart + 1;
+                uint64_t* nilFillEnd = butterflyStart + 1 + newCapacity;
+                while (nilFillBegin < nilFillEnd)
+                {
+                    *nilFillBegin = nilVal;
+                    nilFillBegin++;
+                }
+            }
+            m_butterfly = butterfly;
+        }
+        else
+        {
+            uint32_t oldArrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
+            uint32_t oldNamedStorageCapacity = m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
+            uint32_t oldButterflySlots = oldArrayStorageCapacity + oldNamedStorageCapacity + 1;
+
+            uint32_t oldButterflyStartOffset = oldNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+            uint64_t* oldButterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - oldButterflyStartOffset;
+
+            uint32_t newButterflySlots;
+            uint32_t newButterflyNamedStorageCapacity;
+            if constexpr(isGrowNamedStorage)
+            {
+                assert(newCapacity > oldNamedStorageCapacity);
+                newButterflySlots = newCapacity + oldArrayStorageCapacity + 1;
+                newButterflyNamedStorageCapacity = newCapacity;
+            }
+            else
+            {
+                assert(newCapacity > oldArrayStorageCapacity);
+                newButterflySlots = oldNamedStorageCapacity + newCapacity + 1;
+                newButterflyNamedStorageCapacity = oldNamedStorageCapacity;
+            }
+
+            assert(newButterflySlots > oldButterflySlots);
+
+            uint64_t* newButterflyStart = new uint64_t[newButterflySlots];
+            if constexpr(isGrowNamedStorage)
+            {
+                uint64_t nilVal = TValue::Nil().m_value;
+                uint64_t* nilFillBegin = newButterflyStart;
+                uint64_t* nilFillEnd = newButterflyStart + newButterflySlots - oldButterflySlots;
+                while (nilFillBegin < nilFillEnd)
+                {
+                    *nilFillBegin = nilVal;
+                    nilFillBegin++;
+                }
+                memcpy(nilFillEnd, oldButterflyStart, oldButterflySlots * sizeof(uint64_t));
+            }
+            else
+            {
+                memcpy(newButterflyStart, oldButterflyStart, oldButterflySlots * sizeof(uint64_t));
+                uint64_t nilVal = TValue::Nil().m_value;
+                uint64_t* nilFillBegin = newButterflyStart + oldButterflySlots;
+                uint64_t* nilFillEnd = newButterflyStart + newButterflySlots;
+                while (nilFillBegin < nilFillEnd)
+                {
+                    *nilFillBegin = nilVal;
+                    nilFillBegin++;
+                }
+            }
+
+            delete [] oldButterflyStart;
+            uint32_t offset = newButterflyNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+            Butterfly* butterfly = reinterpret_cast<Butterfly*>(newButterflyStart + offset);
+            if constexpr(!isGrowNamedStorage)
+            {
+                butterfly->GetHeader()->m_arrayStorageCapacity = static_cast<int32_t>(newCapacity);
+            }
+            m_butterfly = butterfly;
+        }
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue ALWAYS_INLINE GetByValHandleMetatable(T self, TValue tidx, TValue rawResult)
+    static void ALWAYS_INLINE PutById(T self, UserHeapPointer<HeapString> /*propertyName*/, TValue newValue, PutByIdICInfo icInfo)
     {
-        ArrayType arrType { self->m_arrayType };
-        if (likely(!arrType.MayHaveMetatable()))
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::UncacheableDictionary)
         {
-            return TValue::Nil();
+            ReleaseAssert(false && "unimplemented");
         }
 
-        if (likely(!rawResult.IsNil()))
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::CacheableDictionary)
         {
-            return rawResult;
+            ReleaseAssert(false && "unimplemented");
         }
 
-        return GetByValCheckAndCallMetatableMethod(self, tidx);
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode)
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+
+        // TODO: check for metatable
+
+        if (!icInfo.m_propertyExists)
+        {
+            if (icInfo.m_shouldGrowButterfly)
+            {
+                TableObject* rawSelf = TranslateToRawPointer(self);
+                rawSelf->GrowButterfly<true /*isGrowNamedStorage*/>(icInfo.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+            }
+
+            TCSet(self->m_hiddenClass, SystemHeapPointer<void> { icInfo.m_newStructure.As() });
+        }
+
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
+        {
+            TCSet(self->m_inlineStorage[icInfo.m_slot], newValue);
+        }
+
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage)
+        {
+            TCSet(*(self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot)), newValue);
+        }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByValCheckAndCallMetatableMethod(T self, TValue tidx);
+    static HeapPtr<TableObject> CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
+    {
+        assert(emptyStructure->m_numSlots == 0);
+        assert(emptyStructure->m_metatable == 0);
+        assert(emptyStructure->m_arrayType.m_asValue == 0);
+        assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
+        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
+        size_t inlineCapacity = emptyStructure->m_inlineNamedStorageCapacity;
+        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
+        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
+        UserHeapGcObjectHeader::Populate(r);
+        TCSet(r->m_hiddenClass, SystemHeapPointer<void> { emptyStructure });
+        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
+        // Initialize the butterfly storage
+        //
+        r->m_butterfly = nullptr;
+        if (initialButterflyArrayPartCapacity > 0)
+        {
+            TranslateToRawPointer(vm, r)->GrowButterfly<false /*isGrowNamedStorage*/>(initialButterflyArrayPartCapacity);
+        }
+        // Initialize the inline storage
+        //
+        TValue nilVal = TValue::Nil();
+        for (size_t i = 0; i < inlineCapacity; i++)
+        {
+            TCSet(r->m_inlineStorage[i], nilVal);
+        }
+        return r;
+    }
 
     // Object header
     //
-    SystemHeapPointer<void> m_structure;
+    SystemHeapPointer<void> m_hiddenClass;
     Type m_type;
     GcCellState m_cellState;
 
@@ -245,88 +795,6 @@ public:
 };
 static_assert(sizeof(TableObject) == 16);
 
-template<typename T, typename>
-TValue TableObject::GetByVal(T self, TValue tidx)
-{
-    if (tidx.IsInt32(TValue::x_int32Tag))
-    {
-        int32_t idx = tidx.AsInt32();
-
-        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx))
-        {
-            return GetByValVectorIndex(self, tidx, idx);
-        }
-        else
-        {
-            ArrayType arrType { self->m_arrayType };
-
-            // Not vector-qualifying index
-            // If it exists, it must be in the sparse map
-            //
-            if (unlikely(arrType.HasSparseMap()))
-            {
-                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
-                return GetByValArraySparseMap(self, tidx, static_cast<double>(idx));
-            }
-            else
-            {
-                return GetByValHandleMetatableKnowingNil(self, tidx);
-            }
-        }
-    }
-
-    if (tidx.IsDouble(TValue::x_int32Tag))
-    {
-        double dblIdx = tidx.AsDouble();
-        if (IsNaN(dblIdx))
-        {
-            // TODO: throw error NaN as table index
-            ReleaseAssert(false);
-        }
-
-        int32_t idx;
-        if (likely(IsQualifiedForVectorIndex(dblIdx, idx /*out*/)))
-        {
-            return GetByValVectorIndex(self, tidx, idx);
-        }
-        else
-        {
-            ArrayType arrType { self->m_arrayType };
-
-            // Not vector-qualifying index
-            // If it exists, it must be in the sparse map
-            //
-            if (unlikely(arrType.HasSparseMap()))
-            {
-                assert(arrType.ArrayKind() != ArrayType::NoButterflyArrayPart);
-                return GetByValArraySparseMap(self, tidx, dblIdx);
-            }
-            else
-            {
-                return GetByValHandleMetatableKnowingNil(self, tidx);
-            }
-        }
-    }
-
-    if (tidx.IsPointer(TValue::x_mivTag))
-    {
-
-    }
-
-}
-
-template<typename T, typename>
-TValue TableObject::GetByValArraySparseMap(T self, TValue tidx, double index)
-{
-    HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
-    TValue rawResult = TranslateToRawPointer(VM::GetActiveVMForCurrentThread(), sparseMap)->GetByVal(index);
-#ifndef NDEBUG
-    ArrayType arrType { self->m_arrayType };
-    AssertImp(!rawResult.IsNil() && arrType.ArrayKind() == ArrayType::Int32, rawResult.IsInt32(TValue::x_int32Tag));
-    AssertImp(!rawResult.IsNil() && arrType.ArrayKind() == ArrayType::Double, rawResult.IsDouble(TValue::x_int32Tag));
-#endif
-    return GetByValHandleMetatable(self, tidx, rawResult);
-}
 
 class IRNode
 {
