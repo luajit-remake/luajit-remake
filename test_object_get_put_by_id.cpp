@@ -313,6 +313,8 @@ TEST(ObjectGetSetById, Sanity)
             TableObject::PutById(curObject, prop, TValue::CreateInt32(static_cast<int32_t>(i + 45678), TValue::x_int32Tag), icInfo);
         }
 
+        ReleaseAssert(curObject != allObjects[testcase]);
+        ReleaseAssert(curObject->m_butterfly != allObjects[testcase]->m_butterfly);
         ReleaseAssert(TCGet(curObject->m_hiddenClass) == TCGet(allObjects[testcase]->m_hiddenClass));
         allObjects[testcase] = curObject;
     }

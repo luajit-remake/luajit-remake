@@ -41,6 +41,10 @@ struct ArrayGrowthPolicy
     //
     constexpr static int32_t x_unconditionallySparseMapCutoff = 1U << 27;
 
+    // The initial capacity for vector part
+    //
+    constexpr static uint32_t x_initialVectorPartCapacity = 4;
+
     // The growth factor for vector part
     //
     constexpr static double x_vectorGrowthFactor = 2;

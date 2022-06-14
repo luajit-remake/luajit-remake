@@ -134,6 +134,7 @@ add_executable(main
   test_global_string_conser.cpp
   test_structure.cpp
   test_object_get_put_by_id.cpp
+  test_object_array_part.cpp
 )
 
 target_link_libraries(main PUBLIC

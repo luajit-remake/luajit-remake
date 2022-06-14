@@ -323,7 +323,7 @@ struct GeneralHeapPointer
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     GeneralHeapPointer(U* value)
-        : GeneralHeapPointer(SafeIntegerCast<int32_t>(ArithmeticShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
+        : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(ArithmeticShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
         assert(TranslateToRawPointer(As<U>()) == value);
     }

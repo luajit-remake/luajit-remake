@@ -17,6 +17,7 @@ using namespace CommonUtils;
   , (USERDATA,                      HeapCDataObject,                HOI_USR_HEAP)       \
   , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
   , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
+  , (ArraySparseMap,                ArraySparseMap,                 HOI_USR_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (DictionaryHiddenClass,         DictionaryHiddenClass,          HOI_SYS_HEAP)       \
   , (HiddenClassAnchorHashTable,    StructureAnchorHashTable,       HOI_SYS_HEAP)       \
