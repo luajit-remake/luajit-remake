@@ -244,7 +244,7 @@ TEST(ObjectArrayPart, PutFirstElement)
 
                             // Check reads: read the array elements
                             //
-                            for (int64_t readLocation : { -1LL, 0LL, 1LL, 2LL, ArrayGrowthPolicy::x_alwaysVectorCutoff * 2LL, 50000000000LL})
+                            for (int64_t readLocation : { -1LL, 0LL, 1LL, 2LL, 4LL, ArrayGrowthPolicy::x_alwaysVectorCutoff * 2LL, 50000000000LL})
                             {
                                 GetByIntegerIndexICInfo icInfo;
                                 TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
@@ -325,7 +325,7 @@ TEST(ObjectArrayPart, PutFirstElement)
 
                             // Check reads: read the array elements
                             //
-                            for (int64_t readLocation : { -1LL, 0LL, 1LL, 2LL, ArrayGrowthPolicy::x_alwaysVectorCutoff * 2LL, ArrayGrowthPolicy::x_alwaysVectorCutoff / 2LL, 50000000000LL})
+                            for (int64_t readLocation : { -1LL, 0LL, 1LL, 2LL, 4LL, ArrayGrowthPolicy::x_alwaysVectorCutoff * 2LL, ArrayGrowthPolicy::x_alwaysVectorCutoff / 2LL, 50000000000LL})
                             {
                                 GetByIntegerIndexICInfo icInfo;
                                 TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
@@ -351,5 +351,365 @@ TEST(ObjectArrayPart, PutFirstElement)
     }
 }
 
+TEST(ObjectArrayPart, ContinuousArray)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
+    constexpr uint32_t numPropsToAdd = 4;
+    constexpr size_t numAllString = 100;
+    UserHeapPointer<HeapString> strings[numAllString];
+    for (uint32_t i = 0; i < 100; i++)
+    {
+        std::string s = "";
+        s = s + static_cast<char>('a' + i);
+        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
+    }
+
+    for (uint32_t inlineCap : { 0U, numPropsToAdd / 2, numPropsToAdd })
+    {
+        Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
+        for (uint32_t initButterflyCap : { 0U, 1U, 2U, 4U })
+        {
+            for (uint32_t numNamedProps : { 0U, numPropsToAdd })
+            {
+                enum PutType
+                {
+                    Int32,
+                    Double,
+                    Object
+                };
+                for (PutType baseType : { PutType::Int32, PutType::Double, PutType::Object })
+                {
+                    auto getValueForInsert = [&]() -> TValue
+                    {
+                        if (baseType == PutType::Int32)
+                        {
+                            return TValue::CreateInt32(rand() % 10000, TValue::x_int32Tag);
+                        }
+                        else if (baseType == PutType::Double)
+                        {
+                            return TValue::CreateDouble(rand() / static_cast<double>(100000.0));
+                        }
+                        else
+                        {
+                            return TValue::CreatePointer(strings[static_cast<size_t>(rand()) % numAllString]);
+                        }
+                    };
+
+                    enum class EndTransitionType
+                    {
+                        InArrayNil,
+                        InArrayNonNil,
+                        EndOfArray,
+                        MakeNotContinuous,
+                        MakeNotContinuousAndOutOfRange,
+                        MakeNotContinuousAndVectorRangeSparseMap,
+                        MakeNotContinuousAndSparseMap,
+                        X_END_OF_ENUM
+                    };
+                    for (bool lastInsertSameKindElement : { false, true })
+                    {
+                        for (int ett_ = 0; ett_ < static_cast<int>(EndTransitionType::X_END_OF_ENUM); ett_++)
+                        {
+                            EndTransitionType ett = static_cast<EndTransitionType>(ett_);
+                            if (baseType == PutType::Object && !lastInsertSameKindElement)
+                            {
+                                continue;
+                            }
+                            if (lastInsertSameKindElement && (ett == EndTransitionType::InArrayNil || ett == EndTransitionType::InArrayNonNil || ett == EndTransitionType::EndOfArray))
+                            {
+                                continue;
+                            }
+
+                            HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+
+                            for (uint32_t i = 0; i < numNamedProps; i++)
+                            {
+                                PutByIdICInfo icInfo;
+                                TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
+                                TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                            }
+
+                            constexpr size_t x_validateLen = 30;
+                            TValue expected[x_validateLen];
+                            for (size_t i = 0; i < x_validateLen; i++) { expected[i] = TValue::Nil(); }
+
+                            auto validateEverything = [&](size_t expectedContinuousLen)
+                            {
+                                ArrayType arrType = TCGet(obj->m_arrayType);
+                                ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                ReleaseAssert(arrType.IsContinuous());
+                                ReleaseAssert(!arrType.HasSparseMap());
+                                ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
+                                if (baseType == PutType::Int32)
+                                {
+                                    ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Int32);
+                                }
+                                else if (baseType == PutType::Double)
+                                {
+                                    ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Double);
+                                }
+                                else
+                                {
+                                    ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
+                                }
+
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == static_cast<int32_t>(expectedContinuousLen));
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd >= static_cast<int32_t>(expectedContinuousLen));
+                                for (size_t i = 0; i < x_validateLen; i++)
+                                {
+                                    GetByIntegerIndexICInfo icInfo;
+                                    TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+                                    TValue result = TableObject::GetByIntegerIndex(obj, static_cast<int64_t>(i), icInfo);
+                                    ReleaseAssert(result.m_value == expected[i].m_value);
+                                }
+
+                                for (uint32_t i = 0; i < numNamedProps; i++)
+                                {
+                                    GetByIdICInfo icInfo;
+                                    TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
+                                    TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                    ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                    ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
+                                }
+                            };
+
+                            constexpr size_t x_writeLen = 20;
+                            for (size_t i = 1; i <= x_writeLen; i++)
+                            {
+                                // insert a new value at the end
+                                //
+                                TValue val = getValueForInsert();
+                                TableObject::PutByValIntegerIndex(obj, static_cast<int64_t>(i), val);
+                                expected[i] = val;
+
+                                validateEverything(i + 1);
+
+                                // overwrite a random value inside the array range
+                                // the resulted array should still be continuous
+                                //
+                                val = getValueForInsert();
+                                int64_t idx = rand() % static_cast<int64_t>(i) + 1;
+                                TableObject::PutByValIntegerIndex(obj, idx, val);
+                                expected[idx] = val;
+
+                                validateEverything(i + 1);
+                            }
+
+                            // Put some nils outside array range, array should still be continuous
+                            //
+                            {
+                                TValue val = TValue::Nil();
+                                TableObject::PutByValIntegerIndex(obj, 123, val);
+                                validateEverything(x_writeLen + 1);
+                            }
+
+                            // Replace the last element to nil, array should still be continuous with length one shorter
+                            //
+                            {
+                                TValue val = TValue::Nil();
+                                TableObject::PutByValIntegerIndex(obj, x_writeLen, val);
+                                expected[x_writeLen] = val;
+                                validateEverything(x_writeLen);
+
+                                TableObject::PutByValIntegerIndex(obj, x_writeLen - 1, val);
+                                expected[x_writeLen - 1] = val;
+                                validateEverything(x_writeLen - 1);
+                            }
+
+                            // Do the end transition to break continuity, and validate everything is as expected
+                            //
+                            TValue lastInsertElement;
+                            ArrayType::Kind expectNewKind;
+                            int64_t indexToPut;
+                            bool expectContinuous;
+                            int32_t expectedContinuousLen = -1;
+                            if (baseType == PutType::Int32)
+                            {
+                                expectNewKind = ArrayType::Kind::Int32;
+                            }
+                            else if (baseType == PutType::Double)
+                            {
+                                expectNewKind = ArrayType::Kind::Double;
+                            }
+                            else
+                            {
+                                expectNewKind = ArrayType::Kind::Any;
+                            }
+
+                            auto getDifferentKindElement = [&]() -> TValue
+                            {
+                                if (baseType == PutType::Int32)
+                                {
+                                    return TValue::CreateDouble(rand() / static_cast<double>(100000.0));
+                                }
+                                else if (baseType == PutType::Double)
+                                {
+                                    return TValue::CreateInt32(rand() % 10000, TValue::x_int32Tag);
+                                }
+                                else
+                                {
+                                    ReleaseAssert(false);
+                                }
+                            };
+
+                            if (ett == EndTransitionType::InArrayNil)
+                            {
+                                lastInsertElement = TValue::Nil();
+                                indexToPut = rand() % static_cast<int64_t>(x_writeLen - 3) + 1;
+                                expectContinuous = false;
+                            }
+                            else if (ett == EndTransitionType::InArrayNonNil)
+                            {
+                                ReleaseAssert(!lastInsertSameKindElement);
+                                lastInsertElement = getDifferentKindElement();
+                                expectNewKind = ArrayType::Kind::Any;
+                                indexToPut = rand() % static_cast<int64_t>(x_writeLen - 2) + 1;
+                                expectContinuous = true;
+                                expectedContinuousLen = x_writeLen - 1;
+                            }
+                            else if (ett == EndTransitionType::EndOfArray)
+                            {
+                                ReleaseAssert(!lastInsertSameKindElement);
+                                lastInsertElement = getDifferentKindElement();
+                                expectNewKind = ArrayType::Kind::Any;
+                                indexToPut = static_cast<int64_t>(x_writeLen - 1);
+                                expectContinuous = true;
+                                expectedContinuousLen = x_writeLen;
+                            }
+                            else if (ett == EndTransitionType::MakeNotContinuous)
+                            {
+                                if (lastInsertSameKindElement)
+                                {
+                                    lastInsertElement = getValueForInsert();
+                                }
+                                else
+                                {
+                                    lastInsertElement = getDifferentKindElement();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                indexToPut = x_writeLen;
+                                expectContinuous = false;
+                            }
+                            else if (ett == EndTransitionType::MakeNotContinuousAndOutOfRange)
+                            {
+                                if (lastInsertSameKindElement)
+                                {
+                                    lastInsertElement = getValueForInsert();
+                                }
+                                else
+                                {
+                                    lastInsertElement = getDifferentKindElement();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                indexToPut = 500;
+                                expectContinuous = false;
+                            }
+                            else if (ett == EndTransitionType::MakeNotContinuousAndVectorRangeSparseMap)
+                            {
+                                if (lastInsertSameKindElement)
+                                {
+                                    lastInsertElement = getValueForInsert();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                else
+                                {
+                                    lastInsertElement = getDifferentKindElement();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                indexToPut = ArrayGrowthPolicy::x_unconditionallySparseMapCutoff;
+                                expectContinuous = false;
+                            }
+                            else if (ett == EndTransitionType::MakeNotContinuousAndSparseMap)
+                            {
+                                if (lastInsertSameKindElement)
+                                {
+                                    lastInsertElement = getValueForInsert();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                else
+                                {
+                                    lastInsertElement = getDifferentKindElement();
+                                    expectNewKind = ArrayType::Kind::Any;
+                                }
+                                indexToPut = ArrayGrowthPolicy::x_unconditionallySparseMapCutoff + 1;
+                                expectContinuous = false;
+                            }
+                            else
+                            {
+                                ReleaseAssert(false);
+                            }
+
+                            TableObject::PutByValIntegerIndex(obj, indexToPut, lastInsertElement);
+                            if (0 <= indexToPut && indexToPut <= static_cast<int64_t>(x_validateLen))
+                            {
+                                expected[indexToPut] = lastInsertElement;
+                            }
+
+                            ArrayType arrType = TCGet(obj->m_arrayType);
+                            ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                            ReleaseAssert(arrType.IsContinuous() == expectContinuous);
+                            if (ett == EndTransitionType::MakeNotContinuousAndSparseMap)
+                            {
+                                ReleaseAssert(arrType.HasSparseMap());
+                                ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                            }
+                            else if (ett == EndTransitionType::MakeNotContinuousAndVectorRangeSparseMap)
+                            {
+                                ReleaseAssert(arrType.HasSparseMap());
+                                ReleaseAssert(arrType.SparseMapContainsVectorIndex());
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                            }
+                            else
+                            {
+                                ReleaseAssert(!arrType.HasSparseMap());
+                                ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
+                                if (expectContinuous)
+                                {
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == expectedContinuousLen);
+                                }
+                                else
+                                {
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                }
+                            }
+                            ReleaseAssert(arrType.ArrayKind() == expectNewKind);
+
+                            for (size_t i = 0; i < x_validateLen; i++)
+                            {
+                                GetByIntegerIndexICInfo icInfo;
+                                TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+                                TValue result = TableObject::GetByIntegerIndex(obj, static_cast<int64_t>(i), icInfo);
+                                ReleaseAssert(result.m_value == expected[i].m_value);
+                            }
+
+                            {
+                                GetByIntegerIndexICInfo icInfo;
+                                TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+                                TValue result = TableObject::GetByIntegerIndex(obj, indexToPut, icInfo);
+                                ReleaseAssert(result.m_value == lastInsertElement.m_value);
+                            }
+
+                            for (uint32_t i = 0; i < numNamedProps; i++)
+                            {
+                                GetByIdICInfo icInfo;
+                                TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
+                                TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
+                            }
+                        }
+                    }
+                }
+
+            }
+        }
+    }
+}
+
+// TODO: density check test
+// TODO: random test
 
 }   // anonymous namespace

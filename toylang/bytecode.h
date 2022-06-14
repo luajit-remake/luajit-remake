@@ -358,8 +358,8 @@ public:
             // If the array is actually continuous, result must be non-nil
             //
             AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.IsNil());
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32(TValue::x_int32Tag));
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble(TValue::x_int32Tag));
             return res;
         }
 
@@ -451,8 +451,8 @@ public:
         HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
         TValue res = TranslateToRawPointer(sparseMap)->GetByVal(idx);
 #ifndef NDEBUG
-        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Int32, res.IsInt32(TValue::x_int32Tag));
-        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Double, res.IsDouble(TValue::x_int32Tag));
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32(TValue::x_int32Tag));
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble(TValue::x_int32Tag));
 #endif
         return res;
     }

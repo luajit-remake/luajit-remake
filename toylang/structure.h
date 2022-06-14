@@ -55,7 +55,7 @@ struct ArrayType
     ArrayType() : m_asValue(0) { }
     ArrayType(uint8_t value) : m_asValue(value) { }
 
-    enum Kind : uint8_t  // must fit in 2 bits
+    enum class Kind : uint8_t  // must fit in 2 bits
     {
         // NoButterflyArrayPart means one of the following:
         // (1) The butterfly doesn't exist at all
