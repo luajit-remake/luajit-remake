@@ -369,7 +369,7 @@ TEST(ObjectArrayPart, ContinuousArray)
     for (uint32_t inlineCap : { 0U, numPropsToAdd / 2, numPropsToAdd })
     {
         Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
-        for (uint32_t initButterflyCap : { 0U, 1U, 2U, 4U })
+        for (uint32_t initButterflyCap : { 0U, 1U, 2U, 4U, 8U })
         {
             for (uint32_t numNamedProps : { 0U, numPropsToAdd })
             {
@@ -703,13 +703,420 @@ TEST(ObjectArrayPart, ContinuousArray)
                         }
                     }
                 }
-
             }
         }
     }
 }
 
-// TODO: density check test
-// TODO: random test
+TEST(ObjectArrayPart, RandomTest)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
+    constexpr uint32_t maxNumProps = 50;
+    UserHeapPointer<HeapString> strings[maxNumProps];
+    for (uint32_t i = 0; i < maxNumProps; i++)
+    {
+        std::string s = "";
+        s = s + static_cast<char>('a' + i);
+        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
+    }
+
+    for (uint32_t testCase = 0; testCase < 1000; testCase++)
+    {
+        uint32_t inlineCap = static_cast<uint32_t>(rand() % 5);
+        uint32_t initialButterflyCap = static_cast<uint32_t>(rand() % 5);
+
+        uint32_t initialNamedProps = static_cast<uint32_t>(rand() % 5);
+
+        uint32_t initArrayContinuousLen;
+        {
+            int dice = rand() % 3;
+            if (dice == 0)
+            {
+                initArrayContinuousLen = 0;
+            }
+            else if (dice == 1)
+            {
+                initArrayContinuousLen = static_cast<uint32_t>(rand() % 30);
+            }
+            else if (dice == 2)
+            {
+                initArrayContinuousLen = static_cast<uint32_t>(rand() % 2000);
+            }
+            else
+            {
+                ReleaseAssert(false);
+            }
+        }
+
+        Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
+        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initialButterflyCap);
+
+        std::unordered_map<int64_t, TValue> namedPropMap;
+        std::unordered_map<double, TValue> arrayPropMap;
+        std::vector<double> allPutArrayProperties;
+
+        auto getRandomValue = [&]() -> TValue
+        {
+            int dice = rand() % 3;
+            if (dice == 0)
+            {
+                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+            }
+            else if (dice == 1)
+            {
+                return TValue::CreateDouble(rand() / static_cast<double>(1000.0));
+            }
+            else
+            {
+                return TValue::CreatePointer(strings[static_cast<uint32_t>(rand()) % maxNumProps]);
+            }
+        };
+
+        auto putRandomNamedProp = [&]()
+        {
+            uint32_t ord = static_cast<uint32_t>(rand()) % maxNumProps;
+            PutByIdICInfo icInfo;
+            TableObject::PreparePutById(obj, strings[ord], icInfo /*out*/);
+            TValue newVal = getRandomValue();
+            TableObject::PutById(obj, strings[ord], newVal, icInfo);
+            namedPropMap[strings[ord].m_value] = newVal;
+        };
+
+        int putPropsBeforeArray = rand() % 2;
+
+        if (putPropsBeforeArray)
+        {
+            for (uint32_t i = 0; i < initialNamedProps; i++)
+            {
+                putRandomNamedProp();
+            }
+        }
+
+        {
+            int dice = rand() % 3;
+            auto getValueToPut = [&]() -> TValue
+            {
+                if (dice == 0)
+                {
+                    return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                }
+                else if (dice == 1)
+                {
+                    return TValue::CreateDouble(rand() / static_cast<double>(1000.0));
+                }
+                else
+                {
+                    return getRandomValue();
+                }
+            };
+
+            for (uint32_t i = 0; i < initArrayContinuousLen; i++)
+            {
+                int64_t index = static_cast<int64_t>(i) + ArrayGrowthPolicy::x_arrayBaseOrd;
+                TValue val = getValueToPut();
+                TableObject::PutByValIntegerIndex(obj, index, val);
+                arrayPropMap[static_cast<double>(index)] = val;
+                allPutArrayProperties.push_back(static_cast<double>(index));
+            }
+        }
+
+        if (!putPropsBeforeArray)
+        {
+            for (uint32_t i = 0; i < initialNamedProps; i++)
+            {
+                putRandomNamedProp();
+            }
+        }
+
+        auto putRandomArrayProp = [&]()
+        {
+            int dice = rand() % 10;
+            if (dice == 0)
+            {
+                // put a random double-index prop
+                //
+                double index = rand() / static_cast<double>(1000.0);
+                TValue val = getRandomValue();
+                TableObject::PutByValDoubleIndex(obj, index, val);
+                arrayPropMap[index] = val;
+                allPutArrayProperties.push_back(index);
+                return;
+            }
+
+            // put at integer index
+            //
+            int64_t index;
+            if (dice == 1)
+            {
+                index = rand();
+                if (rand() % 2 == 0) { index = -index; }
+            }
+            else if (dice < 7)
+            {
+                index = rand() % 30;
+            }
+            else
+            {
+                index = rand() % 10000;
+            }
+            TValue val = getRandomValue();
+            TableObject::PutByValIntegerIndex(obj, index, val);
+            arrayPropMap[static_cast<double>(index)] = val;
+            allPutArrayProperties.push_back(static_cast<double>(index));
+        };
+
+        auto testRead = [&]()
+        {
+            int dice = rand() % 10;
+            if (dice == 0 || allPutArrayProperties.empty())
+            {
+                // read a named property
+                //
+                UserHeapPointer<HeapString> prop = strings[static_cast<uint32_t>(rand()) % maxNumProps];
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(obj, prop, icInfo /*out*/);
+                TValue result = TableObject::GetById(obj, prop, icInfo);
+                if (namedPropMap.count(prop.m_value))
+                {
+                    ReleaseAssert(result.m_value == namedPropMap[prop.m_value].m_value);
+                }
+                else
+                {
+                    ReleaseAssert(result.IsNil());
+                }
+            }
+            else
+            {
+                // read an array property
+                //
+                double index;
+                if (dice == 1)
+                {
+                    index = rand() / static_cast<double>(1000.0);
+                }
+                else
+                {
+                    index = allPutArrayProperties[static_cast<size_t>(rand()) % allPutArrayProperties.size()];
+                }
+                GetByIntegerIndexICInfo icInfo;
+                TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+                TValue result = TableObject::GetByDoubleVal(obj, index, icInfo);
+                if (arrayPropMap.count(index))
+                {
+                    ReleaseAssert(result.m_value == arrayPropMap[index].m_value);
+                }
+                else
+                {
+                    ReleaseAssert(result.IsNil());
+                }
+            }
+        };
+
+        auto doWrite = [&]()
+        {
+            int dice = rand() % 10;
+            if (dice == 0)
+            {
+                putRandomNamedProp();
+            }
+            else
+            {
+                putRandomArrayProp();
+            }
+        };
+
+        for (uint32_t testOp = 0; testOp < 500; testOp++)
+        {
+            testRead();
+            doWrite();
+
+            ArrayType arrType = TCGet(obj->m_arrayType);
+            ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+        }
+    }
+}
+
+// Test the density check in our array policy is working
+//
+TEST(ObjectArrayPart, DensityTest)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
+    constexpr uint32_t numProps = 4;
+    UserHeapPointer<HeapString> strings[numProps];
+    for (uint32_t i = 0; i < numProps; i++)
+    {
+        std::string s = "";
+        s = s + static_cast<char>('a' + i);
+        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
+    }
+
+    Structure* initStructure = Structure::CreateInitialStructure(vm, 2 /*inlineCap*/);
+    for (uint32_t initButterflyCap : { 0U, 8U })
+    {
+        for (int gap : { 3, 9 })    // this value is determined based on ArrayGrowthPolicy::x_densityCutoff
+        {
+            enum PutType
+            {
+                Int32,
+                Double,
+                MixInt32Double,
+                Object
+            };
+
+            for (PutType baseTy :  { PutType::Int32, PutType::Double, PutType::MixInt32Double, PutType::Object })
+            {
+                for (bool putNamedPropsBeforeArray : { false, true })
+                {
+                    HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+
+                    if (putNamedPropsBeforeArray)
+                    {
+                        for (uint32_t i = 0; i < numProps; i++)
+                        {
+                            PutByIdICInfo icInfo;
+                            TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
+                            TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                        }
+                    }
+
+                    auto getValueToPut = [&]()
+                    {
+                        int state = 0;
+                        return [=]() mutable -> TValue
+                        {
+                            if (baseTy == PutType::Object)
+                            {
+                                return TValue::CreatePointer(strings[static_cast<uint32_t>(rand()) % numProps]);
+                            }
+                            if (baseTy == PutType::Int32 || (baseTy == PutType::MixInt32Double && state == 0))
+                            {
+                                state = 1;
+                                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                            }
+                            else if (baseTy == PutType::Double || (baseTy == PutType::MixInt32Double && state == 1))
+                            {
+                                state = 0;
+                                return TValue::CreateDouble(rand() / static_cast<double>(1000.0));
+                            }
+                            ReleaseAssert(false);
+                        };
+                    }();
+
+                    std::vector<TValue> expected;
+
+                    int multUplimit;
+                    if (gap == 3)
+                    {
+                        // If the density is high, the array should be able to grow to up to x_sparseMapUnlessContinuousCutoff without becoming sparse map
+                        //
+                        multUplimit = ArrayGrowthPolicy::x_sparseMapUnlessContinuousCutoff / gap;
+                    }
+                    else
+                    {
+                        // If the density is low, the array is guaranteed to become sparse map at x_alwaysVectorCutoff * x_vectorGrowthFactor
+                        //
+                        multUplimit = static_cast<int>(ArrayGrowthPolicy::x_alwaysVectorCutoff * ArrayGrowthPolicy::x_vectorGrowthFactor / gap + 10);
+                    }
+
+                    expected.resize(static_cast<size_t>(multUplimit * gap + 10));
+                    for (size_t i = 0; i < expected.size(); i++)
+                    {
+                        expected[i] = TValue::Nil();
+                    }
+
+                    for (int mult = 1; mult <= multUplimit; mult++)
+                    {
+                        int32_t index = gap * mult;
+                        TValue val = getValueToPut();
+                        TableObject::PutByValIntegerIndex(obj, index, val);
+                        ReleaseAssert(static_cast<size_t>(index) < expected.size());
+                        expected[static_cast<size_t>(index)] = val;
+                    }
+
+                    auto checkArrayType = [&]()
+                    {
+                        ArrayType arrType = TCGet(obj->m_arrayType);
+                        ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+
+                        if (gap == 3)
+                        {
+                            ReleaseAssert(!arrType.IsContinuous());
+                            if (baseTy == PutType::Int32)
+                            {
+                                ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Int32);
+                            }
+                            else if (baseTy == PutType::Double)
+                            {
+                                ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Double);
+                            }
+                            else
+                            {
+                                ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
+                            }
+                            ReleaseAssert(!arrType.HasSparseMap());
+                            ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
+                        }
+                        else
+                        {
+                            ReleaseAssert(!arrType.IsContinuous());
+                            ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
+                            ReleaseAssert(arrType.HasSparseMap());
+                            ReleaseAssert(arrType.SparseMapContainsVectorIndex());
+                        }
+                    };
+
+                    checkArrayType();
+
+                    if (!putNamedPropsBeforeArray)
+                    {
+                        for (uint32_t i = 0; i < numProps; i++)
+                        {
+                            PutByIdICInfo icInfo;
+                            TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
+                            TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                        }
+                    }
+
+                    checkArrayType();
+
+                    for (size_t i = 0; i < expected.size(); i++)
+                    {
+                        GetByIntegerIndexICInfo icInfo;
+                        TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+                        TValue result = TableObject::GetByInt32Val(obj, static_cast<int32_t>(i), icInfo);
+                        ReleaseAssert(result.m_value == expected[i].m_value);
+                    }
+
+                    for (uint32_t i = 0; i < numProps; i++)
+                    {
+                        GetByIdICInfo icInfo;
+                        TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
+                        TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                        ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                        ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
+                    }
+
+                    if (gap == 3)
+                    {
+                        int32_t index = static_cast<int32_t>(ArrayGrowthPolicy::x_sparseMapUnlessContinuousCutoff * ArrayGrowthPolicy::x_vectorGrowthFactor + 10);
+                        TValue val = getValueToPut();
+                        TableObject::PutByValIntegerIndex(obj, index, val);
+
+                        ArrayType arrType = TCGet(obj->m_arrayType);
+                        ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                        ReleaseAssert(!arrType.IsContinuous());
+                        ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
+                        ReleaseAssert(arrType.HasSparseMap());
+                        ReleaseAssert(arrType.SparseMapContainsVectorIndex());
+                    }
+                }
+            }
+        }
+    }
+}
 
 }   // anonymous namespace

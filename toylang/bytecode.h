@@ -1071,8 +1071,8 @@ public:
             }
             else
             {
-                int32_t currentCapcity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
-                if (index >= currentCapcity + ArrayGrowthPolicy::x_arrayBaseOrd)
+                int32_t currentCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
+                if (index >= currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd)
                 {
                     needToGrowOrCreateButterfly = true;
                 }
@@ -1129,9 +1129,9 @@ public:
         {
             Butterfly* butterfly = m_butterfly;
             assert(butterfly != nullptr);
-            int32_t currentCapcity = butterfly->GetHeader()->m_arrayStorageCapacity;
+            int32_t currentCapacity = butterfly->GetHeader()->m_arrayStorageCapacity;
 
-            if (index >= currentCapcity + ArrayGrowthPolicy::x_arrayBaseOrd)
+            if (index >= currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd)
             {
                 // The put is out of bound, we need to either grow butterfly to accommodate or go to sparse map
                 //
@@ -1155,7 +1155,7 @@ public:
                 // By default we grow the capacity by x_vectorGrowthFactor (but do not exceed x_unconditionallySparseMapCutoff),
                 // but if that's still not enough, we grow to just enough capacity to hold the index
                 //
-                uint32_t newCapacity = static_cast<uint32_t>(currentCapcity * ArrayGrowthPolicy::x_vectorGrowthFactor);
+                uint32_t newCapacity = static_cast<uint32_t>(currentCapacity * ArrayGrowthPolicy::x_vectorGrowthFactor);
                 newCapacity = std::min(newCapacity, static_cast<uint32_t>(ArrayGrowthPolicy::x_unconditionallySparseMapCutoff));
                 newCapacity = std::max(newCapacity, static_cast<uint32_t>(index + 1 - ArrayGrowthPolicy::x_arrayBaseOrd));
 
@@ -1172,7 +1172,7 @@ public:
                     }
                     else
                     {
-                        assert(index == currentCapcity + ArrayGrowthPolicy::x_arrayBaseOrd);
+                        assert(index == currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd);
                         DEBUG_ONLY(shouldIncrementContinuousLength = true;)
                     }
                 }
@@ -1183,24 +1183,32 @@ public:
                 // because it has been checked at the start of the function
                 //
                 bool shouldPutToSparseMap = false;
-                if (newCapacity > ArrayGrowthPolicy::x_sparseMapUnlessContinuousCutoff)
+                if (index > ArrayGrowthPolicy::x_sparseMapUnlessContinuousCutoff)
                 {
                     if (!isContinuous)
                     {
                         shouldPutToSparseMap = true;
                     }
                 }
-                else if (newCapacity > ArrayGrowthPolicy::x_alwaysVectorCutoff)
+                else if (index > ArrayGrowthPolicy::x_alwaysVectorCutoff)
                 {
                     uint64_t nonNilCount = 1;
-                    for (int32_t i = ArrayGrowthPolicy::x_arrayBaseOrd; i < currentCapcity + ArrayGrowthPolicy::x_arrayBaseOrd; i++)
+                    for (int32_t i = ArrayGrowthPolicy::x_arrayBaseOrd; i < currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd; i++)
                     {
                         if (!butterfly->UnsafeGetInVectorIndexAddr(i)->IsNil())
                         {
                             nonNilCount++;
                         }
                     }
-                    if (nonNilCount * ArrayGrowthPolicy::x_densityCutoff < newCapacity)
+
+                    // This check is a bit problematic: we are growing our array based on the initial butterfly size,
+                    // and if we change our initial butterfly size, it can change whether an array which density is close to threshold
+                    // should go to sparse map or not, causing unexpected performance change.
+                    // We should probably make our growth strategy not depend on the initial butterfly size to fix this problem
+                    // (and it's a good idea anyway once we have a real memory allocator). But for now let's be simple.
+                    //
+                    uint64_t maxCapacityMaintainingMinimalDensity = nonNilCount * ArrayGrowthPolicy::x_densityCutoff;
+                    if (newCapacity > maxCapacityMaintainingMinimalDensity)
                     {
                         shouldPutToSparseMap = true;
                     }
