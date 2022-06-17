@@ -67,7 +67,7 @@ TEST(ObjectGetSetById, Sanity)
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity - expectedAbsoluteOrd - 1));
             }
         }
-        TValue result = TableObject::GetById(obj, prop, icInfo);
+        TValue result = TableObject::GetById(obj, prop.As<void>(), icInfo);
         if (!expectExist)
         {
             ReleaseAssert(result.IsNil());
@@ -136,8 +136,8 @@ TEST(ObjectGetSetById, Sanity)
                 ReleaseAssert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(i) - 1);
             }
-            ReleaseAssert(TCGet(curObject->m_hiddenClass).As() == icInfo.m_structure.As());
-            if (i == icInfo.m_structure.As()->m_butterflyNamedStorageCapacity + icInfo.m_structure.As()->m_inlineNamedStorageCapacity)
+            ReleaseAssert(TCGet(curObject->m_hiddenClass).As() == icInfo.m_hiddenClass.As<Structure>());
+            if (i == icInfo.m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity + icInfo.m_hiddenClass.As<Structure>()->m_inlineNamedStorageCapacity)
             {
                 ReleaseAssert(icInfo.m_shouldGrowButterfly);
             }
@@ -145,9 +145,9 @@ TEST(ObjectGetSetById, Sanity)
             {
                 ReleaseAssert(!icInfo.m_shouldGrowButterfly);
             }
-            ReleaseAssert(icInfo.m_structure.As() != icInfo.m_newStructure.As());
+            ReleaseAssert(icInfo.m_hiddenClass.As<Structure>() != icInfo.m_newStructure.As());
 
-            TableObject::PutById(curObject, propToAdd, TValue::CreateInt32(static_cast<int32_t>(i + 456), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456), TValue::x_int32Tag), icInfo);
 
             // Check the PutById didn't screw the array part
             //
@@ -284,7 +284,7 @@ TEST(ObjectGetSetById, Sanity)
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity - i - 1));
             }
 
-            TableObject::PutById(obj, prop, TValue::CreateInt32(static_cast<int32_t>(i + 7890), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(obj, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 7890), TValue::x_int32Tag), icInfo);
         }
     }
 
@@ -310,7 +310,7 @@ TEST(ObjectGetSetById, Sanity)
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(curObject, prop, icInfo /*out*/);
             ReleaseAssert(!icInfo.m_propertyExists);
-            TableObject::PutById(curObject, prop, TValue::CreateInt32(static_cast<int32_t>(i + 45678), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(curObject, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 45678), TValue::x_int32Tag), icInfo);
         }
 
         ReleaseAssert(curObject != allObjects[testcase]);
@@ -320,6 +320,111 @@ TEST(ObjectGetSetById, Sanity)
     }
 
     checkAllObjectsAreAsExpected(45678);
+}
+
+TEST(ObjectGetSetById, CacheableDictionary)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    uint32_t numStrings = 2000;
+    StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
+
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 8 /*inlineCapacity*/);
+    for (uint32_t testCase = 0; testCase < 50; testCase++)
+    {
+        const uint32_t maxArrayPartSize = 5;
+        uint32_t initArrayPartSize = static_cast<uint32_t>(rand()) % maxArrayPartSize;
+        uint32_t initArrayPartFillSize = static_cast<uint32_t>(rand()) % (initArrayPartSize + 1);
+        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+
+        std::unordered_map<int64_t, TValue> expected;
+        TValue arrayExpected[maxArrayPartSize + 2];
+        for (uint32_t i = 0; i <= maxArrayPartSize; i++)
+        {
+            arrayExpected[i] = TValue::Nil();
+        }
+
+        auto getRandomValue = [&]() -> TValue
+        {
+            int dice = rand() % 3;
+            if (dice == 0)
+            {
+                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+            }
+            else if (dice == 1)
+            {
+                return TValue::CreateDouble(rand() / static_cast<double>(1000.0));
+            }
+            else
+            {
+                return TValue::CreatePointer(strings[static_cast<uint32_t>(rand()) % numStrings]);
+            }
+        };
+
+        if (rand() % 2 == 0)
+        {
+            for (uint32_t i = 1; i <= initArrayPartFillSize; i++)
+            {
+                TValue val = getRandomValue();
+                TableObject::PutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
+                arrayExpected[i] = val;
+            }
+        }
+        else
+        {
+            for (uint32_t i = initArrayPartFillSize; i >= 1; i--)
+            {
+                TValue val = getRandomValue();
+                TableObject::PutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
+                arrayExpected[i] = val;
+            }
+        }
+
+
+        for (uint32_t testOp = 0; testOp < 3000; testOp++)
+        {
+            // Perform a put
+            //
+            {
+                uint32_t ord = static_cast<uint32_t>(rand()) % numStrings;
+                PutByIdICInfo icInfo;
+                TableObject::PreparePutById(obj, strings[ord], icInfo /*out*/);
+                TValue newVal = getRandomValue();
+                TableObject::PutById(obj, strings[ord].As<void>(), newVal, icInfo);
+                expected[strings[ord].m_value] = newVal;
+            }
+            // Perform a query
+            //
+            {
+                UserHeapPointer<HeapString> prop = strings[static_cast<uint32_t>(rand()) % numStrings];
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(obj, prop, icInfo /*out*/);
+                TValue result = TableObject::GetById(obj, prop.As<void>(), icInfo);
+                if (expected.count(prop.m_value))
+                {
+                    ReleaseAssert(result.m_value == expected[prop.m_value].m_value);
+                }
+                else
+                {
+                    ReleaseAssert(result.IsNil());
+                }
+            }
+        }
+
+        for (uint32_t i = 0; i <= maxArrayPartSize; i++)
+        {
+            GetByIntegerIndexICInfo icInfo;
+            TableObject::PrepareGetByIntegerIndex(obj, icInfo /*out*/);
+            {
+                TValue result = TableObject::GetByDoubleVal(obj, static_cast<int32_t>(i), icInfo);
+                ReleaseAssert(result.m_value == arrayExpected[i].m_value);
+            }
+            {
+                TValue result = TableObject::GetByInt32Val(obj, static_cast<int32_t>(i), icInfo);
+                ReleaseAssert(result.m_value == arrayExpected[i].m_value);
+            }
+        }
+    }
 }
 
 }   // anonymous namespace

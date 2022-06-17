@@ -19,9 +19,9 @@ using namespace CommonUtils;
   , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
   , (ArraySparseMap,                ArraySparseMap,                 HOI_USR_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
-  , (DictionaryHiddenClass,         DictionaryHiddenClass,          HOI_SYS_HEAP)       \
-  , (HiddenClassAnchorHashTable,    StructureAnchorHashTable,       HOI_SYS_HEAP)       \
-  , (CacheableDictionary,           CacheableDictionary,            HOI_SYS_HEAP)
+  , (StructureAnchorHashTable,      StructureAnchorHashTable,       HOI_SYS_HEAP)       \
+  , (CacheableDictionary,           CacheableDictionary,            HOI_SYS_HEAP)       \
+  , (UncacheableDictionary,         UncacheableDictionary,          HOI_SYS_HEAP)
 
 #define HOI_ENUM_NAME(hoi) PP_TUPLE_GET_1(hoi)
 #define HOI_CLASS_NAME(hoi) PP_TUPLE_GET_2(hoi)
@@ -69,6 +69,7 @@ constexpr Type TypeEnumForHeapObject = TypeEnumForHeapObjectImpl<T>::value;
 template<typename T>
 constexpr bool IsHeapObjectType = (TypeEnumForHeapObject<T> != Type::X_END_OF_ENUM);
 
+// FIXME
 template<typename T>
 struct TypeMayLiveInSystemHeapImpl : std::true_type { };
 
@@ -81,6 +82,7 @@ PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
 template<typename T>
 constexpr bool TypeMayLiveInSystemHeap = TypeMayLiveInSystemHeapImpl<T>::value;
 
+// FIXME
 template<typename T>
 struct TypeMayLiveInUserHeapImpl : std::true_type { };
 

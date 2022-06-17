@@ -5,6 +5,36 @@ using namespace ToyLang;
 
 namespace {
 
+using StringList = std::vector<UserHeapPointer<HeapString>>;
+
+StringList GetStringList(VM* vm, size_t n)
+{
+    std::set<std::string> used;
+    StringList result;
+    std::set<int64_t> ptrSet;
+    for (size_t i = 0; i < n; i++)
+    {
+        std::string s;
+        while (true)
+        {
+            s = "";
+            size_t len = static_cast<size_t>(rand() % 20);
+            for (size_t k = 0; k < len; k++) s += 'a' + rand() % 26;
+            if (!used.count(s))
+            {
+                break;
+            }
+        }
+        used.insert(s);
+        UserHeapPointer<HeapString> ptr = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
+        result.push_back(ptr);
+        ReleaseAssert(!ptrSet.count(ptr.m_value));
+        ptrSet.insert(ptr.m_value);
+    }
+    ReleaseAssert(used.size() == n && ptrSet.size() == n && result.size() == n);
+    return result;
+}
+
 // Test the transition on NoButterflyPart, that is, test the array type is
 // as expected when we put the first element into the array part
 //
@@ -14,13 +44,7 @@ TEST(ObjectArrayPart, PutFirstElement)
     Auto(vm->Destroy());
 
     constexpr uint32_t numPropsToAdd = 4;
-    UserHeapPointer<HeapString> strings[numPropsToAdd];
-    for (uint32_t i = 0; i < numPropsToAdd; i++)
-    {
-        std::string s = "";
-        s = s + static_cast<char>('a' + i);
-        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
-    }
+    StringList strings = GetStringList(vm, numPropsToAdd);
 
     for (uint32_t inlineCap : { 0U, numPropsToAdd / 2, numPropsToAdd })
     {
@@ -85,7 +109,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             {
                                 PutByIdICInfo icInfo;
                                 TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                                TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(12345 + i), TValue::x_int32Tag), icInfo);
+                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(12345 + i), TValue::x_int32Tag), icInfo);
                             }
 
                             if (hasButterfly && obj->m_butterfly == nullptr)
@@ -237,7 +261,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             {
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
-                                TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
                                 ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(12345 + i));
                             }
@@ -318,7 +342,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             {
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
-                                TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
                                 ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(12345 + i));
                             }
@@ -356,22 +380,15 @@ TEST(ObjectArrayPart, ContinuousArray)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
-    constexpr uint32_t numPropsToAdd = 4;
-    constexpr size_t numAllString = 100;
-    UserHeapPointer<HeapString> strings[numAllString];
-    for (uint32_t i = 0; i < 100; i++)
-    {
-        std::string s = "";
-        s = s + static_cast<char>('a' + i);
-        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
-    }
+    constexpr uint32_t numAllString = 600;
+    StringList strings = GetStringList(vm, numAllString);
 
-    for (uint32_t inlineCap : { 0U, numPropsToAdd / 2, numPropsToAdd })
+    for (uint32_t inlineCap : { 0U, 2U, 4U })
     {
         Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
         for (uint32_t initButterflyCap : { 0U, 1U, 2U, 4U, 8U })
         {
-            for (uint32_t numNamedProps : { 0U, numPropsToAdd })
+            for (uint32_t numNamedProps : { 0U, 4U, numAllString })
             {
                 enum PutType
                 {
@@ -428,7 +445,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                             {
                                 PutByIdICInfo icInfo;
                                 TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                                TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
                             }
 
                             constexpr size_t x_validateLen = 30;
@@ -438,7 +455,11 @@ TEST(ObjectArrayPart, ContinuousArray)
                             auto validateEverything = [&](size_t expectedContinuousLen)
                             {
                                 ArrayType arrType = TCGet(obj->m_arrayType);
-                                ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                                if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                                {
+                                    ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+                                }
                                 ReleaseAssert(arrType.IsContinuous());
                                 ReleaseAssert(!arrType.HasSparseMap());
                                 ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
@@ -469,7 +490,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 {
                                     GetByIdICInfo icInfo;
                                     TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
-                                    TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                    TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
                                     ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
                                     ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                                 }
@@ -648,7 +669,11 @@ TEST(ObjectArrayPart, ContinuousArray)
                             }
 
                             ArrayType arrType = TCGet(obj->m_arrayType);
-                            ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                            SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                            {
+                                ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+                            }
                             ReleaseAssert(arrType.IsContinuous() == expectContinuous);
                             if (ett == EndTransitionType::MakeNotContinuousAndSparseMap)
                             {
@@ -696,7 +721,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                             {
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
-                                TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                                TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
                                 ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                             }
@@ -713,14 +738,8 @@ TEST(ObjectArrayPart, RandomTest)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
-    constexpr uint32_t maxNumProps = 50;
-    UserHeapPointer<HeapString> strings[maxNumProps];
-    for (uint32_t i = 0; i < maxNumProps; i++)
-    {
-        std::string s = "";
-        s = s + static_cast<char>('a' + i);
-        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
-    }
+    constexpr uint32_t maxNumProps = 2000;
+    StringList strings = GetStringList(vm, maxNumProps);
 
     for (uint32_t testCase = 0; testCase < 1000; testCase++)
     {
@@ -774,13 +793,29 @@ TEST(ObjectArrayPart, RandomTest)
             }
         };
 
+        uint32_t totalTestOp;
+        int namedPropDiceLimit;
+        uint32_t namedPropSelectionLimit;
+        if (rand() % 10 == 0)
+        {
+            totalTestOp = 1000;
+            namedPropDiceLimit = 8;
+            namedPropSelectionLimit = maxNumProps;
+        }
+        else
+        {
+            totalTestOp = 500;
+            namedPropDiceLimit = 1;
+            namedPropSelectionLimit = 50;
+        }
+
         auto putRandomNamedProp = [&]()
         {
-            uint32_t ord = static_cast<uint32_t>(rand()) % maxNumProps;
+            uint32_t ord = static_cast<uint32_t>(rand()) % namedPropSelectionLimit;
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(obj, strings[ord], icInfo /*out*/);
             TValue newVal = getRandomValue();
-            TableObject::PutById(obj, strings[ord], newVal, icInfo);
+            TableObject::PutById(obj, strings[ord].As<void>(), newVal, icInfo);
             namedPropMap[strings[ord].m_value] = newVal;
         };
 
@@ -870,14 +905,14 @@ TEST(ObjectArrayPart, RandomTest)
         auto testRead = [&]()
         {
             int dice = rand() % 10;
-            if (dice == 0 || allPutArrayProperties.empty())
+            if (dice < namedPropDiceLimit || allPutArrayProperties.empty())
             {
                 // read a named property
                 //
-                UserHeapPointer<HeapString> prop = strings[static_cast<uint32_t>(rand()) % maxNumProps];
+                UserHeapPointer<HeapString> prop = strings[static_cast<uint32_t>(rand()) % namedPropSelectionLimit];
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(obj, prop, icInfo /*out*/);
-                TValue result = TableObject::GetById(obj, prop, icInfo);
+                TValue result = TableObject::GetById(obj, prop.As<void>(), icInfo);
                 if (namedPropMap.count(prop.m_value))
                 {
                     ReleaseAssert(result.m_value == namedPropMap[prop.m_value].m_value);
@@ -917,7 +952,7 @@ TEST(ObjectArrayPart, RandomTest)
         auto doWrite = [&]()
         {
             int dice = rand() % 10;
-            if (dice == 0)
+            if (dice < namedPropDiceLimit)
             {
                 putRandomNamedProp();
             }
@@ -927,32 +962,26 @@ TEST(ObjectArrayPart, RandomTest)
             }
         };
 
-        for (uint32_t testOp = 0; testOp < 500; testOp++)
+        for (uint32_t testOp = 0; testOp < totalTestOp; testOp++)
         {
             testRead();
             doWrite();
 
             ArrayType arrType = TCGet(obj->m_arrayType);
-            ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+            SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+            {
+                ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+            }
         }
     }
 }
 
 // Test the density check in our array policy is working
 //
-TEST(ObjectArrayPart, DensityTest)
+void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
 {
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-
-    constexpr uint32_t numProps = 4;
-    UserHeapPointer<HeapString> strings[numProps];
-    for (uint32_t i = 0; i < numProps; i++)
-    {
-        std::string s = "";
-        s = s + static_cast<char>('a' + i);
-        strings[i] = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
-    }
+    StringList strings = GetStringList(vm, numProps);
 
     Structure* initStructure = Structure::CreateInitialStructure(vm, 2 /*inlineCap*/);
     for (uint32_t initButterflyCap : { 0U, 8U })
@@ -979,7 +1008,7 @@ TEST(ObjectArrayPart, DensityTest)
                         {
                             PutByIdICInfo icInfo;
                             TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                            TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
                         }
                     }
 
@@ -1040,7 +1069,11 @@ TEST(ObjectArrayPart, DensityTest)
                     auto checkArrayType = [&]()
                     {
                         ArrayType arrType = TCGet(obj->m_arrayType);
-                        ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                        SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                        {
+                            ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+                        }
 
                         if (gap == 3)
                         {
@@ -1077,7 +1110,7 @@ TEST(ObjectArrayPart, DensityTest)
                         {
                             PutByIdICInfo icInfo;
                             TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                            TableObject::PutById(obj, strings[i], TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
                         }
                     }
 
@@ -1095,7 +1128,7 @@ TEST(ObjectArrayPart, DensityTest)
                     {
                         GetByIdICInfo icInfo;
                         TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
-                        TValue result = TableObject::GetById(obj, strings[i], icInfo);
+                        TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
                         ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
                         ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                     }
@@ -1107,7 +1140,11 @@ TEST(ObjectArrayPart, DensityTest)
                         TableObject::PutByValIntegerIndex(obj, index, val);
 
                         ArrayType arrType = TCGet(obj->m_arrayType);
-                        ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                        SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                        {
+                            ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+                        }
                         ReleaseAssert(!arrType.IsContinuous());
                         ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
                         ReleaseAssert(arrType.HasSparseMap());
@@ -1117,6 +1154,20 @@ TEST(ObjectArrayPart, DensityTest)
             }
         }
     }
+}
+
+TEST(ObjectArrayPart, DensityTest1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    ObjectArrayPartDensityTest(vm, 4 /*numProps*/);
+}
+
+TEST(ObjectArrayPart, DensityTest2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    ObjectArrayPartDensityTest(vm, 2000 /*numProps*/);
 }
 
 }   // anonymous namespace

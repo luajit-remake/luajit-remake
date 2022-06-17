@@ -162,12 +162,12 @@ void HandleChild(TestContext& ctx, size_t cur, size_t child, UserHeapPointer<voi
 
     Structure::AddNewPropertyResult result;
     structure->AddNonExistentProperty(VM::GetActiveVMForCurrentThread(), key, result);
-    ReleaseAssert(result.m_newStructureOrDictionary);
-    ReleaseAssert(!result.m_transitionedToDictionaryMode);
+    ReleaseAssert(result.m_newStructure != nullptr);
+    ReleaseAssert(!result.m_shouldTransitionToDictionaryMode);
     bool expectButterflyGrowth = (structure->m_inlineNamedStorageCapacity + structure->m_butterflyNamedStorageCapacity == ctx.m_tree.m_expectedContents[cur].size());
     ReleaseAssert(result.m_shouldGrowButterfly == expectButterflyGrowth);
     ReleaseAssert(result.m_slotOrdinal == ctx.m_tree.m_expectedContents[cur].size());
-    Structure* newStructure = reinterpret_cast<Structure*>(result.m_newStructureOrDictionary);
+    Structure* newStructure = reinterpret_cast<Structure*>(result.m_newStructure);
     ReleaseAssert(ctx.m_structures[child] == nullptr);
     ctx.m_structures[child] = newStructure;
 }
@@ -247,12 +247,12 @@ void PostTraversalCheck(TestContext& ctx, size_t numNodes)
 
             Structure::AddNewPropertyResult result;
             structure->AddNonExistentProperty(VM::GetActiveVMForCurrentThread(), key, result);
-            ReleaseAssert(result.m_newStructureOrDictionary);
-            ReleaseAssert(!result.m_transitionedToDictionaryMode);
+            ReleaseAssert(result.m_newStructure != nullptr);
+            ReleaseAssert(!result.m_shouldTransitionToDictionaryMode);
             bool expectButterflyGrowth = (structure->m_inlineNamedStorageCapacity + structure->m_butterflyNamedStorageCapacity == ctx.m_tree.m_expectedContents[i].size());
             ReleaseAssert(result.m_shouldGrowButterfly == expectButterflyGrowth);
             ReleaseAssert(result.m_slotOrdinal == ctx.m_tree.m_expectedContents[i].size());
-            ReleaseAssert(result.m_newStructureOrDictionary == expectedTarget);
+            ReleaseAssert(result.m_newStructure == expectedTarget);
         }
     }
 

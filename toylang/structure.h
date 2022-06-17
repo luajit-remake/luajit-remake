@@ -410,6 +410,57 @@ public:
 };
 static_assert(sizeof(StructureAnchorHashTable) == 8);
 
+struct ButterflyNamedStorageGrowthPolicy
+{
+    static constexpr uint8_t x_initialMinimumButterflyCapacity = 4;
+    static constexpr uint8_t x_butterflyCapacityFromInlineCapacityFactor = 2;
+    static constexpr uint32_t x_butterflyNamedStorageCapacityGrowthFactor = 2;
+
+    // TODO: refine growth strategy
+    //
+    static uint8_t WARN_UNUSED ComputeInitialButterflyCapacityForDictionary(uint8_t inlineNamedStorageCapacity)
+    {
+        uint8_t capacity = inlineNamedStorageCapacity / x_butterflyCapacityFromInlineCapacityFactor;
+        capacity = std::max(capacity, x_initialMinimumButterflyCapacity);
+        return capacity;
+    }
+
+    static uint32_t WARN_UNUSED ComputeNextButterflyCapacityForDictionary(uint32_t curButterflyCapacity)
+    {
+        uint32_t capacity = curButterflyCapacity * x_butterflyNamedStorageCapacityGrowthFactor;
+        return capacity;
+    }
+
+    template<typename T>
+    static uint8_t WARN_UNUSED ClampCapacityForStructure(T capacity, uint8_t inlineNamedStorageCapacity, uint8_t maxPropertySlots)
+    {
+        // It needs to grow to up to maxPropertySlots + 1: that's the real max capacity considering PolyMetatable
+        //
+        assert(inlineNamedStorageCapacity <= maxPropertySlots);
+        uint8_t capacityLimit = maxPropertySlots + 1 - inlineNamedStorageCapacity;
+        if (capacity > capacityLimit)
+        {
+            return capacityLimit;
+        }
+        else
+        {
+            return static_cast<uint8_t>(capacity);
+        }
+    }
+
+    static uint8_t WARN_UNUSED ComputeInitialButterflyCapacityForStructure(uint8_t inlineNamedStorageCapacity, uint8_t maxPropertySlots)
+    {
+        uint16_t capacity = ComputeInitialButterflyCapacityForDictionary(inlineNamedStorageCapacity);
+        return ClampCapacityForStructure(capacity, inlineNamedStorageCapacity, maxPropertySlots);
+    }
+
+    static uint8_t WARN_UNUSED ComputeNextButterflyCapacityForStructure(uint8_t inlineNamedStorageCapacity, uint8_t curButterflyCapacity, uint8_t maxPropertySlots)
+    {
+        uint32_t capacity = ComputeNextButterflyCapacityForDictionary(curButterflyCapacity);
+        return ClampCapacityForStructure(capacity, inlineNamedStorageCapacity, maxPropertySlots);
+    }
+};
+
 // A structure hidden class
 //
 // Future work: we can use one structure to store a chain of PropertyAdd transitions (and user
@@ -447,30 +498,6 @@ public:
         if (numSlots == 0) { return 0; }
         uint8_t nonFullBlockLen = static_cast<uint8_t>(((static_cast<uint32_t>(numSlots) - 1) & (x_hiddenClassBlockSize - 1)) + 1);
         return nonFullBlockLen;
-    }
-
-    // TODO: refine butterfly growth strategy
-    //
-    static uint8_t WARN_UNUSED ComputeInitialButterflyCapacity(uint8_t inlineNamedStorageCapacity)
-    {
-        constexpr uint8_t x_initialMinimumButterflyCapacity = 4;
-        constexpr uint8_t x_butterflyCapacityFromInlineCapacityFactor = 2;
-        uint8_t capacity = inlineNamedStorageCapacity / x_butterflyCapacityFromInlineCapacityFactor;
-        capacity = std::max(capacity, x_initialMinimumButterflyCapacity);
-        // It needs to grow to up to x_maxNumSlot + 1: that's the real max capacity considering PolyMetatable
-        //
-        capacity = std::min(capacity, static_cast<uint8_t>(x_maxNumSlots + 1 - inlineNamedStorageCapacity));
-        return capacity;
-    }
-
-    static uint8_t WARN_UNUSED ComputeNextButterflyCapacity(uint8_t inlineNamedStorageCapacity, uint8_t curButterflyCapacity)
-    {
-        constexpr uint8_t x_butterflyCapacityGrowthFactor = 2;
-        uint32_t capacity = static_cast<uint32_t>(curButterflyCapacity) * x_butterflyCapacityGrowthFactor;
-        // It needs to grow to up to x_maxNumSlot + 1: that's the real max capacity considering PolyMetatable
-        //
-        capacity = std::min(capacity, static_cast<uint32_t>(x_maxNumSlots + 1 - inlineNamedStorageCapacity));
-        return static_cast<uint8_t>(capacity);
     }
 
     static constexpr int8_t x_inlineHashTableEmptyValue = 0x7f;
@@ -518,8 +545,9 @@ public:
     struct AddNewPropertyResult
     {
         // If true, the Structure just transitioned into dictionary mode
+        // When this is true, all other fields in this struct are NOT filled
         //
-        bool m_transitionedToDictionaryMode;
+        bool m_shouldTransitionToDictionaryMode;
 
         // If true, the caller should grow the object's butterfly property part
         //
@@ -529,7 +557,7 @@ public:
         //
         uint32_t m_slotOrdinal;
 
-        void* m_newStructureOrDictionary;
+        void* m_newStructure;
     };
 
     // Perform an AddProperty transition, the added property must be non-existent
@@ -1073,6 +1101,9 @@ public:
 };
 static_assert(sizeof(Structure) == 32);
 
+// WARNING: if the structure is in PolyMetatable mode, this iterator will return the key 'vm->GetSpecialKeyForPolyMetatable()' for the
+// PolyMetatable slot! User should special check this case themselves if this behavior is undesired
+//
 class StructureIterator
 {
 public:
@@ -1181,6 +1212,348 @@ private:
     uint8_t m_anchorTableMaxOrd;
 };
 static_assert(sizeof(StructureIterator) == 16);
+
+class CacheableDictionary final : public SystemHeapGcObjectHeader
+{
+public:
+    ~CacheableDictionary()
+    {
+        if (m_hashTable != nullptr)
+        {
+            delete [] m_hashTable;
+        }
+    }
+
+    struct HashTableEntry
+    {
+        GeneralHeapPointer<void> m_key;
+        uint32_t m_slot;
+    };
+
+    // Create an empty CacheableDictionary with expected 'numSlots' properties and specified inline storage capacity
+    //
+    static CacheableDictionary* WARN_UNUSED CreateEmptyDictionary(VM* vm, uint32_t anticipatedNumSlots, uint8_t inlineCapacity, bool shouldNeverTransitToUncacheableDictionary)
+    {
+        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        SystemHeapGcObjectHeader::Populate(r);
+        r->m_shouldNeverTransitToUncacheableDictionary = shouldNeverTransitToUncacheableDictionary;
+        r->m_inlineNamedStorageCapacity = inlineCapacity;
+        r->m_butterflyNamedStorageCapacity = 0;
+        uint32_t hashTableMask = RoundUpToPowerOfTwo(anticipatedNumSlots) * 2 - 1;
+        hashTableMask = std::max(hashTableMask, 127U);
+        r->m_hashTableMask = hashTableMask;
+        r->m_slotCount = 0;
+        r->m_hashTable = new HashTableEntry[hashTableMask + 1];
+        r->m_metatable.m_value = 0;
+        memset(r->m_hashTable, 0, sizeof(HashTableEntry) * (hashTableMask + 1));
+        return r;
+    }
+
+    CacheableDictionary* WARN_UNUSED RelocateForAddingOrRemovingMetatable(VM* vm)
+    {
+        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        // m_metatable field is intentionally not populated because it shall be populated by our caller
+        //
+        SystemHeapGcObjectHeader::Populate(r);
+        r->m_shouldNeverTransitToUncacheableDictionary = m_shouldNeverTransitToUncacheableDictionary;
+        r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
+        r->m_butterflyNamedStorageCapacity = m_butterflyNamedStorageCapacity;
+        r->m_hashTableMask = m_hashTableMask;
+        r->m_slotCount = m_slotCount;
+        r->m_hashTable = m_hashTable;
+        // Since CacheableDictionary and object is 1-on-1, 'this' will never be used anymore, so just have the new dictionary steal our hash table
+        //
+        m_hashTable = nullptr;
+        return r;
+    }
+
+    struct CreateFromStructureResult
+    {
+        CacheableDictionary* m_dictionary;
+        // The slot to put the value for the newly inserted prop
+        //
+        uint32_t m_slot;
+        bool m_shouldGrowButterfly;
+    };
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static uint32_t WARN_UNUSED GetInitOrNextButterflyCapacity(T self)
+    {
+        if (self->m_butterflyNamedStorageCapacity == 0)
+        {
+            uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeInitialButterflyCapacityForDictionary(self->m_inlineNamedStorageCapacity);
+            assert(newCapacity > 0);
+            return newCapacity;
+        }
+        else
+        {
+            uint32_t oldCapacity = self->m_butterflyNamedStorageCapacity;
+            uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeNextButterflyCapacityForDictionary(oldCapacity);
+            assert(newCapacity > oldCapacity);
+            return newCapacity;
+        }
+    }
+
+    static UserHeapPointer<void> GetPolyMetatableFromObject(TableObject* obj, uint32_t slot, uint32_t inlineCapacity, uint32_t outlineCapacity);
+
+    // Handle the case that a structure transitions to a CacheableDictionary due to too many properties
+    //
+    static void CreateFromStructure(VM* vm, TableObject* obj, Structure* structure, UserHeapPointer<void> newProp, CreateFromStructureResult& result /*out*/)
+    {
+        uint32_t neededSlots = structure->m_numSlots;
+        // One more slot for the newly added key
+        //
+        neededSlots += 1;
+        if (Structure::IsPolyMetatable(structure))
+        {
+            // Now the metatable is stored in the dictionary, since dictionary is 1-to-1 with object
+            // (but since we don't change dictionary pointer when we change metatable, the metatable is still not uncacheable, i.e. behaves like PolyMetatable)
+            //
+            neededSlots -= 1;
+        }
+
+        // Populate various fields
+        //
+        CacheableDictionary* r = CacheableDictionary::CreateEmptyDictionary(vm, neededSlots, structure->m_inlineNamedStorageCapacity, false /*shouldNeverTransitToUncacheableDictionary*/);
+        r->m_butterflyNamedStorageCapacity = structure->m_butterflyNamedStorageCapacity;
+        if (Structure::IsPolyMetatable(structure))
+        {
+            r->m_metatable = GetPolyMetatableFromObject(obj, Structure::GetPolyMetatableSlot(structure), structure->m_inlineNamedStorageCapacity, structure->m_butterflyNamedStorageCapacity);
+        }
+        else
+        {
+            r->m_metatable = GeneralHeapPointer<void>(structure->m_metatable).As();
+        }
+
+        result.m_dictionary = r;
+        if (Structure::IsPolyMetatable(structure))
+        {
+            result.m_shouldGrowButterfly = false;
+            result.m_slot = Structure::GetPolyMetatableSlot(structure);
+        }
+        else if (structure->m_inlineNamedStorageCapacity + structure->m_butterflyNamedStorageCapacity == structure->m_numSlots)
+        {
+            result.m_shouldGrowButterfly = true;
+            r->m_butterflyNamedStorageCapacity = GetInitOrNextButterflyCapacity(r);
+            result.m_slot = structure->m_numSlots;
+        }
+        else
+        {
+            result.m_shouldGrowButterfly = false;
+            result.m_slot = structure->m_numSlots;
+        }
+
+        assert(r->m_butterflyNamedStorageCapacity + r->m_inlineNamedStorageCapacity >= neededSlots);
+        assert(result.m_slot < neededSlots);
+        AssertImp(result.m_shouldGrowButterfly, r->m_butterflyNamedStorageCapacity > structure->m_butterflyNamedStorageCapacity);
+        AssertImp(!result.m_shouldGrowButterfly, r->m_butterflyNamedStorageCapacity == structure->m_butterflyNamedStorageCapacity);
+
+        // Insert the properties into the hash table
+        //
+#ifndef NDEBUG
+        std::unordered_set<int64_t> showedUpKeys;
+        std::unordered_set<uint32_t> showedUpSlots;
+#endif
+        StructureIterator iterator(structure);
+        while (iterator.HasMore())
+        {
+            UserHeapPointer<void> key = iterator.GetCurrentKey().As();
+            uint32_t keySlot = iterator.GetCurrentSlotOrdinal();
+            iterator.Advance();
+
+            if (key == vm->GetSpecialKeyForMetadataSlot())
+            {
+                continue;
+            }
+            assert(keySlot != result.m_slot);
+
+#ifndef NDEBUG
+            assert(!showedUpKeys.count(key.m_value));
+            assert(!showedUpSlots.count(keySlot));
+            showedUpKeys.insert(key.m_value);
+            showedUpSlots.insert(keySlot);
+#endif
+
+            r->InsertNonExistentPropertyForInitOrResize(key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), keySlot);
+        }
+
+        assert(!showedUpKeys.count(newProp.m_value));
+        assert(!showedUpSlots.count(result.m_slot));
+        assert(showedUpKeys.size() + 1 == neededSlots);
+
+        r->InsertNonExistentPropertyForInitOrResize(newProp, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(newProp), result.m_slot);
+
+        r->m_slotCount = neededSlots;
+    }
+
+    // Only used for initialization and resize, so this does not check for resize, and does not update slot count!
+    //
+    void InsertNonExistentPropertyForInitOrResize(UserHeapPointer<void> prop, uint32_t propHash, uint32_t slotOrdinal)
+    {
+        size_t htMask = m_hashTableMask;
+        size_t slot = propHash & htMask;
+        while (m_hashTable[slot].m_key.m_value != 0)
+        {
+            assert(m_hashTable[slot].m_key.As() != prop.As());
+            slot = (slot + 1) & htMask;
+        }
+        m_hashTable[slot].m_key = prop.As();
+        m_hashTable[slot].m_slot = slotOrdinal;
+    }
+
+    // After an insertion, resize the hash table if needed. Return true if the hash table is resized.
+    //
+    // If returned true, the caller should check if the CacheableDictionary should transit to UncacheableDictionary
+    // due to the table containing too many elements but the values of most of them are nil
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static bool WARN_UNUSED ResizeIfNeeded(T self)
+    {
+        if (likely(self->m_slotCount * 2 < self->m_hashTableMask))
+        {
+            return false;
+        }
+
+        TranslateToRawPointer(self)->ResizeImpl();
+        return true;
+    }
+
+    void NO_INLINE ResizeImpl()
+    {
+        assert(is_power_of_2(m_hashTableMask + 1));
+        uint32_t oldMask = m_hashTableMask;
+        uint32_t newMask = oldMask * 2 + 1;
+        ReleaseAssert(newMask < std::numeric_limits<uint32_t>::max());
+        m_hashTableMask = newMask;
+
+        HashTableEntry* oldHt = m_hashTable;
+        m_hashTable = new HashTableEntry[newMask + 1];
+        memset(m_hashTable, 0, sizeof(HashTableEntry) * (newMask + 1));
+
+        DEBUG_ONLY(uint32_t cnt = 0;)
+        HashTableEntry* oldHtEnd = oldHt + oldMask + 1;
+        HashTableEntry* curEntry = oldHt;
+        while (curEntry < oldHtEnd)
+        {
+            if (curEntry->m_key.m_value != 0)
+            {
+                UserHeapPointer<void> key = curEntry->m_key.As();
+                uint32_t keySlot = curEntry->m_slot;
+                InsertNonExistentPropertyForInitOrResize(key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), keySlot);
+                DEBUG_ONLY(cnt++;)
+            }
+            curEntry++;
+        }
+        assert(cnt == m_slotCount);
+
+        delete [] oldHt;
+    }
+
+    // Query the slot for a property
+    // Return false if the property is not found, the 'hashSlot' output can be used for insertion
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static bool WARN_UNUSED ALWAYS_INLINE GetSlotOrdinalFromPropertyImpl(T self, UserHeapPointer<void> prop, uint32_t propHash, size_t& slotForInsertion /*out*/, uint32_t& slotOrdinal /*out*/)
+    {
+        size_t hashMask = self->m_hashTableMask;
+        size_t slot = propHash & hashMask;
+        GeneralHeapPointer<void> gprop = prop.As();
+        while (true)
+        {
+            GeneralHeapPointer<void> key = TCGet(self->m_hashTable[slot].m_key);
+            if (key.m_value == 0)
+            {
+                slotForInsertion = slot;
+                return false;
+            }
+            if (key == gprop)
+            {
+                slotOrdinal = self->m_hashTable[slot].m_slot;
+                return true;
+            }
+            slot = (slot + 1) & hashMask;
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> prop, uint32_t& slotOrdinal /*out*/)
+    {
+        size_t slotForInsertionUnused;
+        return GetSlotOrdinalFromPropertyImpl(self, prop.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(prop), slotForInsertionUnused /*out*/, slotOrdinal /*out*/);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(T self, UserHeapPointer<void> prop, uint32_t& slotOrdinal /*out*/)
+    {
+        size_t slotForInsertionUnused;
+        return GetSlotOrdinalFromPropertyImpl(self, prop, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop), slotForInsertionUnused /*out*/, slotOrdinal /*out*/);
+    }
+
+    struct PutByIdResult
+    {
+        uint32_t m_slot;
+        uint32_t m_newButterflyCapacity;
+        bool m_shouldGrowButterfly;
+        bool m_shouldCheckForTransitionToUncacheableDictionary;
+    };
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static void ALWAYS_INLINE PreparePutPropertyImpl(T self, UserHeapPointer<void> prop, uint32_t propHash, PutByIdResult& result /*out*/)
+    {
+        size_t slotForInsertion;
+        if (GetSlotOrdinalFromPropertyImpl(self, prop, propHash, slotForInsertion /*out*/, result.m_slot /*out*/))
+        {
+            result.m_shouldGrowButterfly = false;
+            result.m_shouldCheckForTransitionToUncacheableDictionary = false;
+            return;
+        }
+
+        // Slot not found
+        //
+        result.m_slot = self->m_slotCount;
+        assert(self->m_slotCount <= self->m_inlineNamedStorageCapacity + self->m_butterflyNamedStorageCapacity);
+        if (self->m_slotCount == self->m_inlineNamedStorageCapacity + self->m_butterflyNamedStorageCapacity)
+        {
+            result.m_shouldGrowButterfly = true;
+            result.m_newButterflyCapacity = GetInitOrNextButterflyCapacity(self);
+        }
+        else
+        {
+            result.m_shouldGrowButterfly = false;
+        }
+
+        // insert into hash table
+        //
+        TCSet(self->m_hashTable[slotForInsertion].m_key, GeneralHeapPointer<void>(prop.As()));
+        self->m_hashTable[slotForInsertion].m_slot = result.m_slot;
+        self->m_slotCount++;
+        result.m_shouldCheckForTransitionToUncacheableDictionary = ResizeIfNeeded(self);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static void PreparePutById(T self, UserHeapPointer<HeapString> prop, PutByIdResult& result /*out*/)
+    {
+        PreparePutPropertyImpl(self, prop.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(prop), result);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
+    static void PreparePutByMaybeNonStringKey(T self, UserHeapPointer<void> prop, PutByIdResult& result /*out*/)
+    {
+        PreparePutPropertyImpl(self, prop, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop), result);
+    }
+
+    // For the global object we should make it never transit to UncacheableDictionary, as that would destroy the performance for all global variable access
+    //
+    bool m_shouldNeverTransitToUncacheableDictionary;
+    uint8_t m_inlineNamedStorageCapacity;
+    uint32_t m_butterflyNamedStorageCapacity;
+    uint32_t m_hashTableMask;
+    uint32_t m_slotCount;
+    HashTableEntry* m_hashTable;
+    // Whenever this value is changed from zero to non-zero, or from non-zero to zero, we must relocate the structure, otherwise we would break the IC!
+    //
+    UserHeapPointer<void> m_metatable;
+};
 
 inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM* vm, Structure* shc)
 {
@@ -1534,7 +1907,7 @@ end_setup:
             if (m_numSlots == m_inlineNamedStorageCapacity)
             {
                 needButterflyExpansion = true;
-                expandedButterflyCapacity = ComputeInitialButterflyCapacity(m_inlineNamedStorageCapacity);
+                expandedButterflyCapacity = ButterflyNamedStorageGrowthPolicy::ComputeInitialButterflyCapacityForStructure(m_inlineNamedStorageCapacity, x_maxNumSlots);
             }
         }
         else
@@ -1545,7 +1918,7 @@ end_setup:
             if (usedLen == m_butterflyNamedStorageCapacity)
             {
                 needButterflyExpansion = true;
-                expandedButterflyCapacity = ComputeNextButterflyCapacity(m_inlineNamedStorageCapacity, m_butterflyNamedStorageCapacity);
+                expandedButterflyCapacity = ButterflyNamedStorageGrowthPolicy::ComputeNextButterflyCapacityForStructure(m_inlineNamedStorageCapacity, m_butterflyNamedStorageCapacity, x_maxNumSlots);
             }
         }
         AssertImp(needButterflyExpansion, static_cast<uint32_t>(expandedButterflyCapacity) + m_inlineNamedStorageCapacity > m_numSlots);
@@ -1928,9 +2301,10 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
     //
     if (m_numSlots >= x_maxNumSlots)
     {
-        // TODO: transit to dictionary
+        // Transit to CacheableDictionary
         //
-        ReleaseAssert(false);
+        result.m_shouldTransitionToDictionaryMode = true;
+        return;
     }
 
     int32_t transitionKey = GeneralHeapPointer<void>(key.As()).m_value;
@@ -1949,11 +2323,11 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
     TransitionKind tkind = transitionStructure->m_parentEdgeTransitionKind;
     assert(tkind == TransitionKind::AddProperty || tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
 
-    result.m_transitionedToDictionaryMode = false;
+    result.m_shouldTransitionToDictionaryMode = false;
     result.m_shouldGrowButterfly = (tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
     assert(transitionStructure->m_numSlots == m_numSlots + 1);
     result.m_slotOrdinal = m_numSlots;
-    result.m_newStructureOrDictionary = transitionStructure;
+    result.m_newStructure = transitionStructure;
 
 #ifndef NDEBUG
     // Confirm that the key exists in the new structure
@@ -1968,8 +2342,7 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
 
 inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/)
 {
-    // TODO: assert that 'key' is a table object
-    //
+    assert(key.As<UserHeapGcObjectHeader>()->m_type == Type::TABLE);
     GeneralHeapPointer<void> metatable { key.As() };
     constexpr int32_t transitionKey = StructureTransitionTable::x_key_add_or_to_poly_metatable;
     Structure* transitionStructure;
