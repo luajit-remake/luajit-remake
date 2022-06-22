@@ -105,17 +105,16 @@ private:
     int m_value;
 };
 
-class GlobalObject;
 class alignas(64) CoroutineRuntimeContext
 {
 public:
     // The constant table of the current function, if interpreter
     //
-    uint64_t* m_constants;
+    TValue* m_constants;
 
     // The global object, if interpreter
     //
-    GlobalObject* m_globalObject;
+    UserHeapPointer<TableObject> m_globalObject;
 
     // slot [m_variadicRetSlotBegin + ord] holds variadic return value 'ord'
     //
@@ -181,7 +180,7 @@ class FunctionExecutable;
 class CodeBlock final : public ExecutableCode
 {
 public:
-    GlobalObject* m_globalObject;
+    UserHeapPointer<TableObject> m_globalObject;
 
     uint32_t m_stackFrameNumSlots;
     uint32_t m_numUpValues;
@@ -344,23 +343,49 @@ public:
     std::vector<InliningStackEntry> m_inlineStack;
 };
 
-enum class Opcode
-{
-    BcReturn,
-    BcCall,
-    BcAddVV,
-    BcSubVV,
-    BcIsLTVV,
-    BcConstant,
-    X_END_OF_ENUM
-};
+#define OPCODE_LIST     \
+    BcTableGetById,     \
+    BcTablePutById,     \
+    BcTableGetByVal,    \
+    BcTablePutByVal,    \
+    BcGlobalGet,        \
+    BcGlobalPut,        \
+    BcReturn,           \
+    BcCall,             \
+    BcAddVV,            \
+    BcSubVV,            \
+    BcIsLTVV,           \
+    BcConstant
 
-extern const InterpreterFn x_interpreter_dispatches[static_cast<size_t>(Opcode::X_END_OF_ENUM)];
+#define macro(opcodeCppName) class opcodeCppName;
+PP_FOR_EACH(macro, OPCODE_LIST)
+#undef macro
+
+#define macro(opcodeCppName) + 1
+constexpr size_t x_numOpcodes = 0 PP_FOR_EACH(macro, OPCODE_LIST);
+#undef macro
+
+namespace internal
+{
+
+template<typename T>
+struct opcode_for_type_impl;
+
+#define macro(ord, opcodeCppName) template<> struct opcode_for_type_impl<opcodeCppName> { static constexpr uint8_t value = ord; };
+PP_FOR_EACH_UNPACK_TUPLE(macro, PP_ZIP_TWO_LISTS((PP_NATURAL_NUMBERS_LIST), (OPCODE_LIST)))
+#undef macro
+
+}   // namespace internal
+
+template<typename T>
+constexpr uint8_t x_opcodeId = internal::opcode_for_type_impl<T>::value;
+
+extern const InterpreterFn x_interpreter_dispatches[x_numOpcodes];
 
 #define Dispatch(rc, stackframe, instr)                                                                                          \
     do {                                                                                                                         \
         uint8_t dispatch_nextopcode = *reinterpret_cast<const uint8_t*>(instr);                                                  \
-        assert(dispatch_nextopcode < static_cast<size_t>(Opcode::X_END_OF_ENUM));                                                \
+        assert(dispatch_nextopcode < x_numOpcodes);                                                                              \
 _Pragma("clang diagnostic push")                                                                                                 \
 _Pragma("clang diagnostic ignored \"-Wuninitialized\"")                                                                          \
         uint64_t dispatch_unused;                                                                                                \
@@ -377,6 +402,245 @@ inline void EnterInterpreter(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
 //
 constexpr uint32_t x_minNilFillReturnValues = 3;
 
+class BcTableGetById
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_dst;
+    uint32_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTableGetById* bc = reinterpret_cast<const BcTableGetById*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTableGetById>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        assert(rc->m_constants[bc->m_index].IsPointer(TValue::x_mivTag));
+        UserHeapPointer<HeapString> index = rc->m_constants[bc->m_index].AsPointer<HeapString>();
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(base.As<TableObject>(), index, icInfo /*out*/);
+            TValue result = TableObject::GetById(base.As<TableObject>(), index.As<void>(), icInfo);
+
+            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+            Dispatch(rc, sfp, bcu + sizeof(BcTableGetById));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcTablePutById
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_src;
+    uint32_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTablePutById* bc = reinterpret_cast<const BcTablePutById*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTablePutById>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        assert(rc->m_constants[bc->m_index].IsPointer(TValue::x_mivTag));
+        UserHeapPointer<HeapString> index = rc->m_constants[bc->m_index].AsPointer<HeapString>();
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+            PutByIdICInfo icInfo;
+            TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
+            TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+            TableObject::PutById(base.As<TableObject>(), index.As<void>(), newValue, icInfo);
+            Dispatch(rc, sfp, bcu + sizeof(BcTablePutById));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcTableGetByVal
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_index;
+    BytecodeSlot m_dst;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTableGetByVal* bc = reinterpret_cast<const BcTableGetByVal*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTableGetByVal>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            TValue index = *StackFrameHeader::GetLocalAddr(sfp, bc->m_index);
+            TValue result;
+            if (index.IsInt32(TValue::x_int32Tag))
+            {
+                GetByIntegerIndexICInfo icInfo;
+                TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
+                result = TableObject::GetByIntegerIndex(base.As<TableObject>(), index.AsInt32(), icInfo);
+            }
+            else if (index.IsDouble(TValue::x_int32Tag))
+            {
+                GetByIntegerIndexICInfo icInfo;
+                TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
+                result = TableObject::GetByDoubleVal(base.As<TableObject>(), index.AsDouble(), icInfo);
+            }
+            else if (index.IsPointer(TValue::x_mivTag))
+            {
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(base.As<TableObject>(), index.AsPointer(), icInfo /*out*/);
+                result = TableObject::GetById(base.As<TableObject>(), index.AsPointer(), icInfo);
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+            Dispatch(rc, sfp, bcu + sizeof(BcTableGetByVal));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcTablePutByVal
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_index;
+    BytecodeSlot m_src;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTablePutByVal* bc = reinterpret_cast<const BcTablePutByVal*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTablePutByVal>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            TValue index = *StackFrameHeader::GetLocalAddr(sfp, bc->m_index);
+            TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+            if (index.IsInt32(TValue::x_int32Tag))
+            {
+                TableObject::PutByValIntegerIndex(base.As<TableObject>(), index.AsInt32(), newValue);
+            }
+            else if (index.IsDouble(TValue::x_int32Tag))
+            {
+                TableObject::PutByValDoubleIndex(base.As<TableObject>(), index.AsDouble(), newValue);
+            }
+            else if (index.IsPointer(TValue::x_mivTag))
+            {
+                PutByIdICInfo icInfo;
+                TableObject::PreparePutById(base.As<TableObject>(), index.AsPointer(), icInfo /*out*/);
+                TableObject::PutById(base.As<TableObject>(), index.AsPointer(), newValue, icInfo);
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            Dispatch(rc, sfp, bcu + sizeof(BcTablePutByVal));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcGlobalGet
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    uint32_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcGlobalGet* bc = reinterpret_cast<const BcGlobalGet*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcGlobalGet>);
+
+        assert(rc->m_constants[bc->m_index].IsPointer(TValue::x_mivTag));
+        UserHeapPointer<HeapString> index = rc->m_constants[bc->m_index].AsPointer<HeapString>();
+
+        UserHeapPointer<TableObject> base = rc->m_globalObject;
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(base.As<TableObject>(), index, icInfo /*out*/);
+        TValue result = TableObject::GetById(base.As(), index.As<void>(), icInfo);
+
+        *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+        Dispatch(rc, sfp, bcu + sizeof(BcGlobalGet));
+    }
+} __attribute__((__packed__));
+
+class BcGlobalPut
+{
+public:
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    uint32_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcGlobalPut* bc = reinterpret_cast<const BcGlobalPut*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcGlobalPut>);
+
+        assert(rc->m_constants[bc->m_index].IsPointer(TValue::x_mivTag));
+        UserHeapPointer<HeapString> index = rc->m_constants[bc->m_index].AsPointer<HeapString>();
+        TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+
+        UserHeapPointer<TableObject> base = rc->m_globalObject;
+        PutByIdICInfo icInfo;
+        TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
+        TableObject::PutById(base.As(), index.As<void>(), newValue, icInfo);
+
+        Dispatch(rc, sfp, bcu + sizeof(BcGlobalPut));
+    }
+} __attribute__((__packed__));
+
+
 class BcReturn
 {
 public:
@@ -388,7 +652,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcReturn* bc = reinterpret_cast<const BcReturn*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcReturn));
+        assert(bc->m_opcode == x_opcodeId<BcReturn>);
         assert(bc->m_slotBegin.IsLocal());
         TValue* pbegin = StackFrameHeader::GetLocalAddr(sfp, bc->m_slotBegin);
         uint32_t numRetValues = bc->m_numReturnValues;
@@ -437,7 +701,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcCall));
+        assert(bc->m_opcode == x_opcodeId<BcCall>);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
 
         HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
@@ -575,7 +839,7 @@ public:
         uint8_t* callerBytecodeStart = callerEc->m_bytecode;
         ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
         const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
-        assert(static_cast<Opcode>(bc->m_opcode) == Opcode::BcCall);
+        assert(bc->m_opcode == x_opcodeId<BcCall>);
         if (bc->m_keepVariadicRet)
         {
             rc->m_numVariadicRets = SafeIntegerCast<uint32_t>(numRetValues);
@@ -620,7 +884,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcAddVV* bc = reinterpret_cast<const BcAddVV*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcAddVV));
+        assert(bc->m_opcode == x_opcodeId<BcAddVV>);
         TValue lhs = StackFrameHeader::GetLocal(stackframe, bc->m_lhs);
         TValue rhs = StackFrameHeader::GetLocal(stackframe, bc->m_rhs);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -646,7 +910,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcSubVV* bc = reinterpret_cast<const BcSubVV*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcSubVV));
+        assert(bc->m_opcode == x_opcodeId<BcSubVV>);
         TValue lhs = StackFrameHeader::GetLocal(stackframe, bc->m_lhs);
         TValue rhs = StackFrameHeader::GetLocal(stackframe, bc->m_rhs);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -672,7 +936,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcIsLTVV* bc = reinterpret_cast<const BcIsLTVV*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcIsLTVV));
+        assert(bc->m_opcode == x_opcodeId<BcIsLTVV>);
         TValue lhs = StackFrameHeader::GetLocal(stackframe, bc->m_lhs);
         TValue rhs = StackFrameHeader::GetLocal(stackframe, bc->m_rhs);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -703,7 +967,7 @@ public:
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
         const BcConstant* bc = reinterpret_cast<const BcConstant*>(bcu);
-        assert(bc->m_opcode == static_cast<uint8_t>(Opcode::BcConstant));
+        assert(bc->m_opcode == x_opcodeId<BcConstant>);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = bc->m_value;
         Dispatch(rc, stackframe, bcu + sizeof(BcConstant));
     }

@@ -35,7 +35,7 @@ StringList GetStringList(VM* vm, size_t n)
     return result;
 }
 
-TEST(ObjectGetSetById, Sanity)
+TEST(ObjectGetPutById, Sanity)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -424,6 +424,36 @@ TEST(ObjectGetSetById, CacheableDictionary)
                 ReleaseAssert(result.m_value == arrayExpected[i].m_value);
             }
         }
+    }
+}
+
+// CacheableDictionary can only IC on hit GetById, not on miss GetById, because we have no way
+// to know when the property is added in the future
+//
+TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    const uint32_t numStrings = 500;
+    StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
+    Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 8 /*inlineCapacity*/);
+    HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, 0 /*initArraySize*/);
+    for (uint32_t i = 0; i < numStrings - 1; i++)
+    {
+        UserHeapPointer<HeapString> propToAdd = strings[i];
+        PutByIdICInfo icInfo;
+        TableObject::PreparePutById(curObject, propToAdd, icInfo /*out*/);
+        TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456), TValue::x_int32Tag), icInfo);
+    }
+
+    {
+        UserHeapPointer<HeapString> propToTest = strings[numStrings - 1];
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(curObject, propToTest, icInfo /*out*/);
+        ReleaseAssert(icInfo.m_hiddenClass.As() == TCGet(curObject->m_hiddenClass).As());
+        ReleaseAssert(icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::CacheableDictionary);
+        ReleaseAssert(icInfo.m_mayHaveMetatable == false);
+        ReleaseAssert(icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
     }
 }
 

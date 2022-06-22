@@ -129,6 +129,10 @@ struct GetByIdICInfo
         // The GetById must return nil because the property doesn't exist
         //
         MustBeNil,
+        // The GetById must return nil because the property doesn't exist,
+        // however this is not cacheable because the hidden class is a CacheableDictionary
+        //
+        MustBeNilButUncacheable,
         // The property is in the inlined storage in m_slot
         //
         InlinedStorage,
@@ -525,7 +529,15 @@ public:
         }
         else
         {
-            icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
+            if (ty == Type::Structure)
+            {
+                icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
+            }
+            else
+            {
+                assert(ty == Type::CacheableDictionary);
+                icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNilButUncacheable;
+            }
         }
     }
 
@@ -534,7 +546,7 @@ public:
     {
         // TODO: handle metatable
 
-        if (icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNil)
+        if (icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNil || icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable)
         {
             return TValue::Nil();
         }

@@ -37,7 +37,7 @@ struct SanityCallOpcodeInfo
 //
 void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
 {
-    SanityCallOpcodeInfo* info = reinterpret_cast<SanityCallOpcodeInfo*>(rc->m_globalObject);
+    SanityCallOpcodeInfo* info = reinterpret_cast<SanityCallOpcodeInfo*>(rc->m_globalObject.m_value);
     ReleaseAssert(!info->m_checkerHasExecuted);
     info->m_checkerHasExecuted = true;
 
@@ -166,7 +166,7 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
 
     uint8_t* byt = callerCb->m_bytecode;
     BcCall* callOp = reinterpret_cast<BcCall*>(byt);
-    callOp->m_opcode = static_cast<uint8_t>(Opcode::BcCall);
+    callOp->m_opcode = x_opcodeId<BcCall>;
 
     CoroutineRuntimeContext rc;
 
@@ -253,7 +253,7 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
 
                 // we repurpose this field to pass 'info' to our correctness checker
                 //
-                rc.m_globalObject = reinterpret_cast<GlobalObject*>(&info);
+                rc.m_globalObject.m_value = reinterpret_cast<int64_t>(&info);
 
                 callOp->m_funcSlot = BytecodeSlot::Local(static_cast<int>(funcStart));
                 callOp->m_numFixedParams = numFixedParams;
@@ -323,70 +323,70 @@ TEST(Interpreter, SanityFibonacci)
     BcReturn* instr14 = reinterpret_cast<BcReturn*>(p);     // 'ret'
     p += sizeof(BcReturn);
 
-    instr1->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr1->m_opcode = x_opcodeId<BcConstant>;
     instr1->m_dst = BytecodeSlot::Local(1);
     instr1->m_value = TValue::CreateDouble(3);
 
-    instr2->m_opcode = static_cast<uint8_t>(Opcode::BcIsLTVV);
+    instr2->m_opcode = x_opcodeId<BcIsLTVV>;
     instr2->m_lhs = BytecodeSlot::Local(0);
     instr2->m_rhs = BytecodeSlot::Local(1);
     instr2->m_offset = static_cast<int32_t>(reinterpret_cast<intptr_t>(instr13) - reinterpret_cast<intptr_t>(instr2));
 
-    instr3->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr3->m_opcode = x_opcodeId<BcConstant>;
     instr3->m_dst = BytecodeSlot::Local(1);
     instr3->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
 
-    instr4->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr4->m_opcode = x_opcodeId<BcConstant>;
     instr4->m_dst = BytecodeSlot::Local(2);
     instr4->m_value = TValue::CreateDouble(1);
 
-    instr5->m_opcode = static_cast<uint8_t>(Opcode::BcSubVV);
+    instr5->m_opcode = x_opcodeId<BcSubVV>;
     instr5->m_result = BytecodeSlot::Local(2);
     instr5->m_lhs = BytecodeSlot::Local(0);
     instr5->m_rhs = BytecodeSlot::Local(2);
 
-    instr6->m_opcode = static_cast<uint8_t>(Opcode::BcCall);
+    instr6->m_opcode = x_opcodeId<BcCall>;
     instr6->m_funcSlot = BytecodeSlot::Local(1);
     instr6->m_numFixedParams = 1;
     instr6->m_numFixedRets = 1;
     instr6->m_passVariadicRetAsParam = false;
     instr6->m_keepVariadicRet = false;
 
-    instr7->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr7->m_opcode = x_opcodeId<BcConstant>;
     instr7->m_dst = BytecodeSlot::Local(2);
     instr7->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
 
-    instr8->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr8->m_opcode = x_opcodeId<BcConstant>;
     instr8->m_dst = BytecodeSlot::Local(3);
     instr8->m_value = TValue::CreateDouble(2);
 
-    instr9->m_opcode = static_cast<uint8_t>(Opcode::BcSubVV);
+    instr9->m_opcode = x_opcodeId<BcSubVV>;
     instr9->m_result = BytecodeSlot::Local(3);
     instr9->m_lhs = BytecodeSlot::Local(0);
     instr9->m_rhs = BytecodeSlot::Local(3);
 
-    instr10->m_opcode = static_cast<uint8_t>(Opcode::BcCall);
+    instr10->m_opcode = x_opcodeId<BcCall>;
     instr10->m_funcSlot = BytecodeSlot::Local(2);
     instr10->m_numFixedParams = 1;
     instr10->m_numFixedRets = 1;
     instr10->m_passVariadicRetAsParam = false;
     instr10->m_keepVariadicRet = false;
 
-    instr11->m_opcode = static_cast<uint8_t>(Opcode::BcAddVV);
+    instr11->m_opcode = x_opcodeId<BcAddVV>;
     instr11->m_lhs = BytecodeSlot::Local(1);
     instr11->m_rhs = BytecodeSlot::Local(2);
     instr11->m_result = BytecodeSlot::Local(1);
 
-    instr12->m_opcode = static_cast<uint8_t>(Opcode::BcReturn);
+    instr12->m_opcode = x_opcodeId<BcReturn>;
     instr12->m_numReturnValues = 1;
     instr12->m_isVariadicRet = false;
     instr12->m_slotBegin = BytecodeSlot::Local(1);
 
-    instr13->m_opcode = static_cast<uint8_t>(Opcode::BcConstant);
+    instr13->m_opcode = x_opcodeId<BcConstant>;
     instr13->m_dst = BytecodeSlot::Local(1);
     instr13->m_value = TValue::CreateDouble(1);
 
-    instr14->m_opcode = static_cast<uint8_t>(Opcode::BcReturn);
+    instr14->m_opcode = x_opcodeId<BcReturn>;
     instr14->m_numReturnValues = 1;
     instr14->m_isVariadicRet = false;
     instr14->m_slotBegin = BytecodeSlot::Local(1);
