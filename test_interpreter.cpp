@@ -10,6 +10,7 @@ CodeBlock* AllocateInterpreterCodeBlockWithBytecodeSize(size_t bytecodeSize)
     SystemHeapPointer<void> ptr = VM::GetActiveVMForCurrentThread()->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(CodeBlock)));
     void* retVoid = TranslateToRawPointer(ptr.As<void>());
     CodeBlock* ret = new (retVoid) CodeBlock();
+    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(ret);
     ret->m_bytecodeLength = SafeIntegerCast<uint32_t>(bytecodeSize);
     ret->m_bytecode = new uint8_t[bytecodeSize];
     return ret;
@@ -148,12 +149,12 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
 
     CodeBlock* callerCb = AllocateInterpreterCodeBlockWithBytecodeSize(1000);
     callerCb->m_stackFrameNumSlots = 30;
-    callerCb->m_numUpValues = 0;
+    callerCb->m_numUpvalues = 0;
     callerCb->m_bestEntryPoint = nullptr;
 
     CodeBlock* calleeCb = AllocateInterpreterCodeBlockWithBytecodeSize(1000);
     calleeCb->m_stackFrameNumSlots = 30;
-    calleeCb->m_numUpValues = 0;
+    calleeCb->m_numUpvalues = 0;
     calleeCb->m_bestEntryPoint = CheckStackLayout;
 
     HeapPtr<FunctionObject> callerFunc = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();
@@ -285,7 +286,7 @@ TEST(Interpreter, SanityFibonacci)
     fib->m_stackFrameNumSlots = 4;
     fib->m_hasVariadicArguments = false;
     fib->m_numFixedArguments = 1;
-    fib->m_numUpValues = 0;
+    fib->m_numUpvalues = 0;
     fib->m_bestEntryPoint = EnterInterpreter;
 
     HeapPtr<FunctionObject> fibObj = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();

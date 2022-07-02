@@ -51,6 +51,11 @@ struct MiscImmediateValue
         return MiscImmediateValue { x_nil };
     }
 
+    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateBoolean(bool v)
+    {
+        return MiscImmediateValue { v ? x_true : x_false };
+    }
+
     static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateFalse()
     {
         return MiscImmediateValue { x_false };

@@ -172,10 +172,33 @@ public:
 
     Packed() : Packed(T { }) { }
     Packed(const T& value) { UnalignedStore<T>(m_storage, value); }
-    Packed(HeapRef<Packed> value) { UnalignedStore<T>(m_storage, value.get()); }
 
     uint8_t m_storage[sizeof(T)];
 };
+
+template<typename T>
+struct is_packed_class_impl : std::false_type { };
+
+template<typename T>
+struct is_packed_class_impl<Packed<T>> : std::true_type { };
+
+template<typename T>
+struct is_packed_class_impl<const Packed<T>> : std::true_type { };
+
+template<typename T>
+constexpr bool is_packed_class_v = is_packed_class_impl<T>::value;
+
+template<typename T>
+struct remove_packed_impl { using type = std::remove_const_t<T>; };
+
+template<typename T>
+struct remove_packed_impl<Packed<T>> { using type = T; };
+
+template<typename T>
+struct remove_packed_impl<const Packed<T>> { using type = T; };
+
+template<typename T>
+using remove_packed_t = typename remove_packed_impl<T>::type;
 
 // A severe limitation with HeapPtr classes is that it cannot call member method (since C++ always assumes that the hidden 'this' pointer is
 // in the normal address space, but our HeapPtr is in the GS address space, which cannot be converted to normal address space automatically)
@@ -185,33 +208,31 @@ public:
 // This is what the 'TCGet' and 'TCSet' (TC stands for TriviallyCopyable) is for.
 //
 template<typename T>
-T WARN_UNUSED ALWAYS_INLINE TCGet(T& obj)
+remove_packed_t<T> WARN_UNUSED ALWAYS_INLINE TCGet(T& obj)
 {
     static_assert(std::is_trivially_copyable_v<T>);
-    return obj;
+    if constexpr(is_packed_class_v<T>)
+    {
+        return UnalignedLoad<remove_packed_t<T>>(obj.m_storage);
+    }
+    else
+    {
+        return obj;
+    }
 }
 
 template<typename T>
-T WARN_UNUSED ALWAYS_INLINE TCGet(HeapRef<T> obj)
+remove_packed_t<T> WARN_UNUSED ALWAYS_INLINE TCGet(HeapRef<T> obj)
 {
     static_assert(std::is_trivially_copyable_v<T>);
-    return UnalignedLoad<T>(&obj);
-}
-
-// Overloads for Packed classes
-//
-template<typename T>
-T WARN_UNUSED ALWAYS_INLINE TCGet(Packed<T>& obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    return UnalignedLoad<T>(obj.m_storage);
-}
-
-template<typename T>
-T WARN_UNUSED ALWAYS_INLINE TCGet(HeapRef<Packed<T>> obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    return UnalignedLoad<T>(obj.m_storage);
+    if constexpr(is_packed_class_v<T>)
+    {
+        return UnalignedLoad<remove_packed_t<T>>(obj.m_storage);
+    }
+    else
+    {
+        return UnalignedLoad<T>(&obj);
+    }
 }
 
 template<typename T>

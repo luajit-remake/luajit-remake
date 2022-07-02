@@ -1,6 +1,7 @@
 #include "bytecode.h"
 #include "gtest/gtest.h"
 #include "json_utils.h"
+#include <fstream>
 
 using namespace ToyLang;
 
@@ -18,6 +19,27 @@ TEST(JSONParser, Sanity)
     ReleaseAssert(j.count("b"));
     ReleaseAssert(j["b"].is_string());
     ReleaseAssert(j["b"].get<std::string>() == "cd");
+}
+
+std::string LoadFile(std::string filename)
+{
+    std::ifstream infile(filename, std::ios_base::binary);
+    std::istreambuf_iterator<char> iter { infile }, end;
+    return std::string { iter, end };
+}
+
+TEST(JSONParser, Fib)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    vm->SetUpSegmentationRegister();
+
+    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
+    CoroutineRuntimeContext* rc = CoroutineRuntimeContext::Create(vm, globalObject);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, globalObject, LoadFile("luatests/fib.json"));
+    TValue* stack = new TValue[1000];
+
+    module->EnterVM(rc, stack);
 }
 
 }   // anonymous namespace

@@ -423,33 +423,43 @@ public:
         m_hashTableSizeMask = x_initialSize - 1;
         m_elementCount = 0;
 
-        // Create the special key used as the key for metatable slot in PolyMetatable mode
+        // Create a special key used as an exotic index into the table
         //
+        // The content of the string and its hash value doesn't matter,
+        // because we don't put this string into the global hash table thus it will never be found by others.
+        //
+        // We give it some content for debug purpose, but, we give it a fake hash value, to avoids unnecessary
+        // collision with the real string of that value in the Structure's hash table.
+        //
+        auto createSpecialKey = [&](const char* debugName, uint64_t fakeHash) -> UserHeapPointer<void>
         {
-            // The content of the string and its hash value doesn't matter,
-            // because we don't put this string into the global hash table thus it will never be found by others.
-            // We give it some content for debug purpose, but, we give it a fake hash value, to avoids unnecessary
-            // collision with the real string of that value in the Structure's hash table.
-            //
-            const char* mtDebugName = "(hidden_mt_tbl)";
             StringLengthAndHash slah {
-                .m_length = strlen(mtDebugName),
-                .m_hashValue = 0x1F2E3D4C5B6A798LL
+                .m_length = strlen(debugName),
+                .m_hashValue = fakeHash
             };
 
             size_t allocationLength = HeapString::ComputeAllocationLengthForString(slah.m_length);
             HeapPtrTranslator translator = static_cast<CRTP*>(this)->GetHeapPtrTranslator();
             UserHeapPointer<void> uhp = static_cast<CRTP*>(this)->AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
-            m_specialKeyForMetatableSlot = uhp;
 
             HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
 
             ptr->PopulateHeader(slah);
             // Copy the trailing '\0' as well
             //
-            memcpy(ptr->m_string, mtDebugName, slah.m_length + 1);
-        }
+            memcpy(ptr->m_string, debugName, slah.m_length + 1);
 
+            return uhp;
+        };
+
+        // Create the special key used as the key for metatable slot in PolyMetatable mode
+        //
+        m_specialKeyForMetatableSlot = createSpecialKey("(hidden_mt_tbl)" /*debugName*/, 0x1F2E3D4C5B6A798LL /*specialHash*/);
+
+        // Create the special keys for 'false' and 'true' index
+        //
+        m_specialKeyForBooleanIndex[0] = createSpecialKey("(hidden_false)" /*debugName*/, 0x897A6B5C4D3E2F1LL /*specialHash*/);
+        m_specialKeyForBooleanIndex[1] = createSpecialKey("(hidden_true)" /*debugName*/, 0xC5B4D6A3E792F81LL /*specialHash*/);
         return true;
     }
 
@@ -466,6 +476,11 @@ public:
         return m_specialKeyForMetatableSlot;
     }
 
+    UserHeapPointer<void> GetSpecialKeyForBoolean(bool v)
+    {
+        return m_specialKeyForBooleanIndex[static_cast<size_t>(v)];
+    }
+
 private:
     uint32_t m_hashTableSizeMask;
     uint32_t m_elementCount;
@@ -478,6 +493,10 @@ private:
     // For simplicity, we always assign this special key (which is used exclusively for this purpose) to this slot
     //
     UserHeapPointer<void> m_specialKeyForMetatableSlot;
+
+    // These two special keys are used for 'false' and 'true' respectively
+    //
+    UserHeapPointer<void> m_specialKeyForBooleanIndex[2];
 };
 
 }   // namespace ToyLang

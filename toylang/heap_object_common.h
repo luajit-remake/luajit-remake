@@ -18,6 +18,8 @@ using namespace CommonUtils;
   , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
   , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
   , (ArraySparseMap,                ArraySparseMap,                 HOI_USR_HEAP)       \
+  , (Upvalue,                       Upvalue,                        HOI_USR_HEAP)       \
+  , (ExecutableCode,                ExecutableCode,                 HOI_SYS_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (StructureAnchorHashTable,      StructureAnchorHashTable,       HOI_SYS_HEAP)       \
   , (CacheableDictionary,           CacheableDictionary,            HOI_SYS_HEAP)       \
@@ -133,6 +135,8 @@ public:
         static_assert(std::is_pointer_v<RawTypePtr>);
         using RawType = std::remove_pointer_t<RawTypePtr>;
         static_assert(IsHeapObjectType<RawType>);
+        static_assert(offsetof_member_v<&RawType::m_type> == offsetof_member_v<&UserHeapGcObjectHeader::m_type>);
+        static_assert(offsetof_member_v<&RawType::m_cellState> == offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>);
         self->m_type = TypeEnumForHeapObject<RawType>;
         self->m_cellState = GcCellState::White;
     }

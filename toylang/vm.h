@@ -198,6 +198,64 @@ private:
     int32_t m_lastChunkInTheChain;
 };
 
+namespace internal
+{
+
+constexpr uint32_t GetLeastFitCellSizeInSlots(uint32_t slotToFit)
+{
+    // TODO: we haven't implemented the segregated allocator yet, so this function is dummy
+    //
+    return RoundUpToPowerOfTwo(slotToFit);
+}
+
+constexpr uint32_t x_maxInlineCapacity = 253;
+
+// If we want the inline storage to hold at least 'elementToHold' elements, the optimal capacity is not 'elementToHold',
+// as having exactly 'elementToHold' capacity can cause unnecessary internal fragmentation in our segregated allocator.
+// This function computes the optimal capacity.
+//
+constexpr uint8_t ComputeOptimalInlineStorageCapacity(uint8_t elementToHold)
+{
+    assert(elementToHold <= x_maxInlineCapacity);
+    // The TableObject has a header of 2 slots (16 bytes)
+    //
+    uint32_t minimalSlotsNeeded = elementToHold + 2;
+    uint32_t r32 = GetLeastFitCellSizeInSlots(minimalSlotsNeeded);
+    r32 = std::min(r32, x_maxInlineCapacity);
+    return static_cast<uint8_t>(r32);
+}
+
+constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeOptimalInlineStorageCapacityArray()
+{
+    std::array<uint8_t, x_maxInlineCapacity + 1> r;
+    for (uint8_t i = 0; i <= x_maxInlineCapacity; i++)
+    {
+        r[i] = ComputeOptimalInlineStorageCapacity(i);
+        AssertImp(i > 0, r[i] >= r[i-1]);
+    }
+    return r;
+}
+
+constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacityArray = ComputeOptimalInlineStorageCapacityArray();
+
+constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeInlineStorageCapacitySteppingArray()
+{
+    std::array<uint8_t, 256> v;
+    for (size_t i = 0; i < 256; i++) { v[i] = 0; }
+    for (size_t i = 0; i <= x_maxInlineCapacity; i++) { v[x_optimalInlineCapacityArray[i]] = 1; }
+    for (size_t i = 1; i < 256; i++) { v[i] += v[i-1]; }
+
+    std::array<uint8_t, x_maxInlineCapacity + 1> r;
+    for (size_t i = 0; i <= x_maxInlineCapacity; i++) { r[i] = v[x_optimalInlineCapacityArray[i]] - 1; }
+    return r;
+}
+
+constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacitySteppingArray = ComputeInlineStorageCapacitySteppingArray();
+
+}   // namespace internal
+
+constexpr size_t x_numInlineCapacitySteppings = internal::x_optimalInlineCapacitySteppingArray[internal::x_maxInlineCapacity] + 1;
+
 // [ 12GB user heap ] [ 2GB padding ] [ 2GB short-pointer data structures ] [ 2GB system heap ]
 //                                                                          ^
 //     userheap                                   SPDS region     32GB aligned baseptr   systemheap
@@ -484,6 +542,11 @@ public:
         }
     }
 
+    std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& GetInitialStructureForDifferentInlineCapacityArray()
+    {
+        return m_initialStructureForDifferentInlineCapacity;
+    }
+
     bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMMemoryManager, CRTP>, "wrong use of CRTP pattern");
@@ -517,6 +580,10 @@ public:
         for (size_t i = 0; i < x_numSpdsAllocatableClassNotUsingLfFreelist; i++)
         {
             m_spdsExecutionThreadFreeList[i] = SpdsPtr<void> { 0 };
+        }
+        for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
+        {
+            m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
         }
         return true;
     }
@@ -746,6 +813,8 @@ protected:
     alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_compilerThreadSpdsAlloc;
 
     SpdsPtr<void> m_spdsCompilerThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
+
+    std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
 };
 
 

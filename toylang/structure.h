@@ -541,6 +541,7 @@ public:
     }
 
     static constexpr uint8_t x_maxNumSlots = 253;
+    static_assert(internal::x_maxInlineCapacity == Structure::x_maxNumSlots);
 
     struct AddNewPropertyResult
     {
@@ -676,6 +677,8 @@ public:
         return newStructure;
     }
 
+    // You should not call this function directly. Call GetInitialStructureForInlineCapacity instead. This function is exposed only for unit test.
+    //
     static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
@@ -1022,6 +1025,27 @@ public:
     {
         assert(IsPolyMetatable(self));
         return static_cast<uint32_t>(self->m_metatable - 1);
+    }
+
+    static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForInlineCapacity(VM* vm, uint32_t inlineCapacity)
+    {
+        std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& arr = vm->GetInitialStructureForDifferentInlineCapacityArray();
+        if (inlineCapacity > Structure::x_maxNumSlots)
+        {
+            inlineCapacity = Structure::x_maxNumSlots;
+        }
+
+        size_t stepping = internal::x_optimalInlineCapacitySteppingArray[inlineCapacity];
+        assert(stepping < x_numInlineCapacitySteppings);
+        if (likely(arr[stepping].m_value != 0))
+        {
+            return arr[stepping];
+        }
+
+        uint8_t optimalInlineCapacity = internal::x_optimalInlineCapacityArray[inlineCapacity];
+        Structure* s = Structure::CreateInitialStructure(vm, optimalInlineCapacity);
+        arr[stepping] = s;
+        return arr[stepping];
     }
 
     // DEVNOTE: If you add a field, make sure to update both CreateInitialStructure

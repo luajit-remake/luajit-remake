@@ -1646,7 +1646,7 @@ public:
         }
     }
 
-    static HeapPtr<TableObject> CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
+    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
     {
         assert(emptyStructure->m_numSlots == 0);
         assert(emptyStructure->m_metatable == 0);
@@ -1668,6 +1668,25 @@ public:
         }
         // Initialize the inline storage
         //
+        TValue nilVal = TValue::Nil();
+        for (size_t i = 0; i < inlineCapacity; i++)
+        {
+            TCSet(r->m_inlineStorage[i], nilVal);
+        }
+        return r;
+    }
+
+    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyGlobalObject(VM* vm)
+    {
+        uint8_t inlineCapacity = Structure::x_maxNumSlots;
+        CacheableDictionary* hc = CacheableDictionary::CreateEmptyDictionary(vm, 128 /*anticipatedNumSlots*/, inlineCapacity, true /*shouldNeverTransitToUncacheableDictionary*/);
+        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
+        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
+        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
+        UserHeapGcObjectHeader::Populate(r);
+        TCSet(r->m_hiddenClass, SystemHeapPointer<void> { hc });
+        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
+        r->m_butterfly = nullptr;
         TValue nilVal = TValue::Nil();
         for (size_t i = 0; i < inlineCapacity; i++)
         {
