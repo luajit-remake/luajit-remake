@@ -706,6 +706,7 @@ inline void ScriptModule::EnterVM(CoroutineRuntimeContext* rc, void* stackStart)
 
 inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
 {
+    FILE* fp = VM::GetActiveVMForCurrentThread()->GetStdout();
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
     uint32_t numElementsToPrint = hdr->m_numVariadicArguments;
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numElementsToPrint;
@@ -713,31 +714,40 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     {
         if (i > 0)
         {
-            printf("\t");
+            fprintf(fp, "\t");
         }
 
         TValue val = vaBegin[i];
         if (val.IsInt32(TValue::x_int32Tag))
         {
-            printf("%d", static_cast<int>(val.AsInt32()));
+            fprintf(fp, "%d", static_cast<int>(val.AsInt32()));
         }
         else if (val.IsDouble(TValue::x_int32Tag))
         {
-            char buf[x_dragonbox_stringify_double_buffer_length];
-            dragonbox_stringify_double(val.AsDouble(), buf);
-            printf("%s", buf);
+            double dbl = val.AsDouble();
+            int64_t i64 = static_cast<int64_t>(dbl);
+            if (!UnsafeFloatEqual(static_cast<double>(i64), dbl))
+            {
+                char buf[x_dragonbox_stringify_double_buffer_length];
+                dragonbox_stringify_double(val.AsDouble(), buf);
+                fprintf(fp, "%s", buf);
+            }
+            else
+            {
+                fprintf(fp, "%lld", static_cast<unsigned long long>(i64));
+            }
         }
         else if (val.IsMIV(TValue::x_mivTag))
         {
             MiscImmediateValue miv = val.AsMIV(TValue::x_mivTag);
             if (miv.IsNil())
             {
-                printf("nil");
+                fprintf(fp, "nil");
             }
             else
             {
                 assert(miv.IsBoolean());
-                printf("%s", (miv.GetBooleanValue() ? "true" : "false"));
+                fprintf(fp, "%s", (miv.GetBooleanValue() ? "true" : "false"));
             }
         }
         else
@@ -747,31 +757,31 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
             if (p->m_type == Type::STRING)
             {
                 HeapString* hs = reinterpret_cast<HeapString*>(p);
-                fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, stdout);
+                fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
             }
             else
             {
                 if (p->m_type == Type::FUNCTION)
                 {
-                    printf("function");
+                    fprintf(fp, "function");
                 }
                 else if (p->m_type == Type::TABLE)
                 {
-                    printf("table");
+                    fprintf(fp, "table");
                 }
                 else if (p->m_type == Type::THREAD)
                 {
-                    printf("thread");
+                    fprintf(fp, "thread");
                 }
                 else
                 {
-                    printf("(type %d)", static_cast<int>(p->m_type));
+                    fprintf(fp, "(type %d)", static_cast<int>(p->m_type));
                 }
-                printf(": %p", static_cast<void*>(p));
+                fprintf(fp, ": %p", static_cast<void*>(p));
             }
         }
     }
-    printf("\n");
+    fprintf(fp, "\n");
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
@@ -864,25 +874,28 @@ public:
     std::vector<InliningStackEntry> m_inlineStack;
 };
 
-#define OPCODE_LIST     \
-    BcTableGetById,     \
-    BcTablePutById,     \
-    BcTableGetByVal,    \
-    BcTablePutByVal,    \
-    BcGlobalGet,        \
-    BcGlobalPut,        \
-    BcReturn,           \
-    BcCall,             \
-    BcNewClosure,       \
-    BcMove,             \
-    BcAddVV,            \
-    BcSubVV,            \
-    BcIsEQ,             \
-    BcIsNEQ,            \
-    BcIsLTVV,           \
-    BcIsNLTVV,          \
-    BcIsLEVV,           \
-    BcIsNLEVV,          \
+#define OPCODE_LIST         \
+    BcTableGetById,         \
+    BcTablePutById,         \
+    BcTableGetByVal,        \
+    BcTablePutByVal,        \
+    BcTableGetByIntegerVal, \
+    BcTablePutByIntegerVal, \
+    BcGlobalGet,            \
+    BcGlobalPut,            \
+    BcTableDup,             \
+    BcReturn,               \
+    BcCall,                 \
+    BcNewClosure,           \
+    BcMove,                 \
+    BcAdd,                  \
+    BcSub,                  \
+    BcIsEQ,                 \
+    BcIsNEQ,                \
+    BcIsLT,                 \
+    BcIsNLT,                \
+    BcIsLE,                 \
+    BcIsNLE,                \
     BcConstant
 
 #define macro(opcodeCppName) class opcodeCppName;
@@ -933,6 +946,10 @@ constexpr uint32_t x_minNilFillReturnValues = 3;
 class BcTableGetById
 {
 public:
+    BcTableGetById(BytecodeSlot base, BytecodeSlot dst, int32_t index)
+        : m_opcode(x_opcodeId<BcTableGetById>), m_base(base), m_dst(dst), m_index(index)
+    { }
+
     uint8_t m_opcode;
     BytecodeSlot m_base;
     BytecodeSlot m_dst;
@@ -973,10 +990,14 @@ public:
 class BcTablePutById
 {
 public:
+    BcTablePutById(BytecodeSlot base, BytecodeSlot src, int32_t index)
+        : m_opcode(x_opcodeId<BcTablePutById>), m_base(base), m_src(src), m_index(index)
+    { }
+
     uint8_t m_opcode;
     BytecodeSlot m_base;
     BytecodeSlot m_src;
-    uint32_t m_index;
+    int32_t m_index;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1012,10 +1033,14 @@ public:
 class BcTableGetByVal
 {
 public:
+    BcTableGetByVal(BytecodeSlot base, BytecodeSlot dst, BytecodeSlot index)
+        : m_opcode(x_opcodeId<BcTableGetByVal>), m_base(base), m_dst(dst), m_index(index)
+    { }
+
     uint8_t m_opcode;
     BytecodeSlot m_base;
-    BytecodeSlot m_index;
     BytecodeSlot m_dst;
+    BytecodeSlot m_index;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1070,10 +1095,14 @@ public:
 class BcTablePutByVal
 {
 public:
+    BcTablePutByVal(BytecodeSlot base, BytecodeSlot src, BytecodeSlot index)
+        : m_opcode(x_opcodeId<BcTablePutByVal>), m_base(base), m_src(src), m_index(index)
+    { }
+
     uint8_t m_opcode;
     BytecodeSlot m_base;
-    BytecodeSlot m_index;
     BytecodeSlot m_src;
+    BytecodeSlot m_index;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1116,6 +1145,86 @@ public:
             }
 
             Dispatch(rc, sfp, bcu + sizeof(BcTablePutByVal));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcTableGetByIntegerVal
+{
+public:
+    BcTableGetByIntegerVal(BytecodeSlot base, BytecodeSlot dst, int16_t index)
+        : m_opcode(x_opcodeId<BcTableGetByIntegerVal>), m_base(base), m_dst(dst), m_index(index)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_dst;
+    int16_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTableGetByIntegerVal* bc = reinterpret_cast<const BcTableGetByIntegerVal*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTableGetByIntegerVal>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            TValue result;
+            GetByIntegerIndexICInfo icInfo;
+            TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
+            result = TableObject::GetByIntegerIndex(base.As<TableObject>(), bc->m_index, icInfo);
+
+            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+            Dispatch(rc, sfp, bcu + sizeof(BcTableGetByIntegerVal));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcTablePutByIntegerVal
+{
+public:
+    BcTablePutByIntegerVal(BytecodeSlot base, BytecodeSlot src, int16_t index)
+        : m_opcode(x_opcodeId<BcTablePutByIntegerVal>), m_base(base), m_src(src), m_index(index)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_src;
+    int16_t m_index;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTablePutByIntegerVal* bc = reinterpret_cast<const BcTablePutByIntegerVal*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTablePutByIntegerVal>);
+        assert(bc->m_base.IsLocal());
+        TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+
+        if (!tvbase.IsPointer(TValue::x_mivTag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            UserHeapPointer<void> base = tvbase.AsPointer<void>();
+            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+            TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+            TableObject::PutByValIntegerIndex(base.As<TableObject>(), bc->m_index, newValue);
+            Dispatch(rc, sfp, bcu + sizeof(BcTablePutByIntegerVal));
         }
     }
 } __attribute__((__packed__));
@@ -1180,6 +1289,33 @@ public:
     }
 } __attribute__((__packed__));
 
+class BcTableDup
+{
+public:
+    BcTableDup(BytecodeSlot dst, int32_t src)
+        : m_opcode(x_opcodeId<BcTableDup>), m_dst(dst), m_src(src)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    int32_t m_src;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTableDup* bc = reinterpret_cast<const BcTableDup*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTableDup>);
+
+        TValue tpl = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_src);
+        assert(tpl.IsPointer(TValue::x_mivTag));
+        assert(tpl.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TableObject* obj = TranslateToRawPointer(vm, tpl.AsPointer<TableObject>().As());
+        HeapPtr<TableObject> newObject = obj->ShallowCloneTableObject(vm);
+        TValue result = TValue::CreatePointer(UserHeapPointer<TableObject>(newObject));
+        *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+        Dispatch(rc, sfp, bcu + sizeof(BcTableDup));
+    }
+} __attribute__((__packed__));
 
 class BcReturn
 {
@@ -1472,11 +1608,11 @@ public:
     }
 } __attribute__((__packed__));
 
-class BcAddVV
+class BcAdd
 {
 public:
-    BcAddVV(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcAddVV>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    BcAdd(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<BcAdd>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1486,14 +1622,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcAddVV* bc = reinterpret_cast<const BcAddVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcAddVV>);
+        const BcAdd* bc = reinterpret_cast<const BcAdd*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcAdd>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() + rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcAddVV));
+            Dispatch(rc, stackframe, bcu + sizeof(BcAdd));
         }
         else
         {
@@ -1502,11 +1638,11 @@ public:
     }
 } __attribute__((__packed__));
 
-class BcSubVV
+class BcSub
 {
 public:
-    BcSubVV(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcSubVV>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    BcSub(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<BcSub>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1516,14 +1652,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcSubVV* bc = reinterpret_cast<const BcSubVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcSubVV>);
+        const BcSub* bc = reinterpret_cast<const BcSub*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcSub>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() - rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcSubVV));
+            Dispatch(rc, stackframe, bcu + sizeof(BcSub));
         }
         else
         {
@@ -1532,11 +1668,11 @@ public:
     }
 } __attribute__((__packed__));
 
-class BcIsLTVV
+class BcIsLT
 {
 public:
-    BcIsLTVV(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsLTVV>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+    BcIsLT(BytecodeSlot lhs, BytecodeSlot rhs)
+        : m_opcode(x_opcodeId<BcIsLT>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -1546,13 +1682,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsLTVV::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&BcIsLT::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsLTVV* bc = reinterpret_cast<const BcIsLTVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsLTVV>);
+        const BcIsLT* bc = reinterpret_cast<const BcIsLT*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcIsLT>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -1563,7 +1699,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsLTVV));
+                Dispatch(rc, stackframe, bcu + sizeof(BcIsLT));
             }
         }
         else
@@ -1577,11 +1713,11 @@ public:
 // because if x or y is NaN, the former gives true while latter gives false
 // For same reason we need IsNLE
 //
-class BcIsNLTVV
+class BcIsNLT
 {
 public:
-    BcIsNLTVV(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsNLTVV>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+    BcIsNLT(BytecodeSlot lhs, BytecodeSlot rhs)
+        : m_opcode(x_opcodeId<BcIsNLT>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -1591,13 +1727,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsNLTVV::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&BcIsNLT::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsNLTVV* bc = reinterpret_cast<const BcIsNLTVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsNLTVV>);
+        const BcIsNLT* bc = reinterpret_cast<const BcIsNLT*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcIsNLT>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -1608,7 +1744,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLTVV));
+                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLT));
             }
         }
         else
@@ -1618,11 +1754,11 @@ public:
     }
 } __attribute__((__packed__));
 
-class BcIsLEVV
+class BcIsLE
 {
 public:
-    BcIsLEVV(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsLEVV>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+    BcIsLE(BytecodeSlot lhs, BytecodeSlot rhs)
+        : m_opcode(x_opcodeId<BcIsLE>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -1632,13 +1768,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsLEVV::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&BcIsLE::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsLEVV* bc = reinterpret_cast<const BcIsLEVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsLEVV>);
+        const BcIsLE* bc = reinterpret_cast<const BcIsLE*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcIsLE>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -1649,7 +1785,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsLEVV));
+                Dispatch(rc, stackframe, bcu + sizeof(BcIsLE));
             }
         }
         else
@@ -1659,11 +1795,11 @@ public:
     }
 } __attribute__((__packed__));
 
-class BcIsNLEVV
+class BcIsNLE
 {
 public:
-    BcIsNLEVV(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsNLEVV>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+    BcIsNLE(BytecodeSlot lhs, BytecodeSlot rhs)
+        : m_opcode(x_opcodeId<BcIsNLE>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -1673,13 +1809,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsNLEVV::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&BcIsNLE::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsNLEVV* bc = reinterpret_cast<const BcIsNLEVV*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsNLEVV>);
+        const BcIsNLE* bc = reinterpret_cast<const BcIsNLE*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcIsNLE>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -1690,7 +1826,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLEVV));
+                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLE));
             }
         }
         else

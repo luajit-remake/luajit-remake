@@ -165,7 +165,7 @@ struct BytecodeWriter
         Reserve(sizeof(T));
         *reinterpret_cast<T*>(m_bytecodeCur) = value;
         m_bytecodeCur += sizeof(T);
-        assert(m_bytecodeCur < m_bytecodeEnd);
+        assert(m_bytecodeCur <= m_bytecodeEnd);
     }
 
     int32_t CurrentBytecodeOffset()
@@ -219,6 +219,8 @@ struct BytecodeJumpPatch
     int32_t m_selfOffset;       // The offset of the jumping bytecode
     int32_t m_targetOrdinal;    // The ordinal of the target bytecode
 };
+
+constexpr bool x_json_parser_force_use_double = true;
 
 ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
 {
@@ -285,7 +287,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 if (ty == "Int32")
                 {
                     int32_t value = JSONCheckedGet<int32_t>(c, "Value");
-                    ucb->m_cstTable[i].m_tv = TValue::CreateInt32(value, TValue::x_int32Tag);
+                    TValue tv;
+                    if (x_json_parser_force_use_double)
+                    {
+                        tv = TValue::CreateDouble(value);
+                    }
+                    else
+                    {
+                        tv = TValue::CreateInt32(value, TValue::x_int32Tag);
+                    }
+                    ucb->m_cstTable[i].m_tv = tv;
                 }
                 else
                 {
@@ -348,7 +359,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         else if (vty == "Int32")
                         {
                             int32_t value = JSONCheckedGet<int32_t>(tabEntryValue, "Value");
-                            return TValue::CreateInt32(value, TValue::x_int32Tag);
+                            TValue tv;
+                            if (x_json_parser_force_use_double)
+                            {
+                                tv = TValue::CreateDouble(value);
+                            }
+                            else
+                            {
+                                tv = TValue::CreateInt32(value, TValue::x_int32Tag);
+                            }
+                            return tv;
                         }
                         else
                         {
@@ -594,12 +614,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 {
                 case 0:
                 {
-                    bw.Append(BcAddVV(lhs, rhs, dst));
+                    bw.Append(BcAdd(lhs, rhs, dst));
                     break;
                 }
                 case 1:
                 {
-                    bw.Append(BcSubVV(lhs, rhs, dst));
+                    bw.Append(BcSub(lhs, rhs, dst));
                     break;
                 }
                 case 2:
@@ -626,8 +646,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata.size() == 2);
                 BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
                 int32_t data = opdata[1];
-                // TODO: For now, create double
-                bw.Append(BcConstant(dst, TValue::CreateDouble(data)));
+                TValue tv;
+                if (x_json_parser_force_use_double)
+                {
+                    tv = TValue::CreateDouble(data);
+                }
+                else
+                {
+                    tv = TValue::CreateInt32(data, TValue::x_int32Tag);
+                }
+                bw.Append(BcConstant(dst, tv));
                 break;
             }
             case LJOpcode::ISLT: [[fallthrough]];
@@ -704,9 +732,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 {
                 case 0:
                 {
-                    bw.Append(BcIsLTVV(lhs, rhs));
+                    bw.Append(BcIsLT(lhs, rhs));
                     jumpPatches.push_back(BytecodeJumpPatch {
-                                              .m_loc = selfOffset + BcIsLTVV::OffsetOfJump(),
+                                              .m_loc = selfOffset + BcIsLT::OffsetOfJump(),
                                               .m_selfOffset = selfOffset,
                                               .m_targetOrdinal = jumpBytecodeOrdinal
                                           });
@@ -714,9 +742,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 case 1:
                 {
-                    bw.Append(BcIsNLTVV(lhs, rhs));
+                    bw.Append(BcIsNLT(lhs, rhs));
                     jumpPatches.push_back(BytecodeJumpPatch {
-                                              .m_loc = selfOffset + BcIsNLTVV::OffsetOfJump(),
+                                              .m_loc = selfOffset + BcIsNLT::OffsetOfJump(),
                                               .m_selfOffset = selfOffset,
                                               .m_targetOrdinal = jumpBytecodeOrdinal
                                           });
@@ -724,9 +752,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 case 2:
                 {
-                    bw.Append(BcIsLEVV(lhs, rhs));
+                    bw.Append(BcIsLE(lhs, rhs));
                     jumpPatches.push_back(BytecodeJumpPatch {
-                                              .m_loc = selfOffset + BcIsLEVV::OffsetOfJump(),
+                                              .m_loc = selfOffset + BcIsLE::OffsetOfJump(),
                                               .m_selfOffset = selfOffset,
                                               .m_targetOrdinal = jumpBytecodeOrdinal
                                           });
@@ -734,9 +762,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 case 3:
                 {
-                    bw.Append(BcIsNLEVV(lhs, rhs));
+                    bw.Append(BcIsNLE(lhs, rhs));
                     jumpPatches.push_back(BytecodeJumpPatch {
-                                              .m_loc = selfOffset + BcIsNLEVV::OffsetOfJump(),
+                                              .m_loc = selfOffset + BcIsNLE::OffsetOfJump(),
                                               .m_selfOffset = selfOffset,
                                               .m_targetOrdinal = jumpBytecodeOrdinal
                                           });
@@ -909,6 +937,64 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcNewClosure(src, dst));
                 break;
             }
+            case LJOpcode::TDUP:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot src = bytecodeSlotFromObjectConstant(opdata[1]);
+                bw.Append(BcTableDup(dst, src.ConstantOrd()));
+                break;
+            }
+            case LJOpcode::TGETV: [[fallthrough]];
+            case LJOpcode::TGETS: [[fallthrough]];
+            case LJOpcode::TSETV: [[fallthrough]];
+            case LJOpcode::TSETS:
+            {
+                TestAssert(opdata.size() == 3);
+                BytecodeSlot srcOrDst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[1]);
+                if (opcode == LJOpcode::TGETV)
+                {
+                    BytecodeSlot index = bytecodeSlotFromVariableSlot(opdata[2]);
+                    bw.Append(BcTableGetByVal(base, srcOrDst, index));
+                }
+                else if (opcode == LJOpcode::TGETS)
+                {
+                    BytecodeSlot index = bytecodeSlotFromObjectConstant(opdata[2]);
+                    bw.Append(BcTableGetById(base, srcOrDst, index.ConstantOrd()));
+                }
+                else if (opcode == LJOpcode::TSETV)
+                {
+                    BytecodeSlot index = bytecodeSlotFromVariableSlot(opdata[2]);
+                    bw.Append(BcTablePutByVal(base, srcOrDst, index));
+                }
+                else
+                {
+                    TestAssert(opcode == LJOpcode::TSETS);
+                    BytecodeSlot index = bytecodeSlotFromObjectConstant(opdata[2]);
+                    bw.Append(BcTablePutById(base, srcOrDst, index.ConstantOrd()));
+                }
+                break;
+            }
+            case LJOpcode::TGETB: [[fallthrough]];
+            case LJOpcode::TSETB:
+            {
+                TestAssert(opdata.size() == 3);
+                BytecodeSlot srcOrDst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[1]);
+                int16_t index = SafeIntegerCast<int16_t>(opdata[2]);
+                if (opcode == LJOpcode::TGETB)
+                {
+                    bw.Append(BcTableGetByIntegerVal(base, srcOrDst, index));
+                }
+                else
+                {
+                    TestAssert(opcode == LJOpcode::TSETB);
+                    bw.Append(BcTablePutByIntegerVal(base, srcOrDst, index));
+                }
+                break;
+            }
+            case LJOpcode::TNEW: [[fallthrough]];
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::NOT: [[fallthrough]];
@@ -922,21 +1008,13 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::ISF: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::KNIL: [[fallthrough]];
+            case LJOpcode::TSETM: [[fallthrough]];
             case LJOpcode::UGET: [[fallthrough]];
             case LJOpcode::USETV: [[fallthrough]];
             case LJOpcode::USETS: [[fallthrough]];
             case LJOpcode::USETN: [[fallthrough]];
             case LJOpcode::USETP: [[fallthrough]];
             case LJOpcode::UCLO: [[fallthrough]];
-            case LJOpcode::TNEW: [[fallthrough]];
-            case LJOpcode::TDUP: [[fallthrough]];
-            case LJOpcode::TGETV: [[fallthrough]];
-            case LJOpcode::TGETS: [[fallthrough]];
-            case LJOpcode::TGETB: [[fallthrough]];
-            case LJOpcode::TSETV: [[fallthrough]];
-            case LJOpcode::TSETS: [[fallthrough]];
-            case LJOpcode::TSETB: [[fallthrough]];
-            case LJOpcode::TSETM: [[fallthrough]];
             case LJOpcode::CALLMT: [[fallthrough]];
             case LJOpcode::CALLT: [[fallthrough]];
             case LJOpcode::ITERC: [[fallthrough]];
@@ -990,6 +1068,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         ucb->m_bytecodeMetadataLength = 0;
         ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, globalObject);
         r->m_unlinkedCodeBlocks.push_back(ucb);
+
+        /*
+        for (size_t i = 0; i < bytecodeLocation.size(); i++)
+        {
+            if (bytecodeLocation[i] != -1)
+            {
+                printf("Opcode %d at %p\n", static_cast<int>(ucb->m_defaultCodeBlock->m_bytecode[bytecodeLocation[i]]), static_cast<void*>(ucb->m_defaultCodeBlock->m_bytecode + bytecodeLocation[i]));
+            }
+        }
+        */
     }
 
     UnlinkedCodeBlock* chunkFn = r->m_unlinkedCodeBlocks.back();

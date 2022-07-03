@@ -297,26 +297,26 @@ TEST(Interpreter, SanityFibonacci)
 
     BcConstant* instr1 = reinterpret_cast<BcConstant*>(p);  // 2
     p += sizeof(BcConstant);
-    BcIsLTVV* instr2 = reinterpret_cast<BcIsLTVV*>(p);  // cmp
-    p += sizeof(BcIsLTVV);
+    BcIsLT* instr2 = reinterpret_cast<BcIsLT*>(p);  // cmp
+    p += sizeof(BcIsLT);
     BcConstant* instr3 = reinterpret_cast<BcConstant*>(p); // f
     p += sizeof(BcConstant);
     BcConstant* instr4 = reinterpret_cast<BcConstant*>(p); // 1
     p += sizeof(BcConstant);
-    BcSubVV* instr5 = reinterpret_cast<BcSubVV*>(p);    // 'n-1'
-    p += sizeof(BcSubVV);
+    BcSub* instr5 = reinterpret_cast<BcSub*>(p);    // 'n-1'
+    p += sizeof(BcSub);
     BcCall* instr6 = reinterpret_cast<BcCall*>(p);      // 'call'
     p += sizeof(BcCall);
     BcConstant* instr7 = reinterpret_cast<BcConstant*>(p); // f
     p += sizeof(BcConstant);
     BcConstant* instr8 = reinterpret_cast<BcConstant*>(p); // 2
     p += sizeof(BcConstant);
-    BcSubVV* instr9 = reinterpret_cast<BcSubVV*>(p);    // 'n-2'
-    p += sizeof(BcSubVV);
+    BcSub* instr9 = reinterpret_cast<BcSub*>(p);    // 'n-2'
+    p += sizeof(BcSub);
     BcCall* instr10 = reinterpret_cast<BcCall*>(p);      // 'call'
     p += sizeof(BcCall);
-    BcAddVV* instr11 = reinterpret_cast<BcAddVV*>(p);       // 'add'
-    p += sizeof(BcAddVV);
+    BcAdd* instr11 = reinterpret_cast<BcAdd*>(p);       // 'add'
+    p += sizeof(BcAdd);
     BcReturn* instr12 = reinterpret_cast<BcReturn*>(p);     // 'ret'
     p += sizeof(BcReturn);
     BcConstant* instr13 = reinterpret_cast<BcConstant*>(p);     // '1'
@@ -328,7 +328,7 @@ TEST(Interpreter, SanityFibonacci)
     instr1->m_dst = BytecodeSlot::Local(1);
     instr1->m_value = TValue::CreateDouble(3);
 
-    instr2->m_opcode = x_opcodeId<BcIsLTVV>;
+    instr2->m_opcode = x_opcodeId<BcIsLT>;
     instr2->m_lhs = BytecodeSlot::Local(0);
     instr2->m_rhs = BytecodeSlot::Local(1);
     instr2->m_offset = static_cast<int32_t>(reinterpret_cast<intptr_t>(instr13) - reinterpret_cast<intptr_t>(instr2));
@@ -341,7 +341,7 @@ TEST(Interpreter, SanityFibonacci)
     instr4->m_dst = BytecodeSlot::Local(2);
     instr4->m_value = TValue::CreateDouble(1);
 
-    instr5->m_opcode = x_opcodeId<BcSubVV>;
+    instr5->m_opcode = x_opcodeId<BcSub>;
     instr5->m_result = BytecodeSlot::Local(2);
     instr5->m_lhs = BytecodeSlot::Local(0);
     instr5->m_rhs = BytecodeSlot::Local(2);
@@ -361,7 +361,7 @@ TEST(Interpreter, SanityFibonacci)
     instr8->m_dst = BytecodeSlot::Local(3);
     instr8->m_value = TValue::CreateDouble(2);
 
-    instr9->m_opcode = x_opcodeId<BcSubVV>;
+    instr9->m_opcode = x_opcodeId<BcSub>;
     instr9->m_result = BytecodeSlot::Local(3);
     instr9->m_lhs = BytecodeSlot::Local(0);
     instr9->m_rhs = BytecodeSlot::Local(3);
@@ -373,7 +373,7 @@ TEST(Interpreter, SanityFibonacci)
     instr10->m_passVariadicRetAsParam = false;
     instr10->m_keepVariadicRet = false;
 
-    instr11->m_opcode = x_opcodeId<BcAddVV>;
+    instr11->m_opcode = x_opcodeId<BcAdd>;
     instr11->m_lhs = BytecodeSlot::Local(1);
     instr11->m_rhs = BytecodeSlot::Local(2);
     instr11->m_result = BytecodeSlot::Local(1);

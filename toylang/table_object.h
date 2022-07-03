@@ -1519,14 +1519,20 @@ public:
         assert(didSomethingNontrivial);
     }
 
-    ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
+    static ArraySparseMap* WARN_UNUSED AllocateEmptyArraySparseMapImpl(VM* vm)
     {
-        assert(m_butterfly != nullptr);
-        assert(!m_butterfly->GetHeader()->HasSparseMap());
         HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
         ArraySparseMap* sparseMap = TranslateToRawPointer(vm, hp);
         ConstructInPlace(sparseMap);
         UserHeapGcObjectHeader::Populate(sparseMap);
+        return sparseMap;
+    }
+
+    ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
+    {
+        assert(m_butterfly != nullptr);
+        assert(!m_butterfly->GetHeader()->HasSparseMap());
+        ArraySparseMap* sparseMap = AllocateEmptyArraySparseMapImpl(vm);
         m_butterfly->GetHeader()->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(sparseMap).m_value;
         return sparseMap;
     }
@@ -1646,19 +1652,28 @@ public:
         }
     }
 
+    // Does NOT set m_hiddenClass and m_butterfly, and does NOT fill nils to the inline storage!
+    //
+    static HeapPtr<TableObject> WARN_UNUSED AllocateObjectImpl(VM* vm, uint8_t inlineCapacity)
+    {
+        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
+        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
+        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
+        UserHeapGcObjectHeader::Populate(r);
+        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
+        return r;
+    }
+
     static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
     {
         assert(emptyStructure->m_numSlots == 0);
         assert(emptyStructure->m_metatable == 0);
         assert(emptyStructure->m_arrayType.m_asValue == 0);
         assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
-        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
-        size_t inlineCapacity = emptyStructure->m_inlineNamedStorageCapacity;
-        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
-        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
-        UserHeapGcObjectHeader::Populate(r);
+
+        uint8_t inlineCapacity = emptyStructure->m_inlineNamedStorageCapacity;
+        HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
         TCSet(r->m_hiddenClass, SystemHeapPointer<void> { emptyStructure });
-        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
         // Initialize the butterfly storage
         //
         r->m_butterfly = nullptr;
@@ -1680,12 +1695,8 @@ public:
     {
         uint8_t inlineCapacity = Structure::x_maxNumSlots;
         CacheableDictionary* hc = CacheableDictionary::CreateEmptyDictionary(vm, 128 /*anticipatedNumSlots*/, inlineCapacity, true /*shouldNeverTransitToUncacheableDictionary*/);
-        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
-        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
-        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
-        UserHeapGcObjectHeader::Populate(r);
+        HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
         TCSet(r->m_hiddenClass, SystemHeapPointer<void> { hc });
-        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
         r->m_butterfly = nullptr;
         TValue nilVal = TValue::Nil();
         for (size_t i = 0; i < inlineCapacity; i++)
@@ -1693,6 +1704,95 @@ public:
             TCSet(r->m_inlineStorage[i], nilVal);
         }
         return r;
+    }
+
+    Butterfly* WARN_UNUSED CloneButterfly(uint32_t butterflyNamedStorageCapacity)
+    {
+        if (m_butterfly == nullptr)
+        {
+            return nullptr;
+        }
+        else
+        {
+            uint32_t arrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
+#ifndef NDEBUG
+            Type hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+            if (hiddenClassTy == Type::Structure)
+            {
+                assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
+            }
+            else if (hiddenClassTy == Type::CacheableDictionary)
+            {
+                assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
+            }
+            else
+            {
+                assert(hiddenClassTy == Type::UncacheableDictionary);
+                ReleaseAssert(false && "unimplemented");
+            }
+#endif
+            uint32_t butterflySlots = arrayStorageCapacity + butterflyNamedStorageCapacity + 1;
+
+            uint32_t butterflyStartOffset = butterflyNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+            uint64_t* butterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - butterflyStartOffset;
+
+            uint64_t* butterflyCopy = new uint64_t[butterflySlots];
+            memcpy(butterflyCopy, butterflyStart, sizeof(uint64_t) * butterflySlots);
+            Butterfly* butterflyPtr = reinterpret_cast<Butterfly*>(butterflyCopy + butterflyStartOffset);
+
+            // Clone array sparse map if exists
+            //
+            ButterflyHeader* hdr = butterflyPtr->GetHeader();
+            if (hdr->HasSparseMap())
+            {
+                VM* vm = VM::GetActiveVMForCurrentThread();
+                ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
+                ArraySparseMap* newSparseMap = AllocateEmptyArraySparseMapImpl(vm);
+                // Since ArraySparseMap is simply implemented by a STL map, the copy here is a deep copy as desired
+                //
+                newSparseMap->m_map = oldSparseMap->m_map;
+                hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
+                assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
+            }
+
+            return butterflyPtr;
+        }
+    }
+
+    HeapPtr<TableObject> WARN_UNUSED ShallowCloneTableObject(VM* vm)
+    {
+        Type ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+
+        SystemHeapPointer<void> newHiddenClass;
+        uint8_t inlineCapacity;
+        uint32_t butterflyNamedStorageCapacity;
+        if (likely(ty == Type::Structure))
+        {
+            Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
+            inlineCapacity = structure->m_inlineNamedStorageCapacity;
+            butterflyNamedStorageCapacity = structure->m_butterflyNamedStorageCapacity;
+            newHiddenClass = m_hiddenClass;
+        }
+        else if (ty == Type::CacheableDictionary)
+        {
+            CacheableDictionary* cd = TranslateToRawPointer(m_hiddenClass.As<CacheableDictionary>());
+            CacheableDictionary* cloneCd = cd->Clone(vm);
+            inlineCapacity = cd->m_inlineNamedStorageCapacity;
+            butterflyNamedStorageCapacity = cd->m_butterflyNamedStorageCapacity;
+            newHiddenClass = cloneCd;
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+
+        TableObject* r = TranslateToRawPointer(vm, AllocateObjectImpl(vm, inlineCapacity));
+        r->m_arrayType = m_arrayType;
+        r->m_hiddenClass = newHiddenClass;
+        memcpy(r->m_inlineStorage, m_inlineStorage, sizeof(TValue) * inlineCapacity);
+        r->m_butterfly = CloneButterfly(butterflyNamedStorageCapacity);
+        return TranslateToHeapPtr(r);
     }
 
     // Object header

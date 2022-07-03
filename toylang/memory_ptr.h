@@ -102,8 +102,8 @@ add_heap_ptr_t<T> TranslateToHeapPtr(T ptr)
         AssertIsValidHeapPointer(ptr);
         uintptr_t val = reinterpret_cast<uintptr_t>(ptr);
         constexpr uint32_t shift = 64 - x_vmBasePtrLog2Alignment;
-        val = ArithmeticShiftRight(val << shift, shift);
-        add_heap_ptr_t<T> r = reinterpret_cast<HeapPtr<T>>(val);
+        val = SignExtendedShiftRight(val << shift, shift);
+        add_heap_ptr_t<T> r = reinterpret_cast<add_heap_ptr_t<T>>(val);
         assert(TranslateToRawPointer(r) == ptr);
         return r;
     }
@@ -316,14 +316,14 @@ struct GeneralHeapPointer
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     GeneralHeapPointer(HeapPtr<U> value)
-        : GeneralHeapPointer(SafeIntegerCast<int32_t>(ArithmeticShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
+        : GeneralHeapPointer(SafeIntegerCast<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
         assert(As<U>() == value);
     }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     GeneralHeapPointer(U* value)
-        : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(ArithmeticShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
+        : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
         assert(TranslateToRawPointer(As<U>()) == value);
     }

@@ -85,11 +85,11 @@
       ],
       "NumberConstants": [
         {
-          "Type": "Double",
+          "Type": "Int32",
           "Value": 1
         },
         {
-          "Type": "Double",
+          "Type": "Int32",
           "Value": 2
         }
       ]

@@ -1291,6 +1291,21 @@ public:
         return r;
     }
 
+    CacheableDictionary* WARN_UNUSED Clone(VM* vm)
+    {
+        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        SystemHeapGcObjectHeader::Populate(r);
+        r->m_shouldNeverTransitToUncacheableDictionary = m_shouldNeverTransitToUncacheableDictionary;
+        r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
+        r->m_butterflyNamedStorageCapacity = m_butterflyNamedStorageCapacity;
+        r->m_hashTableMask = m_hashTableMask;
+        r->m_slotCount = m_slotCount;
+        r->m_hashTable = new HashTableEntry[m_hashTableMask + 1];
+        memcpy(r->m_hashTable, m_hashTable, sizeof(HashTableEntry) * (m_hashTableMask + 1));
+        r->m_metatable = m_metatable;
+        return r;
+    }
+
     struct CreateFromStructureResult
     {
         CacheableDictionary* m_dictionary;
@@ -1920,7 +1935,7 @@ end_setup:
 
     // Check if a butterfly space expansion is needed
     //
-    assert(m_inlineNamedStorageCapacity < x_maxNumSlots);
+    assert(m_inlineNamedStorageCapacity <= x_maxNumSlots);
     bool needButterflyExpansion = false;
     uint8_t expandedButterflyCapacity = 0;
     if (shouldAddKey)

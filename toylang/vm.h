@@ -585,10 +585,19 @@ public:
         {
             m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
         }
+
+        m_filePointerForStdout = stdout;
+        m_filePointerForStderr = stderr;
         return true;
     }
 
     void Cleanup() { }
+
+    FILE* WARN_UNUSED GetStdout() { return m_filePointerForStdout; }
+    FILE* WARN_UNUSED GetStderr() { return m_filePointerForStderr; }
+
+    void RedirectStdout(FILE* newStdout) { m_filePointerForStdout = newStdout; }
+    void RedirectStderr(FILE* newStderr) { m_filePointerForStderr = newStderr; }
 
 private:
     uintptr_t VMBaseAddress() const
@@ -815,8 +824,12 @@ protected:
     SpdsPtr<void> m_spdsCompilerThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
 
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
-};
 
+    // Allow unit test to hook stdout and stderr to a custom temporary file
+    //
+    FILE* m_filePointerForStdout;
+    FILE* m_filePointerForStderr;
+};
 
 class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>
 {

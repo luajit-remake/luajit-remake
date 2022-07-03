@@ -12,7 +12,7 @@ namespace CommonUtils
 template<typename T, typename U>
 T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftRight(T value, U shift)
 {
-    static_assert(std::is_integral_v<T> && std::is_integral_v<U>, "must be integral types");
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
     if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
     if constexpr(std::is_signed_v<T>)
     {
@@ -28,7 +28,7 @@ T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftRight(T value, U shift)
 template<typename T, typename U>
 T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftLeft(T value, U shift)
 {
-    static_assert(std::is_integral_v<T> && std::is_integral_v<U>, "must be integral types");
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
     if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
     if constexpr(std::is_signed_v<T>)
     {
@@ -37,6 +37,21 @@ T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftLeft(T value, U shift)
     else
     {
         return value << shift;
+    }
+}
+
+template<typename T, typename U>
+T WARN_UNUSED ALWAYS_INLINE SignExtendedShiftRight(T value, U shift)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
+    if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
+    if constexpr(std::is_signed_v<T>)
+    {
+        return ArithmeticShiftRight(value, shift);
+    }
+    else
+    {
+        return static_cast<T>(ArithmeticShiftRight(static_cast<std::make_signed_t<T>>(value), shift));
     }
 }
 
