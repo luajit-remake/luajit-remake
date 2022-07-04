@@ -256,6 +256,20 @@ constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacitySt
 
 constexpr size_t x_numInlineCapacitySteppings = internal::x_optimalInlineCapacitySteppingArray[internal::x_maxInlineCapacity] + 1;
 
+namespace internal
+{
+
+constexpr std::array<uint8_t, x_numInlineCapacitySteppings> ComputeInlineStorageSizeForSteppingArray()
+{
+    std::array<uint8_t, x_numInlineCapacitySteppings> r;
+    for (size_t i = 0; i <= x_maxInlineCapacity; i++) { r[x_optimalInlineCapacitySteppingArray[i]] = x_optimalInlineCapacityArray[i]; }
+    return r;
+}
+
+constexpr std::array<uint8_t, x_numInlineCapacitySteppings> x_inlineStorageSizeForSteppingArray = ComputeInlineStorageSizeForSteppingArray();
+
+}   // namespace internal
+
 // [ 12GB user heap ] [ 2GB padding ] [ 2GB short-pointer data structures ] [ 2GB system heap ]
 //                                                                          ^
 //     userheap                                   SPDS region     32GB aligned baseptr   systemheap
@@ -542,11 +556,6 @@ public:
         }
     }
 
-    std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& GetInitialStructureForDifferentInlineCapacityArray()
-    {
-        return m_initialStructureForDifferentInlineCapacity;
-    }
-
     bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMMemoryManager, CRTP>, "wrong use of CRTP pattern");
@@ -581,23 +590,10 @@ public:
         {
             m_spdsExecutionThreadFreeList[i] = SpdsPtr<void> { 0 };
         }
-        for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
-        {
-            m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
-        }
-
-        m_filePointerForStdout = stdout;
-        m_filePointerForStderr = stderr;
         return true;
     }
 
     void Cleanup() { }
-
-    FILE* WARN_UNUSED GetStdout() { return m_filePointerForStdout; }
-    FILE* WARN_UNUSED GetStderr() { return m_filePointerForStderr; }
-
-    void RedirectStdout(FILE* newStdout) { m_filePointerForStdout = newStdout; }
-    void RedirectStderr(FILE* newStderr) { m_filePointerForStderr = newStderr; }
 
 private:
     uintptr_t VMBaseAddress() const
@@ -823,6 +819,50 @@ protected:
 
     SpdsPtr<void> m_spdsCompilerThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
 
+};
+
+template<typename CRTP>
+class VMGlobalDataManager
+{
+public:
+    bool WARN_UNUSED Initialize()
+    {
+        static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
+        for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
+        {
+            m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
+        }
+        m_filePointerForStdout = stdout;
+        m_filePointerForStderr = stderr;
+        CreateRootCoroutine();
+        return true;
+    }
+
+    void Cleanup() { }
+
+    FILE* WARN_UNUSED GetStdout() { return m_filePointerForStdout; }
+    FILE* WARN_UNUSED GetStderr() { return m_filePointerForStderr; }
+
+    void RedirectStdout(FILE* newStdout) { m_filePointerForStdout = newStdout; }
+    void RedirectStderr(FILE* newStderr) { m_filePointerForStderr = newStderr; }
+
+    std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& GetInitialStructureForDifferentInlineCapacityArray()
+    {
+        return m_initialStructureForDifferentInlineCapacity;
+    }
+
+    CoroutineRuntimeContext* GetRootCoroutine()
+    {
+        return m_rootCoroutine;
+    }
+
+    HeapPtr<TableObject> GetRootGlobalObject();
+
+private:
+    void CreateRootCoroutine();
+
+    CoroutineRuntimeContext* m_rootCoroutine;
+
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
 
     // Allow unit test to hook stdout and stderr to a custom temporary file
@@ -831,7 +871,9 @@ protected:
     FILE* m_filePointerForStderr;
 };
 
-class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>
+class ScriptModule;
+
+class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>, public VMGlobalDataManager<VM>
 {
 public:
     static_assert(x_segmentRegisterSelfReferencingOffset == offsetof_member_v<&VM::m_self>);
@@ -846,6 +888,9 @@ public:
         CHECK_LOG_ERROR(static_cast<GlobalStringHashConser<VM>*>(this)->Initialize());
         Auto(if (!success) static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup());
 
+        CHECK_LOG_ERROR(static_cast<VMGlobalDataManager<VM>*>(this)->Initialize());
+        Auto(if (!success) static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup());
+
         success = true;
         return true;
     }
@@ -854,9 +899,14 @@ public:
     {
         static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup();
         static_cast<VMMemoryManager<VM>*>(this)->Cleanup();
+        static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup();
     }
 
+    void LaunchScript(ScriptModule* module);
+    static void LaunchScriptReturnEndpoint(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/) { }
 };
 
+template<> void VMGlobalDataManager<VM>::CreateRootCoroutine();
+template<> HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject();
 
 }   // namespace ToyLang

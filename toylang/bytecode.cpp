@@ -417,7 +417,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         }
                     }
 
-                    SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForInlineCapacity(vm, numNamedProps /*inlineCapacity*/);
+                    uint32_t additionalNamedKeys = JSONCheckedGet<uint32_t>(c, "AdditionalNamedKeys");
+                    uint32_t inlineCapcitySize = numNamedProps + additionalNamedKeys;
+
+                    // TODO: if we have more than x_maxSlot keys, we'd better make it CacheableDictionary right now
+                    //
+                    SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcitySize);
                     HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), initalArraySize);
 
                     // Now, insert all the string properties in alphabetic order
@@ -937,6 +942,43 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcNewClosure(src, dst));
                 break;
             }
+            case LJOpcode::TNEW:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                // For TNEW, the second parameter should be interpreted as uint32_t and split into two parts
+                //
+                uint32_t tdata = static_cast<uint32_t>(opdata[1]);
+                uint32_t arrayPartHint = tdata & 2047;
+                uint32_t hashPartLog2Hint = tdata >> 11;
+                uint32_t inlineCapacity;
+                // TODO: refine this strategy
+                //
+                if (hashPartLog2Hint == 0)
+                {
+                    inlineCapacity = 0;
+                }
+                else if (hashPartLog2Hint <= 4)
+                {
+                    inlineCapacity = (1U << hashPartLog2Hint);
+                }
+                else if (hashPartLog2Hint <= 8)
+                {
+                    inlineCapacity = (1U << (hashPartLog2Hint - 1));
+                }
+                else
+                {
+                    inlineCapacity = 0;
+                }
+
+                uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);
+                // Create the structure now, so we can call GetInitialStructureForSteppingKnowingAlreadyBuilt at runtime
+                //
+                std::ignore = Structure::GetInitialStructureForStepping(vm, stepping);
+
+                bw.Append(BcTableNew(dst, stepping, static_cast<uint16_t>(arrayPartHint)));
+                break;
+            }
             case LJOpcode::TDUP:
             {
                 TestAssert(opdata.size() == 2);
@@ -994,7 +1036,17 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 break;
             }
-            case LJOpcode::TNEW: [[fallthrough]];
+            case LJOpcode::TSETM:
+            {
+                TestAssert(opdata.size() == 2);
+                // This opcode reads from slot A-1...
+                //
+                TestAssert(opdata[0] >= 1);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot index = bytecodeSlotFromNumberConstant(opdata[1]);
+                bw.Append(BcTableVariadicPutByIntegerValSeq(dst, index));
+                break;
+            }
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::NOT: [[fallthrough]];
@@ -1008,7 +1060,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::ISF: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::KNIL: [[fallthrough]];
-            case LJOpcode::TSETM: [[fallthrough]];
             case LJOpcode::UGET: [[fallthrough]];
             case LJOpcode::USETV: [[fallthrough]];
             case LJOpcode::USETS: [[fallthrough]];

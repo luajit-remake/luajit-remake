@@ -39,15 +39,10 @@ TEST(LuaTest, Fib)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
     VMOutputInterceptor vmoutput(vm);
 
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
-    CoroutineRuntimeContext* rc = CoroutineRuntimeContext::Create(vm, globalObject);
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, globalObject, LoadFile("luatests/fib.lua.json"));
-    TValue* stack = new TValue[1000];
-
-    module->EnterVM(rc, stack);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/fib.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -59,15 +54,10 @@ TEST(LuaTest, TestPrint)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
     VMOutputInterceptor vmoutput(vm);
 
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
-    CoroutineRuntimeContext* rc = CoroutineRuntimeContext::Create(vm, globalObject);
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, globalObject, LoadFile("luatests/test_print.lua.json"));
-    TValue* stack = new TValue[1000];
-
-    module->EnterVM(rc, stack);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/test_print.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -81,15 +71,10 @@ TEST(LuaTest, TestTableDup)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
     VMOutputInterceptor vmoutput(vm);
 
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
-    CoroutineRuntimeContext* rc = CoroutineRuntimeContext::Create(vm, globalObject);
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, globalObject, LoadFile("luatests/table_dup.lua.json"));
-    TValue* stack = new TValue[1000];
-
-    module->EnterVM(rc, stack);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -108,15 +93,10 @@ TEST(LuaTest, TestTableDup2)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
     VMOutputInterceptor vmoutput(vm);
 
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
-    CoroutineRuntimeContext* rc = CoroutineRuntimeContext::Create(vm, globalObject);
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, globalObject, LoadFile("luatests/table_dup2.lua.json"));
-    TValue* stack = new TValue[1000];
-
-    module->EnterVM(rc, stack);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup2.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -131,5 +111,39 @@ TEST(LuaTest, TestTableDup2)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, TestTableSizeHint)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_size_hint.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "3\t4\tnil\t1\t2\tnil\t1\t1\tnil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+
+    {
+        TValue t = GetGlobalVariable(vm, "t");
+        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        TableObject* obj = AssertAndGetTableObject(t);
+        Structure* structure = AssertAndGetStructure(obj);
+        ReleaseAssert(structure->m_inlineNamedStorageCapacity == ToyLang::internal::x_optimalInlineCapacityArray[4]);
+    }
+
+    {
+        TValue t = GetGlobalVariable(vm, "t2");
+        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        TableObject* obj = AssertAndGetTableObject(t);
+        Structure* structure = AssertAndGetStructure(obj);
+        ReleaseAssert(structure->m_inlineNamedStorageCapacity == ToyLang::internal::x_optimalInlineCapacityArray[3]);
+    }
+}
 
 }   // anonymous namespace

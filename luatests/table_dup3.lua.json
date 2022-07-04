@@ -1,0 +1,57 @@
+{
+  "ChunkName": "@luatests/table_dup3.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 1,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 2,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 1
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "Boolean",
+                "Value": true
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 2
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Boolean",
+                "Value": false
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 1
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

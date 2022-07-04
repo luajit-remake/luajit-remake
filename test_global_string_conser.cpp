@@ -119,7 +119,6 @@ TEST(GlobalStringHashConser, Stress)
         CheckStringObjectIsAsExpected(ptr, expectedString.c_str(), expectedString.length());
     }
 
-    ReleaseAssert(static_cast<size_t>(vm->GetGlobalStringHashConserCurrentElementCount()) == vec.size());
     ReleaseAssert(vec.size() == expectedMap.size());
 }
 

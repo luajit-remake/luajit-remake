@@ -1029,23 +1029,44 @@ public:
 
     static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForInlineCapacity(VM* vm, uint32_t inlineCapacity)
     {
-        std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& arr = vm->GetInitialStructureForDifferentInlineCapacityArray();
+        uint8_t stepping = GetInitialStructureSteppingForInlineCapacity(inlineCapacity);
+        return GetInitialStructureForStepping(vm, stepping);
+    }
+
+    static uint8_t WARN_UNUSED GetInitialStructureSteppingForInlineCapacity(uint32_t inlineCapacity)
+    {
         if (inlineCapacity > Structure::x_maxNumSlots)
         {
             inlineCapacity = Structure::x_maxNumSlots;
         }
 
-        size_t stepping = internal::x_optimalInlineCapacitySteppingArray[inlineCapacity];
+        uint8_t stepping = internal::x_optimalInlineCapacitySteppingArray[inlineCapacity];
+        assert(stepping < x_numInlineCapacitySteppings);
+        assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
+        return stepping;
+    }
+
+    static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForStepping(VM* vm, uint8_t stepping)
+    {
+        std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& arr = vm->GetInitialStructureForDifferentInlineCapacityArray();
         assert(stepping < x_numInlineCapacitySteppings);
         if (likely(arr[stepping].m_value != 0))
         {
             return arr[stepping];
         }
 
-        uint8_t optimalInlineCapacity = internal::x_optimalInlineCapacityArray[inlineCapacity];
+        uint8_t optimalInlineCapacity = internal::x_inlineStorageSizeForSteppingArray[stepping];
         Structure* s = Structure::CreateInitialStructure(vm, optimalInlineCapacity);
         arr[stepping] = s;
         return arr[stepping];
+    }
+
+    static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForSteppingKnowingAlreadyBuilt(VM* vm, uint8_t stepping)
+    {
+        assert(stepping < x_numInlineCapacitySteppings);
+        SystemHeapPointer<Structure> r = vm->GetInitialStructureForDifferentInlineCapacityArray()[stepping];
+        assert(r.m_value != 0);
+        return r;
     }
 
     // DEVNOTE: If you add a field, make sure to update both CreateInitialStructure

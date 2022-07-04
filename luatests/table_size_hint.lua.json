@@ -1,0 +1,273 @@
+{
+  "ChunkName": "@luatests/table_size_hint.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 9,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 3, 4096 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 4, 3, 0 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 4 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 4, 3, 1 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 5 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 4, 3, 2 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 0, 3, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 1, 3, 3 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 2, 3, 4 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 3, 5 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 3, 5 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 0, 3, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 0, 3, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 0, 3, 3 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 0, 3, 4 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 3, 6 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 7 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 4, 4, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 5, 5, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 6, 6, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 5 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 5 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 3 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 5 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 8 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 10, 10, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 11, 11, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 12, 12, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 10 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 7
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "t"
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 3,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "x"
+        },
+        {
+          "Type": "String",
+          "Value": "y"
+        },
+        {
+          "Type": "String",
+          "Value": "z"
+        },
+        {
+          "Type": "String",
+          "Value": "t2"
+        },
+        {
+          "Type": "String",
+          "Value": "t3"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

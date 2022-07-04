@@ -81,4 +81,26 @@ private:
     FILE* m_fp[2];
 };
 
+inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
+{
+    HeapPtr<TableObject> globalObject = vm->GetRootGlobalObject();
+    UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(name.c_str(), static_cast<uint32_t>(name.length()));
+
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(globalObject, hs, icInfo /*out*/);
+    return TableObject::GetById(globalObject, hs.As<void>(), icInfo);
+}
+
+inline TableObject* AssertAndGetTableObject(TValue t)
+{
+    ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+    return TranslateToRawPointer(t.AsPointer<TableObject>().As());
+}
+
+inline Structure* AssertAndGetStructure(TableObject* obj)
+{
+    ReleaseAssert(TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == Type::Structure);
+    return TranslateToRawPointer(TCGet(obj->m_hiddenClass).As<Structure>());
+}
+
 }   // namespace ToyLang

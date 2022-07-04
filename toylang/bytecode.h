@@ -123,6 +123,7 @@ class alignas(8) CoroutineRuntimeContext
 {
 public:
     static constexpr uint32_t x_hiddenClassForCoroutineRuntimeContext = 0x10;
+    static constexpr size_t x_defaultStackSlots = 10000;
 
     static CoroutineRuntimeContext* Create(VM* vm, UserHeapPointer<TableObject> globalObject)
     {
@@ -134,6 +135,7 @@ public:
         r->m_numVariadicRets = 0;
         r->m_variadicRetSlotBegin = 0;
         r->m_upvalueList.m_value = 0;
+        r->m_stackBegin = new TValue[x_defaultStackSlots];
         return r;
     }
 
@@ -159,7 +161,29 @@ public:
     // The linked list head of the list of open upvalues
     //
     UserHeapPointer<Upvalue> m_upvalueList;
+
+    // The beginning of the stack
+    //
+    TValue* m_stackBegin;
 };
+
+UserHeapPointer<TableObject> CreateGlobalObject(VM* vm);
+
+template<>
+inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
+{
+    // Create global object
+    //
+    VM* vm = static_cast<VM*>(this);
+    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
+    m_rootCoroutine = CoroutineRuntimeContext::Create(vm, globalObject);
+}
+
+template<>
+inline HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject()
+{
+    return m_rootCoroutine->m_globalObject.As();
+}
 
 using InterpreterFn = void(*)(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*stackframe*/, ConstRestrictPtr<uint8_t> /*instr*/, uint64_t /*unused*/);
 
@@ -606,8 +630,10 @@ public:
 
     static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
 
-    void EnterVM(CoroutineRuntimeContext* rc, void* stackbase);
-    static void ExitVM(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/) { }
+    static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, const std::string& content)
+    {
+        return ParseFromJSON(vm, vm->GetRootGlobalObject(), content);
+    }
 };
 
 class BytecodeSlot
@@ -689,15 +715,16 @@ public:
 static_assert(sizeof(StackFrameHeader) % sizeof(TValue) == 0);
 static constexpr size_t x_sizeOfStackFrameHeaderInTermsOfTValue = sizeof(StackFrameHeader) / sizeof(TValue);
 
-inline void ScriptModule::EnterVM(CoroutineRuntimeContext* rc, void* stackStart)
+inline void VM::LaunchScript(ScriptModule* module)
 {
-    CodeBlock* cb = static_cast<CodeBlock*>(TranslateToRawPointer(TCGet(m_defaultEntryPoint.As()->m_executable).As()));
+    CoroutineRuntimeContext* rc = GetRootCoroutine();
+    CodeBlock* cb = static_cast<CodeBlock*>(TranslateToRawPointer(TCGet(module->m_defaultEntryPoint.As()->m_executable).As()));
     rc->m_codeBlock = cb;
     assert(cb->m_numFixedArguments == 0);
-    StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(stackStart);
+    StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(rc->m_stackBegin);
     sfh->m_caller = nullptr;
-    sfh->m_retAddr = reinterpret_cast<void*>(ExitVM);
-    sfh->m_func = m_defaultEntryPoint.As();
+    sfh->m_retAddr = reinterpret_cast<void*>(LaunchScriptReturnEndpoint);
+    sfh->m_func = module->m_defaultEntryPoint.As();
     sfh->m_callerBytecodeOffset = 0;
     sfh->m_numVariadicArguments = 0;
     void* stackbase = sfh + 1;
@@ -874,28 +901,30 @@ public:
     std::vector<InliningStackEntry> m_inlineStack;
 };
 
-#define OPCODE_LIST         \
-    BcTableGetById,         \
-    BcTablePutById,         \
-    BcTableGetByVal,        \
-    BcTablePutByVal,        \
-    BcTableGetByIntegerVal, \
-    BcTablePutByIntegerVal, \
-    BcGlobalGet,            \
-    BcGlobalPut,            \
-    BcTableDup,             \
-    BcReturn,               \
-    BcCall,                 \
-    BcNewClosure,           \
-    BcMove,                 \
-    BcAdd,                  \
-    BcSub,                  \
-    BcIsEQ,                 \
-    BcIsNEQ,                \
-    BcIsLT,                 \
-    BcIsNLT,                \
-    BcIsLE,                 \
-    BcIsNLE,                \
+#define OPCODE_LIST                     \
+    BcTableGetById,                     \
+    BcTablePutById,                     \
+    BcTableGetByVal,                    \
+    BcTablePutByVal,                    \
+    BcTableGetByIntegerVal,             \
+    BcTablePutByIntegerVal,             \
+    BcTableVariadicPutByIntegerValSeq,  \
+    BcGlobalGet,                        \
+    BcGlobalPut,                        \
+    BcTableNew,                         \
+    BcTableDup,                         \
+    BcReturn,                           \
+    BcCall,                             \
+    BcNewClosure,                       \
+    BcMove,                             \
+    BcAdd,                              \
+    BcSub,                              \
+    BcIsEQ,                             \
+    BcIsNEQ,                            \
+    BcIsLT,                             \
+    BcIsNLT,                            \
+    BcIsLE,                             \
+    BcIsNLE,                            \
     BcConstant
 
 #define macro(opcodeCppName) class opcodeCppName;
@@ -1229,6 +1258,23 @@ public:
     }
 } __attribute__((__packed__));
 
+class BcTableVariadicPutByIntegerValSeq
+{
+public:
+    BcTableVariadicPutByIntegerValSeq(BytecodeSlot base, BytecodeSlot index)
+        : m_opcode(x_opcodeId<BcTableVariadicPutByIntegerValSeq>), m_base(base), m_index(index)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    BytecodeSlot m_index;
+
+    static void NO_RETURN Execute(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*sfp*/, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+    {
+        ReleaseAssert(false && "unimplemented");
+    }
+} __attribute__((__packed__));
+
 class BcGlobalGet
 {
 public:
@@ -1286,6 +1332,31 @@ public:
         TableObject::PutById(base.As(), index.As<void>(), newValue, icInfo);
 
         Dispatch(rc, sfp, bcu + sizeof(BcGlobalPut));
+    }
+} __attribute__((__packed__));
+
+class BcTableNew
+{
+public:
+    BcTableNew(BytecodeSlot dst, uint8_t inlineCapacityStepping, uint16_t arrayPartSizeHint)
+        : m_opcode(x_opcodeId<BcTableNew>), m_dst(dst), m_inlineCapacityStepping(inlineCapacityStepping), m_arrayPartSizeHint(arrayPartSizeHint)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    uint8_t m_inlineCapacityStepping;
+    uint16_t m_arrayPartSizeHint;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcTableNew* bc = reinterpret_cast<const BcTableNew*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcTableNew>);
+
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForSteppingKnowingAlreadyBuilt(vm, bc->m_inlineCapacityStepping);
+        UserHeapPointer<TableObject> obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), bc->m_arrayPartSizeHint);
+        *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = TValue::CreatePointer(obj);
+        Dispatch(rc, sfp, bcu + sizeof(BcTableNew));
     }
 } __attribute__((__packed__));
 
