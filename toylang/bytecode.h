@@ -139,6 +139,8 @@ public:
         return r;
     }
 
+    void CloseUpvalues(TValue* base);
+
     uint32_t m_hiddenClass;  // Always x_hiddenClassForCoroutineRuntimeContext
     Type m_type;
     GcCellState m_cellState;
@@ -255,32 +257,24 @@ public:
     //
     uint32_t m_slot;
 };
-// For simplicity, we just make all the TValue constants and upvalue metadata as one trailing array.
-// This requires UpvalueMetadata having the same size as TValue
-//
-static_assert(sizeof(UpvalueMetadata) == sizeof(TValue), "Must be the same size as TValue");
 
 class UnlinkedCodeBlock;
 
-// The constant table stores all the UpvalueMetadata and constants used in the bytecode.
-// We know if an entry is a UpvalueMetadata since all the UpvalueMetadata are stored up-front.
+// The constant table stores all constants in one bytecode function.
 // However, we cannot know if an entry is a TValue or a UnlinkedCodeBlock pointer!
 // (this is due to how LuaJIT parser is designed. It can be changed, but we don't want to bother making it more complex)
 // This is fine for the mutator as the bytecode will never misuse the type.
-// For the GC, we rely on the crazy fact that a user-space raw pointer always falls in [0, 2^47) under practically every OS kernel,
+// For the GC, we rely on the crazy fact that a user-space raw pointer always falls in [0, 2^47) (high 17 bits = 0, not 1) under practically every OS kernel,
 // which mean when a pointer is interpreted as a TValue, it will always be interpreted into a double, so the GC marking
 // algorithm will correctly ignore it for the marking.
 //
 union BytecodeConstantTableEntry
 {
     BytecodeConstantTableEntry() : m_ucb(nullptr) { }
-    UpvalueMetadata m_uv;
     TValue m_tv;
     UnlinkedCodeBlock* m_ucb;
 };
 static_assert(sizeof(BytecodeConstantTableEntry) == 8);
-
-class UnlinkedCodeBlock;
 
 // This uniquely corresponds to each pair of <UnlinkedCodeBlock, GlobalObject>
 // It owns the bytecode and the corresponding metadata (the bytecode is copied from the UnlinkedCodeBlock,
@@ -301,23 +295,16 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static UpvalueMetadata GetConstant_UpvalueMetadata(T self, int64_t ordinal)
+    static TValue GetConstantAsTValue(T self, int64_t ordinal)
     {
-        assert(-static_cast<int64_t>(self->m_numUpvalues) <= ordinal && ordinal < 0);
-        return TCGet(GetConstantTableEnd(self)[ordinal]).m_uv;
-    }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static TValue GetConstant_TValue(T self, int64_t ordinal)
-    {
-        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < -static_cast<int64_t>(self->m_numUpvalues));
+        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < 0);
         return TCGet(GetConstantTableEnd(self)[ordinal]).m_tv;
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static UnlinkedCodeBlock* GetConstant_UnlinkedCodeBlock(T self, int64_t ordinal)
+    static UnlinkedCodeBlock* GetConstantAsUnlinkedCodeBlock(T self, int64_t ordinal)
     {
-        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < -static_cast<int64_t>(self->m_numUpvalues));
+        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < 0);
         return TCGet(GetConstantTableEnd(self)[ordinal]).m_ucb;
     }
 
@@ -379,6 +366,7 @@ public:
     RareGlobalObjectToCodeBlockMap* m_rareGOtoCBMap;
 
     uint8_t* m_bytecode;
+    UpvalueMetadata* m_upvalueInfo;
     BytecodeConstantTableEntry* m_cstTable;
     UnlinkedCodeBlock* m_parent;
 
@@ -423,33 +411,25 @@ class FunctionObject;
 class Upvalue
 {
 public:
-    static HeapPtr<TValue> WARN_UNUSED GetValueAddr(HeapPtr<Upvalue> self)
-    {
-        return TCGet(self->m_ptr).As();
-    }
-
-    static TValue WARN_UNUSED GetValue(HeapPtr<Upvalue> self)
-    {
-        return TCGet(*GetValueAddr(self));
-    }
-
-    static HeapPtr<Upvalue> WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, GeneralHeapPointer<TValue> dst, bool isImmutable)
+    static HeapPtr<Upvalue> WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, TValue* dst, bool isImmutable)
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
         HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
         UserHeapGcObjectHeader::Populate(r);
-        TCSet(r->m_ptr, dst);
+        r->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
+        r->m_ptr = dst;
         r->m_isClosed = false;
         r->m_isImmutable = isImmutable;
-        TCSet(r->m_u.prev, prev);
+        TCSet(r->m_prev, prev);
         return r;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dstRaw, bool isImmutable)
+    static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
     {
-        GeneralHeapPointer<TValue> dst = dstRaw;
-        if (rc->m_upvalueList.m_value == 0 || rc->m_upvalueList.As()->m_ptr.m_value < dst.m_value)
+        if (rc->m_upvalueList.m_value == 0 || rc->m_upvalueList.As()->m_ptr < dst)
         {
+            // Edge case: the open upvalue list is empty, or the upvalue shall be inserted as the first element in the list
+            //
             HeapPtr<Upvalue> newNode = CreateUpvalueImpl(rc->m_upvalueList /*prev*/, dst, isImmutable);
             rc->m_upvalueList = newNode;
             WriteBarrier(rc);
@@ -460,20 +440,20 @@ public:
             // Invariant: after the loop, the node shall be inserted between 'cur' and 'prev'
             //
             HeapPtr<Upvalue> cur = rc->m_upvalueList.As();
-            GeneralHeapPointer<TValue> curVal = TCGet(cur->m_ptr);
+            TValue* curVal = cur->m_ptr;
             UserHeapPointer<Upvalue> prev;
             while (true)
             {
                 assert(!cur->m_isClosed);
-                assert(dst.m_value <= curVal.m_value);
-                if (curVal.m_value == dst.m_value)
+                assert(dst <= curVal);
+                if (curVal == dst)
                 {
                     // We found an open upvalue for that slot, we are good
                     //
                     return cur;
                 }
 
-                prev = TCGet(cur->m_u.prev);
+                prev = TCGet(cur->m_prev);
                 if (prev.m_value == 0)
                 {
                     // 'cur' is the last node, so we found the insertion location
@@ -482,9 +462,9 @@ public:
                 }
 
                 assert(!prev.As()->m_isClosed);
-                GeneralHeapPointer<TValue> prevVal = TCGet(prev.As()->m_ptr);
-                assert(prevVal.m_value < curVal.m_value);
-                if (prevVal.m_value < dst.m_value)
+                TValue* prevVal = prev.As()->m_ptr;
+                assert(prevVal < curVal);
+                if (prevVal < dst)
                 {
                     // prevVal < dst < curVal, so we found the insertion location
                     //
@@ -495,25 +475,34 @@ public:
                 curVal = prevVal;
             }
 
-            assert(curVal.m_value == cur->m_ptr.m_value);
-            assert(prev.m_value == cur->m_u.prev.m_value);
-            assert(dst.m_value < curVal.m_value);
-            assert(prev.m_value == 0 || prev.As()->m_ptr.m_value < dst.m_value);
+            assert(curVal == cur->m_ptr);
+            assert(prev == TCGet(cur->m_prev));
+            assert(dst < curVal);
+            assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
             HeapPtr<Upvalue> newNode = CreateUpvalueImpl(prev, dst, isImmutable);
-            TCSet(cur->m_u.prev, UserHeapPointer<Upvalue>(newNode));
+            TCSet(cur->m_prev, UserHeapPointer<Upvalue>(newNode));
             WriteBarrier(cur);
             return newNode;
         }
     }
 
-    // This pointer occupies the slot for hidden class.
-    // Normally this is a bit risky as it might confuse all sort of things (like IC), but upvalue is so special: it is never exposed to user,
-    // so an Upvalue object will never be used as operand into any bytecode instruction other than the upvalue-dedicated ones, so we are fine.
+    void Close()
+    {
+        assert(!m_isClosed);
+        assert(m_ptr != &m_tv);
+        m_tv = *m_ptr;
+        m_ptr = &m_tv;
+        m_isClosed = true;
+    }
+
+    static constexpr int32_t x_hiddenClassForUpvalue = 0x18;
+
+    // TODO: we could have made this structure 16 bytes instead of 32 bytes by making m_ptr a GeneralHeapPointer and takes the place of m_hiddenClass
+    // (normally this is a bit risky as it might confuse all sort of things (like IC), but upvalue is so special: it is never exposed to user,
+    // so an Upvalue object will never be used as operand into any bytecode instruction other than the upvalue-dedicated ones, so we are fine).
+    // However, we are not doing this now because our stack is currently not placed in the VM memory range.
     //
-    // Points to &m_u.tv for closed upvalue, or the stack slot for open upvalue
-    // All the open values are chained into a linked list (through m_u.prev) in reverse sorted order of m_ptr (i.e. absolute stack slot from high to low)
-    //
-    GeneralHeapPointer<TValue> m_ptr;
+    GeneralHeapPointer<void> m_hiddenClass;
     Type m_type;
     GcCellState m_cellState;
     // Always equal to (m_ptr == &m_u.tv)
@@ -521,17 +510,41 @@ public:
     bool m_isClosed;
     bool m_isImmutable;
 
-    union U {
-        U() : tv() { }
-        // Stores the value for closed upvalue
-        //
-        TValue tv;
-        // Stores the linked list if the upvalue is open
-        //
-        UserHeapPointer<Upvalue> prev;
-    } m_u;
+    // Points to &tv for closed upvalue, or the stack slot for open upvalue
+    // All the open values are chained into a linked list (through prev) in reverse sorted order of m_ptr (i.e. absolute stack slot from high to low)
+    //
+    TValue* m_ptr;
+    // Stores the value for closed upvalue
+    //
+    TValue m_tv;
+    // Stores the linked list if the upvalue is open
+    //
+    UserHeapPointer<Upvalue> m_prev;
 };
-static_assert(sizeof(Upvalue) == 16);
+static_assert(sizeof(Upvalue) == 32);
+
+inline void CoroutineRuntimeContext::CloseUpvalues(TValue* base)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    UserHeapPointer<Upvalue> cur = m_upvalueList;
+    while (cur.m_value != 0)
+    {
+        if (cur.As()->m_ptr < base)
+        {
+            break;
+        }
+        assert(!cur.As()->m_isClosed);
+        Upvalue* uv = TranslateToRawPointer(vm, cur.As());
+        cur = uv->m_prev;
+        assert(cur.m_value == 0 || cur.As()->m_ptr < uv->m_ptr);
+        uv->Close();
+    }
+    m_upvalueList = cur;
+    if (cur.m_value != 0)
+    {
+        WriteBarrier(this);
+    }
+}
 
 class FunctionObject
 {
@@ -575,15 +588,17 @@ public:
         return TCGet(self->m_upvalues[ord]);
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
+    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateAndFillUpvalues(UnlinkedCodeBlock* ucb, CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
     {
+        assert(cb->m_owner == ucb);
         HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
         assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
         assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
         uint32_t numUpvalues = cb->m_numUpvalues;
+        UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
         for (uint32_t ord = 0; ord < numUpvalues; ord++)
         {
-            UpvalueMetadata uvmt = CodeBlock::GetConstant_UpvalueMetadata(cb, -static_cast<int32_t>(ord) - 1);
+            UpvalueMetadata& uvmt = upvalueInfo[ord];
             GeneralHeapPointer<Upvalue> uv;
             if (uvmt.m_isParentLocal)
             {
@@ -847,7 +862,7 @@ inline TValue WARN_UNUSED BytecodeSlot::Get(CoroutineRuntimeContext* rc, void* s
     else
     {
         int ord = ConstantOrd();
-        return CodeBlock::GetConstant_TValue(rc->m_codeBlock, ord);
+        return CodeBlock::GetConstantAsTValue(rc->m_codeBlock, ord);
     }
 }
 
@@ -902,6 +917,9 @@ public:
 };
 
 #define OPCODE_LIST                     \
+    BcUpvalueGet,                       \
+    BcUpvaluePut,                       \
+    BcUpvalueClose,                     \
     BcTableGetById,                     \
     BcTablePutById,                     \
     BcTableGetByVal,                    \
@@ -972,6 +990,77 @@ inline void EnterInterpreter(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
 //
 constexpr uint32_t x_minNilFillReturnValues = 3;
 
+class BcUpvalueGet
+{
+public:
+    BcUpvalueGet(BytecodeSlot dst, uint16_t index)
+        : m_opcode(x_opcodeId<BcUpvalueGet>), m_dst(dst), m_index(index)
+    { }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcUpvalueGet* bc = reinterpret_cast<const BcUpvalueGet*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcUpvalueGet>);
+        assert(bc->m_dst.IsLocal());
+        assert(bc->m_index < StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_numUpvalues);
+        TValue result = *TCGet(StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_upvalues[bc->m_index]).As()->m_ptr;
+        *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+        Dispatch(rc, sfp, bcu + sizeof(BcUpvalueGet));
+    }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    uint16_t m_index;
+} __attribute__((__packed__));
+
+class BcUpvaluePut
+{
+public:
+    BcUpvaluePut(BytecodeSlot src, uint16_t index)
+        : m_opcode(x_opcodeId<BcUpvaluePut>), m_src(src), m_index(index)
+    { }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcUpvaluePut* bc = reinterpret_cast<const BcUpvaluePut*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcUpvaluePut>);
+        assert(bc->m_index < StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_numUpvalues);
+        TValue src = bc->m_src.Get(rc, sfp);
+        *TCGet(StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_upvalues[bc->m_index]).As()->m_ptr = src;
+        Dispatch(rc, sfp, bcu + sizeof(BcUpvaluePut));
+    }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    uint16_t m_index;
+} __attribute__((__packed__));
+
+class BcUpvalueClose
+{
+public:
+    BcUpvalueClose(BytecodeSlot base)
+        : m_opcode(x_opcodeId<BcUpvalueClose>), m_base(base), m_offset(0)
+    { }
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&BcUpvalueClose::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcUpvalueClose* bc = reinterpret_cast<const BcUpvalueClose*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcUpvalueClose>);
+        TValue* tvbase = StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+        rc->CloseUpvalues(tvbase);
+        Dispatch(rc, sfp, bcu + bc->m_offset);
+    }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    int32_t m_offset;
+} __attribute__((__packed__));
+
 class BcTableGetById
 {
 public:
@@ -991,7 +1080,7 @@ public:
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
-        TValue tvIndex = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_index);
+        TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
@@ -1035,7 +1124,7 @@ public:
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
-        TValue tvIndex = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_index);
+        TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
@@ -1291,7 +1380,7 @@ public:
         const BcGlobalGet* bc = reinterpret_cast<const BcGlobalGet*>(bcu);
         assert(bc->m_opcode == x_opcodeId<BcGlobalGet>);
 
-        TValue tvIndex = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_index);
+        TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
@@ -1321,7 +1410,7 @@ public:
         const BcGlobalPut* bc = reinterpret_cast<const BcGlobalPut*>(bcu);
         assert(bc->m_opcode == x_opcodeId<BcGlobalPut>);
 
-        TValue tvIndex = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_index);
+        TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
         TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
@@ -1376,7 +1465,7 @@ public:
         const BcTableDup* bc = reinterpret_cast<const BcTableDup*>(bcu);
         assert(bc->m_opcode == x_opcodeId<BcTableDup>);
 
-        TValue tpl = CodeBlock::GetConstant_TValue(rc->m_codeBlock, bc->m_src);
+        TValue tpl = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_src);
         assert(tpl.IsPointer(TValue::x_mivTag));
         assert(tpl.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
         VM* vm = VM::GetActiveVMForCurrentThread();
@@ -1650,9 +1739,9 @@ public:
     {
         const BcNewClosure* bc = reinterpret_cast<const BcNewClosure*>(bcu);
         assert(bc->m_opcode == x_opcodeId<BcNewClosure>);
-        UnlinkedCodeBlock* ucb = CodeBlock::GetConstant_UnlinkedCodeBlock(rc->m_codeBlock, bc->m_src.ConstantOrd());
+        UnlinkedCodeBlock* ucb = CodeBlock::GetConstantAsUnlinkedCodeBlock(rc->m_codeBlock, bc->m_src.ConstantOrd());
         CodeBlock* cb = UnlinkedCodeBlock::GetCodeBlock(ucb, rc->m_globalObject);
-        UserHeapPointer<FunctionObject> func = FunctionObject::CreateAndFillUpvalues(cb, rc, reinterpret_cast<TValue*>(stackframe), StackFrameHeader::GetStackFrameHeader(stackframe)->m_func);
+        UserHeapPointer<FunctionObject> func = FunctionObject::CreateAndFillUpvalues(ucb, cb, rc, reinterpret_cast<TValue*>(stackframe), StackFrameHeader::GetStackFrameHeader(stackframe)->m_func);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreatePointer(func);
         Dispatch(rc, stackframe, bcu + sizeof(BcNewClosure));
     }

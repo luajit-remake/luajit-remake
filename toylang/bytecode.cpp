@@ -255,30 +255,34 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         TestAssert(j.count("ObjectConstants") && j["ObjectConstants"].is_array());
         size_t numObjectConstants = j["ObjectConstants"].size();
 
-        ucb->m_cstTableLength = SafeIntegerCast<uint32_t>(numObjectConstants + ucb->m_numUpvalues + ucb->m_numNumberConstants);
+        ucb->m_upvalueInfo = new UpvalueMetadata[ucb->m_numUpvalues];
 
+        {
+            uint32_t i = 0;
+            for (auto u : j["Upvalues"])
+            {
+                bool isParentLocal = JSONCheckedGet<bool>(u, "IsParentLocal");
+                ucb->m_upvalueInfo[i].m_isParentLocal = isParentLocal;
+                if (isParentLocal)
+                {
+                    ucb->m_upvalueInfo[i].m_isImmutable = JSONCheckedGet<bool>(u, "IsImmutable");
+                    ucb->m_upvalueInfo[i].m_slot = JSONCheckedGet<uint32_t>(u, "ParentLocalOrdinal");
+                }
+                else
+                {
+                    ucb->m_upvalueInfo[i].m_isImmutable = false;
+                    ucb->m_upvalueInfo[i].m_slot = JSONCheckedGet<uint32_t>(u, "ParentUpvalueOrdinal");
+                }
+                i++;
+            }
+            TestAssert(i == ucb->m_numUpvalues);
+        }
+
+        ucb->m_cstTableLength = SafeIntegerCast<uint32_t>(numObjectConstants + ucb->m_numNumberConstants);
         ucb->m_cstTable = new BytecodeConstantTableEntry[ucb->m_cstTableLength];
 
         {
             uint32_t i = ucb->m_cstTableLength;
-            for (auto u : j["Upvalues"])
-            {
-                i--;
-                bool isParentLocal = JSONCheckedGet<bool>(u, "IsParentLocal");
-                ucb->m_cstTable[i].m_uv.m_isParentLocal = isParentLocal;
-                if (isParentLocal)
-                {
-                    ucb->m_cstTable[i].m_uv.m_isImmutable = JSONCheckedGet<bool>(u, "IsImmutable");
-                    ucb->m_cstTable[i].m_uv.m_slot = JSONCheckedGet<uint32_t>(u, "ParentLocalOrdinal");
-                }
-                else
-                {
-                    ucb->m_cstTable[i].m_uv.m_isImmutable = false;
-                    ucb->m_cstTable[i].m_uv.m_slot = JSONCheckedGet<uint32_t>(u, "ParentUpvalueOrdinal");
-                }
-            }
-            TestAssert(i == numObjectConstants + ucb->m_numNumberConstants);
-
             for (auto& c : j["NumberConstants"])
             {
                 i--;
@@ -514,23 +518,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             TestAssert(i == 0);
         }
 
-        auto bytecodeSlotFromUpvalueOrdinal = [&](int32_t ord) -> BytecodeSlot
-        {
-            TestAssert(0 <= ord && ord < static_cast<int32_t>(numUpvalues));
-            return BytecodeSlot::Constant(-(ord + 1));
-        };
-        std::ignore = bytecodeSlotFromUpvalueOrdinal;
-
         auto bytecodeSlotFromNumberConstant = [&](int32_t ord) -> BytecodeSlot
         {
             TestAssert(0 <= ord && ord < static_cast<int32_t>(numNumberConstants));
-            return BytecodeSlot::Constant(-(static_cast<int>(numUpvalues) + ord + 1));
+            return BytecodeSlot::Constant(-(ord + 1));
         };
 
         auto bytecodeSlotFromObjectConstant = [&](int32_t ord) -> BytecodeSlot
         {
             TestAssert(0 <= ord && ord < static_cast<int32_t>(numObjectConstants));
-            return BytecodeSlot::Constant(-(static_cast<int>(numUpvalues + numNumberConstants) + ord + 1));
+            return BytecodeSlot::Constant(-(static_cast<int>(numNumberConstants) + ord + 1));
         };
 
         auto bytecodeSlotFromVariableSlot = [&](int32_t ord) -> BytecodeSlot
@@ -1047,6 +1044,53 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcTableVariadicPutByIntegerValSeq(dst, index));
                 break;
             }
+            case LJOpcode::UGET:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                uint16_t index = SafeIntegerCast<uint16_t>(opdata[1]);
+                bw.Append(BcUpvalueGet(dst, index));
+                break;
+            }
+            case LJOpcode::USETV: [[fallthrough]];
+            case LJOpcode::USETS: [[fallthrough]];
+            case LJOpcode::USETN:
+            {
+                TestAssert(opdata.size() == 2);
+                uint16_t index = SafeIntegerCast<uint16_t>(opdata[0]);
+                BytecodeSlot src;
+                if (opcode == LJOpcode::USETV)
+                {
+                    src = bytecodeSlotFromVariableSlot(opdata[1]);
+                }
+                else if (opcode == LJOpcode::USETS)
+                {
+                    src = bytecodeSlotFromObjectConstant(opdata[1]);
+                }
+                else
+                {
+                    TestAssert(opcode == LJOpcode::USETN);
+                    src = bytecodeSlotFromNumberConstant(opdata[1]);
+                }
+                bw.Append(BcUpvaluePut(src, index));
+                break;
+            }
+            case LJOpcode::UCLO:
+            {
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcUpvalueClose::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                bw.Append(BcUpvalueClose(base));
+                break;
+            }
+            case LJOpcode::USETP: [[fallthrough]];
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::NOT: [[fallthrough]];
@@ -1060,12 +1104,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::ISF: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::KNIL: [[fallthrough]];
-            case LJOpcode::UGET: [[fallthrough]];
-            case LJOpcode::USETV: [[fallthrough]];
-            case LJOpcode::USETS: [[fallthrough]];
-            case LJOpcode::USETN: [[fallthrough]];
-            case LJOpcode::USETP: [[fallthrough]];
-            case LJOpcode::UCLO: [[fallthrough]];
             case LJOpcode::CALLMT: [[fallthrough]];
             case LJOpcode::CALLT: [[fallthrough]];
             case LJOpcode::ITERC: [[fallthrough]];
