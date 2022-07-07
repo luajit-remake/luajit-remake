@@ -240,6 +240,22 @@ TEST(LuaTest, ForLoopCoercion)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, ForLoopEdgeCases)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_loop_edge_cases.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "test1\ntest2\n5\n5\n5\ntest3\ntest4\ntest5\ntest6\ntest7\ntest8\ntest9\ntest10\n");
+    ReleaseAssert(err == "");
+}
+
 TEST(LuaTest, PrimitiveConstants)
 {
     VM* vm = VM::Create();
