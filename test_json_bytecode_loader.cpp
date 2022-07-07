@@ -272,4 +272,37 @@ TEST(LuaTest, PrimitiveConstants)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, LogicalOpSanity)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/logical_op_sanity.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "f1\n2\n4\n5\n7\n9\n11\n13\n15\nf2\n17\n19\n22\n24\n26\n28\n30\n32\nf3\nnil\nfalse\n35\n36\n37\n38\n39\n40\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, PositiveAndNegativeInf)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/pos_and_neg_inf.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "inf\n-inf\n");
+    ReleaseAssert(err == "");
+}
+
+
 }   // anonymous namespace

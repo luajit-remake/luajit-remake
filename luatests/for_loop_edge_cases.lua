@@ -18,27 +18,27 @@ for i = 3, 1, 0.0/0 do
 	print(i)
 end
 print('test5')
-for i = 0/0, 4, 1 do
+for i = 0.0/0, 4, 1 do
 	print(i)
 end
 print('test6')
-for i = 4, 0/0, 1 do
+for i = 4, 0.0/0, 1 do
 	print(i)
 end
 print('test7')
-for i = 0/0, 4, -1 do
+for i = 0.0/0, 4, -1 do
 	print(i)
 end
 print('test8')
-for i = 4, 0/0, -1 do
+for i = 4, 0.0/0, -1 do
 	print(i)
 end
 print('test9')
-for i = 0/0, 0/0, 1 do
+for i = 0.0/0, 0.0/0, 1 do
 	print(i)
 end
 print('test10')
-for i = 0/0, 0/0, -1 do
+for i = 0.0/0, 0.0/0, -1 do
 	print(i)
 end
 

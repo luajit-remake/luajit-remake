@@ -289,9 +289,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 i--;
                 ucb->m_cstTable[i].m_tv = TValue::Nil();
                 i--;
-                ucb->m_cstTable[i].m_tv = TValue::CreateMIV(MiscImmediateValue::CreateFalse(), TValue::x_mivTag);
+                ucb->m_cstTable[i].m_tv = TValue::CreateFalse();
                 i--;
-                ucb->m_cstTable[i].m_tv = TValue::CreateMIV(MiscImmediateValue::CreateTrue(), TValue::x_mivTag);
+                ucb->m_cstTable[i].m_tv = TValue::CreateTrue();
             }
             for (auto& c : j["NumberConstants"])
             {
@@ -824,6 +824,86 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 break;
             }
+            case LJOpcode::ISTC: [[fallthrough]];
+            case LJOpcode::ISFC: [[fallthrough]];
+            case LJOpcode::IST: [[fallthrough]];
+            case LJOpcode::ISF:
+            {
+                uint32_t opKind = static_cast<uint32_t>(opcode) - static_cast<uint32_t>(LJOpcode::ISTC);
+                TestAssert(opKind < 4);
+                TestAssertImp(opKind < 2, opdata.size() == 2);
+                TestAssertImp(opKind >=2, opdata.size() == 1);
+
+                BytecodeSlot src = bytecodeSlotFromVariableSlot(opKind < 2 ? opdata[1] : opdata[0]);
+
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+
+                it++;
+                TestAssert(it < bytecodeList.end());
+                auto& nextBytecode = *it;
+                TestAssert(JSONCheckedGet<std::string>(nextBytecode, "OpCode") == "JMP");
+                TestAssert(nextBytecode.count("OpData") && nextBytecode["OpData"].is_array() && nextBytecode["OpData"].size() == 2);
+
+                // The 'JMP' bytecode immediately following the comparsion should never be a valid jump target
+                //
+                bytecodeLocation.push_back(-1);
+
+                auto& e = nextBytecode["OpData"][1];
+                TestAssert(e.is_number_integer() || e.is_number_unsigned());
+                int32_t jumpTargetOffset;
+                if (e.is_number_integer())
+                {
+                    jumpTargetOffset = SafeIntegerCast<int32_t>(e.get<int64_t>());
+                }
+                else
+                {
+                    jumpTargetOffset = SafeIntegerCast<int32_t>(e.get<uint64_t>());
+                }
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + 1 + jumpTargetOffset;
+                TestAssert(jumpBytecodeOrdinal >= 0);
+
+                if (opcode == LJOpcode::ISTC)
+                {
+                    BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                    bw.Append(BcCopyAndBranchIfTruthy(dst, src));
+                    jumpPatches.push_back(BytecodeJumpPatch {
+                                              .m_loc = selfOffset + BcCopyAndBranchIfTruthy::OffsetOfJump(),
+                                              .m_selfOffset = selfOffset,
+                                              .m_targetOrdinal = jumpBytecodeOrdinal
+                                          });
+                }
+                else if (opcode == LJOpcode::ISFC)
+                {
+                    BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                    bw.Append(BcCopyAndBranchIfFalsy(dst, src));
+                    jumpPatches.push_back(BytecodeJumpPatch {
+                                              .m_loc = selfOffset + BcCopyAndBranchIfFalsy::OffsetOfJump(),
+                                              .m_selfOffset = selfOffset,
+                                              .m_targetOrdinal = jumpBytecodeOrdinal
+                                          });
+                }
+                else if (opcode == LJOpcode::IST)
+                {
+                    bw.Append(BcBranchIfTruthy(src));
+                    jumpPatches.push_back(BytecodeJumpPatch {
+                                              .m_loc = selfOffset + BcBranchIfTruthy::OffsetOfJump(),
+                                              .m_selfOffset = selfOffset,
+                                              .m_targetOrdinal = jumpBytecodeOrdinal
+                                          });
+                }
+                else
+                {
+                    TestAssert(opcode == LJOpcode::ISF);
+                    bw.Append(BcBranchIfFalsy(src));
+                    jumpPatches.push_back(BytecodeJumpPatch {
+                                              .m_loc = selfOffset + BcBranchIfFalsy::OffsetOfJump(),
+                                              .m_selfOffset = selfOffset,
+                                              .m_targetOrdinal = jumpBytecodeOrdinal
+                                          });
+                }
+                break;
+            }
             case LJOpcode::GGET:
             {
                 TestAssert(opdata.size() == 2);
@@ -1188,10 +1268,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::NOT: [[fallthrough]];
             case LJOpcode::UNM: [[fallthrough]];
             case LJOpcode::LEN: [[fallthrough]];
-            case LJOpcode::ISTC: [[fallthrough]];
-            case LJOpcode::ISFC: [[fallthrough]];
-            case LJOpcode::IST: [[fallthrough]];
-            case LJOpcode::ISF: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::KNIL: [[fallthrough]];
             case LJOpcode::CALLMT: [[fallthrough]];

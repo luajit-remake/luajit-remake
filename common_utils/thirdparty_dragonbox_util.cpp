@@ -5,6 +5,12 @@
 #pragma clang diagnostic ignored "-Wconditional-uninitialized"
 #pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
 
+// !!!!! NOTE !!!!!
+// We made the following changes:
+// (1) When the value is inf / -inf, instead of outputting 'Infinity' / '-Infinity', we output 'inf' / '-inf' to match the output of Lua
+// (2) When the valus is NaN, instead of outputting 'NaN', we output 'nan' to match the output of Lua
+//
+
 // *** THIRD PARTY SOURCE CODE BEGIN ***
 
 // Copyright 2020-2022 Junekey Jeon
@@ -2739,11 +2745,11 @@ namespace jkj::dragonbox {
                         *buffer = '-';
                         ++buffer;
                     }
-                    std::memcpy(buffer, "Infinity", 8);
-                    return buffer + 8;
+                    std::memcpy(buffer, "inf", 3);
+                    return buffer + 3;
                 }
                 else {
-                    std::memcpy(buffer, "NaN", 3);
+                    std::memcpy(buffer, "nan", 3);
                     return buffer + 3;
                 }
             }

@@ -946,6 +946,10 @@ public:
     BcIsNLT,                            \
     BcIsLE,                             \
     BcIsNLE,                            \
+    BcCopyAndBranchIfTruthy,            \
+    BcCopyAndBranchIfFalsy,             \
+    BcBranchIfTruthy,                   \
+    BcBranchIfFalsy,                    \
     BcForLoopInit,                      \
     BcForLoopStep,                      \
     BcUnconditionalJump,                \
@@ -999,19 +1003,21 @@ constexpr uint32_t x_minNilFillReturnValues = 3;
 class BcUpvalueGet
 {
 public:
+    using Self = BcUpvalueGet;
+
     BcUpvalueGet(BytecodeSlot dst, uint16_t index)
-        : m_opcode(x_opcodeId<BcUpvalueGet>), m_dst(dst), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_index(index)
     { }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcUpvalueGet* bc = reinterpret_cast<const BcUpvalueGet*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcUpvalueGet>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_dst.IsLocal());
         assert(bc->m_index < StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_numUpvalues);
         TValue result = *TCGet(StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_upvalues[bc->m_index]).As()->m_ptr;
         *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-        Dispatch(rc, sfp, bcu + sizeof(BcUpvalueGet));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 
     uint8_t m_opcode;
@@ -1022,18 +1028,20 @@ public:
 class BcUpvaluePut
 {
 public:
+    using Self = BcUpvaluePut;
+
     BcUpvaluePut(BytecodeSlot src, uint16_t index)
-        : m_opcode(x_opcodeId<BcUpvaluePut>), m_src(src), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_index(index)
     { }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcUpvaluePut* bc = reinterpret_cast<const BcUpvaluePut*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcUpvaluePut>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_index < StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_numUpvalues);
         TValue src = bc->m_src.Get(rc, sfp);
         *TCGet(StackFrameHeader::GetStackFrameHeader(sfp)->m_func->m_upvalues[bc->m_index]).As()->m_ptr = src;
-        Dispatch(rc, sfp, bcu + sizeof(BcUpvaluePut));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 
     uint8_t m_opcode;
@@ -1044,19 +1052,21 @@ public:
 class BcUpvalueClose
 {
 public:
+    using Self = BcUpvalueClose;
+
     BcUpvalueClose(BytecodeSlot base)
-        : m_opcode(x_opcodeId<BcUpvalueClose>), m_base(base), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_offset(0)
     { }
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcUpvalueClose::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcUpvalueClose* bc = reinterpret_cast<const BcUpvalueClose*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcUpvalueClose>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue* tvbase = StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
         rc->CloseUpvalues(tvbase);
         Dispatch(rc, sfp, bcu + bc->m_offset);
@@ -1070,8 +1080,10 @@ public:
 class BcTableGetById
 {
 public:
+    using Self = BcTableGetById;
+
     BcTableGetById(BytecodeSlot base, BytecodeSlot dst, int32_t index)
-        : m_opcode(x_opcodeId<BcTableGetById>), m_base(base), m_dst(dst), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_dst(dst), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1081,8 +1093,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTableGetById* bc = reinterpret_cast<const BcTableGetById*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTableGetById>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1106,7 +1118,7 @@ public:
             TValue result = TableObject::GetById(base.As<TableObject>(), index.As<void>(), icInfo);
 
             *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(BcTableGetById));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1114,8 +1126,10 @@ public:
 class BcTablePutById
 {
 public:
+    using Self = BcTablePutById;
+
     BcTablePutById(BytecodeSlot base, BytecodeSlot src, int32_t index)
-        : m_opcode(x_opcodeId<BcTablePutById>), m_base(base), m_src(src), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_src(src), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1125,8 +1139,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTablePutById* bc = reinterpret_cast<const BcTablePutById*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTablePutById>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1149,7 +1163,7 @@ public:
             TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
             TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
             TableObject::PutById(base.As<TableObject>(), index.As<void>(), newValue, icInfo);
-            Dispatch(rc, sfp, bcu + sizeof(BcTablePutById));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1157,8 +1171,10 @@ public:
 class BcTableGetByVal
 {
 public:
+    using Self = BcTableGetByVal;
+
     BcTableGetByVal(BytecodeSlot base, BytecodeSlot dst, BytecodeSlot index)
-        : m_opcode(x_opcodeId<BcTableGetByVal>), m_base(base), m_dst(dst), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_dst(dst), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1168,8 +1184,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTableGetByVal* bc = reinterpret_cast<const BcTableGetByVal*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTableGetByVal>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1211,7 +1227,7 @@ public:
             }
 
             *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(BcTableGetByVal));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1219,8 +1235,10 @@ public:
 class BcTablePutByVal
 {
 public:
+    using Self = BcTablePutByVal;
+
     BcTablePutByVal(BytecodeSlot base, BytecodeSlot src, BytecodeSlot index)
-        : m_opcode(x_opcodeId<BcTablePutByVal>), m_base(base), m_src(src), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_src(src), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1230,8 +1248,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTablePutByVal* bc = reinterpret_cast<const BcTablePutByVal*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTablePutByVal>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1268,7 +1286,7 @@ public:
                 ReleaseAssert(false && "unimplemented");
             }
 
-            Dispatch(rc, sfp, bcu + sizeof(BcTablePutByVal));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1276,8 +1294,10 @@ public:
 class BcTableGetByIntegerVal
 {
 public:
+    using Self = BcTableGetByIntegerVal;
+
     BcTableGetByIntegerVal(BytecodeSlot base, BytecodeSlot dst, int16_t index)
-        : m_opcode(x_opcodeId<BcTableGetByIntegerVal>), m_base(base), m_dst(dst), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_dst(dst), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1287,8 +1307,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTableGetByIntegerVal* bc = reinterpret_cast<const BcTableGetByIntegerVal*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTableGetByIntegerVal>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1310,7 +1330,7 @@ public:
             result = TableObject::GetByIntegerIndex(base.As<TableObject>(), bc->m_index, icInfo);
 
             *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(BcTableGetByIntegerVal));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1318,8 +1338,10 @@ public:
 class BcTablePutByIntegerVal
 {
 public:
+    using Self = BcTablePutByIntegerVal;
+
     BcTablePutByIntegerVal(BytecodeSlot base, BytecodeSlot src, int16_t index)
-        : m_opcode(x_opcodeId<BcTablePutByIntegerVal>), m_base(base), m_src(src), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_src(src), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1329,8 +1351,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTablePutByIntegerVal* bc = reinterpret_cast<const BcTablePutByIntegerVal*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTablePutByIntegerVal>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
@@ -1348,7 +1370,7 @@ public:
 
             TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
             TableObject::PutByValIntegerIndex(base.As<TableObject>(), bc->m_index, newValue);
-            Dispatch(rc, sfp, bcu + sizeof(BcTablePutByIntegerVal));
+            Dispatch(rc, sfp, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -1356,8 +1378,10 @@ public:
 class BcTableVariadicPutByIntegerValSeq
 {
 public:
+    using Self = BcTableVariadicPutByIntegerValSeq;
+
     BcTableVariadicPutByIntegerValSeq(BytecodeSlot base, BytecodeSlot index)
-        : m_opcode(x_opcodeId<BcTableVariadicPutByIntegerValSeq>), m_base(base), m_index(index)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_index(index)
     { }
 
     uint8_t m_opcode;
@@ -1373,8 +1397,10 @@ public:
 class BcGlobalGet
 {
 public:
+    using Self = BcGlobalGet;
+
     BcGlobalGet(BytecodeSlot dst, BytecodeSlot idx)
-        : m_opcode(x_opcodeId<BcGlobalGet>), m_dst(dst), m_index(idx.ConstantOrd())
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_index(idx.ConstantOrd())
     { }
 
     uint8_t m_opcode;
@@ -1383,8 +1409,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcGlobalGet* bc = reinterpret_cast<const BcGlobalGet*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcGlobalGet>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
@@ -1396,15 +1422,17 @@ public:
         TValue result = TableObject::GetById(base.As(), index.As<void>(), icInfo);
 
         *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-        Dispatch(rc, sfp, bcu + sizeof(BcGlobalGet));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcGlobalPut
 {
 public:
+    using Self = BcGlobalPut;
+
     BcGlobalPut(BytecodeSlot src, BytecodeSlot idx)
-        : m_opcode(x_opcodeId<BcGlobalPut>), m_src(src), m_index(idx.ConstantOrd())
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_index(idx.ConstantOrd())
     { }
 
     uint8_t m_opcode;
@@ -1413,8 +1441,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcGlobalPut* bc = reinterpret_cast<const BcGlobalPut*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcGlobalPut>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
@@ -1426,15 +1454,17 @@ public:
         TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
         TableObject::PutById(base.As(), index.As<void>(), newValue, icInfo);
 
-        Dispatch(rc, sfp, bcu + sizeof(BcGlobalPut));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcTableNew
 {
 public:
+    using Self = BcTableNew;
+
     BcTableNew(BytecodeSlot dst, uint8_t inlineCapacityStepping, uint16_t arrayPartSizeHint)
-        : m_opcode(x_opcodeId<BcTableNew>), m_dst(dst), m_inlineCapacityStepping(inlineCapacityStepping), m_arrayPartSizeHint(arrayPartSizeHint)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_inlineCapacityStepping(inlineCapacityStepping), m_arrayPartSizeHint(arrayPartSizeHint)
     { }
 
     uint8_t m_opcode;
@@ -1444,22 +1474,24 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTableNew* bc = reinterpret_cast<const BcTableNew*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTableNew>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
 
         VM* vm = VM::GetActiveVMForCurrentThread();
         SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForSteppingKnowingAlreadyBuilt(vm, bc->m_inlineCapacityStepping);
         UserHeapPointer<TableObject> obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), bc->m_arrayPartSizeHint);
         *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = TValue::CreatePointer(obj);
-        Dispatch(rc, sfp, bcu + sizeof(BcTableNew));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcTableDup
 {
 public:
+    using Self = BcTableDup;
+
     BcTableDup(BytecodeSlot dst, int32_t src)
-        : m_opcode(x_opcodeId<BcTableDup>), m_dst(dst), m_src(src)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_src(src)
     { }
 
     uint8_t m_opcode;
@@ -1468,8 +1500,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcTableDup* bc = reinterpret_cast<const BcTableDup*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcTableDup>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tpl = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_src);
         assert(tpl.IsPointer(TValue::x_mivTag));
@@ -1479,15 +1511,17 @@ public:
         HeapPtr<TableObject> newObject = obj->ShallowCloneTableObject(vm);
         TValue result = TValue::CreatePointer(UserHeapPointer<TableObject>(newObject));
         *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-        Dispatch(rc, sfp, bcu + sizeof(BcTableDup));
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcReturn
 {
 public:
+    using Self = BcReturn;
+
     BcReturn(bool isVariadic, uint16_t numReturnValues, BytecodeSlot slotBegin)
-        : m_opcode(x_opcodeId<BcReturn>), m_isVariadicRet(isVariadic), m_numReturnValues(numReturnValues), m_slotBegin(slotBegin)
+        : m_opcode(x_opcodeId<Self>), m_isVariadicRet(isVariadic), m_numReturnValues(numReturnValues), m_slotBegin(slotBegin)
     { }
 
     uint8_t m_opcode;
@@ -1497,8 +1531,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcReturn* bc = reinterpret_cast<const BcReturn*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcReturn>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_slotBegin.IsLocal());
         TValue* pbegin = StackFrameHeader::GetLocalAddr(sfp, bc->m_slotBegin);
         uint32_t numRetValues = bc->m_numReturnValues;
@@ -1537,8 +1571,10 @@ public:
 class BcCall
 {
 public:
+    using Self = BcCall;
+
     BcCall(bool keepVariadicRet, bool passVariadicRetAsParam, uint32_t numFixedParams, uint32_t numFixedRets, BytecodeSlot funcSlot)
-        : m_opcode(x_opcodeId<BcCall>), m_keepVariadicRet(keepVariadicRet), m_passVariadicRetAsParam(passVariadicRetAsParam)
+        : m_opcode(x_opcodeId<Self>), m_keepVariadicRet(keepVariadicRet), m_passVariadicRetAsParam(passVariadicRetAsParam)
         , m_numFixedParams(numFixedParams), m_numFixedRets(numFixedRets), m_funcSlot(funcSlot)
     { }
 
@@ -1551,8 +1587,8 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcCall>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
 
         HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
@@ -1694,8 +1730,8 @@ public:
         assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
         uint8_t* callerBytecodeStart = callerEc->m_bytecode;
         ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
-        const BcCall* bc = reinterpret_cast<const BcCall*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcCall>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         if (bc->m_keepVariadicRet)
         {
             rc->m_numVariadicRets = SafeIntegerCast<uint32_t>(numRetValues);
@@ -1726,15 +1762,17 @@ public:
             }
         }
         rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
-        Dispatch(rc, stackframe, bcu + sizeof(BcCall));
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcNewClosure
 {
 public:
+    using Self = BcNewClosure;
+
     BcNewClosure(BytecodeSlot src, BytecodeSlot dst)
-        : m_opcode(x_opcodeId<BcNewClosure>), m_src(src), m_dst(dst)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_dst(dst)
     { }
 
     uint8_t m_opcode;
@@ -1743,21 +1781,23 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcNewClosure* bc = reinterpret_cast<const BcNewClosure*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcNewClosure>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         UnlinkedCodeBlock* ucb = CodeBlock::GetConstantAsUnlinkedCodeBlock(rc->m_codeBlock, bc->m_src.ConstantOrd());
         CodeBlock* cb = UnlinkedCodeBlock::GetCodeBlock(ucb, rc->m_globalObject);
         UserHeapPointer<FunctionObject> func = FunctionObject::CreateAndFillUpvalues(ucb, cb, rc, reinterpret_cast<TValue*>(stackframe), StackFrameHeader::GetStackFrameHeader(stackframe)->m_func);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreatePointer(func);
-        Dispatch(rc, stackframe, bcu + sizeof(BcNewClosure));
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcMove
 {
 public:
+    using Self = BcMove;
+
     BcMove(BytecodeSlot src, BytecodeSlot dst)
-        : m_opcode(x_opcodeId<BcMove>), m_src(src), m_dst(dst)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_dst(dst)
     { }
 
     uint8_t m_opcode;
@@ -1766,19 +1806,21 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcMove* bc = reinterpret_cast<const BcMove*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcMove>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue src = bc->m_src.Get(rc, stackframe);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = src;
-        Dispatch(rc, stackframe, bcu + sizeof(BcMove));
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
 class BcAdd
 {
 public:
+    using Self = BcAdd;
+
     BcAdd(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcAdd>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1788,14 +1830,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcAdd* bc = reinterpret_cast<const BcAdd*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcAdd>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() + rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcAdd));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else
         {
@@ -1807,8 +1849,10 @@ public:
 class BcSub
 {
 public:
+    using Self = BcSub;
+
     BcSub(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcSub>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1818,14 +1862,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcSub* bc = reinterpret_cast<const BcSub*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcSub>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() - rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcSub));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else
         {
@@ -1837,8 +1881,10 @@ public:
 class BcMul
 {
 public:
+    using Self = BcMul;
+
     BcMul(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcMul>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1848,14 +1894,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcMul* bc = reinterpret_cast<const BcMul*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcMul>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() * rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcMul));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else
         {
@@ -1867,8 +1913,10 @@ public:
 class BcDiv
 {
 public:
+    using Self = BcDiv;
+
     BcDiv(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcDiv>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1878,14 +1926,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcDiv* bc = reinterpret_cast<const BcDiv*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcDiv>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() / rhs.AsDouble());
-            Dispatch(rc, stackframe, bcu + sizeof(BcDiv));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else
         {
@@ -1897,8 +1945,10 @@ public:
 class BcMod
 {
 public:
+    using Self = BcMod;
+
     BcMod(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
-        : m_opcode(x_opcodeId<BcMod>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
     { }
 
     uint8_t m_opcode;
@@ -1926,14 +1976,14 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcMod* bc = reinterpret_cast<const BcMod*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcMod>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(ModulusWithLuaSemantics(lhs.AsDouble(), rhs.AsDouble()));
-            Dispatch(rc, stackframe, bcu + sizeof(BcMod));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else
         {
@@ -1945,8 +1995,10 @@ public:
 class BcIsLT
 {
 public:
+    using Self = BcIsLT;
+
     BcIsLT(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsLT>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -1956,13 +2008,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsLT::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsLT* bc = reinterpret_cast<const BcIsLT*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsLT>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -1973,7 +2025,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsLT));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -1990,8 +2042,10 @@ public:
 class BcIsNLT
 {
 public:
+    using Self = BcIsNLT;
+
     BcIsNLT(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsNLT>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2001,13 +2055,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsNLT::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsNLT* bc = reinterpret_cast<const BcIsNLT*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsNLT>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -2018,7 +2072,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLT));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -2031,8 +2085,10 @@ public:
 class BcIsLE
 {
 public:
+    using Self = BcIsLE;
+
     BcIsLE(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsLE>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2042,13 +2098,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsLE::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsLE* bc = reinterpret_cast<const BcIsLE*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsLE>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -2059,7 +2115,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsLE));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -2072,8 +2128,10 @@ public:
 class BcIsNLE
 {
 public:
+    using Self = BcIsNLE;
+
     BcIsNLE(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsNLE>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2083,13 +2141,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsNLE::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsNLE* bc = reinterpret_cast<const BcIsNLE*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsNLE>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -2100,7 +2158,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNLE));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -2113,8 +2171,10 @@ public:
 class BcIsEQ
 {
 public:
+    using Self = BcIsEQ;
+
     BcIsEQ(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsEQ>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2124,13 +2184,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsEQ::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsEQ* bc = reinterpret_cast<const BcIsEQ*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsEQ>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -2141,7 +2201,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsEQ));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -2154,7 +2214,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsEQ));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
     }
@@ -2163,8 +2223,10 @@ public:
 class BcIsNEQ
 {
 public:
+    using Self = BcIsNEQ;
+
     BcIsNEQ(BytecodeSlot lhs, BytecodeSlot rhs)
-        : m_opcode(x_opcodeId<BcIsNEQ>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2174,13 +2236,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcIsNEQ::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcIsNEQ* bc = reinterpret_cast<const BcIsNEQ*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcIsNEQ>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
@@ -2191,7 +2253,7 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNEQ));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
         }
         else
@@ -2204,8 +2266,154 @@ public:
             }
             else
             {
-                Dispatch(rc, stackframe, bcu + sizeof(BcIsNEQ));
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
+        }
+    }
+} __attribute__((__packed__));
+
+class BcCopyAndBranchIfTruthy
+{
+public:
+    using Self = BcCopyAndBranchIfTruthy;
+
+    BcCopyAndBranchIfTruthy(BytecodeSlot dst, BytecodeSlot src)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_src(src), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    BytecodeSlot m_src;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = src;
+
+        if (src.IsTruthy())
+        {
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcCopyAndBranchIfFalsy
+{
+public:
+    using Self = BcCopyAndBranchIfFalsy;
+
+    BcCopyAndBranchIfFalsy(BytecodeSlot dst, BytecodeSlot src)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_src(src), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    BytecodeSlot m_src;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = src;
+
+        if (!src.IsTruthy())
+        {
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcBranchIfTruthy
+{
+public:
+    using Self = BcBranchIfTruthy;
+
+    BcBranchIfTruthy(BytecodeSlot src)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        if (src.IsTruthy())
+        {
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcBranchIfFalsy
+{
+public:
+    using Self = BcBranchIfFalsy;
+
+    BcBranchIfFalsy(BytecodeSlot src)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        if (!src.IsTruthy())
+        {
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -2213,8 +2421,10 @@ public:
 class BcForLoopInit
 {
 public:
+    using Self = BcForLoopInit;
+
     BcForLoopInit(BytecodeSlot base)
-        : m_opcode(x_opcodeId<BcForLoopInit>), m_base(base), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2223,13 +2433,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcForLoopInit::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcForLoopInit* bc = reinterpret_cast<const BcForLoopInit*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcForLoopInit>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         double vals[3];
         TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
         for (uint32_t i = 0; i < 3; i++)
@@ -2267,7 +2477,7 @@ public:
         else
         {
             addr[3] = TValue::CreateDouble(vals[0]);
-            Dispatch(rc, stackframe, bcu + sizeof(BcForLoopInit));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -2275,8 +2485,10 @@ public:
 class BcForLoopStep
 {
 public:
+    using Self = BcForLoopStep;
+
     BcForLoopStep(BytecodeSlot base)
-        : m_opcode(x_opcodeId<BcForLoopStep>), m_base(base), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2285,13 +2497,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcForLoopStep::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcForLoopStep* bc = reinterpret_cast<const BcForLoopStep*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcForLoopStep>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         double vals[3];
         TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
 
@@ -2310,7 +2522,7 @@ public:
         }
         else
         {
-            Dispatch(rc, stackframe, bcu + sizeof(BcForLoopInit));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
     }
 } __attribute__((__packed__));
@@ -2318,8 +2530,10 @@ public:
 class BcUnconditionalJump
 {
 public:
+    using Self = BcUnconditionalJump;
+
     BcUnconditionalJump()
-        : m_opcode(x_opcodeId<BcUnconditionalJump>), m_offset(0)
+        : m_opcode(x_opcodeId<Self>), m_offset(0)
     { }
 
     uint8_t m_opcode;
@@ -2327,13 +2541,13 @@ public:
 
     static constexpr int32_t OffsetOfJump()
     {
-        return static_cast<int32_t>(offsetof_member_v<&BcUnconditionalJump::m_offset>);
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
     }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcUnconditionalJump* bc = reinterpret_cast<const BcUnconditionalJump*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcUnconditionalJump>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
     }
 } __attribute__((__packed__));
@@ -2341,8 +2555,10 @@ public:
 class BcConstant
 {
 public:
+    using Self = BcConstant;
+
     BcConstant(BytecodeSlot dst, TValue value)
-        : m_opcode(x_opcodeId<BcConstant>), m_dst(dst), m_value(value)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_value(value)
     { }
 
     uint8_t m_opcode;
@@ -2351,10 +2567,10 @@ public:
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        const BcConstant* bc = reinterpret_cast<const BcConstant*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<BcConstant>);
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TCGet(bc->m_value);
-        Dispatch(rc, stackframe, bcu + sizeof(BcConstant));
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 

@@ -151,6 +151,13 @@ struct TValue
         return BitwiseTruncateTo<int32_t>(m_value);
     }
 
+    // Return true if the value is not 'nil' or 'false'
+    //
+    bool IsTruthy() const
+    {
+        return m_value != Nil().m_value && m_value != CreateFalse().m_value;
+    }
+
     template<typename T = void>
     UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
@@ -196,6 +203,16 @@ struct TValue
         TValue result { miv.m_value ^ mivTag };
         assert(result.AsMIV(mivTag).m_value == miv.m_value);
         return result;
+    }
+
+    static TValue CreateTrue()
+    {
+        return TValue::CreateMIV(MiscImmediateValue::CreateTrue(), x_mivTag);
+    }
+
+    static TValue CreateFalse()
+    {
+        return TValue::CreateMIV(MiscImmediateValue::CreateFalse(), x_mivTag);
     }
 
     static TValue Nil()

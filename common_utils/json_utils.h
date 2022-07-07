@@ -61,6 +61,23 @@ T JSONCheckedGet(json& j, const char* prop)
             TestAssert(static_cast<uint64_t>(d) == val);
             return d;
         }
+        else if (it->is_string())
+        {
+            std::string s = it->get<std::string>();
+            if (s == "Infinity")
+            {
+                return std::numeric_limits<double>::infinity();
+            }
+            else if (s == "-Infinity")
+            {
+                return -std::numeric_limits<double>::infinity();
+            }
+            else
+            {
+                ReleaseAssert(s == "NaN");
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+        }
         else
         {
             TestAssert(it->is_number_float());
