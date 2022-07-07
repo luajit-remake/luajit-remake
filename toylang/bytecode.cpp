@@ -248,8 +248,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         uint32_t numUpvalues = SafeIntegerCast<uint32_t>(j["Upvalues"].size());
         ucb->m_numUpvalues = numUpvalues;
 
+        // We always insert 3 constants 'nil', 'false', 'true', to make things easier
+        //
         TestAssert(j.count("NumberConstants") && j["NumberConstants"].is_array());
-        size_t numNumberConstants = j["NumberConstants"].size();
+        size_t numNumberConstants = j["NumberConstants"].size() + 3;
         ucb->m_numNumberConstants = SafeIntegerCast<uint32_t>(numNumberConstants);
 
         TestAssert(j.count("ObjectConstants") && j["ObjectConstants"].is_array());
@@ -283,6 +285,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
         {
             uint32_t i = ucb->m_cstTableLength;
+            {
+                i--;
+                ucb->m_cstTable[i].m_tv = TValue::Nil();
+                i--;
+                ucb->m_cstTable[i].m_tv = TValue::CreateMIV(MiscImmediateValue::CreateFalse(), TValue::x_mivTag);
+                i--;
+                ucb->m_cstTable[i].m_tv = TValue::CreateMIV(MiscImmediateValue::CreateTrue(), TValue::x_mivTag);
+            }
             for (auto& c : j["NumberConstants"])
             {
                 i--;
@@ -518,10 +528,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             TestAssert(i == 0);
         }
 
+        auto bytecodeSlotFromPrimaryConstant = [&](int32_t primaryConstant) -> BytecodeSlot
+        {
+            TestAssert(0 <= primaryConstant && primaryConstant < 3);
+            return BytecodeSlot::Constant(-(primaryConstant + 1));
+        };
+
         auto bytecodeSlotFromNumberConstant = [&](int32_t ord) -> BytecodeSlot
         {
-            TestAssert(0 <= ord && ord < static_cast<int32_t>(numNumberConstants));
-            return BytecodeSlot::Constant(-(ord + 1));
+            TestAssert(0 <= ord && ord < static_cast<int32_t>(numNumberConstants) - 3);
+            return BytecodeSlot::Constant(-(ord + 1 + 3));
         };
 
         auto bytecodeSlotFromObjectConstant = [&](int32_t ord) -> BytecodeSlot
@@ -672,10 +688,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::ISEQS: [[fallthrough]];
             case LJOpcode::ISNES: [[fallthrough]];
             case LJOpcode::ISEQN: [[fallthrough]];
-            case LJOpcode::ISNEN:
+            case LJOpcode::ISNEN: [[fallthrough]];
+            case LJOpcode::ISEQP: [[fallthrough]];
+            case LJOpcode::ISNEP:
             {
                 uint32_t opOrd = static_cast<uint32_t>(opcode) - static_cast<uint32_t>(LJOpcode::ISLT);
-                TestAssert(opOrd < 10);
+                TestAssert(opOrd < 12);
                 uint32_t opKind;
                 uint32_t rhsKind;
                 if (opOrd < 4)
@@ -703,10 +721,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 {
                     rhs = bytecodeSlotFromObjectConstant(opdata[1]);
                 }
+                else if (rhsKind == 2)
+                {
+                    rhs = bytecodeSlotFromNumberConstant(opdata[1]);
+                }
                 else
                 {
-                    TestAssert(rhsKind == 2);
-                    rhs = bytecodeSlotFromNumberConstant(opdata[1]);
+                    TestAssert(rhsKind == 3);
+                    rhs = bytecodeSlotFromPrimaryConstant(opdata[1]);
                 }
 
                 it++;
@@ -1057,7 +1079,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             }
             case LJOpcode::USETV: [[fallthrough]];
             case LJOpcode::USETS: [[fallthrough]];
-            case LJOpcode::USETN:
+            case LJOpcode::USETN: [[fallthrough]];
+            case LJOpcode::USETP:
             {
                 TestAssert(opdata.size() == 2);
                 uint16_t index = SafeIntegerCast<uint16_t>(opdata[0]);
@@ -1070,10 +1093,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 {
                     src = bytecodeSlotFromObjectConstant(opdata[1]);
                 }
+                else if (opcode == LJOpcode::USETN)
+                {
+                    src = bytecodeSlotFromNumberConstant(opdata[1]);
+                }
                 else
                 {
-                    TestAssert(opcode == LJOpcode::USETN);
-                    src = bytecodeSlotFromNumberConstant(opdata[1]);
+                    TestAssert(opcode == LJOpcode::USETP);
+                    src = bytecodeSlotFromPrimaryConstant(opdata[1]);
                 }
                 bw.Append(BcUpvaluePut(src, index));
                 break;
@@ -1156,14 +1183,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcUnconditionalJump());
                 break;
             }
-            case LJOpcode::USETP: [[fallthrough]];
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::NOT: [[fallthrough]];
             case LJOpcode::UNM: [[fallthrough]];
             case LJOpcode::LEN: [[fallthrough]];
-            case LJOpcode::ISEQP: [[fallthrough]];
-            case LJOpcode::ISNEP: [[fallthrough]];
             case LJOpcode::ISTC: [[fallthrough]];
             case LJOpcode::ISFC: [[fallthrough]];
             case LJOpcode::IST: [[fallthrough]];

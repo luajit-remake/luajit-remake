@@ -240,4 +240,20 @@ TEST(LuaTest, ForLoopCoercion)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, PrimitiveConstants)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/primitive_constant.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "0\n1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n1\n1\n1\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1\n0\n1\n1\n0\nfalse\ntrue\nnil\n0\ntrue\n0\ntrue\n");
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace
