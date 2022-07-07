@@ -177,4 +177,67 @@ TEST(LuaTest, Upvalue)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, Fib_upvalue)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/fib_upvalue.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    ReleaseAssert(out == "610\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, Sieve)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/sieve.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "9592\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, NaNEdgeCase)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/nan_edge_case.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "1\n0\n0\n0\n0\n0\n1\n0\n1\n0\n0\n0\n0\n1\n0\n0\n0\n0\n0\n1\n1\n0\n0\n0\n0\n0\n1\n0\n0\n0\n1\n1\n0\n1\n1\n1\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, ForLoopCoercion)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_loop_coercion.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n");
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

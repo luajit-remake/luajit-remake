@@ -937,12 +937,18 @@ public:
     BcMove,                             \
     BcAdd,                              \
     BcSub,                              \
+    BcMul,                              \
+    BcDiv,                              \
+    BcMod,                              \
     BcIsEQ,                             \
     BcIsNEQ,                            \
     BcIsLT,                             \
     BcIsNLT,                            \
     BcIsLE,                             \
     BcIsNLE,                            \
+    BcForLoopInit,                      \
+    BcForLoopStep,                      \
+    BcUnconditionalJump,                \
     BcConstant
 
 #define macro(opcodeCppName) class opcodeCppName;
@@ -1828,6 +1834,114 @@ public:
     }
 } __attribute__((__packed__));
 
+class BcMul
+{
+public:
+    BcMul(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<BcMul>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_lhs;
+    BytecodeSlot m_rhs;
+    BytecodeSlot m_result;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcMul* bc = reinterpret_cast<const BcMul*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcMul>);
+        TValue lhs = bc->m_lhs.Get(rc, stackframe);
+        TValue rhs = bc->m_rhs.Get(rc, stackframe);
+        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        {
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() * rhs.AsDouble());
+            Dispatch(rc, stackframe, bcu + sizeof(BcMul));
+        }
+        else
+        {
+            assert(false && "unimplemented");
+        }
+    }
+} __attribute__((__packed__));
+
+class BcDiv
+{
+public:
+    BcDiv(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<BcDiv>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_lhs;
+    BytecodeSlot m_rhs;
+    BytecodeSlot m_result;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcDiv* bc = reinterpret_cast<const BcDiv*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcDiv>);
+        TValue lhs = bc->m_lhs.Get(rc, stackframe);
+        TValue rhs = bc->m_rhs.Get(rc, stackframe);
+        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        {
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() / rhs.AsDouble());
+            Dispatch(rc, stackframe, bcu + sizeof(BcDiv));
+        }
+        else
+        {
+            assert(false && "unimplemented");
+        }
+    }
+} __attribute__((__packed__));
+
+class BcMod
+{
+public:
+    BcMod(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<BcMod>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_lhs;
+    BytecodeSlot m_rhs;
+    BytecodeSlot m_result;
+
+    static double WARN_UNUSED ModulusWithLuaSemantics(double a, double b)
+    {
+        // Quoted from PUC Lua llimits.h:320:
+        //     modulo: defined as 'a - floor(a/b)*b'; the direct computation
+        //     using this definition has several problems with rounding errors,
+        //     so it is better to use 'fmod'. 'fmod' gives the result of
+        //     'a - trunc(a/b)*b', and therefore must be corrected when
+        //     'trunc(a/b) ~= floor(a/b)'. That happens when the division has a
+        //     non-integer negative result: non-integer result is equivalent to
+        //     a non-zero remainder 'm'; negative result is equivalent to 'a' and
+        //     'b' with different signs, or 'm' and 'b' with different signs
+        //     (as the result 'm' of 'fmod' has the same sign of 'a').
+        //
+        double m = fmod(a, b);
+        if ((m > 0) ? b < 0 : (m < 0 && b > 0)) m += b;
+        return m;
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcMod* bc = reinterpret_cast<const BcMod*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcMod>);
+        TValue lhs = bc->m_lhs.Get(rc, stackframe);
+        TValue rhs = bc->m_rhs.Get(rc, stackframe);
+        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        {
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(ModulusWithLuaSemantics(lhs.AsDouble(), rhs.AsDouble()));
+            Dispatch(rc, stackframe, bcu + sizeof(BcMod));
+        }
+        else
+        {
+            assert(false && "unimplemented");
+        }
+    }
+} __attribute__((__packed__));
+
 class BcIsLT
 {
 public:
@@ -2071,7 +2185,7 @@ public:
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
         {
-            if (UnsafeFloatEqual(lhs.AsDouble(), rhs.AsDouble()))
+            if (!UnsafeFloatEqual(lhs.AsDouble(), rhs.AsDouble()))
             {
                 Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
             }
@@ -2084,7 +2198,7 @@ public:
         {
             // This is problematic..
             //
-            if (lhs.m_value == rhs.m_value)
+            if (!(lhs.m_value == rhs.m_value))
             {
                 Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
             }
@@ -2093,6 +2207,134 @@ public:
                 Dispatch(rc, stackframe, bcu + sizeof(BcIsNEQ));
             }
         }
+    }
+} __attribute__((__packed__));
+
+class BcForLoopInit
+{
+public:
+    BcForLoopInit(BytecodeSlot base)
+        : m_opcode(x_opcodeId<BcForLoopInit>), m_base(base), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&BcForLoopInit::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcForLoopInit* bc = reinterpret_cast<const BcForLoopInit*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcForLoopInit>);
+        double vals[3];
+        TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
+        for (uint32_t i = 0; i < 3; i++)
+        {
+            TValue v = addr[i];
+            if (v.IsDouble(TValue::x_int32Tag))
+            {
+                vals[i] = v.AsDouble();
+            }
+            else if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            {
+                HeapPtr<HeapString> hs = v.AsPointer<HeapString>().As();
+                uint8_t* str = TranslateToRawPointer(hs->m_string);
+                uint32_t len = hs->m_length;
+                StrScanResult r = TryConvertStringToDoubleWithLuaSemantics(str, len);
+                if (r.fmt == STRSCAN_ERROR)
+                {
+                    ReleaseAssert(false && "for loop range not integer, error path not implemented");
+                }
+                assert(r.fmt == STRSCAN_NUM);
+                vals[i] = r.d;
+                addr[i] = TValue::CreateDouble(r.d);
+            }
+            else
+            {
+                ReleaseAssert(false && "for loop range not integer, error path not implemented");
+            }
+        }
+
+        bool loopConditionSatisfied = (vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1]);
+        if (!loopConditionSatisfied)
+        {
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            addr[3] = TValue::CreateDouble(vals[0]);
+            Dispatch(rc, stackframe, bcu + sizeof(BcForLoopInit));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcForLoopStep
+{
+public:
+    BcForLoopStep(BytecodeSlot base)
+        : m_opcode(x_opcodeId<BcForLoopStep>), m_base(base), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&BcForLoopStep::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcForLoopStep* bc = reinterpret_cast<const BcForLoopStep*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcForLoopStep>);
+        double vals[3];
+        TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
+
+        vals[0] = addr[0].AsDouble();
+        vals[1] = addr[1].AsDouble();
+        vals[2] = addr[2].AsDouble();
+
+        vals[0] += vals[2];
+        bool loopConditionSatisfied = (vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1]);
+        if (loopConditionSatisfied)
+        {
+            TValue v = TValue::CreateDouble(vals[0]);
+            addr[0] = v;
+            addr[3] = v;
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(BcForLoopInit));
+        }
+    }
+} __attribute__((__packed__));
+
+class BcUnconditionalJump
+{
+public:
+    BcUnconditionalJump()
+        : m_opcode(x_opcodeId<BcUnconditionalJump>), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&BcUnconditionalJump::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const BcUnconditionalJump* bc = reinterpret_cast<const BcUnconditionalJump*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<BcUnconditionalJump>);
+        Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
     }
 } __attribute__((__packed__));
 

@@ -140,8 +140,10 @@ add_executable(main
 
 target_link_libraries(main PUBLIC
   gtest
+  -Wl,--start-group
   common_utils
   toylang
+  -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )
 

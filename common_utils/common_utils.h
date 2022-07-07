@@ -15,3 +15,4 @@
 #include "x64_segmentation_register_utils.h"
 #include "hash_functions.h"
 #include "dragonbox_util.h"
+#include "string_to_number.h"

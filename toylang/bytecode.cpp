@@ -626,15 +626,18 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 case 2:
                 {
-                    ReleaseAssert(false && "unimplemented");
+                    bw.Append(BcMul(lhs, rhs, dst));
+                    break;
                 }
                 case 3:
                 {
-                    ReleaseAssert(false && "unimplemented");
+                    bw.Append(BcDiv(lhs, rhs, dst));
+                    break;
                 }
                 case 4:
                 {
-                    ReleaseAssert(false && "unimplemented");
+                    bw.Append(BcMod(lhs, rhs, dst));
+                    break;
                 }
                 default:
                 {
@@ -1090,6 +1093,69 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcUpvalueClose(base));
                 break;
             }
+            case LJOpcode::FORI:
+            {
+                // Loop init
+                // semantics:
+                // [A] = tonumber([A]), [A+1] = tonumber([A+1]), [A+2] = tonumber([A+2])
+                // if (!([A+2] > 0 && [A] <= [A+1]) || ([A+2] <= 0 && [A] >= [A+1])): jump
+                // [A+3] = [A]
+                //
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcForLoopInit::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                bw.Append(BcForLoopInit(base));
+                break;
+            }
+            case LJOpcode::FORL:
+            {
+                // Loop step
+                // semantics:
+                // [A] += [A+2]
+                // if ([A+2] > 0 && [A] <= [A+1]) || ([A+2] <= 0 && [A] >= [A+1]): jump
+                //
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcForLoopStep::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                bw.Append(BcForLoopStep(base));
+                break;
+            }
+            case LJOpcode::LOOP:
+            {
+                // LOOP is a no-op used for LuaJIT's internal profiling
+                // For now make it a no-op for us as well
+                //
+                break;
+            }
+            case LJOpcode::JMP:
+            {
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                // opdata[0] is unused for now (indicates stack frame size after jump)
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcUnconditionalJump::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                bw.Append(BcUnconditionalJump());
+                break;
+            }
             case LJOpcode::USETP: [[fallthrough]];
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
@@ -1110,11 +1176,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::ITERN: [[fallthrough]];
             case LJOpcode::VARG: [[fallthrough]];
             case LJOpcode::ISNEXT: [[fallthrough]];
-            case LJOpcode::FORI: [[fallthrough]];
-            case LJOpcode::FORL: [[fallthrough]];
-            case LJOpcode::ITERL: [[fallthrough]];
-            case LJOpcode::LOOP: [[fallthrough]];
-            case LJOpcode::JMP:
+            case LJOpcode::ITERL:
             {
                 ReleaseAssert(false && "unimplemented");
             }
