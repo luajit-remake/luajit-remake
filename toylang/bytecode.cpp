@@ -143,65 +143,31 @@ LJOpcode WARN_UNUSED GetOpcodeFromString(const std::string& s)
     abort();
 }
 
-struct BytecodeWriter
+class BytecodeWriter : public SimpleTempStringStream
 {
-    BytecodeWriter()
-    {
-        constexpr size_t initialSize = 128;
-        m_bytecodeStart = new uint8_t[initialSize];
-        m_bytecodeCur = m_bytecodeStart;
-        m_bytecodeEnd = m_bytecodeStart + initialSize;
-    }
-
-    ~BytecodeWriter()
-    {
-        delete [] m_bytecodeStart;
-    }
-
+public:
     template<typename T>
     void Append(T value)
     {
         static_assert(alignof(T) == 1);
         Reserve(sizeof(T));
-        *reinterpret_cast<T*>(m_bytecodeCur) = value;
-        m_bytecodeCur += sizeof(T);
-        assert(m_bytecodeCur <= m_bytecodeEnd);
+        *reinterpret_cast<T*>(m_bufferCur) = value;
+        m_bufferCur += sizeof(T);
+        assert(m_bufferCur <= m_bufferEnd);
     }
 
     int32_t CurrentBytecodeOffset()
     {
-        return static_cast<int32_t>(m_bytecodeCur - m_bytecodeStart);
+        return static_cast<int32_t>(m_bufferCur - m_bufferBegin);
     }
 
     std::pair<uint8_t*, size_t> Get()
     {
-        size_t length = static_cast<size_t>(m_bytecodeCur - m_bytecodeStart);
+        size_t length = static_cast<size_t>(m_bufferCur - m_bufferBegin);
         uint8_t* r = new uint8_t[length];
-        memcpy(r, m_bytecodeStart, length);
+        memcpy(r, m_bufferBegin, length);
         return std::make_pair(r, length);
     }
-
-    void Reserve(size_t size)
-    {
-        if (likely(m_bytecodeEnd - m_bytecodeCur >= static_cast<ssize_t>(size)))
-        {
-            return;
-        }
-        size_t cap = static_cast<size_t>(m_bytecodeEnd - m_bytecodeStart);
-        size_t current = static_cast<size_t>(m_bytecodeCur - m_bytecodeStart);
-        size_t needed = current + size;
-        while (cap < needed) { cap *= 2; }
-        uint8_t* newArray = new uint8_t[cap];
-        memcpy(newArray, m_bytecodeStart, current);
-        delete [] m_bytecodeStart;
-        m_bytecodeStart = newArray;
-        m_bytecodeCur = newArray + current;
-        m_bytecodeEnd = newArray + cap;
-    }
-
-    uint8_t* m_bytecodeStart;
-    uint8_t* m_bytecodeCur;
-    uint8_t* m_bytecodeEnd;
 };
 
 struct BytecodeJumpPatch
@@ -1331,7 +1297,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
         for (auto& jumpPatch : jumpPatches)
         {
-            jumpPatch.Patch(bw.m_bytecodeStart, bytecodeLocation);
+            jumpPatch.Patch(bw.m_bufferBegin, bytecodeLocation);
         }
 
         std::pair<uint8_t*, size_t> bytecodeData = bw.Get();

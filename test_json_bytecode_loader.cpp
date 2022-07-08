@@ -62,7 +62,7 @@ TEST(LuaTest, TestPrint)
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    std::string expectedOut = "2E-1\t3\tfalse\ttrue\tnil\tabc\tfunction: 0x";
+    std::string expectedOut = "0.2\t3\tfalse\ttrue\tnil\tabc\tfunction: 0x";
     ReleaseAssert(StartsWith(out, expectedOut));
     ReleaseAssert(err == "");
 }
@@ -348,7 +348,7 @@ TEST(LuaTest, NBody)
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    printf("%s\n", out.c_str());
+    ReleaseAssert(out == "-0.16907516382852\n-0.16908760523461\n");
     ReleaseAssert(err == "");
 }
 

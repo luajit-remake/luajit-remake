@@ -16,3 +16,5 @@
 #include "hash_functions.h"
 #include "dragonbox_util.h"
 #include "string_to_number.h"
+#include "simple_string_stream.h"
+#include "double_to_string.h"

@@ -793,8 +793,8 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
             int64_t i64 = static_cast<int64_t>(dbl);
             if (!UnsafeFloatEqual(static_cast<double>(i64), dbl))
             {
-                char buf[x_dragonbox_stringify_double_buffer_length];
-                dragonbox_stringify_double(val.AsDouble(), buf);
+                char buf[x_default_tostring_buffersize_double];
+                StringifyDoubleUsingDefaultLuaFormattingOptions(val.AsDouble(), buf /*out*/);
                 fprintf(fp, "%s", buf);
             }
             else
