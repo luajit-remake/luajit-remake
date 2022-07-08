@@ -746,6 +746,29 @@ inline void VM::LaunchScript(ScriptModule* module)
     cb->m_bestEntryPoint(rc, stackbase, cb->m_bytecode, 0 /*unused*/);
 }
 
+inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numParams = hdr->m_numVariadicArguments;
+    if (numParams < 1)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
+    TValue input = *addr;
+    if (!input.IsDouble(TValue::x_int32Tag))
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    double result = sqrt(input.AsDouble());
+    *addr = TValue::CreateDouble(result);
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    StackFrameHeader* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(addr), 1 /*numRetValues*/);
+}
+
 inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
 {
     FILE* fp = VM::GetActiveVMForCurrentThread()->GetStdout();
@@ -833,9 +856,9 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
 
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
-    HeapPtr<TableObject> r = TableObject::CreateEmptyGlobalObject(vm);
+    HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
 
-    auto insertField = [&](const char* propName, TValue value)
+    auto insertField = [&](HeapPtr<TableObject> r, const char* propName, TValue value)
     {
         UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(propName, static_cast<uint32_t>(strlen(propName)));
         PutByIdICInfo icInfo;
@@ -843,14 +866,24 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
     };
 
-    auto insertCFunc = [&](const char* propName, InterpreterFn func)
+    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, InterpreterFn func)
     {
         UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func));
-        insertField(propName, TValue::CreatePointer(funcObj));
+        insertField(r, propName, TValue::CreatePointer(funcObj));
     };
 
-    insertCFunc("print", LJR_LIB_BASE_print);
-    return r;
+    auto insertObject = [&](HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity) -> HeapPtr<TableObject>
+    {
+        SystemHeapPointer<Structure> initialStructure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapacity);
+        UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, initialStructure.As()), 0 /*initialButterflyArrayPartCapacity*/);
+        insertField(r, propName, TValue::CreatePointer(o));
+        return o.As();
+    };
+
+    insertCFunc(globalObject, "print", LJR_LIB_BASE_print);
+    HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
+    insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
+    return globalObject;
 }
 
 inline TValue WARN_UNUSED BytecodeSlot::Get(CoroutineRuntimeContext* rc, void* sfp) const
@@ -935,6 +968,9 @@ public:
     BcCall,                             \
     BcNewClosure,                       \
     BcMove,                             \
+    BcIsFalsy,                          \
+    BcUnaryMinus,                       \
+    BcLengthOperator,                   \
     BcAdd,                              \
     BcSub,                              \
     BcMul,                              \
@@ -1811,6 +1847,106 @@ public:
         TValue src = bc->m_src.Get(rc, stackframe);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = src;
         Dispatch(rc, stackframe, bcu + sizeof(Self));
+    }
+} __attribute__((__packed__));
+
+class BcIsFalsy
+{
+public:
+    using Self = BcIsFalsy;
+
+    BcIsFalsy(BytecodeSlot src, BytecodeSlot dst)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_dst(dst)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    BytecodeSlot m_dst;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateBoolean(!src.IsTruthy());
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
+    }
+} __attribute__((__packed__));
+
+class BcUnaryMinus
+{
+public:
+    using Self = BcUnaryMinus;
+
+    BcUnaryMinus(BytecodeSlot src, BytecodeSlot dst)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_dst(dst)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    BytecodeSlot m_dst;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        if (src.IsDouble(TValue::x_int32Tag))
+        {
+            double result = -src.AsDouble();
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(result);
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+} __attribute__((__packed__));
+
+class BcLengthOperator
+{
+public:
+    using Self = BcLengthOperator;
+
+    BcLengthOperator(BytecodeSlot src, BytecodeSlot dst)
+        : m_opcode(x_opcodeId<Self>), m_src(src), m_dst(dst)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_src;
+    BytecodeSlot m_dst;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
+        if (src.IsPointer(TValue::x_mivTag))
+        {
+            Type ty = src.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (ty == Type::STRING)
+            {
+                HeapPtr<HeapString> s = src.AsPointer<HeapString>().As();
+                *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(s->m_length);
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
+            }
+            else if (ty == Type::TABLE)
+            {
+                HeapPtr<TableObject> s = src.AsPointer<TableObject>().As();
+                uint32_t result = TableObject::GetTableLengthWithLuaSemantics(s);
+                *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(result);
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
     }
 } __attribute__((__packed__));
 

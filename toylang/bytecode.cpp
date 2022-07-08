@@ -997,6 +997,30 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcMove(src, dst));
                 break;
             }
+            case LJOpcode::NOT:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot src = bytecodeSlotFromVariableSlot(opdata[1]);
+                bw.Append(BcIsFalsy(src, dst));
+                break;
+            }
+            case LJOpcode::UNM:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot src = bytecodeSlotFromVariableSlot(opdata[1]);
+                bw.Append(BcUnaryMinus(src, dst));
+                break;
+            }
+            case LJOpcode::LEN:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot src = bytecodeSlotFromVariableSlot(opdata[1]);
+                bw.Append(BcLengthOperator(src, dst));
+                break;
+            }
             case LJOpcode::KSTR:
             {
                 TestAssert(opdata.size() == 2);
@@ -1265,9 +1289,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             }
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
-            case LJOpcode::NOT: [[fallthrough]];
-            case LJOpcode::UNM: [[fallthrough]];
-            case LJOpcode::LEN: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::KNIL: [[fallthrough]];
             case LJOpcode::CALLMT: [[fallthrough]];

@@ -215,6 +215,11 @@ struct TValue
         return TValue::CreateMIV(MiscImmediateValue::CreateFalse(), x_mivTag);
     }
 
+    static TValue CreateBoolean(bool v)
+    {
+        return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(v), x_mivTag);
+    }
+
     static TValue Nil()
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateNil(), x_mivTag);

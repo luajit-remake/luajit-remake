@@ -304,5 +304,52 @@ TEST(LuaTest, PositiveAndNegativeInf)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, LogicalNot)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/logical_not.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "true\ntrue\nfalse\nfalse\nfalse\nfalse\nfalse\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, LengthOperator)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/length_operator.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "sanity test\n5\n3\n4\n6\nstress test\ntest end\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, NBody)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/n-body.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    printf("%s\n", out.c_str());
+    ReleaseAssert(err == "");
+}
 
 }   // anonymous namespace
