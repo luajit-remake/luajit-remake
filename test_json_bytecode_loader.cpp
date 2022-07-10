@@ -352,4 +352,120 @@ TEST(LuaTest, NBody)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, TailCall)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/tail_call.lua.json"));
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "\n100001\n123\t456\t789\t10\n100024\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, VariadicTailCall_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_1.lua.json"));
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "\n100000\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, VariadicTailCall_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_2.lua.json"));
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "\n100000\t80000\t20000\t120000\t40000\t120000\t60000\t80000\t80000\t0\t100000\t0\t100000\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, VariadicTailCall_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_3.lua.json"));
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "\n100000\t50000\t25000\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, OpcodeKNIL)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/test_knil.lua.json"));
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "nil\tnil\tnil\tnil\tnil\tnil\tnil\n1\tnil\ta\tnil\t1.2\tnil\tnil\n");
+    ReleaseAssert(err == "");
+}
+
+
 }   // anonymous namespace

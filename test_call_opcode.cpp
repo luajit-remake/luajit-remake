@@ -225,7 +225,7 @@ TEST(CallOpcode, Sanity)
                         locals[slotBegin + i] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
                         paramV++;
                     }
-                    rc.m_variadicRetSlotBegin = slotBegin;
+                    rc.m_variadicRetSlotBegin = static_cast<int32_t>(slotBegin);
                     info.m_numCallerVariadicRets = numVariadicRet;
                 }
                 else

@@ -1,0 +1,196 @@
+{
+  "ChunkName": "@luatests/test_knil.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 18,
+      "SourceLineStart": 1,
+      "SourceLineEnd": 8,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KNIL",
+          "OpData": [ 0, 6 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 14, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 15, 4 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 16, 5 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 6 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 1, 8 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KNUM",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 14, 3 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 15, 4 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 16, 5 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 1, 8 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 8
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Double",
+          "Value": 1.2E0
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 4,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 12,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 1 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 10
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "String",
+          "Value": "f"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

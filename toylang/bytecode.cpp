@@ -955,6 +955,30 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcCall(keepVariadicResult, passVarRetAsParams, numFixedParams, numFixedResults, base));
                 break;
             }
+            case LJOpcode::CALLMT: [[fallthrough]];
+            case LJOpcode::CALLT:
+            {
+                TestAssert(opdata.size() == 2);
+                bool passVarRetAsParams = (opcode == LJOpcode::CALLMT);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                uint32_t numFixedParams;
+                int32_t fieldD = opdata[1];
+                if (opcode == LJOpcode::CALLMT)
+                {
+                    // For CALLMT, D holds # of fixed params
+                    //
+                    numFixedParams = SafeIntegerCast<uint32_t>(fieldD);
+                }
+                else
+                {
+                    // For CALLT, D holds 1 + # of fixed params
+                    //
+                    TestAssert(opcode == LJOpcode::CALLT);
+                    numFixedParams = SafeIntegerCast<uint32_t>(fieldD - 1);
+                }
+                bw.Append(BcTailCall(passVarRetAsParams, numFixedParams, base));
+                break;
+            }
             case LJOpcode::MOV:
             {
                 TestAssert(opdata.size() == 2);
@@ -1253,15 +1277,40 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcUnconditionalJump());
                 break;
             }
+            case LJOpcode::VARG:
+            {
+                // should have 3 opdata, despite field C is ignored by us
+                //
+                TestAssert(opdata.size() == 3);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                int32_t fieldB = opdata[1];
+                if (fieldB == 0)
+                {
+                    // Put vararg as variadic returns
+                    //
+                    bw.Append(BcVariadicArgsToVariadicRet());
+                }
+                else
+                {
+                    uint32_t numResults = static_cast<uint32_t>(fieldB - 1);
+                    bw.Append(BcPutVariadicArgs(base, numResults));
+                }
+                break;
+            }
+            case LJOpcode::KNIL:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                TestAssert(opdata[1] >= opdata[0]);
+                uint32_t numSlotsToFill = static_cast<uint32_t>(opdata[1] - opdata[0] + 1);
+                bw.Append(BcFillNil(base, numSlotsToFill));
+                break;
+            }
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
-            case LJOpcode::KNIL: [[fallthrough]];
-            case LJOpcode::CALLMT: [[fallthrough]];
-            case LJOpcode::CALLT: [[fallthrough]];
             case LJOpcode::ITERC: [[fallthrough]];
             case LJOpcode::ITERN: [[fallthrough]];
-            case LJOpcode::VARG: [[fallthrough]];
             case LJOpcode::ISNEXT: [[fallthrough]];
             case LJOpcode::ITERL:
             {
