@@ -227,7 +227,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 9,
       "SourceLineStart": 0,
       "SourceLineEnd": 25,
       "HasChildPrototype": true,
@@ -250,17 +250,17 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 23
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 8, 0 ],
           "SourceLine": 23
         },
         {
           "OpCode": "CALL",
-          "OpData": [ 1, 0, 2 ],
+          "OpData": [ 4, 0, 2 ],
           "SourceLine": 23
         },
         {

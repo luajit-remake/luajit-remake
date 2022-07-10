@@ -64,12 +64,9 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
         }
         ReleaseAssert(newHdr->m_numVariadicArguments == expectedVarArgRegionLength);
     }
-
-    // Check that the stack frame is positioned at the expected place
-    //
+    else
     {
-        int64_t diff = reinterpret_cast<TValue*>(newHdr) - reinterpret_cast<TValue*>(info->m_expectedSfh);
-        ReleaseAssert(diff == static_cast<int64_t>(info->m_callerNumStackSlots + x_sizeOfStackFrameHeaderInTermsOfTValue + expectedVarArgRegionLength));
+        ReleaseAssert(newHdr->m_numVariadicArguments == 0);
     }
 
     // Check that the caller stack frame is not trashed
@@ -89,21 +86,8 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
     TValue* callerLocals = reinterpret_cast<TValue*>(info->m_expectedSfh) + x_sizeOfStackFrameHeaderInTermsOfTValue;
     for (uint32_t i = 0; i < info->m_callerNumStackSlots; i++)
     {
-        if (i == info->m_callerArgStart)
-        {
-            ReleaseAssert(callerLocals[i].IsPointer(TValue::x_mivTag));
-            ReleaseAssert(callerLocals[i].AsPointer().As<FunctionObject>() == info->m_calleeFunc);
-        }
-        else if (info->m_callerArgStart < i && i <= info->m_callerArgStart + info->m_numCallerFixedParams)
-        {
-            ReleaseAssert(callerLocals[i].IsInt32(TValue::x_int32Tag));
-            ReleaseAssert(callerLocals[i].AsInt32() == static_cast<int32_t>(i - info->m_callerArgStart));
-        }
-        else
-        {
-            ReleaseAssert(callerLocals[i].IsInt32(TValue::x_int32Tag));
-            ReleaseAssert(callerLocals[i].AsInt32() == static_cast<int32_t>(i + 10000));
-        }
+        ReleaseAssert(callerLocals[i].IsInt32(TValue::x_int32Tag));
+        ReleaseAssert(callerLocals[i].AsInt32() == static_cast<int32_t>(i + 10000));
     }
 
     // Check that the callee stack frame is set up correctly
@@ -130,10 +114,14 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
 
     // Then check the variadic arguments part
     //
-    for (uint32_t i = 0; i < expectedVarArgRegionLength; i++)
+    if (expectedVarArgRegionLength > 0)
     {
-        ReleaseAssert(callerLocals[info->m_callerNumStackSlots + i].IsInt32(TValue::x_int32Tag));
-        ReleaseAssert(callerLocals[info->m_callerNumStackSlots + i].AsInt32() == static_cast<int32_t>(i + info->m_calleeNumFixedArgs + 1));
+        TValue* vaBegin = reinterpret_cast<TValue*>(newHdr) - expectedVarArgRegionLength;
+        for (uint32_t i = 0; i < expectedVarArgRegionLength; i++)
+        {
+            ReleaseAssert(vaBegin[i].IsInt32(TValue::x_int32Tag));
+            ReleaseAssert(vaBegin[i].AsInt32() == static_cast<int32_t>(i + info->m_calleeNumFixedArgs + 1));
+        }
     }
 
     uint8_t* calleeFuncBytecode = TCGet(info->m_calleeFunc->m_executable).As()->m_bytecode;
@@ -141,7 +129,7 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
     ReleaseAssert(rc == info->m_expectedRc);
 }
 
-TEST(Interpreter, SanityCallOpcodeCallPart)
+TEST(CallOpcode, Sanity)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -190,7 +178,6 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
                 info.m_expectedSfh = hdr;
                 info.m_calleeFunc = calleeFunc;
                 info.m_callerFunc = callerFunc;
-                info.m_callerNumStackSlots = callerCb->m_stackFrameNumSlots;
                 info.m_expectedRc = &rc;
 
                 memset(stack, 0, sizeof(uint64_t) * 300);
@@ -200,7 +187,7 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
                 for (uint32_t i = 0; i < callerCb->m_stackFrameNumSlots; i++)
                 {
                     locals[i] = TValue::CreateInt32(static_cast<int32_t>(i + 10000), TValue::x_int32Tag);
-                 }
+                }
 
                 // roll out how many fixed arguments the callee is accepting
                 //
@@ -209,16 +196,18 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
 
                 // roll out # of parameters to pass and their position
                 //
-                uint32_t numFixedParams = static_cast<uint32_t>(rand()) % callerCb->m_stackFrameNumSlots;
-                uint32_t funcStart = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - numFixedParams);
-                ReleaseAssert(funcStart + numFixedParams < callerCb->m_stackFrameNumSlots);
+                uint32_t numFixedParams = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - x_sizeOfStackFrameHeaderInTermsOfTValue);
+                uint32_t funcStart = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - numFixedParams - x_sizeOfStackFrameHeaderInTermsOfTValue);
+                ReleaseAssert(funcStart + x_sizeOfStackFrameHeaderInTermsOfTValue - 1 + numFixedParams < callerCb->m_stackFrameNumSlots);
                 info.m_numCallerFixedParams = numFixedParams;
+
+                info.m_callerNumStackSlots = funcStart;
 
                 int paramV = 1;
                 locals[funcStart] = TValue::CreatePointer(UserHeapPointer<FunctionObject> { calleeFunc });
                 for (uint32_t i = 0; i < numFixedParams; i++)
                 {
-                    locals[funcStart + i + 1] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
+                    locals[funcStart + i + x_sizeOfStackFrameHeaderInTermsOfTValue] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
                     paramV++;
                 }
                 info.m_callerArgStart = funcStart;
@@ -266,158 +255,6 @@ TEST(Interpreter, SanityCallOpcodeCallPart)
             }
         }
     }
-}
-
-void TestFibEndpoint(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> retValuesU, uint64_t numRetValues)
-{
-    ReleaseAssert(numRetValues == 1);
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    ReleaseAssert(hdr->m_caller == hdr + 1);
-    hdr->m_caller = reinterpret_cast<StackFrameHeader*>(const_cast<uint8_t*>(retValuesU));
-}
-
-TEST(Interpreter, SanityFibonacci)
-{
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
-
-    CodeBlock* fib = AllocateInterpreterCodeBlockWithBytecodeSize(1000);
-    fib->m_stackFrameNumSlots = 4;
-    fib->m_hasVariadicArguments = false;
-    fib->m_numFixedArguments = 1;
-    fib->m_numUpvalues = 0;
-    fib->m_bestEntryPoint = EnterInterpreter;
-
-    HeapPtr<FunctionObject> fibObj = vm->AllocFromUserHeap(sizeof(FunctionObject)).AsNoAssert<FunctionObject>();
-    UserHeapGcObjectHeader::Populate(fibObj);
-    TCSet(fibObj->m_executable, SystemHeapPointer<ExecutableCode>(static_cast<ExecutableCode*>(fib)));
-
-    uint8_t* p = fib->m_bytecode;
-
-    BcConstant* instr1 = reinterpret_cast<BcConstant*>(p);  // 2
-    p += sizeof(BcConstant);
-    BcIsLT* instr2 = reinterpret_cast<BcIsLT*>(p);  // cmp
-    p += sizeof(BcIsLT);
-    BcConstant* instr3 = reinterpret_cast<BcConstant*>(p); // f
-    p += sizeof(BcConstant);
-    BcConstant* instr4 = reinterpret_cast<BcConstant*>(p); // 1
-    p += sizeof(BcConstant);
-    BcSub* instr5 = reinterpret_cast<BcSub*>(p);    // 'n-1'
-    p += sizeof(BcSub);
-    BcCall* instr6 = reinterpret_cast<BcCall*>(p);      // 'call'
-    p += sizeof(BcCall);
-    BcConstant* instr7 = reinterpret_cast<BcConstant*>(p); // f
-    p += sizeof(BcConstant);
-    BcConstant* instr8 = reinterpret_cast<BcConstant*>(p); // 2
-    p += sizeof(BcConstant);
-    BcSub* instr9 = reinterpret_cast<BcSub*>(p);    // 'n-2'
-    p += sizeof(BcSub);
-    BcCall* instr10 = reinterpret_cast<BcCall*>(p);      // 'call'
-    p += sizeof(BcCall);
-    BcAdd* instr11 = reinterpret_cast<BcAdd*>(p);       // 'add'
-    p += sizeof(BcAdd);
-    BcReturn* instr12 = reinterpret_cast<BcReturn*>(p);     // 'ret'
-    p += sizeof(BcReturn);
-    BcConstant* instr13 = reinterpret_cast<BcConstant*>(p);     // '1'
-    p += sizeof(BcConstant);
-    BcReturn* instr14 = reinterpret_cast<BcReturn*>(p);     // 'ret'
-    p += sizeof(BcReturn);
-
-    instr1->m_opcode = x_opcodeId<BcConstant>;
-    instr1->m_dst = BytecodeSlot::Local(1);
-    instr1->m_value = TValue::CreateDouble(3);
-
-    instr2->m_opcode = x_opcodeId<BcIsLT>;
-    instr2->m_lhs = BytecodeSlot::Local(0);
-    instr2->m_rhs = BytecodeSlot::Local(1);
-    instr2->m_offset = static_cast<int32_t>(reinterpret_cast<intptr_t>(instr13) - reinterpret_cast<intptr_t>(instr2));
-
-    instr3->m_opcode = x_opcodeId<BcConstant>;
-    instr3->m_dst = BytecodeSlot::Local(1);
-    instr3->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
-
-    instr4->m_opcode = x_opcodeId<BcConstant>;
-    instr4->m_dst = BytecodeSlot::Local(2);
-    instr4->m_value = TValue::CreateDouble(1);
-
-    instr5->m_opcode = x_opcodeId<BcSub>;
-    instr5->m_result = BytecodeSlot::Local(2);
-    instr5->m_lhs = BytecodeSlot::Local(0);
-    instr5->m_rhs = BytecodeSlot::Local(2);
-
-    instr6->m_opcode = x_opcodeId<BcCall>;
-    instr6->m_funcSlot = BytecodeSlot::Local(1);
-    instr6->m_numFixedParams = 1;
-    instr6->m_numFixedRets = 1;
-    instr6->m_passVariadicRetAsParam = false;
-    instr6->m_keepVariadicRet = false;
-
-    instr7->m_opcode = x_opcodeId<BcConstant>;
-    instr7->m_dst = BytecodeSlot::Local(2);
-    instr7->m_value = TValue::CreatePointer(UserHeapPointer<FunctionObject> { fibObj });
-
-    instr8->m_opcode = x_opcodeId<BcConstant>;
-    instr8->m_dst = BytecodeSlot::Local(3);
-    instr8->m_value = TValue::CreateDouble(2);
-
-    instr9->m_opcode = x_opcodeId<BcSub>;
-    instr9->m_result = BytecodeSlot::Local(3);
-    instr9->m_lhs = BytecodeSlot::Local(0);
-    instr9->m_rhs = BytecodeSlot::Local(3);
-
-    instr10->m_opcode = x_opcodeId<BcCall>;
-    instr10->m_funcSlot = BytecodeSlot::Local(2);
-    instr10->m_numFixedParams = 1;
-    instr10->m_numFixedRets = 1;
-    instr10->m_passVariadicRetAsParam = false;
-    instr10->m_keepVariadicRet = false;
-
-    instr11->m_opcode = x_opcodeId<BcAdd>;
-    instr11->m_lhs = BytecodeSlot::Local(1);
-    instr11->m_rhs = BytecodeSlot::Local(2);
-    instr11->m_result = BytecodeSlot::Local(1);
-
-    instr12->m_opcode = x_opcodeId<BcReturn>;
-    instr12->m_numReturnValues = 1;
-    instr12->m_isVariadicRet = false;
-    instr12->m_slotBegin = BytecodeSlot::Local(1);
-
-    instr13->m_opcode = x_opcodeId<BcConstant>;
-    instr13->m_dst = BytecodeSlot::Local(1);
-    instr13->m_value = TValue::CreateDouble(1);
-
-    instr14->m_opcode = x_opcodeId<BcReturn>;
-    instr14->m_numReturnValues = 1;
-    instr14->m_isVariadicRet = false;
-    instr14->m_slotBegin = BytecodeSlot::Local(1);
-
-    TValue* stack = new TValue[1000];
-    CoroutineRuntimeContext rc;
-
-    auto testFib = [&](int n)
-    {
-        TValue* locals = stack + x_sizeOfStackFrameHeaderInTermsOfTValue;
-        StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(stack);
-        hdr->m_caller = hdr + 1;
-        hdr->m_func = fibObj;
-        hdr->m_retAddr = reinterpret_cast<void*>(TestFibEndpoint);
-
-        locals[0] = TValue::CreateDouble(static_cast<double>(n));
-
-        rc.m_numVariadicRets = static_cast<uint32_t>(-1);
-        fib->m_bestEntryPoint(&rc, locals, fib->m_bytecode, 0 /*unused*/);
-
-        ReleaseAssert(hdr->m_caller != hdr + 1);
-        TValue* r = reinterpret_cast<TValue*>(hdr->m_caller);
-        ReleaseAssert(r->IsDouble(TValue::x_int32Tag));
-        return r->AsDouble();
-    };
-
-    double a = testFib(15);
-    SUPRESS_FLOAT_EQUAL_WARNING(
-        ReleaseAssert(a == 610.0);
-    )
 }
 
 }   // anonymous namespace

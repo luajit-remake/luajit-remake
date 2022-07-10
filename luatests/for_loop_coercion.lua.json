@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 6,
+      "MaxFrameSize": 9,
       "SourceLineStart": 0,
       "SourceLineEnd": 5,
       "HasChildPrototype": false,
@@ -37,7 +37,7 @@
         },
         {
           "OpCode": "ADDVN",
-          "OpData": [ 5, 3, 0 ],
+          "OpData": [ 8, 3, 0 ],
           "SourceLine": 2
         },
         {

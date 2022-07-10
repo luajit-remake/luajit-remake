@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 3,
       "TakesVarArg": false,
-      "MaxFrameSize": 28,
+      "MaxFrameSize": 29,
       "SourceLineStart": 56,
       "SourceLineEnd": 83,
       "HasChildPrototype": false,
@@ -157,7 +157,7 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 23 ],
+          "OpData": [ 28, 23 ],
           "SourceLine": 65
         },
         {
@@ -403,7 +403,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 23,
+      "MaxFrameSize": 26,
       "SourceLineStart": 85,
       "SourceLineEnd": 99,
       "HasChildPrototype": false,
@@ -576,27 +576,27 @@
         },
         {
           "OpCode": "MULVV",
-          "OpData": [ 21, 17, 17 ],
+          "OpData": [ 24, 17, 17 ],
           "SourceLine": 94
         },
         {
           "OpCode": "MULVV",
-          "OpData": [ 22, 18, 18 ],
+          "OpData": [ 25, 18, 18 ],
           "SourceLine": 94
         },
         {
           "OpCode": "ADDVV",
-          "OpData": [ 21, 21, 22 ],
+          "OpData": [ 24, 24, 25 ],
           "SourceLine": 94
         },
         {
           "OpCode": "MULVV",
-          "OpData": [ 22, 19, 19 ],
+          "OpData": [ 25, 19, 19 ],
           "SourceLine": 94
         },
         {
           "OpCode": "ADDVV",
-          "OpData": [ 21, 21, 22 ],
+          "OpData": [ 24, 24, 25 ],
           "SourceLine": 94
         },
         {
@@ -903,7 +903,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 18,
+      "MaxFrameSize": 21,
       "SourceLineStart": 0,
       "SourceLineEnd": 123,
       "HasChildPrototype": true,
@@ -1596,12 +1596,12 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 11, 4 ],
+          "OpData": [ 14, 4 ],
           "SourceLine": 118
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 12, 9 ],
+          "OpData": [ 15, 9 ],
           "SourceLine": 118
         },
         {
@@ -1616,22 +1616,22 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 11, 6 ],
+          "OpData": [ 14, 6 ],
           "SourceLine": 119
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 12, 4 ],
+          "OpData": [ 18, 4 ],
           "SourceLine": 119
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 13, 9 ],
+          "OpData": [ 19, 9 ],
           "SourceLine": 119
         },
         {
           "OpCode": "CALL",
-          "OpData": [ 11, 0, 3 ],
+          "OpData": [ 14, 0, 3 ],
           "SourceLine": 119
         },
         {
@@ -1666,17 +1666,17 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 4 ],
+          "OpData": [ 18, 4 ],
           "SourceLine": 120
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 9 ],
+          "OpData": [ 19, 9 ],
           "SourceLine": 120
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 17, 31 ],
+          "OpData": [ 20, 31 ],
           "SourceLine": 120
         },
         {
@@ -1696,22 +1696,22 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 11, 6 ],
+          "OpData": [ 14, 6 ],
           "SourceLine": 121
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 12, 4 ],
+          "OpData": [ 18, 4 ],
           "SourceLine": 121
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 13, 9 ],
+          "OpData": [ 19, 9 ],
           "SourceLine": 121
         },
         {
           "OpCode": "CALL",
-          "OpData": [ 11, 0, 3 ],
+          "OpData": [ 14, 0, 3 ],
           "SourceLine": 121
         },
         {

@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 10,
+      "MaxFrameSize": 13,
       "SourceLineStart": 6,
       "SourceLineEnd": 12,
       "HasChildPrototype": false,
@@ -77,42 +77,42 @@
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 3, 4 ],
+          "OpData": [ 6, 4 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 5, 5 ],
+          "OpData": [ 8, 5 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 6, 2 ],
+          "OpData": [ 9, 2 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 7, 6 ],
+          "OpData": [ 10, 6 ],
           "SourceLine": 11
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 8, 3 ],
+          "OpData": [ 11, 3 ],
           "SourceLine": 11
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 9, 0 ],
+          "OpData": [ 12, 0 ],
           "SourceLine": 11
         },
         {
@@ -291,7 +291,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 0,
       "SourceLineEnd": 37,
       "HasChildPrototype": true,
@@ -314,12 +314,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 123 ],
+          "OpData": [ 4, 123 ],
           "SourceLine": 16
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 456 ],
+          "OpData": [ 5, 456 ],
           "SourceLine": 16
         },
         {
@@ -339,12 +339,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 78 ],
+          "OpData": [ 4, 78 ],
           "SourceLine": 17
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 90 ],
+          "OpData": [ 5, 90 ],
           "SourceLine": 17
         },
         {
@@ -364,12 +364,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 765 ],
+          "OpData": [ 4, 765 ],
           "SourceLine": 18
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 43 ],
+          "OpData": [ 5, 43 ],
           "SourceLine": 18
         },
         {
@@ -389,12 +389,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 12 ],
+          "OpData": [ 4, 12 ],
           "SourceLine": 19
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 34 ],
+          "OpData": [ 5, 34 ],
           "SourceLine": 19
         },
         {
@@ -414,12 +414,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 12 ],
+          "OpData": [ 4, 12 ],
           "SourceLine": 20
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 963 ],
+          "OpData": [ 5, 963 ],
           "SourceLine": 20
         },
         {
@@ -439,12 +439,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 233 ],
+          "OpData": [ 4, 233 ],
           "SourceLine": 21
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 852 ],
+          "OpData": [ 5, 852 ],
           "SourceLine": 21
         },
         {
@@ -464,7 +464,7 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 22
         },
         {
@@ -479,7 +479,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 4356 ],
+          "OpData": [ 4, 4356 ],
           "SourceLine": 23
         },
         {
@@ -494,7 +494,7 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 24
         },
         {
@@ -509,7 +509,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 7531 ],
+          "OpData": [ 4, 7531 ],
           "SourceLine": 25
         },
         {
@@ -524,7 +524,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 987 ],
+          "OpData": [ 4, 987 ],
           "SourceLine": 26
         },
         {
@@ -539,7 +539,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 9999 ],
+          "OpData": [ 4, 9999 ],
           "SourceLine": 27
         },
         {
@@ -554,7 +554,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 654 ],
+          "OpData": [ 4, 654 ],
           "SourceLine": 28
         },
         {
@@ -569,7 +569,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 987 ],
+          "OpData": [ 4, 987 ],
           "SourceLine": 29
         },
         {
@@ -584,7 +584,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 432 ],
+          "OpData": [ 4, 432 ],
           "SourceLine": 30
         },
         {
@@ -599,7 +599,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 3232 ],
+          "OpData": [ 4, 3232 ],
           "SourceLine": 31
         },
         {
@@ -614,7 +614,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 321 ],
+          "OpData": [ 4, 321 ],
           "SourceLine": 32
         },
         {
@@ -629,7 +629,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 16 ],
+          "OpData": [ 4, 16 ],
           "SourceLine": 33
         },
         {
@@ -644,12 +644,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 9012 ],
+          "OpData": [ 4, 9012 ],
           "SourceLine": 34
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 234 ],
+          "OpData": [ 5, 234 ],
           "SourceLine": 34
         },
         {
@@ -669,7 +669,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 88 ],
+          "OpData": [ 4, 88 ],
           "SourceLine": 35
         },
         {

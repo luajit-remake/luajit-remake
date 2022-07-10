@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 2,
+      "MaxFrameSize": 5,
       "SourceLineStart": 0,
       "SourceLineEnd": 4,
       "HasChildPrototype": false,
@@ -17,7 +17,7 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 1
         },
         {
@@ -32,7 +32,7 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 2
         },
         {

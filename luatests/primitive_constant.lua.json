@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 1,
       "SourceLineEnd": 7,
       "HasChildPrototype": false,
@@ -27,7 +27,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 3
         },
         {
@@ -47,7 +47,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 5
         },
         {
@@ -81,7 +81,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 9,
       "SourceLineEnd": 15,
       "HasChildPrototype": false,
@@ -104,7 +104,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 11
         },
         {
@@ -124,7 +124,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 13
         },
         {
@@ -158,7 +158,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 17,
       "SourceLineEnd": 23,
       "HasChildPrototype": false,
@@ -181,7 +181,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 19
         },
         {
@@ -201,7 +201,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 21
         },
         {
@@ -235,7 +235,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 25,
       "SourceLineEnd": 31,
       "HasChildPrototype": false,
@@ -258,7 +258,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 27
         },
         {
@@ -278,7 +278,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 29
         },
         {
@@ -312,7 +312,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 33,
       "SourceLineEnd": 39,
       "HasChildPrototype": false,
@@ -335,7 +335,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 35
         },
         {
@@ -355,7 +355,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 37
         },
         {
@@ -389,7 +389,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 41,
       "SourceLineEnd": 47,
       "HasChildPrototype": false,
@@ -412,7 +412,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 43
         },
         {
@@ -432,7 +432,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 2, 2 ],
+          "OpData": [ 5, 2 ],
           "SourceLine": 45
         },
         {
@@ -591,7 +591,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": false,
-      "MaxFrameSize": 2,
+      "MaxFrameSize": 5,
       "SourceLineStart": 108,
       "SourceLineEnd": 110,
       "HasChildPrototype": false,
@@ -604,7 +604,7 @@
         },
         {
           "OpCode": "UGET",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 109
         },
         {
@@ -767,7 +767,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 10,
+      "MaxFrameSize": 13,
       "SourceLineStart": 0,
       "SourceLineEnd": 132,
       "HasChildPrototype": true,
@@ -810,7 +810,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 49
         },
         {
@@ -825,7 +825,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 50
         },
         {
@@ -840,7 +840,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 51
         },
         {
@@ -855,7 +855,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 52
         },
         {
@@ -870,12 +870,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 53
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 53
         },
         {
@@ -890,7 +890,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 6 ],
+          "OpData": [ 10, 6 ],
           "SourceLine": 54
         },
         {
@@ -905,7 +905,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 56
         },
         {
@@ -920,7 +920,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 57
         },
         {
@@ -935,7 +935,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 58
         },
         {
@@ -950,7 +950,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 59
         },
         {
@@ -965,12 +965,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 60
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 60
         },
         {
@@ -985,7 +985,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 7 ],
+          "OpData": [ 10, 7 ],
           "SourceLine": 61
         },
         {
@@ -1000,7 +1000,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 63
         },
         {
@@ -1015,7 +1015,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 64
         },
         {
@@ -1030,7 +1030,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 65
         },
         {
@@ -1045,7 +1045,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 66
         },
         {
@@ -1060,12 +1060,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 67
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 67
         },
         {
@@ -1080,7 +1080,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 8 ],
+          "OpData": [ 10, 8 ],
           "SourceLine": 68
         },
         {
@@ -1095,7 +1095,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 70
         },
         {
@@ -1110,7 +1110,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 71
         },
         {
@@ -1125,7 +1125,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 72
         },
         {
@@ -1140,7 +1140,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 73
         },
         {
@@ -1155,12 +1155,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 74
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 74
         },
         {
@@ -1175,7 +1175,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 9 ],
+          "OpData": [ 10, 9 ],
           "SourceLine": 75
         },
         {
@@ -1190,7 +1190,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 77
         },
         {
@@ -1205,7 +1205,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 78
         },
         {
@@ -1220,7 +1220,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 79
         },
         {
@@ -1235,7 +1235,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 80
         },
         {
@@ -1250,12 +1250,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 81
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 81
         },
         {
@@ -1270,7 +1270,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 10 ],
+          "OpData": [ 10, 10 ],
           "SourceLine": 82
         },
         {
@@ -1285,7 +1285,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 84
         },
         {
@@ -1300,7 +1300,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 2 ],
+          "OpData": [ 10, 2 ],
           "SourceLine": 85
         },
         {
@@ -1315,7 +1315,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 1 ],
+          "OpData": [ 10, 1 ],
           "SourceLine": 86
         },
         {
@@ -1330,7 +1330,7 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 87
         },
         {
@@ -1345,12 +1345,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 7, 0 ],
+          "OpData": [ 10, 0 ],
           "SourceLine": 88
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 7, 7, 0 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 88
         },
         {
@@ -1365,7 +1365,7 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 7, 11 ],
+          "OpData": [ 10, 11 ],
           "SourceLine": 89
         },
         {

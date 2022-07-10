@@ -23,7 +23,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 10,
+      "MaxFrameSize": 13,
       "SourceLineStart": 0,
       "SourceLineEnd": 5,
       "HasChildPrototype": true,
@@ -46,37 +46,37 @@
         },
         {
           "OpCode": "ADDVV",
-          "OpData": [ 3, 0, 1 ],
+          "OpData": [ 6, 0, 1 ],
           "SourceLine": 3
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 3 ],
+          "OpData": [ 7, 3 ],
           "SourceLine": 3
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 5, 1 ],
-          "SourceLine": 3
-        },
-        {
-          "OpCode": "KPRI",
-          "OpData": [ 6, 2 ],
-          "SourceLine": 3
-        },
-        {
-          "OpCode": "KPRI",
-          "OpData": [ 7, 0 ],
-          "SourceLine": 3
-        },
-        {
-          "OpCode": "KSTR",
           "OpData": [ 8, 1 ],
           "SourceLine": 3
         },
         {
-          "OpCode": "FNEW",
+          "OpCode": "KPRI",
           "OpData": [ 9, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 12, 2 ],
           "SourceLine": 3
         },
         {

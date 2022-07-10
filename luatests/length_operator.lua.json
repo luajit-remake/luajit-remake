@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 26,
+      "MaxFrameSize": 29,
       "SourceLineStart": 0,
       "SourceLineEnd": 158,
       "HasChildPrototype": false,
@@ -17,7 +17,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 1
         },
         {
@@ -37,7 +37,7 @@
         },
         {
           "OpCode": "LEN",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 5
         },
         {
@@ -57,7 +57,7 @@
         },
         {
           "OpCode": "LEN",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 7
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "OpCode": "LEN",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 9
         },
         {
@@ -132,12 +132,12 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 4 ],
+          "OpData": [ 6, 4 ],
           "SourceLine": 13
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 13
         },
         {
@@ -192,12 +192,12 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 4 ],
+          "OpData": [ 6, 4 ],
           "SourceLine": 18
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 18
         },
         {
@@ -222,7 +222,7 @@
         },
         {
           "OpCode": "LEN",
-          "OpData": [ 3, 0 ],
+          "OpData": [ 6, 0 ],
           "SourceLine": 21
         },
         {
@@ -237,7 +237,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 5 ],
+          "OpData": [ 6, 5 ],
           "SourceLine": 23
         },
         {
@@ -372,22 +372,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 6 ],
+          "OpData": [ 16, 6 ],
           "SourceLine": 38
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 38
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 38
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 38
         },
         {
@@ -422,22 +422,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 7 ],
+          "OpData": [ 16, 7 ],
           "SourceLine": 41
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 41
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 41
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 41
         },
         {
@@ -482,22 +482,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 8 ],
+          "OpData": [ 16, 8 ],
           "SourceLine": 45
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 45
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 45
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 45
         },
         {
@@ -557,22 +557,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 9 ],
+          "OpData": [ 16, 9 ],
           "SourceLine": 53
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 53
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 53
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 53
         },
         {
@@ -607,22 +607,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 10 ],
+          "OpData": [ 16, 10 ],
           "SourceLine": 56
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 56
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 56
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 56
         },
         {
@@ -667,22 +667,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 11 ],
-          "SourceLine": 60
-        },
-        {
-          "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
-          "SourceLine": 60
-        },
-        {
-          "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
-          "SourceLine": 60
-        },
-        {
-          "OpCode": "MOV",
           "OpData": [ 16, 11 ],
+          "SourceLine": 60
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 5 ],
+          "SourceLine": 60
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 18, 9 ],
+          "SourceLine": 60
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 19, 11 ],
           "SourceLine": 60
         },
         {
@@ -742,22 +742,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 12 ],
+          "OpData": [ 16, 12 ],
           "SourceLine": 68
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 68
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 68
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 68
         },
         {
@@ -792,22 +792,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 13 ],
+          "OpData": [ 16, 13 ],
           "SourceLine": 71
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 71
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 71
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 71
         },
         {
@@ -852,22 +852,22 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 13, 14 ],
+          "OpData": [ 16, 14 ],
           "SourceLine": 75
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 14, 5 ],
+          "OpData": [ 17, 5 ],
           "SourceLine": 75
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 15, 9 ],
+          "OpData": [ 18, 9 ],
           "SourceLine": 75
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 16, 11 ],
+          "OpData": [ 19, 11 ],
           "SourceLine": 75
         },
         {
@@ -1022,27 +1022,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 15 ],
+          "OpData": [ 24, 15 ],
           "SourceLine": 92
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 92
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 92
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 92
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 92
         },
         {
@@ -1232,27 +1232,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 6 ],
+          "OpData": [ 24, 6 ],
           "SourceLine": 111
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 111
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 111
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 111
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 111
         },
         {
@@ -1287,27 +1287,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 7 ],
+          "OpData": [ 24, 7 ],
           "SourceLine": 114
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 114
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 114
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 114
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 114
         },
         {
@@ -1352,27 +1352,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 8 ],
+          "OpData": [ 24, 8 ],
           "SourceLine": 118
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 118
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 118
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 118
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 118
         },
         {
@@ -1432,27 +1432,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 9 ],
+          "OpData": [ 24, 9 ],
           "SourceLine": 126
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 126
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 126
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 126
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 126
         },
         {
@@ -1487,27 +1487,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 10 ],
+          "OpData": [ 24, 10 ],
           "SourceLine": 129
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 129
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 129
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 129
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 129
         },
         {
@@ -1552,27 +1552,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 11 ],
+          "OpData": [ 24, 11 ],
           "SourceLine": 133
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 133
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 133
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 133
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 133
         },
         {
@@ -1632,27 +1632,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 12 ],
+          "OpData": [ 24, 12 ],
           "SourceLine": 141
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 141
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 141
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 141
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 141
         },
         {
@@ -1687,27 +1687,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 13 ],
+          "OpData": [ 24, 13 ],
           "SourceLine": 144
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 144
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 144
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 144
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 144
         },
         {
@@ -1752,27 +1752,27 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 21, 14 ],
+          "OpData": [ 24, 14 ],
           "SourceLine": 148
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 22, 9 ],
+          "OpData": [ 25, 9 ],
           "SourceLine": 148
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 23, 13 ],
+          "OpData": [ 26, 13 ],
           "SourceLine": 148
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 24, 17 ],
+          "OpData": [ 27, 17 ],
           "SourceLine": 148
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 25, 19 ],
+          "OpData": [ 28, 19 ],
           "SourceLine": 148
         },
         {
@@ -1807,7 +1807,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 16 ],
+          "OpData": [ 6, 16 ],
           "SourceLine": 156
         },
         {

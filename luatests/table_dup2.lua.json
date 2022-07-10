@@ -28,6 +28,26 @@
           "Value": [
             {
               "EntryKey": {
+                "Type": "Int32",
+                "Value": 1
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 301
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 4
+              }
+            },
+            {
+              "EntryKey": {
                 "Type": "String",
                 "Value": "a3"
               },
@@ -69,26 +89,6 @@
             {
               "EntryKey": {
                 "Type": "Int32",
-                "Value": 3
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 303
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "Int32",
-                "Value": 1
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 301
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "Int32",
                 "Value": 2
               },
               "EntryValue": {
@@ -98,12 +98,12 @@
             },
             {
               "EntryKey": {
-                "Type": "String",
-                "Value": "a4"
+                "Type": "Int32",
+                "Value": 3
               },
               "EntryValue": {
                 "Type": "Int32",
-                "Value": 4
+                "Value": 303
               }
             }
           ],
@@ -116,7 +116,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 13,
+      "MaxFrameSize": 16,
       "SourceLineStart": 0,
       "SourceLineEnd": 25,
       "HasChildPrototype": true,
@@ -154,42 +154,12 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 1, 2 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 1, 1, 4 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 2, 2 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 2, 2, 5 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 3, 2 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 3, 3, 6 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "GGET",
           "OpData": [ 4, 2 ],
           "SourceLine": 15
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 4, 4, 7 ],
+          "OpData": [ 4, 4, 4 ],
           "SourceLine": 15
         },
         {
@@ -199,7 +169,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 5, 5, 8 ],
+          "OpData": [ 5, 5, 5 ],
           "SourceLine": 15
         },
         {
@@ -209,7 +179,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 6, 6, 9 ],
+          "OpData": [ 6, 6, 6 ],
           "SourceLine": 15
         },
         {
@@ -218,8 +188,8 @@
           "SourceLine": 15
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 7, 7, 0 ],
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 7 ],
           "SourceLine": 15
         },
         {
@@ -228,13 +198,8 @@
           "SourceLine": 15
         },
         {
-          "OpCode": "KSHORT",
-          "OpData": [ 9, -1 ],
-          "SourceLine": 15
-        },
-        {
-          "OpCode": "TGETV",
-          "OpData": [ 8, 8, 9 ],
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 8 ],
           "SourceLine": 15
         },
         {
@@ -243,8 +208,8 @@
           "SourceLine": 15
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 9, 9, 1 ],
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 9 ],
           "SourceLine": 15
         },
         {
@@ -254,7 +219,7 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 10, 10, 2 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 15
         },
         {
@@ -263,8 +228,13 @@
           "SourceLine": 15
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 11, 11, 3 ],
+          "OpCode": "KSHORT",
+          "OpData": [ 12, -1 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 12 ],
           "SourceLine": 15
         },
         {
@@ -274,7 +244,37 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 12, 12, 4 ],
+          "OpData": [ 12, 12, 1 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 13, 13, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 14, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 14, 3 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 15, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 15, 4 ],
           "SourceLine": 15
         },
         {
@@ -339,42 +339,12 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 1, 2 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 1, 1, 4 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 2, 2 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 2, 2, 5 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 3, 2 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 3, 3, 6 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "GGET",
           "OpData": [ 4, 2 ],
           "SourceLine": 18
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 4, 4, 7 ],
+          "OpData": [ 4, 4, 4 ],
           "SourceLine": 18
         },
         {
@@ -384,7 +354,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 5, 5, 8 ],
+          "OpData": [ 5, 5, 5 ],
           "SourceLine": 18
         },
         {
@@ -394,7 +364,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 6, 6, 9 ],
+          "OpData": [ 6, 6, 6 ],
           "SourceLine": 18
         },
         {
@@ -403,8 +373,8 @@
           "SourceLine": 18
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 7, 7, 0 ],
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 7 ],
           "SourceLine": 18
         },
         {
@@ -413,13 +383,8 @@
           "SourceLine": 18
         },
         {
-          "OpCode": "KSHORT",
-          "OpData": [ 9, -1 ],
-          "SourceLine": 18
-        },
-        {
-          "OpCode": "TGETV",
-          "OpData": [ 8, 8, 9 ],
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 8 ],
           "SourceLine": 18
         },
         {
@@ -428,8 +393,8 @@
           "SourceLine": 18
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 9, 9, 1 ],
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 9 ],
           "SourceLine": 18
         },
         {
@@ -439,7 +404,7 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 10, 10, 2 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 18
         },
         {
@@ -448,8 +413,13 @@
           "SourceLine": 18
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 11, 11, 3 ],
+          "OpCode": "KSHORT",
+          "OpData": [ 12, -1 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 12 ],
           "SourceLine": 18
         },
         {
@@ -459,7 +429,37 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 12, 12, 4 ],
+          "OpData": [ 12, 12, 1 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 13, 13, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 14, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 14, 3 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 15, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 15, 4 ],
           "SourceLine": 18
         },
         {
@@ -489,42 +489,12 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 1, 10 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 1, 1, 4 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 2, 10 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 2, 2, 5 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 3, 10 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 3, 3, 6 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "GGET",
           "OpData": [ 4, 10 ],
           "SourceLine": 21
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 4, 4, 7 ],
+          "OpData": [ 4, 4, 4 ],
           "SourceLine": 21
         },
         {
@@ -534,7 +504,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 5, 5, 8 ],
+          "OpData": [ 5, 5, 5 ],
           "SourceLine": 21
         },
         {
@@ -544,7 +514,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 6, 6, 9 ],
+          "OpData": [ 6, 6, 6 ],
           "SourceLine": 21
         },
         {
@@ -553,8 +523,8 @@
           "SourceLine": 21
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 7, 7, 0 ],
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 7 ],
           "SourceLine": 21
         },
         {
@@ -563,13 +533,8 @@
           "SourceLine": 21
         },
         {
-          "OpCode": "KSHORT",
-          "OpData": [ 9, -1 ],
-          "SourceLine": 21
-        },
-        {
-          "OpCode": "TGETV",
-          "OpData": [ 8, 8, 9 ],
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 8 ],
           "SourceLine": 21
         },
         {
@@ -578,8 +543,8 @@
           "SourceLine": 21
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 9, 9, 1 ],
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 9 ],
           "SourceLine": 21
         },
         {
@@ -589,7 +554,7 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 10, 10, 2 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 21
         },
         {
@@ -598,8 +563,13 @@
           "SourceLine": 21
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 11, 11, 3 ],
+          "OpCode": "KSHORT",
+          "OpData": [ 12, -1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 12 ],
           "SourceLine": 21
         },
         {
@@ -609,7 +579,37 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 12, 12, 4 ],
+          "OpData": [ 12, 12, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 13, 10 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 13, 13, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 14, 10 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 14, 3 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 15, 10 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 15, 4 ],
           "SourceLine": 21
         },
         {
@@ -624,42 +624,12 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 1, 2 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 1, 1, 4 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 2, 2 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 2, 2, 5 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "GGET",
-          "OpData": [ 3, 2 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "TGETS",
-          "OpData": [ 3, 3, 6 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "GGET",
           "OpData": [ 4, 2 ],
           "SourceLine": 23
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 4, 4, 7 ],
+          "OpData": [ 4, 4, 4 ],
           "SourceLine": 23
         },
         {
@@ -669,7 +639,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 5, 5, 8 ],
+          "OpData": [ 5, 5, 5 ],
           "SourceLine": 23
         },
         {
@@ -679,7 +649,7 @@
         },
         {
           "OpCode": "TGETS",
-          "OpData": [ 6, 6, 9 ],
+          "OpData": [ 6, 6, 6 ],
           "SourceLine": 23
         },
         {
@@ -688,8 +658,8 @@
           "SourceLine": 23
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 7, 7, 0 ],
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 7 ],
           "SourceLine": 23
         },
         {
@@ -698,13 +668,8 @@
           "SourceLine": 23
         },
         {
-          "OpCode": "KSHORT",
-          "OpData": [ 9, -1 ],
-          "SourceLine": 23
-        },
-        {
-          "OpCode": "TGETV",
-          "OpData": [ 8, 8, 9 ],
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 8 ],
           "SourceLine": 23
         },
         {
@@ -713,8 +678,8 @@
           "SourceLine": 23
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 9, 9, 1 ],
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 9 ],
           "SourceLine": 23
         },
         {
@@ -724,7 +689,7 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 10, 10, 2 ],
+          "OpData": [ 10, 10, 0 ],
           "SourceLine": 23
         },
         {
@@ -733,8 +698,13 @@
           "SourceLine": 23
         },
         {
-          "OpCode": "TGETB",
-          "OpData": [ 11, 11, 3 ],
+          "OpCode": "KSHORT",
+          "OpData": [ 12, -1 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 12 ],
           "SourceLine": 23
         },
         {
@@ -744,7 +714,37 @@
         },
         {
           "OpCode": "TGETB",
-          "OpData": [ 12, 12, 4 ],
+          "OpData": [ 12, 12, 1 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 13, 13, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 14, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 14, 3 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 15, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 15, 4 ],
           "SourceLine": 23
         },
         {

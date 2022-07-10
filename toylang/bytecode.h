@@ -502,7 +502,7 @@ public:
     // so an Upvalue object will never be used as operand into any bytecode instruction other than the upvalue-dedicated ones, so we are fine).
     // However, we are not doing this now because our stack is currently not placed in the VM memory range.
     //
-    GeneralHeapPointer<void> m_hiddenClass;
+    SystemHeapPointer<void> m_hiddenClass;
     Type m_type;
     GcCellState m_cellState;
     // Always equal to (m_ptr == &m_u.tv)
@@ -693,15 +693,16 @@ private:
 class alignas(8) StackFrameHeader
 {
 public:
+    // The function corresponding to this stack frame
+    // Must be first element: this is expected by call opcode
+    //
+    HeapPtr<FunctionObject> m_func;
     // The address of the caller stack frame
     //
     StackFrameHeader* m_caller;
     // The return address
     //
     void* m_retAddr;
-    // The function corresponding to this stack frame
-    //
-    HeapPtr<FunctionObject> m_func;
     // If the function is calling (i.e. not topmost frame), denotes the offset of the bytecode that performed the call
     //
     uint32_t m_callerBytecodeOffset;
@@ -1636,7 +1637,7 @@ public:
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
         TValue func = *begin;
-        begin++;
+        TValue* argEnd = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + bc->m_numFixedParams;
 
         if (func.IsPointer(TValue::x_mivTag))
         {
@@ -1644,95 +1645,63 @@ public:
             {
                 HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
 
-                TValue* sfEnd = reinterpret_cast<TValue*>(sfp) + callerCb->m_stackFrameNumSlots;
-                TValue* baseForNextFrame = sfEnd + x_sizeOfStackFrameHeaderInTermsOfTValue;
-
-                uint32_t numFixedArgsToPass = bc->m_numFixedParams;
-                uint32_t totalArgs = numFixedArgsToPass;
-                if (bc->m_passVariadicRetAsParam)
+                // First, if the call passes variadic ret as param, copy them to the expected location
+                //
+                if (unlikely(bc->m_passVariadicRetAsParam))
                 {
-                    totalArgs += rc->m_numVariadicRets;
+                    // Fast path for the common case: the variadic ret has 1 value
+                    // Directly write *varRetbegin to *argEnd even if the # of variadic ret is 0 to save a branch, since this slot is overwritable any way
+                    //
+                    TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
+                    *argEnd = *varRetbegin;
+                    if (unlikely(rc->m_numVariadicRets > 1))
+                    {
+                        memmove(argEnd, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
+                    }
+                    argEnd += rc->m_numVariadicRets;
                 }
 
                 HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+                TValue* argNeeded = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + calleeEc->m_numFixedArguments;
 
-                uint32_t numCalleeExpectingArgs = calleeEc->m_numFixedArguments;
-                bool calleeTakesVarArgs = calleeEc->m_hasVariadicArguments;
-
-                // If the callee takes varargs and it is not empty, set up the varargs
+                // Pad in nils if necessary
                 //
-                if (unlikely(calleeTakesVarArgs))
+                if (unlikely(argEnd < argNeeded))
                 {
-                    uint32_t actualNumVarArgs = 0;
-                    if (totalArgs > numCalleeExpectingArgs)
+                    TValue val = TValue::Nil();
+                    while (argEnd < argNeeded)
                     {
-                        actualNumVarArgs = totalArgs - numCalleeExpectingArgs;
-                        baseForNextFrame += actualNumVarArgs;
-                    }
-
-                    // First, if we need to pass varret, move the whole varret to the correct position
-                    //
-                    if (bc->m_passVariadicRetAsParam)
-                    {
-                        TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
-                        // TODO: over-moving is fine
-                        memmove(baseForNextFrame + numFixedArgsToPass, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
-                    }
-
-                    // Now, copy the fixed args to the correct position
-                    //
-                    SafeMemcpy(baseForNextFrame, begin, sizeof(TValue) * numFixedArgsToPass);
-
-                    // Now, set up the vararg part
-                    //
-                    if (totalArgs > numCalleeExpectingArgs)
-                    {
-                        SafeMemcpy(sfEnd, baseForNextFrame + numCalleeExpectingArgs, sizeof(TValue) * (totalArgs - numCalleeExpectingArgs));
-                    }
-
-                    // Finally, set up the numVarArgs field in the frame header
-                    //
-                    StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(baseForNextFrame) - 1;
-                    sfh->m_numVariadicArguments = actualNumVarArgs;
-                }
-                else
-                {
-                    // First, if we need to pass varret, move the whole varret to the correct position, up to the number of args the callee accepts
-                    //
-                    if (bc->m_passVariadicRetAsParam)
-                    {
-                        if (numCalleeExpectingArgs > numFixedArgsToPass)
-                        {
-                            TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
-                            // TODO: over-moving is fine
-                            memmove(baseForNextFrame + numFixedArgsToPass, varRetbegin, sizeof(TValue) * std::min(rc->m_numVariadicRets, numCalleeExpectingArgs - numFixedArgsToPass));
-                        }
-                    }
-
-                    // Now, copy the fixed args to the correct position, up to the number of args the callee accepts
-                    //
-                    SafeMemcpy(baseForNextFrame, begin, sizeof(TValue) * std::min(numFixedArgsToPass, numCalleeExpectingArgs));
-                }
-
-                // Finally, pad in nils if necessary
-                //
-                if (totalArgs < numCalleeExpectingArgs)
-                {
-                    TValue* p = baseForNextFrame + totalArgs;
-                    TValue* end = baseForNextFrame + numCalleeExpectingArgs;
-                    while (p < end)
-                    {
-                        *p = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
-                        p++;
+                        *argEnd = val;
+                        argEnd++;
                     }
                 }
 
                 // Set up the stack frame header
                 //
-                StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(baseForNextFrame) - 1;
-                sfh->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
-                sfh->m_retAddr = reinterpret_cast<void*>(OnReturn);
-                sfh->m_func = target;
+                bool needRelocate = calleeEc->m_hasVariadicArguments && argEnd > argNeeded;
+                void* baseForNextFrame;
+                if (unlikely(needRelocate))
+                {
+                    // We need to put the stack frame header at the END of the arguments and copy the fixed argument part
+                    //
+                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(argEnd);
+                    baseForNextFrame = newStackFrameHdr + 1;
+                    newStackFrameHdr->m_func = target;
+                    newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(OnReturn);
+                    newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+                    newStackFrameHdr->m_numVariadicArguments = static_cast<uint32_t>(argEnd - argNeeded);
+                    SafeMemcpy(baseForNextFrame, begin + x_sizeOfStackFrameHeaderInTermsOfTValue, sizeof(TValue) * calleeEc->m_numFixedArguments);
+                }
+                else
+                {
+                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(begin);
+                    baseForNextFrame = newStackFrameHdr + 1;
+                    // m_func is already in its expected place, so just fill the other fields
+                    //
+                    newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(OnReturn);
+                    newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+                    newStackFrameHdr->m_numVariadicArguments = 0;
+                }
 
                 // This static_cast actually doesn't always hold
                 // But if callee is not a bytecode function, the callee will never look at m_codeBlock, so it's fine

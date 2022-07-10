@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 3,
       "TakesVarArg": false,
-      "MaxFrameSize": 6,
+      "MaxFrameSize": 9,
       "SourceLineStart": 1,
       "SourceLineEnd": 4,
       "HasChildPrototype": false,
@@ -42,7 +42,7 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 5, 3 ],
+          "OpData": [ 8, 3 ],
           "SourceLine": 3
         },
         {
@@ -68,7 +68,7 @@
     {
       "NumFixedParams": 3,
       "TakesVarArg": false,
-      "MaxFrameSize": 6,
+      "MaxFrameSize": 9,
       "SourceLineStart": 6,
       "SourceLineEnd": 9,
       "HasChildPrototype": false,
@@ -106,7 +106,7 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 5, 3 ],
+          "OpData": [ 8, 3 ],
           "SourceLine": 8
         },
         {
@@ -132,7 +132,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 5,
+      "MaxFrameSize": 8,
       "SourceLineStart": 11,
       "SourceLineEnd": 14,
       "HasChildPrototype": false,
@@ -160,7 +160,7 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 4, 2 ],
+          "OpData": [ 7, 2 ],
           "SourceLine": 13
         },
         {
@@ -186,7 +186,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 7,
+      "MaxFrameSize": 10,
       "SourceLineStart": 0,
       "SourceLineEnd": 45,
       "HasChildPrototype": true,
@@ -214,7 +214,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 4 ],
+          "OpData": [ 7, 4 ],
           "SourceLine": 16
         },
         {
@@ -229,17 +229,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 17
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 1 ],
+          "OpData": [ 8, 1 ],
           "SourceLine": 17
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 2 ],
+          "OpData": [ 9, 2 ],
           "SourceLine": 17
         },
         {
@@ -254,17 +254,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 18
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 3 ],
+          "OpData": [ 8, 3 ],
           "SourceLine": 18
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 4 ],
+          "OpData": [ 9, 4 ],
           "SourceLine": 18
         },
         {
@@ -279,17 +279,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 2 ],
+          "OpData": [ 7, 2 ],
           "SourceLine": 19
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 5 ],
+          "OpData": [ 8, 5 ],
           "SourceLine": 19
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 6 ],
+          "OpData": [ 9, 6 ],
           "SourceLine": 19
         },
         {
@@ -304,17 +304,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 233 ],
+          "OpData": [ 7, 233 ],
           "SourceLine": 20
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 7 ],
+          "OpData": [ 8, 7 ],
           "SourceLine": 20
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 8 ],
+          "OpData": [ 9, 8 ],
           "SourceLine": 20
         },
         {
@@ -329,17 +329,17 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 4, 5 ],
+          "OpData": [ 7, 5 ],
           "SourceLine": 21
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 9 ],
+          "OpData": [ 8, 9 ],
           "SourceLine": 21
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 10 ],
+          "OpData": [ 9, 10 ],
           "SourceLine": 21
         },
         {
@@ -354,22 +354,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 22
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 4, 4, 0 ],
+          "OpData": [ 7, 7, 0 ],
           "SourceLine": 22
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 11 ],
+          "OpData": [ 8, 11 ],
           "SourceLine": 22
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 12 ],
+          "OpData": [ 9, 12 ],
           "SourceLine": 22
         },
         {
@@ -384,17 +384,17 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 23
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 13 ],
+          "OpData": [ 8, 13 ],
           "SourceLine": 23
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 14 ],
+          "OpData": [ 9, 14 ],
           "SourceLine": 23
         },
         {
@@ -409,17 +409,17 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 6 ],
+          "OpData": [ 7, 6 ],
           "SourceLine": 24
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 15 ],
+          "OpData": [ 8, 15 ],
           "SourceLine": 24
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 16 ],
+          "OpData": [ 9, 16 ],
           "SourceLine": 24
         },
         {
@@ -434,7 +434,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 7 ],
+          "OpData": [ 7, 7 ],
           "SourceLine": 26
         },
         {
@@ -449,17 +449,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 27
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 17 ],
+          "OpData": [ 8, 17 ],
           "SourceLine": 27
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 18 ],
+          "OpData": [ 9, 18 ],
           "SourceLine": 27
         },
         {
@@ -474,17 +474,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 28
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 19 ],
+          "OpData": [ 8, 19 ],
           "SourceLine": 28
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 20 ],
+          "OpData": [ 9, 20 ],
           "SourceLine": 28
         },
         {
@@ -499,17 +499,17 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 2 ],
+          "OpData": [ 7, 2 ],
           "SourceLine": 29
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 21 ],
+          "OpData": [ 8, 21 ],
           "SourceLine": 29
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 22 ],
+          "OpData": [ 9, 22 ],
           "SourceLine": 29
         },
         {
@@ -524,17 +524,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 23333 ],
+          "OpData": [ 7, 23333 ],
           "SourceLine": 30
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 23 ],
+          "OpData": [ 8, 23 ],
           "SourceLine": 30
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 24 ],
+          "OpData": [ 9, 24 ],
           "SourceLine": 30
         },
         {
@@ -549,17 +549,17 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 4, 8 ],
+          "OpData": [ 7, 8 ],
           "SourceLine": 31
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 25 ],
+          "OpData": [ 8, 25 ],
           "SourceLine": 31
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 26 ],
+          "OpData": [ 9, 26 ],
           "SourceLine": 31
         },
         {
@@ -574,22 +574,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 32
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 4, 4, 0 ],
+          "OpData": [ 7, 7, 0 ],
           "SourceLine": 32
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 27 ],
+          "OpData": [ 8, 27 ],
           "SourceLine": 32
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 28 ],
+          "OpData": [ 9, 28 ],
           "SourceLine": 32
         },
         {
@@ -604,17 +604,17 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 33
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 29 ],
+          "OpData": [ 8, 29 ],
           "SourceLine": 33
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 30 ],
+          "OpData": [ 9, 30 ],
           "SourceLine": 33
         },
         {
@@ -629,17 +629,17 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 6 ],
+          "OpData": [ 7, 6 ],
           "SourceLine": 34
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 31 ],
+          "OpData": [ 8, 31 ],
           "SourceLine": 34
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 6, 32 ],
+          "OpData": [ 9, 32 ],
           "SourceLine": 34
         },
         {
@@ -654,7 +654,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 9 ],
+          "OpData": [ 7, 9 ],
           "SourceLine": 36
         },
         {
@@ -669,12 +669,12 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 37
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 33 ],
+          "OpData": [ 8, 33 ],
           "SourceLine": 37
         },
         {
@@ -689,12 +689,12 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 38
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 34 ],
+          "OpData": [ 8, 34 ],
           "SourceLine": 38
         },
         {
@@ -709,12 +709,12 @@
         },
         {
           "OpCode": "KPRI",
-          "OpData": [ 4, 2 ],
+          "OpData": [ 7, 2 ],
           "SourceLine": 39
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 35 ],
+          "OpData": [ 8, 35 ],
           "SourceLine": 39
         },
         {
@@ -729,12 +729,12 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 4, 2 ],
+          "OpData": [ 7, 2 ],
           "SourceLine": 40
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 36 ],
+          "OpData": [ 8, 36 ],
           "SourceLine": 40
         },
         {
@@ -749,12 +749,12 @@
         },
         {
           "OpCode": "TDUP",
-          "OpData": [ 4, 10 ],
+          "OpData": [ 7, 10 ],
           "SourceLine": 41
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 37 ],
+          "OpData": [ 8, 37 ],
           "SourceLine": 41
         },
         {
@@ -769,17 +769,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 4, 0 ],
+          "OpData": [ 7, 0 ],
           "SourceLine": 42
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 4, 4, 0 ],
+          "OpData": [ 7, 7, 0 ],
           "SourceLine": 42
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 38 ],
+          "OpData": [ 8, 38 ],
           "SourceLine": 42
         },
         {
@@ -794,12 +794,12 @@
         },
         {
           "OpCode": "KNUM",
-          "OpData": [ 4, 1 ],
+          "OpData": [ 7, 1 ],
           "SourceLine": 43
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 39 ],
+          "OpData": [ 8, 39 ],
           "SourceLine": 43
         },
         {
@@ -814,12 +814,12 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 4, 6 ],
+          "OpData": [ 7, 6 ],
           "SourceLine": 44
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 5, 40 ],
+          "OpData": [ 8, 40 ],
           "SourceLine": 44
         },
         {

@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 1,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 1,
       "SourceLineEnd": 6,
       "HasChildPrototype": false,
@@ -42,7 +42,7 @@
         },
         {
           "OpCode": "SUBVN",
-          "OpData": [ 2, 0, 0 ],
+          "OpData": [ 5, 0, 0 ],
           "SourceLine": 5
         },
         {
@@ -57,7 +57,7 @@
         },
         {
           "OpCode": "SUBVN",
-          "OpData": [ 3, 0, 1 ],
+          "OpData": [ 6, 0, 1 ],
           "SourceLine": 5
         },
         {
@@ -97,7 +97,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 0,
       "SourceLineEnd": 11,
       "HasChildPrototype": true,
@@ -120,7 +120,7 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 15 ],
+          "OpData": [ 4, 15 ],
           "SourceLine": 8
         },
         {
@@ -135,7 +135,7 @@
         },
         {
           "OpCode": "MOV",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 9
         },
         {

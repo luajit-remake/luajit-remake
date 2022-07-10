@@ -4,7 +4,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 1,
       "SourceLineEnd": 7,
       "HasChildPrototype": false,
@@ -27,7 +27,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 3
         },
         {
@@ -47,7 +47,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 5
         },
         {
@@ -81,7 +81,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 8,
       "SourceLineEnd": 14,
       "HasChildPrototype": false,
@@ -104,7 +104,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 10
         },
         {
@@ -124,7 +124,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 12
         },
         {
@@ -158,7 +158,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 15,
       "SourceLineEnd": 21,
       "HasChildPrototype": false,
@@ -181,7 +181,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 17
         },
         {
@@ -201,7 +201,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 19
         },
         {
@@ -235,7 +235,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 22,
       "SourceLineEnd": 28,
       "HasChildPrototype": false,
@@ -258,7 +258,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 24
         },
         {
@@ -278,7 +278,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 26
         },
         {
@@ -312,7 +312,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 29,
       "SourceLineEnd": 35,
       "HasChildPrototype": false,
@@ -335,7 +335,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 31
         },
         {
@@ -355,7 +355,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 33
         },
         {
@@ -389,7 +389,7 @@
     {
       "NumFixedParams": 2,
       "TakesVarArg": false,
-      "MaxFrameSize": 4,
+      "MaxFrameSize": 7,
       "SourceLineStart": 36,
       "SourceLineEnd": 42,
       "HasChildPrototype": false,
@@ -412,7 +412,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 1 ],
+          "OpData": [ 6, 1 ],
           "SourceLine": 38
         },
         {
@@ -432,7 +432,7 @@
         },
         {
           "OpCode": "KSTR",
-          "OpData": [ 3, 2 ],
+          "OpData": [ 6, 2 ],
           "SourceLine": 40
         },
         {
@@ -466,7 +466,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 3,
+      "MaxFrameSize": 6,
       "SourceLineStart": 0,
       "SourceLineEnd": 86,
       "HasChildPrototype": true,
@@ -539,12 +539,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 44
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 44
         },
         {
@@ -559,12 +559,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 45
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 45
         },
         {
@@ -579,12 +579,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 46
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 46
         },
         {
@@ -599,17 +599,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 47
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 47
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 47
         },
         {
@@ -624,17 +624,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 48
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 48
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 48
         },
         {
@@ -649,22 +649,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 49
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 49
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 49
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 49
         },
         {
@@ -679,12 +679,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 51
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 51
         },
         {
@@ -699,12 +699,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 52
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 52
         },
         {
@@ -719,12 +719,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 53
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 53
         },
         {
@@ -739,17 +739,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 54
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 54
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 54
         },
         {
@@ -764,17 +764,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 55
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 55
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 55
         },
         {
@@ -789,22 +789,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 56
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 56
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 56
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 56
         },
         {
@@ -819,12 +819,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 58
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 58
         },
         {
@@ -839,12 +839,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 59
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 59
         },
         {
@@ -859,12 +859,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 60
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 60
         },
         {
@@ -879,17 +879,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 61
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 61
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 61
         },
         {
@@ -904,17 +904,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 62
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 62
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 62
         },
         {
@@ -929,22 +929,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 63
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 63
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 63
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 63
         },
         {
@@ -959,12 +959,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 65
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 65
         },
         {
@@ -979,12 +979,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 66
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 66
         },
         {
@@ -999,12 +999,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 67
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 67
         },
         {
@@ -1019,17 +1019,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 68
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 68
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 68
         },
         {
@@ -1044,17 +1044,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 69
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 69
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 69
         },
         {
@@ -1069,22 +1069,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 70
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 70
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 70
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 70
         },
         {
@@ -1099,12 +1099,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 72
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 72
         },
         {
@@ -1119,12 +1119,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 73
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 73
         },
         {
@@ -1139,12 +1139,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 74
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 74
         },
         {
@@ -1159,17 +1159,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 75
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 75
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 75
         },
         {
@@ -1184,17 +1184,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 76
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 76
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 76
         },
         {
@@ -1209,22 +1209,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 77
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 77
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 77
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 77
         },
         {
@@ -1239,12 +1239,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 79
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 79
         },
         {
@@ -1259,12 +1259,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 80
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 80
         },
         {
@@ -1279,12 +1279,12 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 81
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 81
         },
         {
@@ -1299,17 +1299,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 82
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 82
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 1 ],
+          "OpData": [ 5, 1 ],
           "SourceLine": 82
         },
         {
@@ -1324,17 +1324,17 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 1 ],
+          "OpData": [ 4, 1 ],
           "SourceLine": 83
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 83
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 83
         },
         {
@@ -1349,22 +1349,22 @@
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 1, 0 ],
+          "OpData": [ 4, 0 ],
           "SourceLine": 84
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 1, 1, 0 ],
+          "OpData": [ 4, 4, 0 ],
           "SourceLine": 84
         },
         {
           "OpCode": "KSHORT",
-          "OpData": [ 2, 0 ],
+          "OpData": [ 5, 0 ],
           "SourceLine": 84
         },
         {
           "OpCode": "DIVVN",
-          "OpData": [ 2, 2, 0 ],
+          "OpData": [ 5, 5, 0 ],
           "SourceLine": 84
         },
         {

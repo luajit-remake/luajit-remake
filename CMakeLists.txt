@@ -130,7 +130,7 @@ add_subdirectory(toylang)
 add_executable(main
   main.cpp        
   test_boxing.cpp
-  test_interpreter.cpp
+  test_call_opcode.cpp
   test_global_string_conser.cpp
   test_structure.cpp
   test_object_get_put_by_id.cpp
