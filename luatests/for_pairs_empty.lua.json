@@ -1,0 +1,121 @@
+{
+  "ChunkName": "@luatests/for_pairs_empty.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 7,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 4, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "ISNEXT",
+          "OpData": [ 3, 5 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 4 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 1, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "ITERN",
+          "OpData": [ 3, 3, 3 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "ITERL",
+          "OpData": [ 3, -5 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 5
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "test start"
+        },
+        {
+          "Type": "String",
+          "Value": "pairs"
+        },
+        {
+          "Type": "String",
+          "Value": "test end"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

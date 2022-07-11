@@ -16,22 +16,149 @@ using namespace CommonUtils;
 class alignas(8) ArraySparseMap final : public UserHeapGcObjectHeader
 {
 public:
+    static constexpr uint32_t x_hiddenClassForArraySparseMap = 0x20;
+
+    using StorageType = std::unordered_map<double, TValue>;
+
+    struct HashTableEntry
+    {
+        // An empty slot is represented by m_key == NaN
+        // This is fine because Lua doesn't allow NaN to be used as an array index
+        //
+        double m_key;
+        TValue m_value;
+    };
+
+    ~ArraySparseMap()
+    {
+        delete [] m_hashTable;
+    }
+
+    static ArraySparseMap* WARN_UNUSED AllocateEmptyArraySparseMap(VM* vm)
+    {
+        HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
+        ArraySparseMap* r = TranslateToRawPointer(vm, hp);
+        ConstructInPlace(r);
+        UserHeapGcObjectHeader::Populate(r);
+        r->m_structure = ArraySparseMap::x_hiddenClassForArraySparseMap;
+        r->m_hashMask = 1;
+        r->m_elementCount = 0;
+        r->m_hashTable = new HashTableEntry[2];
+        r->m_hashTable[0].m_key = std::numeric_limits<double>::quiet_NaN();
+        r->m_hashTable[1].m_key = std::numeric_limits<double>::quiet_NaN();
+        return r;
+    }
+
+    ArraySparseMap* WARN_UNUSED Clone(VM* vm)
+    {
+        HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
+        ArraySparseMap* r = TranslateToRawPointer(vm, hp);
+        ConstructInPlace(r);
+        UserHeapGcObjectHeader::Populate(r);
+        r->m_structure = ArraySparseMap::x_hiddenClassForArraySparseMap;
+        r->m_hashMask = m_hashMask;
+        r->m_elementCount = m_elementCount;
+        r->m_hashTable = new HashTableEntry[m_hashMask + 1];
+        memcpy(r->m_hashTable, m_hashTable, sizeof(HashTableEntry) * (m_hashMask + 1));
+        return r;
+    }
+
+    void ResizeIfNeeded()
+    {
+        if (likely(m_elementCount * 2 <= m_hashMask + 1))
+        {
+            return;
+        }
+        ResizeImpl();
+    }
+
+    void NO_INLINE ResizeImpl()
+    {
+        assert(is_power_of_2(m_hashMask + 1));
+        uint32_t oldMask = m_hashMask;
+        uint32_t newMask = oldMask * 2 + 1;
+        ReleaseAssert(newMask < std::numeric_limits<uint32_t>::max());
+        m_hashMask = newMask;
+
+        HashTableEntry* oldHt = m_hashTable;
+        m_hashTable = new HashTableEntry[newMask + 1];
+        for (size_t i = 0; i <= newMask; i++)
+        {
+             m_hashTable[i].m_key = std::numeric_limits<double>::quiet_NaN();
+        }
+
+        DEBUG_ONLY(uint32_t cnt = 0;)
+        HashTableEntry* oldHtEnd = oldHt + oldMask + 1;
+        HashTableEntry* curEntry = oldHt;
+        while (curEntry < oldHtEnd)
+        {
+            if (!IsNaN(curEntry->m_key))
+            {
+                double key = curEntry->m_key;
+                size_t slot = HashPrimitiveTypes(key) & newMask;
+                while (!IsNaN(m_hashTable[slot].m_key))
+                {
+                    assert(!UnsafeFloatEqual(m_hashTable[slot].m_key, key));
+                    slot = (slot + 1) & newMask;
+                }
+                m_hashTable[slot].m_key = key;
+                m_hashTable[slot].m_value = curEntry->m_value;
+                DEBUG_ONLY(cnt++;)
+            }
+            curEntry++;
+        }
+        assert(cnt == m_elementCount);
+
+        delete [] oldHt;
+    }
+
     TValue GetByVal(double key)
     {
-        auto it = m_map.find(key);
-        if (it == m_map.end())
+        size_t hashMask = m_hashMask;
+        size_t slot = HashPrimitiveTypes(key) & hashMask;
+        while (true)
         {
-            return TValue::Nil();
-        }
-        else
-        {
-            return it->second;
+            HashTableEntry& entry = m_hashTable[slot];
+            if (UnsafeFloatEqual(entry.m_key, key))
+            {
+                return entry.m_value;
+            }
+            if (IsNaN(entry.m_key))
+            {
+                return TValue::Nil();
+            }
+            slot = (slot + 1) & hashMask;
         }
     }
 
-    // Currently we just use an outlined STL hash table for simplicity, we expect well-written code to not trigger SparseMap any way
-    //
-    std::unordered_map<double, TValue> m_map;
+    void Insert(double key, TValue value)
+    {
+        assert(!IsNaN(key));
+        size_t hashMask = m_hashMask;
+        size_t slot = HashPrimitiveTypes(key) & hashMask;
+        while (true)
+        {
+            HashTableEntry& entry = m_hashTable[slot];
+            if (UnsafeFloatEqual(entry.m_key, key))
+            {
+                entry.m_value = value;
+                return;
+            }
+            if (IsNaN(entry.m_key))
+            {
+                entry.m_key = key;
+                entry.m_value = value;
+                m_elementCount++;
+                ResizeIfNeeded();
+                return;
+            }
+            slot = (slot + 1) & hashMask;
+        }
+    }
+
+    uint32_t m_hashMask;
+    uint32_t m_elementCount;
+    HashTableEntry* m_hashTable;
 };
 
 class alignas(8) ButterflyHeader
@@ -690,6 +817,20 @@ public:
         else
         {
             ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static TValue WARN_UNUSED GetValueForSlot(T self, uint32_t slotOrd, uint8_t inlineStorageCapacity)
+    {
+        if (slotOrd < inlineStorageCapacity)
+        {
+            return TCGet(self->m_inlineStorage[slotOrd]);
+        }
+        else
+        {
+            int32_t butterflySlot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
+            return self->m_butterfly->GetNamedProperty(butterflySlot);
         }
     }
 
@@ -1519,20 +1660,11 @@ public:
         assert(didSomethingNontrivial);
     }
 
-    static ArraySparseMap* WARN_UNUSED AllocateEmptyArraySparseMapImpl(VM* vm)
-    {
-        HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
-        ArraySparseMap* sparseMap = TranslateToRawPointer(vm, hp);
-        ConstructInPlace(sparseMap);
-        UserHeapGcObjectHeader::Populate(sparseMap);
-        return sparseMap;
-    }
-
     ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
     {
         assert(m_butterfly != nullptr);
         assert(!m_butterfly->GetHeader()->HasSparseMap());
-        ArraySparseMap* sparseMap = AllocateEmptyArraySparseMapImpl(vm);
+        ArraySparseMap* sparseMap = ArraySparseMap::AllocateEmptyArraySparseMap(vm);
         m_butterfly->GetHeader()->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(sparseMap).m_value;
         return sparseMap;
     }
@@ -1599,7 +1731,7 @@ public:
         newArrayType.SetArrayKind(ArrayType::Kind::Any);
 
         ArraySparseMap* sparseMap = GetOrAllocateSparseMap(vm);
-        sparseMap->m_map[index] = value;
+        sparseMap->Insert(index, value);
 
         if (arrType.m_asValue != newArrayType.m_asValue)
         {
@@ -1747,10 +1879,7 @@ public:
             {
                 VM* vm = VM::GetActiveVMForCurrentThread();
                 ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
-                ArraySparseMap* newSparseMap = AllocateEmptyArraySparseMapImpl(vm);
-                // Since ArraySparseMap is simply implemented by a STL map, the copy here is a deep copy as desired
-                //
-                newSparseMap->m_map = oldSparseMap->m_map;
+                ArraySparseMap* newSparseMap = oldSparseMap->Clone(vm);
                 hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
                 assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
             }
@@ -1963,6 +2092,231 @@ public:
     TValue m_inlineStorage[0];
 };
 static_assert(sizeof(TableObject) == 16);
+
+// TableObjectIterator: the class used by Lua to iterate all key-value pairs in a table
+//
+// DEVNOTE: currently this iterator lives on the stack, so the GC is unaware of the layout of this iterator.
+// Therefore, this iterator can not store the hidden class or any pointer, as these pointers cannot be recognized by GC
+// so the pointed object can be GC'ed (or even worse, ABA'ed) in between two iterator calls. (And due to the possibility
+// of ABA, even validating the pointer equals the pointer stored in the table won't work.) This unfortunately adds a bunch
+// of branches. We can improve this by making it a buffered iterator living on the heap, see TODO.
+//
+// Lua explicitly states that if new keys are added, the behavior for iterator is undefined. So we don't need to worry
+// about correctness when there's a change in hidden class, as long as we don't crash or cause data corruptions in such cases.
+//
+// The story could be more difficult once we support UncacheableDictionary, as Lua explicitly allows deletion of keys during a traversal.
+// Here's the proposal to deal with this issue: transition from CacheableDictionary to UncacheableDictionary, or resizing (including
+// shrinking) of UncacheableDictionary's hash table should be made to only happen upon key insertion, never at other times. Now, if
+// the table transited to UncacheableDictionary or the UncacheableDictionary's hash table gets rehashed during a traversal, it means
+// the user must have already violated the Lua standard by inserted a new key, so we are free to exhibit undefined behavior, so we are good.
+//
+// TODO: we probably should make this a buffered iterator living on the heap for better performance, but this will complicate the design a lot..
+//
+struct TableObjectIterator
+{
+    enum class IteratorState
+    {
+        Uninitialized,
+        NamedProperty,
+        VectorStorage,
+        SparseMap,
+        Terminated
+    };
+
+    struct KeyValuePair
+    {
+        TValue m_key;
+        TValue m_value;
+    };
+
+    TableObjectIterator()
+        : m_namedPropertyOrd(0), m_state(IteratorState::Uninitialized)
+    { }
+
+    KeyValuePair WARN_UNUSED Advance(HeapPtr<TableObject> obj)
+    {
+        Type hcType;
+        HeapPtr<Structure> structure;
+        HeapPtr<CacheableDictionary> cacheableDict;
+        ArraySparseMap* sparseMap;
+
+        if (unlikely(m_state == IteratorState::Uninitialized))
+        {
+            hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
+            if (hcType == Type::Structure)
+            {
+                structure = TCGet(obj->m_hiddenClass).As<Structure>();
+                if (unlikely(structure->m_numSlots == 0))
+                {
+                    goto try_start_iterating_vector_storage;
+                }
+                m_state = IteratorState::NamedProperty;
+                m_namedPropertyOrd = static_cast<uint32_t>(-1);
+                goto try_get_next_structure_prop;
+            }
+            else if (hcType == Type::CacheableDictionary)
+            {
+                cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                m_state = IteratorState::NamedProperty;
+                m_namedPropertyOrd = 0;
+                goto try_find_and_get_cd_prop;
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+        }
+
+        if (m_state == IteratorState::NamedProperty)
+        {
+            hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
+
+            if (likely(hcType == Type::Structure))
+            {
+                structure = TCGet(obj->m_hiddenClass).As<Structure>();
+
+try_get_next_structure_prop:
+                TValue value;
+                while (true)
+                {
+                    m_namedPropertyOrd++;
+                    if (unlikely(m_namedPropertyOrd >= structure->m_numSlots))
+                    {
+                        goto try_start_iterating_vector_storage;
+                    }
+                    if (unlikely(Structure::IsSlotUsedByPolyMetatable(structure, m_namedPropertyOrd)))
+                    {
+                        continue;
+                    }
+                    value = TableObject::GetValueForSlot(obj, m_namedPropertyOrd, structure->m_inlineNamedStorageCapacity);
+                    if (value.IsNil())
+                    {
+                        continue;
+                    }
+                    break;
+                }
+
+                return KeyValuePair {
+                    .m_key = TValue::CreatePointer(Structure::GetKeyForSlotOrdinal(structure, static_cast<uint8_t>(m_namedPropertyOrd))),
+                    .m_value = value
+                };
+            }
+            else if (hcType == Type::CacheableDictionary)
+            {
+                cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                m_namedPropertyOrd++;
+
+try_find_and_get_cd_prop:
+                CacheableDictionary::HashTableEntry* ht = cacheableDict->m_hashTable;
+                uint32_t htMask = cacheableDict->m_hashTableMask;
+                while (m_namedPropertyOrd <= htMask)
+                {
+                    CacheableDictionary::HashTableEntry& entry = ht[m_namedPropertyOrd];
+                    if (entry.m_key.m_value != 0)
+                    {
+                        TValue value = TableObject::GetValueForSlot(obj, entry.m_slot, cacheableDict->m_inlineNamedStorageCapacity);
+                        if (!value.IsNil())
+                        {
+                            return KeyValuePair {
+                                .m_key = TValue::CreatePointer(UserHeapPointer<void>(entry.m_key.As())),
+                                .m_value = value
+                            };
+                        }
+                    }
+                    m_namedPropertyOrd++;
+                }
+                goto try_start_iterating_vector_storage;
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+
+try_start_iterating_vector_storage:
+            if (unlikely(obj->m_butterfly == nullptr))
+            {
+                goto finished_iteration;
+            }
+            m_state = IteratorState::VectorStorage;
+            m_vectorStorageOrd = 0;
+            goto try_find_next_vector_entry;
+        }
+
+        if (m_state == IteratorState::VectorStorage)
+        {
+try_find_next_vector_entry:
+            Butterfly* butterfly = obj->m_butterfly;
+            int32_t vectorStorageCapacity = butterfly->GetHeader()->m_arrayStorageCapacity;
+            // Note that Lua array is 1-based, so the valid range is [1, vectorStorageCapacity]
+            //
+            while (m_vectorStorageOrd < vectorStorageCapacity)
+            {
+                m_vectorStorageOrd++;
+                TValue value = reinterpret_cast<TValue*>(butterfly)[m_vectorStorageOrd];
+                if (!value.IsNil())
+                {
+                    return KeyValuePair {
+                        .m_key = TValue::CreateInt32(m_vectorStorageOrd, TValue::x_int32Tag),
+                        .m_value = value
+                    };
+                }
+            }
+
+            if (butterfly->GetHeader()->HasSparseMap())
+            {
+                sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
+                m_state = IteratorState::SparseMap;
+                m_sparseMapOrd = 0;
+                goto try_find_next_sparse_map_entry;
+            }
+
+            goto finished_iteration;
+        }
+
+        assert(m_state == IteratorState::SparseMap);
+        sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
+        m_sparseMapOrd++;
+
+try_find_next_sparse_map_entry:
+        while (m_sparseMapOrd <= sparseMap->m_hashMask)
+        {
+            ArraySparseMap::HashTableEntry& entry = sparseMap->m_hashTable[m_sparseMapOrd];
+            double key = entry.m_key;
+            if (!IsNaN(key))
+            {
+                TValue value = entry.m_value;
+                if (!value.IsNil())
+                {
+                    return KeyValuePair {
+                        .m_key = TValue::CreateDouble(key),
+                        .m_value = value
+                    };
+                }
+            }
+            m_sparseMapOrd++;
+        }
+        goto finished_iteration;
+
+finished_iteration:
+        m_state = IteratorState::Terminated;
+        return KeyValuePair {
+            .m_key = TValue::Nil(),
+            .m_value = TValue::Nil()
+        };
+    }
+
+    union {
+        uint32_t m_namedPropertyOrd;
+        int32_t m_vectorStorageOrd;
+        uint32_t m_sparseMapOrd;
+    };
+    IteratorState m_state;
+};
+// This struct must fit in 8 bytes as that's all we have on the stack to store it.
+//
+static_assert(sizeof(TableObjectIterator) == 8);
 
 inline UserHeapPointer<void> CacheableDictionary::GetPolyMetatableFromObject(TableObject* obj, uint32_t slot, uint32_t inlineCapacity, uint32_t DEBUG_ONLY(outlineCapacity))
 {

@@ -1,39 +1,10 @@
 #include "bytecode.h"
 #include "gtest/gtest.h"
+#include "test_vm_utils.h"
 
 using namespace ToyLang;
 
 namespace {
-
-using StringList = std::vector<UserHeapPointer<HeapString>>;
-
-StringList GetStringList(VM* vm, size_t n)
-{
-    std::set<std::string> used;
-    StringList result;
-    std::set<int64_t> ptrSet;
-    for (size_t i = 0; i < n; i++)
-    {
-        std::string s;
-        while (true)
-        {
-            s = "";
-            size_t len = static_cast<size_t>(rand() % 20);
-            for (size_t k = 0; k < len; k++) s += 'a' + rand() % 26;
-            if (!used.count(s))
-            {
-                break;
-            }
-        }
-        used.insert(s);
-        UserHeapPointer<HeapString> ptr = vm->CreateStringObjectFromRawString(s.c_str(), static_cast<uint32_t>(s.length()));
-        result.push_back(ptr);
-        ReleaseAssert(!ptrSet.count(ptr.m_value));
-        ptrSet.insert(ptr.m_value);
-    }
-    ReleaseAssert(used.size() == n && ptrSet.size() == n && result.size() == n);
-    return result;
-}
 
 // Test the transition on NoButterflyPart, that is, test the array type is
 // as expected when we put the first element into the array part

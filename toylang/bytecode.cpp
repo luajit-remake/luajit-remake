@@ -1306,6 +1306,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcFillNil(base, numSlotsToFill));
                 break;
             }
+            case LJOpcode::ITERN: [[fallthrough]];
             case LJOpcode::ITERC:
             {
                 // semantics:
@@ -1316,7 +1317,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata[1] >= 2);
                 BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
                 uint32_t numVars = static_cast<uint32_t>(opdata[1]) - 1;
-                bw.Append(BcCallIterator(base, numVars));
+                if (opcode == LJOpcode::ITERN)
+                {
+                    bw.Append(BcCallNext(base, numVars));
+                }
+                else
+                {
+                    bw.Append(BcCallIterator(base, numVars));
+                }
                 break;
             }
             case LJOpcode::ITERL:
@@ -1337,11 +1345,25 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcIteratorLoopBranch(base));
                 break;
             }
+            case LJOpcode::ISNEXT:
+            {
+                TestAssert(opdata.size() == 2);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                // opdata[0] is unused for now (indicates stack frame size after jump)
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcValidateIsNextAndBranch::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                bw.Append(BcValidateIsNextAndBranch(base));
+                break;
+            }
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
-            case LJOpcode::KCDATA: [[fallthrough]];
-            case LJOpcode::ITERN: [[fallthrough]];
-            case LJOpcode::ISNEXT:
+            case LJOpcode::KCDATA:
             {
                 ReleaseAssert(false && "unimplemented");
             }

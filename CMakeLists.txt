@@ -136,6 +136,7 @@ add_executable(main
   test_object_get_put_by_id.cpp
   test_object_array_part.cpp
   test_json_bytecode_loader.cpp
+  test_table_object_iterator.cpp
 )
 
 target_link_libraries(main PUBLIC

@@ -15,7 +15,18 @@ namespace CommonUtils
 template<typename T>
 uint64_t WARN_UNUSED HashPrimitiveTypes(T value)
 {
-    static_assert(std::is_arithmetic_v<T>, "only works for integral or floating point types");
+    if constexpr(std::is_floating_point_v<T>)
+    {
+        // For floating number, we must adjust -0 to 0, as they have different bit representations but must be treated equal
+        // Note that -0 compares equal to 0 under arithmetic comparison
+        //
+        SUPRESS_FLOAT_EQUAL_WARNING(
+            if (value == 0)
+            {
+                value = 0;
+            }
+        )
+    }
     return XXH3_64bits(&value, sizeof(T));
 }
 

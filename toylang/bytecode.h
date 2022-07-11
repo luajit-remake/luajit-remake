@@ -747,6 +747,43 @@ inline void VM::LaunchScript(ScriptModule* module)
     cb->m_bestEntryPoint(rc, stackbase, cb->m_bytecode, 0 /*unused*/);
 }
 
+inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numParams = hdr->m_numVariadicArguments;
+    if (numParams < 1)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
+    TValue input = *addr;
+    if (!input.IsPointer(TValue::x_mivTag))
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    Type ty = input.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+    if (ty != Type::TABLE)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    ret[0] = VM::GetActiveVMForCurrentThread()->GetLibBaseDotNextFunctionObject();
+    ret[1] = input;
+    ret[2] = TValue::Nil();
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    StackFrameHeader* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), 3 /*numRetValues*/);
+}
+
+inline void NO_RETURN LJR_LIB_BASE_next(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*sfp*/, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+{
+    // StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    // uint32_t numParams = hdr->m_numVariadicArguments;
+    ReleaseAssert(false && "unimplemented");
+}
+
 inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
@@ -867,10 +904,11 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
     };
 
-    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, InterpreterFn func)
+    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, InterpreterFn func) -> UserHeapPointer<FunctionObject>
     {
         UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func));
         insertField(r, propName, TValue::CreatePointer(funcObj));
+        return funcObj;
     };
 
     auto insertObject = [&](HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity) -> HeapPtr<TableObject>
@@ -882,6 +920,10 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     };
 
     insertCFunc(globalObject, "print", LJR_LIB_BASE_print);
+    insertCFunc(globalObject, "pairs", LJR_LIB_BASE_pairs);
+    UserHeapPointer<FunctionObject> nextFn = insertCFunc(globalObject, "next", LJR_LIB_BASE_next);
+    vm->InitLibBaseDotNextFunctionObject(TValue::CreatePointer(nextFn));
+
     HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
     insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
     return globalObject;
@@ -972,6 +1014,8 @@ public:
     BcPutVariadicArgs,                  \
     BcCallIterator,                     \
     BcIteratorLoopBranch,               \
+    BcCallNext,                         \
+    BcValidateIsNextAndBranch,          \
     BcNewClosure,                       \
     BcMove,                             \
     BcFillNil,                          \
@@ -1933,6 +1977,7 @@ public:
     {
         const Self* bc = reinterpret_cast<const Self*>(bcu);
         assert(bc->m_opcode == x_opcodeId<Self>);
+        std::ignore = bc;
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
         uint32_t numVarArgs = hdr->m_numVariadicArguments;
         rc->m_variadicRetSlotBegin = -static_cast<int32_t>(numVarArgs + x_numSlotsForStackFrameHeader);
@@ -2111,6 +2156,117 @@ public:
         else
         {
             Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+    }
+} __attribute__((__packed__));
+
+// Must have identical layout as BcCallIterator
+//
+class BcCallNext
+{
+public:
+    using Self = BcCallNext;
+
+    BcCallNext(BytecodeSlot funcSlot, uint32_t numFixedRets)
+        : m_opcode(x_opcodeId<Self>), m_funcSlot(funcSlot), m_numFixedRets(numFixedRets)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_funcSlot;
+    uint32_t m_numFixedRets;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue* addr = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
+        TableObjectIterator* iter = reinterpret_cast<TableObjectIterator*>(addr - 3);
+        HeapPtr<TableObject> table = addr[-2].AsPointer<TableObject>().As();
+        TableObjectIterator::KeyValuePair kv = iter->Advance(table);
+        addr[0] = kv.m_key;
+        addr[1] = kv.m_value;
+        if (bc->m_numFixedRets > 2)
+        {
+            TValue val = TValue::Nil();
+            TValue* addrEnd = addr + bc->m_numFixedRets;
+            addr += 2;
+            while (addr < addrEnd)
+            {
+                *addr = val;
+                addr++;
+            }
+        }
+        Dispatch(rc, sfp, bcu + sizeof(Self));
+    }
+} __attribute__((__packed__));
+
+class BcValidateIsNextAndBranch
+{
+public:
+    using Self = BcValidateIsNextAndBranch;
+
+    BcValidateIsNextAndBranch(BytecodeSlot base)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
+        bool validateOK = false;
+        // Check 1: addr[-3] is the true 'next' function
+        //
+        if (addr[-3].m_value == VM::GetActiveVMForCurrentThread()->GetLibBaseDotNextFunctionObject().m_value)
+        {
+            // Check 2: addr[-2] is a table
+            TValue v = addr[-2];
+            if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE)
+            {
+                // Check 3: addr[-1] is nil
+                //
+                if (addr[-1].IsNil())
+                {
+                    validateOK = true;
+                }
+            }
+        }
+        if (validateOK)
+        {
+            // Overwrite addr[-3] with TableObjectIterator
+            //
+            ConstructInPlace(reinterpret_cast<TableObjectIterator*>(addr - 3));
+            // Overwrite the opcode of 'ITERC' to 'ITERN'
+            //
+            assert(bcu[bc->m_offset] == x_opcodeId<BcCallIterator> || bcu[bc->m_offset] == x_opcodeId<BcCallNext>);
+            const_cast<uint8_t*>(bcu)[bc->m_offset] = x_opcodeId<BcCallNext>;
+            _Pragma("clang diagnostic push")
+            _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
+            uint64_t dispatch_unused;
+            [[clang::musttail]] return BcCallNext::Execute(rc, stackframe, bcu + bc->m_offset, dispatch_unused);
+            _Pragma("clang diagnostic pop")
+
+        }
+        else
+        {
+            // Overwrite the opcode of 'ITERN' to 'ITERC'
+            //
+            assert(bcu[bc->m_offset] == x_opcodeId<BcCallIterator> || bcu[bc->m_offset] == x_opcodeId<BcCallNext>);
+            const_cast<uint8_t*>(bcu)[bc->m_offset] = x_opcodeId<BcCallIterator>;
+            _Pragma("clang diagnostic push")
+            _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
+            uint64_t dispatch_unused;
+            [[clang::musttail]] return BcCallIterator::Execute(rc, stackframe, bcu + bc->m_offset, dispatch_unused);
+            _Pragma("clang diagnostic pop")
         }
     }
 } __attribute__((__packed__));

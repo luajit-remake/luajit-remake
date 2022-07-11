@@ -540,6 +540,35 @@ public:
         return TCGet(self->m_values[nonFullBlockLen - 1]);
     }
 
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static UserHeapPointer<void> WARN_UNUSED GetKeyForSlotOrdinal(T self, uint8_t slotOrdinal)
+    {
+        assert(slotOrdinal < self->m_numSlots);
+
+        SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
+        if (p.m_value != 0 && slotOrdinal < p.As()->m_numTotalSlots)
+        {
+            return StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As();
+        }
+
+        uint8_t lim = self->m_numSlots - self->m_nonFullBlockLen;
+        if (slotOrdinal >= lim)
+        {
+            uint8_t ord = slotOrdinal - lim;
+            assert(ord < x_hiddenClassBlockSize);
+            return TCGet(self->m_values[ord]).As();
+        }
+        else
+        {
+            assert(lim >= x_hiddenClassBlockSize && lim - x_hiddenClassBlockSize <= slotOrdinal);
+            int32_t ord = static_cast<int32_t>(slotOrdinal) - static_cast<int32_t>(lim);
+            assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
+            assert(HasFinalFullBlockPointer(self->m_numSlots));
+            SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
+            return TCGet(u.As()[ord]).As();
+        }
+    }
+
     static constexpr uint8_t x_maxNumSlots = 253;
     static_assert(internal::x_maxInlineCapacity == Structure::x_maxNumSlots);
 
@@ -1025,6 +1054,12 @@ public:
     {
         assert(IsPolyMetatable(self));
         return static_cast<uint32_t>(self->m_metatable - 1);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static bool WARN_UNUSED IsSlotUsedByPolyMetatable(T self, uint32_t slot)
+    {
+        return self->m_metatable == static_cast<int32_t>(slot) + 1;
     }
 
     static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForInlineCapacity(VM* vm, uint32_t inlineCapacity)

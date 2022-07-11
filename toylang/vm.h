@@ -858,12 +858,29 @@ public:
 
     HeapPtr<TableObject> GetRootGlobalObject();
 
+    void InitLibBaseDotNextFunctionObject(TValue val)
+    {
+        assert(val.IsPointer(TValue::x_mivTag));
+        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION);
+        m_ljrLibBaseDotNextFunctionObject = val;
+    }
+
+    TValue GetLibBaseDotNextFunctionObject()
+    {
+        return m_ljrLibBaseDotNextFunctionObject;
+    }
+
 private:
     void CreateRootCoroutine();
 
     CoroutineRuntimeContext* m_rootCoroutine;
 
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
+
+    // The true Lua base library's 'next' function object ('next' is the name of the that function...)
+    // Even if the global variable 'next' is overwritten, this will not be changed
+    //
+    TValue m_ljrLibBaseDotNextFunctionObject;
 
     // Allow unit test to hook stdout and stderr to a custom temporary file
     //
