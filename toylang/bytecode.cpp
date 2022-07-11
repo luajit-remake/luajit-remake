@@ -1306,13 +1306,42 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.Append(BcFillNil(base, numSlotsToFill));
                 break;
             }
+            case LJOpcode::ITERC:
+            {
+                // semantics:
+                // [A], ... [A+B-2] = [A-3]([A-2], [A-1])
+                //
+                TestAssert(opdata.size() == 3);
+                TestAssert(opdata[2] == 3);
+                TestAssert(opdata[1] >= 2);
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                uint32_t numVars = static_cast<uint32_t>(opdata[1]) - 1;
+                bw.Append(BcCallIterator(base, numVars));
+                break;
+            }
+            case LJOpcode::ITERL:
+            {
+                // semantics:
+                // if [A] != nil then: [A-1] = [A], jump
+                //
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t selfOffset = bw.CurrentBytecodeOffset();
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                jumpPatches.push_back(BytecodeJumpPatch {
+                                          .m_loc = selfOffset + BcIteratorLoopBranch::OffsetOfJump(),
+                                          .m_selfOffset = selfOffset,
+                                          .m_targetOrdinal = jumpBytecodeOrdinal
+                                      });
+                BytecodeSlot base = bytecodeSlotFromVariableSlot(opdata[0]);
+                bw.Append(BcIteratorLoopBranch(base));
+                break;
+            }
             case LJOpcode::POW: [[fallthrough]];
             case LJOpcode::CAT: [[fallthrough]];
             case LJOpcode::KCDATA: [[fallthrough]];
-            case LJOpcode::ITERC: [[fallthrough]];
             case LJOpcode::ITERN: [[fallthrough]];
-            case LJOpcode::ISNEXT: [[fallthrough]];
-            case LJOpcode::ITERL:
+            case LJOpcode::ISNEXT:
             {
                 ReleaseAssert(false && "unimplemented");
             }

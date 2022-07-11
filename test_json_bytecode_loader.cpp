@@ -467,5 +467,21 @@ TEST(LuaTest, OpcodeKNIL)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, IterativeForLoop)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/iter_for.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "for init\n1\t1\tnil\tnil\n2\t1\tnil\tnil\n3\t1\tnil\tnil\n4\t1\tnil\tnil\n");
+    ReleaseAssert(err == "");
+}
+
 
 }   // anonymous namespace

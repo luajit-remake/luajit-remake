@@ -83,7 +83,7 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
 
     // Check the caller locals
     //
-    TValue* callerLocals = reinterpret_cast<TValue*>(info->m_expectedSfh) + x_sizeOfStackFrameHeaderInTermsOfTValue;
+    TValue* callerLocals = reinterpret_cast<TValue*>(info->m_expectedSfh) + x_numSlotsForStackFrameHeader;
     for (uint32_t i = 0; i < info->m_callerNumStackSlots; i++)
     {
         ReleaseAssert(callerLocals[i].IsInt32(TValue::x_int32Tag));
@@ -161,7 +161,7 @@ TEST(CallOpcode, Sanity)
 
     TValue* stack = new TValue[1000];
 
-    TValue* locals = stack + x_sizeOfStackFrameHeaderInTermsOfTValue;
+    TValue* locals = stack + x_numSlotsForStackFrameHeader;
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(stack);
 
     for (bool calleeAcceptsVariadicArg : { false, true })
@@ -196,9 +196,9 @@ TEST(CallOpcode, Sanity)
 
                 // roll out # of parameters to pass and their position
                 //
-                uint32_t numFixedParams = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - x_sizeOfStackFrameHeaderInTermsOfTValue);
-                uint32_t funcStart = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - numFixedParams - x_sizeOfStackFrameHeaderInTermsOfTValue);
-                ReleaseAssert(funcStart + x_sizeOfStackFrameHeaderInTermsOfTValue - 1 + numFixedParams < callerCb->m_stackFrameNumSlots);
+                uint32_t numFixedParams = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - x_numSlotsForStackFrameHeader);
+                uint32_t funcStart = static_cast<uint32_t>(rand()) % (callerCb->m_stackFrameNumSlots - numFixedParams - x_numSlotsForStackFrameHeader);
+                ReleaseAssert(funcStart + x_numSlotsForStackFrameHeader - 1 + numFixedParams < callerCb->m_stackFrameNumSlots);
                 info.m_numCallerFixedParams = numFixedParams;
 
                 info.m_callerNumStackSlots = funcStart;
@@ -207,7 +207,7 @@ TEST(CallOpcode, Sanity)
                 locals[funcStart] = TValue::CreatePointer(UserHeapPointer<FunctionObject> { calleeFunc });
                 for (uint32_t i = 0; i < numFixedParams; i++)
                 {
-                    locals[funcStart + i + x_sizeOfStackFrameHeaderInTermsOfTValue] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
+                    locals[funcStart + i + x_numSlotsForStackFrameHeader] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
                     paramV++;
                 }
                 info.m_callerArgStart = funcStart;

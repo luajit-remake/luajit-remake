@@ -729,7 +729,7 @@ public:
 };
 
 static_assert(sizeof(StackFrameHeader) % sizeof(TValue) == 0);
-static constexpr size_t x_sizeOfStackFrameHeaderInTermsOfTValue = sizeof(StackFrameHeader) / sizeof(TValue);
+static constexpr size_t x_numSlotsForStackFrameHeader = sizeof(StackFrameHeader) / sizeof(TValue);
 
 inline void VM::LaunchScript(ScriptModule* module)
 {
@@ -970,6 +970,8 @@ public:
     BcTailCall,                         \
     BcVariadicArgsToVariadicRet,        \
     BcPutVariadicArgs,                  \
+    BcCallIterator,                     \
+    BcIteratorLoopBranch,               \
     BcNewClosure,                       \
     BcMove,                             \
     BcFillNil,                          \
@@ -1583,7 +1585,8 @@ public:
             TValue* pdst = pbegin + bc->m_numReturnValues;
             TValue* psrc = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
             numRetValues += rc->m_numVariadicRets;
-            SafeMemcpy(pdst, psrc, sizeof(TValue) * rc->m_numVariadicRets);
+            // TODO: it's always correct to move from left to right
+            memmove(pdst, psrc, sizeof(TValue) * rc->m_numVariadicRets);
         }
         // No matter we consumed variadic ret or not, it is no longer valid after the return
         //
@@ -1609,6 +1612,76 @@ public:
     }
 } __attribute__((__packed__));
 
+inline void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sfp, TValue* begin, HeapPtr<FunctionObject> target, uint32_t numFixedParamsToPass, InterpreterFn onReturn, bool passVariadicRetAsParam)
+{
+    TValue* argEnd = begin + x_numSlotsForStackFrameHeader + numFixedParamsToPass;
+
+    // First, if the call passes variadic ret as param, copy them to the expected location
+    //
+    if (unlikely(passVariadicRetAsParam))
+    {
+        // Fast path for the common case: the variadic ret has 1 value
+        // Directly write *varRetbegin to *argEnd even if the # of variadic ret is 0 to save a branch, since this slot is overwritable any way
+        //
+        TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
+        *argEnd = *varRetbegin;
+        if (unlikely(rc->m_numVariadicRets > 1))
+        {
+            memmove(argEnd, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
+        }
+        argEnd += rc->m_numVariadicRets;
+    }
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+    TValue* argNeeded = begin + x_numSlotsForStackFrameHeader + calleeEc->m_numFixedArguments;
+
+    // Pad in nils if necessary
+    //
+    if (unlikely(argEnd < argNeeded))
+    {
+        TValue val = TValue::Nil();
+        while (argEnd < argNeeded)
+        {
+            *argEnd = val;
+            argEnd++;
+        }
+    }
+
+    // Set up the stack frame header
+    //
+    bool needRelocate = calleeEc->m_hasVariadicArguments && argEnd > argNeeded;
+    void* baseForNextFrame;
+    if (unlikely(needRelocate))
+    {
+        // We need to put the stack frame header at the END of the arguments and copy the fixed argument part
+        //
+        StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(argEnd);
+        baseForNextFrame = newStackFrameHdr + 1;
+        newStackFrameHdr->m_func = target;
+        newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(onReturn);
+        newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+        newStackFrameHdr->m_numVariadicArguments = static_cast<uint32_t>(argEnd - argNeeded);
+        SafeMemcpy(baseForNextFrame, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * calleeEc->m_numFixedArguments);
+    }
+    else
+    {
+        StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(begin);
+        baseForNextFrame = newStackFrameHdr + 1;
+        // m_func is already in its expected place, so just fill the other fields
+        //
+        newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(onReturn);
+        newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+        newStackFrameHdr->m_numVariadicArguments = 0;
+    }
+
+    // This static_cast actually doesn't always hold
+    // But if callee is not a bytecode function, the callee will never look at m_codeBlock, so it's fine
+    //
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(calleeEc));
+
+    return baseForNextFrame;
+}
+
 class BcCall
 {
 public:
@@ -1624,7 +1697,7 @@ public:
     bool m_passVariadicRetAsParam;
     uint32_t m_numFixedParams;
     uint32_t m_numFixedRets;    // only used when m_keepVariadicRet == false
-    BytecodeSlot m_funcSlot;   // params are [m_funcSlot + 1, ... m_funcSlot + m_numFixedParams]
+    BytecodeSlot m_funcSlot;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1641,76 +1714,14 @@ public:
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
         TValue func = *begin;
-        TValue* argEnd = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + bc->m_numFixedParams;
 
         if (func.IsPointer(TValue::x_mivTag))
         {
             if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
             {
                 HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
-
-                // First, if the call passes variadic ret as param, copy them to the expected location
-                //
-                if (unlikely(bc->m_passVariadicRetAsParam))
-                {
-                    // Fast path for the common case: the variadic ret has 1 value
-                    // Directly write *varRetbegin to *argEnd even if the # of variadic ret is 0 to save a branch, since this slot is overwritable any way
-                    //
-                    TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
-                    *argEnd = *varRetbegin;
-                    if (unlikely(rc->m_numVariadicRets > 1))
-                    {
-                        memmove(argEnd, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
-                    }
-                    argEnd += rc->m_numVariadicRets;
-                }
-
                 HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
-                TValue* argNeeded = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + calleeEc->m_numFixedArguments;
-
-                // Pad in nils if necessary
-                //
-                if (unlikely(argEnd < argNeeded))
-                {
-                    TValue val = TValue::Nil();
-                    while (argEnd < argNeeded)
-                    {
-                        *argEnd = val;
-                        argEnd++;
-                    }
-                }
-
-                // Set up the stack frame header
-                //
-                bool needRelocate = calleeEc->m_hasVariadicArguments && argEnd > argNeeded;
-                void* baseForNextFrame;
-                if (unlikely(needRelocate))
-                {
-                    // We need to put the stack frame header at the END of the arguments and copy the fixed argument part
-                    //
-                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(argEnd);
-                    baseForNextFrame = newStackFrameHdr + 1;
-                    newStackFrameHdr->m_func = target;
-                    newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(OnReturn);
-                    newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
-                    newStackFrameHdr->m_numVariadicArguments = static_cast<uint32_t>(argEnd - argNeeded);
-                    SafeMemcpy(baseForNextFrame, begin + x_sizeOfStackFrameHeaderInTermsOfTValue, sizeof(TValue) * calleeEc->m_numFixedArguments);
-                }
-                else
-                {
-                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(begin);
-                    baseForNextFrame = newStackFrameHdr + 1;
-                    // m_func is already in its expected place, so just fill the other fields
-                    //
-                    newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(OnReturn);
-                    newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
-                    newStackFrameHdr->m_numVariadicArguments = 0;
-                }
-
-                // This static_cast actually doesn't always hold
-                // But if callee is not a bytecode function, the callee will never look at m_codeBlock, so it's fine
-                //
-                rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(calleeEc));
+                void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, bc->m_numFixedParams, OnReturn, bc->m_passVariadicRetAsParam);
 
                 _Pragma("clang diagnostic push")
                 _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
@@ -1757,7 +1768,8 @@ public:
                 TValue* dst = StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot);
                 if (numRetValues < bc->m_numFixedRets)
                 {
-                    SafeMemcpy(dst, retValues, sizeof(TValue) * numRetValues);
+                    // TODO: it's always correct to move from left to right
+                    memmove(dst, retValues, sizeof(TValue) * numRetValues);
                     while (numRetValues < bc->m_numFixedRets)
                     {
                         dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
@@ -1766,7 +1778,8 @@ public:
                 }
                 else
                 {
-                    SafeMemcpy(dst, retValues, sizeof(TValue) * bc->m_numFixedRets);
+                    // TODO: it's always correct to move from left to right
+                    memmove(dst, retValues, sizeof(TValue) * bc->m_numFixedRets);
                 }
             }
         }
@@ -1788,7 +1801,7 @@ public:
     uint8_t m_opcode;
     bool m_passVariadicRetAsParam;
     uint32_t m_numFixedParams;
-    BytecodeSlot m_funcSlot;   // params are [m_funcSlot + 1, ... m_funcSlot + m_numFixedParams]
+    BytecodeSlot m_funcSlot;
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
@@ -1805,7 +1818,7 @@ public:
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
         TValue func = *begin;
-        TValue* argEnd = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + bc->m_numFixedParams;
+        TValue* argEnd = begin + x_numSlotsForStackFrameHeader + bc->m_numFixedParams;
 
         if (func.IsPointer(TValue::x_mivTag))
         {
@@ -1830,7 +1843,7 @@ public:
                 }
 
                 HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
-                TValue* argNeeded = begin + x_sizeOfStackFrameHeaderInTermsOfTValue + calleeEc->m_numFixedArguments;
+                TValue* argNeeded = begin + x_numSlotsForStackFrameHeader + calleeEc->m_numFixedArguments;
 
                 // Pad in nils if necessary
                 //
@@ -1858,12 +1871,12 @@ public:
                     newStackFrameHdr->m_callerBytecodeOffset = hdr->m_callerBytecodeOffset;
                     uint32_t numVarArgs = static_cast<uint32_t>(argEnd - argNeeded);
                     newStackFrameHdr->m_numVariadicArguments = numVarArgs;
-                    SafeMemcpy(newStackFrameHdr + 1, begin + x_sizeOfStackFrameHeaderInTermsOfTValue, sizeof(TValue) * calleeEc->m_numFixedArguments);
+                    SafeMemcpy(newStackFrameHdr + 1, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * calleeEc->m_numFixedArguments);
                     // Now we have a fully set up new stack frame, overwrite current stack frame by moving it to the lowest address of current stack frame
                     // This provides the semantics of proper tail call (no stack overflow even with unbounded # of tail calls)
                     //
                     memmove(callerFrameLowestAddress, reinterpret_cast<TValue*>(newStackFrameHdr) - numVarArgs, sizeof(TValue) * static_cast<size_t>(argEnd - begin));
-                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + numVarArgs + x_sizeOfStackFrameHeaderInTermsOfTValue;
+                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + numVarArgs + x_numSlotsForStackFrameHeader;
                 }
                 else
                 {
@@ -1877,7 +1890,7 @@ public:
                     // Move to lowest address, see above
                     //
                     memmove(callerFrameLowestAddress, newStackFrameHdr, sizeof(TValue) * static_cast<size_t>(argNeeded - begin));
-                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + x_sizeOfStackFrameHeaderInTermsOfTValue;
+                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + x_numSlotsForStackFrameHeader;
                 }
 
                 // This static_cast actually doesn't always hold
@@ -1922,7 +1935,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
         uint32_t numVarArgs = hdr->m_numVariadicArguments;
-        rc->m_variadicRetSlotBegin = -static_cast<int32_t>(numVarArgs + x_sizeOfStackFrameHeaderInTermsOfTValue);
+        rc->m_variadicRetSlotBegin = -static_cast<int32_t>(numVarArgs + x_numSlotsForStackFrameHeader);
         rc->m_numVariadicRets = numVarArgs;
         Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
@@ -1966,6 +1979,139 @@ public:
             SafeMemcpy(addr, reinterpret_cast<TValue*>(hdr) - numVarArgs, sizeof(TValue) * numValuesWanted);
         }
         Dispatch(rc, stackframe, bcu + sizeof(Self));
+    }
+} __attribute__((__packed__));
+
+class BcCallIterator
+{
+public:
+    using Self = BcCallIterator;
+
+    BcCallIterator(BytecodeSlot funcSlot, uint32_t numFixedRets)
+        : m_opcode(x_opcodeId<Self>), m_funcSlot(funcSlot), m_numFixedRets(numFixedRets)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_funcSlot;
+    uint32_t m_numFixedRets;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+
+        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+        HeapPtr<CodeBlock> callerCb = static_cast<HeapPtr<CodeBlock>>(callerEc);
+        uint8_t* callerBytecodeStart = callerCb->m_bytecode;
+        hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(bcu - callerBytecodeStart);
+
+        assert(bc->m_funcSlot.IsLocal());
+        TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
+        begin[0] = begin[-3];
+        begin[x_numSlotsForStackFrameHeader] = begin[-2];
+        begin[x_numSlotsForStackFrameHeader + 1] = begin[-1];
+        TValue func = *begin;
+
+        if (func.IsPointer(TValue::x_mivTag))
+        {
+            if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
+            {
+                HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
+                HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+                void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, 2 /*numFixedParams*/, OnReturn, false /*passVariadicRetAsParam*/);
+
+                _Pragma("clang diagnostic push")
+                _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
+                uint64_t unused;
+                uint8_t* calleeBytecode = calleeEc->m_bytecode;
+                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, unused);
+                _Pragma("clang diagnostic pop")
+            }
+            else
+            {
+                assert(false && "unimplemented");
+            }
+        }
+        else
+        {
+            assert(false && "unimplemented");
+        }
+    }
+
+    static void OnReturn(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> retValuesU, uint64_t numRetValues)
+    {
+        const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+        StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+        uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+        ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        if (bc->m_numFixedRets <= x_minNilFillReturnValues)
+        {
+            SafeMemcpy(StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot), retValues, sizeof(TValue) * bc->m_numFixedRets);
+        }
+        else
+        {
+            TValue* dst = StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot);
+            if (numRetValues < bc->m_numFixedRets)
+            {
+                // TODO: it's always correct to move from left to right
+                memmove(dst, retValues, sizeof(TValue) * numRetValues);
+                while (numRetValues < bc->m_numFixedRets)
+                {
+                    dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
+                    numRetValues++;
+                }
+            }
+            else
+            {
+                // TODO: it's always correct to move from left to right
+                memmove(dst, retValues, sizeof(TValue) * bc->m_numFixedRets);
+            }
+        }
+        rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
+    }
+} __attribute__((__packed__));
+
+class BcIteratorLoopBranch
+{
+public:
+    using Self = BcIteratorLoopBranch;
+
+    BcIteratorLoopBranch(BytecodeSlot base)
+        : m_opcode(x_opcodeId<Self>), m_base(base), m_offset(0)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_base;
+    int32_t m_offset;
+
+    static constexpr int32_t OffsetOfJump()
+    {
+        return static_cast<int32_t>(offsetof_member_v<&Self::m_offset>);
+    }
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue* addr = StackFrameHeader::GetLocalAddr(stackframe, bc->m_base);
+        TValue val = *addr;
+        if (!val.IsNil())
+        {
+            addr[-1] = val;
+            Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+        }
+        else
+        {
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
     }
 } __attribute__((__packed__));
 
