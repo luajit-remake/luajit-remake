@@ -861,17 +861,9 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
         else if (val.IsDouble(TValue::x_int32Tag))
         {
             double dbl = val.AsDouble();
-            int64_t i64 = static_cast<int64_t>(dbl);
-            if (!UnsafeFloatEqual(static_cast<double>(i64), dbl))
-            {
-                char buf[x_default_tostring_buffersize_double];
-                StringifyDoubleUsingDefaultLuaFormattingOptions(val.AsDouble(), buf /*out*/);
-                fprintf(fp, "%s", buf);
-            }
-            else
-            {
-                fprintf(fp, "%lld", static_cast<unsigned long long>(i64));
-            }
+            char buf[x_default_tostring_buffersize_double];
+            StringifyDoubleUsingDefaultLuaFormattingOptions(dbl, buf /*out*/);
+            fprintf(fp, "%s", buf);
         }
         else if (val.IsMIV(TValue::x_mivTag))
         {
@@ -1343,7 +1335,18 @@ public:
             }
             else
             {
-                ReleaseAssert(false && "unimplemented");
+                assert(index.IsMIV(TValue::x_mivTag));
+                MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+                if (miv.IsNil())
+                {
+                    ReleaseAssert(false && "unimplemented");
+                }
+                assert(miv.IsBoolean());
+                UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
+
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(base.As<TableObject>(), specialKey, icInfo /*out*/);
+                result = TableObject::GetById(base.As<TableObject>(), specialKey.As<void>(), icInfo);
             }
 
             *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
@@ -1403,7 +1406,18 @@ public:
             }
             else
             {
-                ReleaseAssert(false && "unimplemented");
+                assert(index.IsMIV(TValue::x_mivTag));
+                MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+                if (miv.IsNil())
+                {
+                    ReleaseAssert(false && "unimplemented");
+                }
+                assert(miv.IsBoolean());
+                UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
+
+                PutByIdICInfo icInfo;
+                TableObject::PreparePutById(base.As<TableObject>(), specialKey, icInfo /*out*/);
+                TableObject::PutById(base.As<TableObject>(), specialKey.As<void>(), newValue, icInfo);
             }
 
             Dispatch(rc, sfp, bcu + sizeof(Self));

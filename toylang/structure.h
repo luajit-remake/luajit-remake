@@ -674,7 +674,7 @@ public:
     Structure* WARN_UNUSED CreateStructureForPolyMetatableTransition(VM* vm)
     {
         assert(m_metatable <= 0);
-        return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForPolyMetatable, vm->GetSpecialKeyForMetadataSlot());
+        return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForPolyMetatable, vm->GetSpecialKeyForMetadataSlot().As<void>());
     }
 
     // Create a child by making a clone of 'this'. That is, the structure is cloned, except that:
@@ -1456,7 +1456,7 @@ public:
             uint32_t keySlot = iterator.GetCurrentSlotOrdinal();
             iterator.Advance();
 
-            if (key == vm->GetSpecialKeyForMetadataSlot())
+            if (key == vm->GetSpecialKeyForMetadataSlot().As<void>())
             {
                 continue;
             }
@@ -1885,7 +1885,7 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
 {
     bool shouldAddKey = (slotAdditionKind != SlotAdditionKind::NoSlotAdded);
 
-    AssertIff(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable, key == vm->GetSpecialKeyForMetadataSlot());
+    AssertIff(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable, key == vm->GetSpecialKeyForMetadataSlot().As<void>());
 
     // Doesn't make sense to transit to PolyMetatable mode if we are already in PolyMetatable mode
     //

@@ -111,6 +111,28 @@ TEST(LuaTest, TestTableDup2)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, TestTableDup3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "1\t2\tnil\tnil\n"
+            "2\t3\t4\t5\t-0\tnil\n"
+            "nil\t4\t5\t6\t7\t8\tnil\n"
+            "nil\t233\tnil\tnil\tasd\tnil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 TEST(LuaTest, TestTableSizeHint)
 {
     VM* vm = VM::Create();
@@ -673,6 +695,99 @@ TEST(LuaTest, ForPairsSlowNext)
     std::stringstream ss(out);
     CheckForPairsThreeTestOutput(ss);
 
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, BooleanAsTableIndex_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::stringstream ss(out);
+    std::set<std::string> expectedAnswer {
+        "1\t2",
+        "2\t3",
+        "a\t1",
+        "true\t5",
+        "c\t4",
+        "b\t2",
+        "d\t6",
+        "0\t4",
+        "false\t3"
+    };
+
+    std::string line;
+    while (std::getline(ss, line))
+    {
+        ReleaseAssert(expectedAnswer.count(line));
+        expectedAnswer.erase(expectedAnswer.find(line));
+    }
+    ReleaseAssert(expectedAnswer.size() == 0);
+
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, BooleanAsTableIndex_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::stringstream ss(out);
+    std::set<std::string> expectedAnswer {
+        "1\t2",
+        "2\t3",
+        "a\t1",
+        "true\t5",
+        "c\t4",
+        "b\t2",
+        "d\t6",
+        "0\t4",
+        "false\t3"
+    };
+
+    std::string line;
+    while (std::getline(ss, line))
+    {
+        ReleaseAssert(expectedAnswer.count(line));
+        expectedAnswer.erase(expectedAnswer.find(line));
+    }
+    ReleaseAssert(expectedAnswer.size() == 0);
+
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, BooleanAsTableIndex_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "1\t3\t2\tnil\t4\tnil\n"
+            "5\t7\t6\tnil\t8\tnil\n"
+            "nil\tnil\tnil\tnil\tnil\tnil\n";
+
+    ReleaseAssert(out == expectedOut);
     ReleaseAssert(err == "");
 }
 

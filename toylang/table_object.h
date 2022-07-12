@@ -2227,8 +2227,23 @@ try_get_next_structure_prop:
                     break;
                 }
 
+                UserHeapPointer<void> key = Structure::GetKeyForSlotOrdinal(structure, static_cast<uint8_t>(m_namedPropertyOrd));
+                if (unlikely(key == VM_GetSpecialKeyForBoolean(false).As<void>()))
+                {
+                    return KeyValuePair {
+                        .m_key = TValue::CreateFalse(),
+                        .m_value = value
+                    };
+                }
+                if (unlikely(key == VM_GetSpecialKeyForBoolean(true).As<void>()))
+                {
+                    return KeyValuePair {
+                        .m_key = TValue::CreateTrue(),
+                        .m_value = value
+                    };
+                }
                 return KeyValuePair {
-                    .m_key = TValue::CreatePointer(Structure::GetKeyForSlotOrdinal(structure, static_cast<uint8_t>(m_namedPropertyOrd))),
+                    .m_key = TValue::CreatePointer(key),
                     .m_value = value
                 };
             }
@@ -2356,6 +2371,17 @@ finished_iteration:
             return true;
         }
 
+        if (key.IsMIV(TValue::x_mivTag))
+        {
+            MiscImmediateValue miv = key.AsMIV(TValue::x_mivTag);
+            if (miv.IsNil())
+            {
+                return false;
+            }
+            assert(miv.IsBoolean());
+            key = TValue::CreatePointer(VM_GetSpecialKeyForBoolean(miv.GetBooleanValue()));
+        }
+
         if (key.IsPointer(TValue::x_mivTag))
         {
             // Input key is a pointer, locate its slot ordinal and iterate from there
@@ -2404,71 +2430,65 @@ finished_iteration:
             ReleaseAssert(false && "unimplemented");
         }
 
-        if (key.IsDouble(TValue::x_int32Tag))
+        assert(key.IsDouble(TValue::x_int32Tag));
+        double idx = key.AsDouble();
+        if (IsNaN(idx))
         {
-            double idx = key.AsDouble();
-            if (IsNaN(idx))
-            {
-                return false;
-            }
-
-            if (obj->m_butterfly == nullptr)
-            {
-                // It's impossible that a butterfly doesn't exist yet a previous 'next' call returned an array part index
-                //
-                return false;
-            }
-
-            {
-                int64_t idx64;
-                if (!TableObject::IsInt64Index(idx, idx64 /*out*/))
-                {
-                    goto get_next_from_sparse_map;
-                }
-
-                if (idx64 < ArrayGrowthPolicy::x_arrayBaseOrd || !obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64))
-                {
-                    goto get_next_from_sparse_map;
-                }
-
-                TableObjectIterator iter;
-                iter.m_state = IteratorState::VectorStorage;
-                iter.m_vectorStorageOrd = static_cast<int32_t>(idx64);
-                out = iter.Advance(obj);
-                return true;
-            }
-
-get_next_from_sparse_map:
-            {
-                if (!obj->m_butterfly->GetHeader()->HasSparseMap())
-                {
-                    // Currently we never shrink butterfly array part, so if control reaches here, it must be the user passing
-                    // in some value that is not returned from 'next'. This is undefined behavior, but we choose to not throw
-                    // an error, but instead terminates the iteration, so this doesn't break if someday we added functionality
-                    // to shrink butterfly array part
-                    //
-                    out = KeyValuePair { TValue::Nil(), TValue::Nil() };
-                    return true;
-                }
-
-                ArraySparseMap* sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
-                uint32_t slot = sparseMap->GetHashSlotOrdinal(idx);
-                if (slot == static_cast<uint32_t>(-1))
-                {
-                    return false;
-                }
-
-                TableObjectIterator iter;
-                iter.m_state = IteratorState::SparseMap;
-                iter.m_sparseMapOrd = slot;
-                out = iter.Advance(obj);
-                return true;
-            }
+            return false;
         }
 
-        // TODO: handle boolean
-        //
-        ReleaseAssert(false && "unimplemented");
+        if (obj->m_butterfly == nullptr)
+        {
+            // It's impossible that a butterfly doesn't exist yet a previous 'next' call returned an array part index
+            //
+            return false;
+        }
+
+        {
+            int64_t idx64;
+            if (!TableObject::IsInt64Index(idx, idx64 /*out*/))
+            {
+                goto get_next_from_sparse_map;
+            }
+
+            if (idx64 < ArrayGrowthPolicy::x_arrayBaseOrd || !obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64))
+            {
+                goto get_next_from_sparse_map;
+            }
+
+            TableObjectIterator iter;
+            iter.m_state = IteratorState::VectorStorage;
+            iter.m_vectorStorageOrd = static_cast<int32_t>(idx64);
+            out = iter.Advance(obj);
+            return true;
+        }
+
+get_next_from_sparse_map:
+        {
+            if (!obj->m_butterfly->GetHeader()->HasSparseMap())
+            {
+                // Currently we never shrink butterfly array part, so if control reaches here, it must be the user passing
+                // in some value that is not returned from 'next'. This is undefined behavior, but we choose to not throw
+                // an error, but instead terminates the iteration, so this doesn't break if someday we added functionality
+                // to shrink butterfly array part
+                //
+                out = KeyValuePair { TValue::Nil(), TValue::Nil() };
+                return true;
+            }
+
+            ArraySparseMap* sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
+            uint32_t slot = sparseMap->GetHashSlotOrdinal(idx);
+            if (slot == static_cast<uint32_t>(-1))
+            {
+                return false;
+            }
+
+            TableObjectIterator iter;
+            iter.m_state = IteratorState::SparseMap;
+            iter.m_sparseMapOrd = slot;
+            out = iter.Advance(obj);
+            return true;
+        }
     }
 
     union {

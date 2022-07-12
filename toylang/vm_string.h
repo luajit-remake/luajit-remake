@@ -431,7 +431,7 @@ public:
         // We give it some content for debug purpose, but, we give it a fake hash value, to avoids unnecessary
         // collision with the real string of that value in the Structure's hash table.
         //
-        auto createSpecialKey = [&](const char* debugName, uint64_t fakeHash) -> UserHeapPointer<void>
+        auto createSpecialKey = [&](const char* debugName, uint64_t fakeHash) -> UserHeapPointer<HeapString>
         {
             StringLengthAndHash slah {
                 .m_length = strlen(debugName),
@@ -449,7 +449,7 @@ public:
             //
             memcpy(ptr->m_string, debugName, slah.m_length + 1);
 
-            return uhp;
+            return uhp.As<HeapString>();
         };
 
         // Create the special key used as the key for metatable slot in PolyMetatable mode
@@ -471,14 +471,19 @@ public:
         }
     }
 
-    UserHeapPointer<void> GetSpecialKeyForMetadataSlot()
+    UserHeapPointer<HeapString> GetSpecialKeyForMetadataSlot()
     {
         return m_specialKeyForMetatableSlot;
     }
 
-    UserHeapPointer<void> GetSpecialKeyForBoolean(bool v)
+    UserHeapPointer<HeapString> GetSpecialKeyForBoolean(bool v)
     {
         return m_specialKeyForBooleanIndex[static_cast<size_t>(v)];
+    }
+
+    static constexpr size_t OffsetofSpecialKeyForBooleanIndex()
+    {
+        return offsetof_base_v<GlobalStringHashConser, CRTP> + offsetof_member_v<&GlobalStringHashConser::m_specialKeyForBooleanIndex>;
     }
 
 private:
@@ -492,11 +497,11 @@ private:
     // In PolyMetatable mode, the metatable is stored in a property slot
     // For simplicity, we always assign this special key (which is used exclusively for this purpose) to this slot
     //
-    UserHeapPointer<void> m_specialKeyForMetatableSlot;
+    UserHeapPointer<HeapString> m_specialKeyForMetatableSlot;
 
     // These two special keys are used for 'false' and 'true' respectively
     //
-    UserHeapPointer<void> m_specialKeyForBooleanIndex[2];
+    UserHeapPointer<HeapString> m_specialKeyForBooleanIndex[2];
 };
 
 }   // namespace ToyLang

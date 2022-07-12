@@ -427,12 +427,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     {
                         if (!booleanValues[k].IsNil())
                         {
-                            UserHeapPointer<void> key = vm->GetSpecialKeyForBoolean(static_cast<bool>(k));
+                            UserHeapPointer<HeapString> key = vm->GetSpecialKeyForBoolean(static_cast<bool>(k));
                             TValue val = booleanValues[k];
 
                             PutByIdICInfo icInfo;
                             TableObject::PreparePutById(obj, key, icInfo /*out*/);
-                            TableObject::PutById(obj, key, val, icInfo);
+                            TableObject::PutById(obj, key.As<void>(), val, icInfo);
 
                             numPropsInserted++;
                         }
@@ -1362,11 +1362,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 break;
             }
             case LJOpcode::POW: [[fallthrough]];
-            case LJOpcode::CAT: [[fallthrough]];
-            case LJOpcode::KCDATA:
+            case LJOpcode::CAT:
             {
                 ReleaseAssert(false && "unimplemented");
             }
+            case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::ISTYPE: [[fallthrough]];
             case LJOpcode::ISNUM: [[fallthrough]];
             case LJOpcode::TGETR: [[fallthrough]];
