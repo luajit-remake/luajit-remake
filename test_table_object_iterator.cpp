@@ -172,4 +172,250 @@ TEST(TableObjectIterator, Sanity)
     }
 }
 
+// Lua explicitly states that deletion is allowed during iteration. This test check this scenario.
+//
+TEST(TableObjectIterator, IterateWithDeleteInBetween)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), 1000 /*numStrings*/);
+
+    for (bool putNamedProps : { false, true })
+    {
+        for (bool putArrayProps : { false, true })
+        {
+            if (!putNamedProps && !putArrayProps)
+            {
+                continue;
+            }
+
+            for (uint32_t testcase = 0; testcase < 3; testcase++)
+            {
+                uint32_t inlineCapacity = testcase * 8;
+
+                for (bool testSlowNext : { false, true })
+                {
+                    for (int numOps : { 100, 200, 400, 800, 1000 })
+                    {
+                        Structure* structure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCapacity));
+                        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, structure, 0 /*initButterflyCap*/);
+                        std::unordered_map<double, TValue> expectedArrayPart;
+                        std::unordered_map<int64_t, TValue> expectedNamedProps;
+
+                        for (int ops = 0; ops < numOps; ops++)
+                        {
+                            int dice = rand() % 2;
+                            if (!putNamedProps) { dice = 1; }
+                            if (!putArrayProps) { dice = 0; }
+                            if (dice == 0)
+                            {
+                                // Put a named prop
+                                //
+                                UserHeapPointer<HeapString> propToAdd;
+                                while (true)
+                                {
+                                    UserHeapPointer<HeapString> choice = strings[static_cast<size_t>(rand()) % strings.size()];
+                                    if (expectedNamedProps.count(choice.m_value))
+                                    {
+                                        continue;
+                                    }
+                                    propToAdd = choice;
+                                    break;
+                                }
+                                TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                                expectedNamedProps[propToAdd.m_value] = val;
+
+                                PutByIdICInfo icInfo;
+                                TableObject::PreparePutById(obj, propToAdd, icInfo /*out*/);
+                                TableObject::PutById(obj, propToAdd.As<void>(), val, icInfo);
+                            }
+                            else
+                            {
+                                // Put an array part prop
+                                //
+                                dice = rand() % 15;
+                                double key;
+                                if (dice == 0)
+                                {
+                                    key = rand() / 1000.0;
+                                }
+                                else if (dice == 1)
+                                {
+                                    key = rand() - 1000000000;
+                                }
+                                else
+                                {
+                                    key = rand() % 8000;
+                                }
+                                TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                                expectedArrayPart[key] = val;
+
+                                TableObject::PutByValDoubleIndex(obj, key, val);
+                            }
+                        }
+
+                        std::vector<double> allArrayPartProps;
+                        for (auto it : expectedArrayPart) { allArrayPartProps.push_back(it.first); }
+                        std::vector<int64_t> allNamedProps;
+                        for (auto it : expectedNamedProps) { allNamedProps.push_back(it.first); }
+
+                        std::unordered_set<double> showedUpArrayPart;
+                        std::unordered_set<int64_t> showedUpNamedProps;
+
+                        std::unordered_set<double> deletedArrayPart;
+                        std::unordered_set<int64_t> deletedNamedProps;
+
+                        TableObjectIterator iter;
+                        TValue lastKey = TValue::Nil();
+
+                        while (true)
+                        {
+                            // Make one iteration
+                            //
+                            TableObjectIterator::KeyValuePair kv;
+
+                            if (testSlowNext)
+                            {
+                                bool success = TableObjectIterator::GetNextFromKey(obj, lastKey, kv /*out*/);
+                                ReleaseAssert(success);
+                            }
+                            else
+                            {
+                                kv = iter.Advance(obj);
+                            }
+
+                            {
+                                TValue key = kv.m_key;
+                                if (key.IsNil())
+                                {
+                                    break;
+                                }
+
+                                if (key.IsPointer(TValue::x_mivTag))
+                                {
+                                    int64_t kp = key.AsPointer().m_value;
+                                    ReleaseAssert(expectedNamedProps.count(kp));
+                                    ReleaseAssert(!showedUpNamedProps.count(kp));
+                                    ReleaseAssert(!deletedNamedProps.count(kp));
+                                    ReleaseAssert(expectedNamedProps[kp].m_value == kv.m_value.m_value);
+                                    showedUpNamedProps.insert(kp);
+                                }
+                                else
+                                {
+                                    double kd;
+                                    if (key.IsInt32(TValue::x_int32Tag))
+                                    {
+                                        kd = key.AsInt32();
+                                    }
+                                    else
+                                    {
+                                        ReleaseAssert(key.IsDouble(TValue::x_int32Tag));
+                                        kd = key.AsDouble();
+                                    }
+                                    ReleaseAssert(expectedArrayPart.count(kd));
+                                    ReleaseAssert(!showedUpArrayPart.count(kd));
+                                    ReleaseAssert(!deletedArrayPart.count(kd));
+                                    ReleaseAssert(expectedArrayPart[kd].m_value == kv.m_value.m_value);
+                                    showedUpArrayPart.insert(kd);
+                                }
+                            }
+
+                            lastKey = kv.m_key;
+
+                            // Make one deletion
+                            // With 1/20 chance, delete the key we just iterated. Otherwise, delete a random key
+                            //
+                            TValue keyToDelete;
+                            if (rand() % 20 == 0)
+                            {
+                                keyToDelete = lastKey;
+                            }
+                            else
+                            {
+                                while (true)
+                                {
+                                    int dice = rand() % 2;
+                                    if (dice == 0 && allNamedProps.size() == 0) { dice = 1; }
+                                    if (dice == 1 && allArrayPartProps.size() == 0) { dice = 0; }
+                                    if (dice == 0)
+                                    {
+                                        // try delete a named prop
+                                        //
+                                        ReleaseAssert(allNamedProps.size() > 0);
+                                        int64_t kp = allNamedProps[static_cast<size_t>(rand()) % allNamedProps.size()];
+                                        if (deletedNamedProps.count(kp))
+                                        {
+                                            continue;
+                                        }
+                                        UserHeapPointer<void> p; p.m_value = kp;
+                                        keyToDelete = TValue::CreatePointer(p);
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        // try delete an array part prop
+                                        //
+                                        ReleaseAssert(allArrayPartProps.size() > 0);
+                                        double kd = allArrayPartProps[static_cast<size_t>(rand()) % allArrayPartProps.size()];
+                                        if (deletedArrayPart.count(kd))
+                                        {
+                                            continue;
+                                        }
+                                        keyToDelete = TValue::CreateDouble(kd);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (keyToDelete.IsPointer(TValue::x_mivTag))
+                            {
+                                int64_t kp = keyToDelete.AsPointer().m_value;
+                                ReleaseAssert(expectedNamedProps.count(kp));
+                                ReleaseAssert(!deletedNamedProps.count(kp));
+                                deletedNamedProps.insert(kp);
+
+                                PutByIdICInfo icInfo;
+                                TableObject::PreparePutById(obj, keyToDelete.AsPointer(), icInfo /*out*/);
+                                TableObject::PutById(obj, keyToDelete.AsPointer(), TValue::Nil(), icInfo);
+                            }
+                            else
+                            {
+                                double kd;
+                                if (keyToDelete.IsInt32(TValue::x_int32Tag))
+                                {
+                                    kd = keyToDelete.AsInt32();
+                                }
+                                else
+                                {
+                                    ReleaseAssert(keyToDelete.IsDouble(TValue::x_int32Tag));
+                                    kd = keyToDelete.AsDouble();
+                                }
+                                ReleaseAssert(expectedArrayPart.count(kd));
+                                ReleaseAssert(!deletedArrayPart.count(kd));
+                                deletedArrayPart.insert(kd);
+
+                                TableObject::PutByValDoubleIndex(obj, kd, TValue::Nil());
+                            }
+                        }
+
+                        // Now, validate the iteration has indeed gone through all keys that aren't deleted
+                        //
+                        for (auto it : expectedArrayPart)
+                        {
+                            double kd = it.first;
+                            ReleaseAssert(deletedArrayPart.count(kd) || showedUpArrayPart.count(kd));
+                        }
+
+                        for (auto it : expectedNamedProps)
+                        {
+                            int64_t kp = it.first;
+                            ReleaseAssert(deletedNamedProps.count(kp) || showedUpNamedProps.count(kp));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 }   // anonymous namespace

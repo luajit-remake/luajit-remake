@@ -1570,6 +1570,29 @@ public:
         }
     }
 
+    // Query the hash table slot for a property
+    // This weird function is only used by the Lua 'next' slow path
+    //
+    static uint32_t WARN_UNUSED GetHashTableSlotNumberForProperty(HeapPtr<CacheableDictionary> self, UserHeapPointer<void> prop)
+    {
+        size_t hashMask = self->m_hashTableMask;
+        size_t slot = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop) & hashMask;
+        GeneralHeapPointer<void> gprop = prop.As();
+        while (true)
+        {
+            GeneralHeapPointer<void> key = TCGet(self->m_hashTable[slot].m_key);
+            if (key.m_value == 0)
+            {
+                return static_cast<uint32_t>(-1);
+            }
+            if (key == gprop)
+            {
+                return static_cast<uint32_t>(slot);
+            }
+            slot = (slot + 1) & hashMask;
+        }
+    }
+
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
     static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> prop, uint32_t& slotOrdinal /*out*/)
     {

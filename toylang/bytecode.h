@@ -777,11 +777,44 @@ inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), 3 /*numRetValues*/);
 }
 
-inline void NO_RETURN LJR_LIB_BASE_next(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*sfp*/, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
 {
-    // StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
-    // uint32_t numParams = hdr->m_numVariadicArguments;
-    ReleaseAssert(false && "unimplemented");
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numParams = hdr->m_numVariadicArguments;
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numParams;
+    if (numParams < 1)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+
+    TValue tab = vaBegin[0];
+    if (tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+    HeapPtr<TableObject> tabObj = tab.AsPointer<TableObject>().As();
+
+    TValue key;
+    if (numParams >= 2)
+    {
+        key = vaBegin[1];
+    }
+    else
+    {
+        key =  TValue::Nil();
+    }
+
+    TableObjectIterator::KeyValuePair* ret = reinterpret_cast<TableObjectIterator::KeyValuePair*>(sfp);
+    bool success = TableObjectIterator::GetNextFromKey(tabObj, key, *ret /*out*/);
+    if (!success)
+    {
+        ReleaseAssert(false && "error path not implemented");
+    }
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    StackFrameHeader* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), 2 /*numRetValues*/);
 }
 
 inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)

@@ -88,26 +88,33 @@ public:
         }
 
         DEBUG_ONLY(uint32_t cnt = 0;)
+        uint32_t nonNilElement = 0;
         HashTableEntry* oldHtEnd = oldHt + oldMask + 1;
         HashTableEntry* curEntry = oldHt;
         while (curEntry < oldHtEnd)
         {
-            if (!IsNaN(curEntry->m_key))
+            double key = curEntry->m_key;
+            if (!IsNaN(key))
             {
-                double key = curEntry->m_key;
-                size_t slot = HashPrimitiveTypes(key) & newMask;
-                while (!IsNaN(m_hashTable[slot].m_key))
+                TValue value = curEntry->m_value;
+                if (!value.IsNil())
                 {
-                    assert(!UnsafeFloatEqual(m_hashTable[slot].m_key, key));
-                    slot = (slot + 1) & newMask;
+                    size_t slot = HashPrimitiveTypes(key) & newMask;
+                    while (!IsNaN(m_hashTable[slot].m_key))
+                    {
+                        assert(!UnsafeFloatEqual(m_hashTable[slot].m_key, key));
+                        slot = (slot + 1) & newMask;
+                    }
+                    m_hashTable[slot].m_key = key;
+                    m_hashTable[slot].m_value = value;
+                    nonNilElement++;
                 }
-                m_hashTable[slot].m_key = key;
-                m_hashTable[slot].m_value = curEntry->m_value;
                 DEBUG_ONLY(cnt++;)
             }
             curEntry++;
         }
         assert(cnt == m_elementCount);
+        m_elementCount = nonNilElement;
 
         delete [] oldHt;
     }
@@ -126,6 +133,28 @@ public:
             if (IsNaN(entry.m_key))
             {
                 return TValue::Nil();
+            }
+            slot = (slot + 1) & hashMask;
+        }
+    }
+
+    // Return -1 if the key isn't found in the hashtable
+    // This is used by Lua 'next', so a 'nil' value is intentionally treated as 'found'
+    //
+    uint32_t GetHashSlotOrdinal(double key)
+    {
+        size_t hashMask = m_hashMask;
+        size_t slot = HashPrimitiveTypes(key) & hashMask;
+        while (true)
+        {
+            HashTableEntry& entry = m_hashTable[slot];
+            if (UnsafeFloatEqual(entry.m_key, key))
+            {
+                return static_cast<uint32_t>(slot);
+            }
+            if (IsNaN(entry.m_key))
+            {
+                return static_cast<uint32_t>(-1);
             }
             slot = (slot + 1) & hashMask;
         }
@@ -2258,7 +2287,9 @@ try_find_next_vector_entry:
                 if (!value.IsNil())
                 {
                     return KeyValuePair {
-                        .m_key = TValue::CreateInt32(m_vectorStorageOrd, TValue::x_int32Tag),
+                        // TODO: we may want to change this when we have true support for integer type
+                        //
+                        .m_key = TValue::CreateDouble(m_vectorStorageOrd),
                         .m_value = value
                     };
                 }
@@ -2305,6 +2336,139 @@ finished_iteration:
             .m_key = TValue::Nil(),
             .m_value = TValue::Nil()
         };
+    }
+
+    // Get the next KV pair from the current key
+    // This is used to implement the Lua 'next', so it has really weird semantics.
+    // Specifically, if the key is obtained from another 'next' call, this function should work properly (i.e. allows user
+    // to eventually iterate through every key-value pair) as long as no new key has been inserted, even if the passed-in key
+    // have been deleted! But in other cases where the key doesn't exist, this function can exhibit undefined behavior (we
+    // will try to throw out an error, but this is not guaranteed).
+    //
+    static bool WARN_UNUSED GetNextFromKey(HeapPtr<TableObject> obj, TValue key, KeyValuePair& out /*out*/)
+    {
+        if (key.IsNil())
+        {
+            // Input key is nil, in this case we should return first KV pair in table
+            //
+            TableObjectIterator iter;
+            out = iter.Advance(obj);
+            return true;
+        }
+
+        if (key.IsPointer(TValue::x_mivTag))
+        {
+            // Input key is a pointer, locate its slot ordinal and iterate from there
+            //
+            Type hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
+            UserHeapPointer<void> prop = key.AsPointer();
+            if (hcType == Type::Structure)
+            {
+                HeapPtr<Structure> structure = TCGet(obj->m_hiddenClass).As<Structure>();
+                uint32_t slotOrd;
+                bool found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, prop, slotOrd /*out*/);
+                if (!found)
+                {
+                    return false;
+                }
+                assert(slotOrd < structure->m_numSlots);
+                TableObjectIterator iter;
+                iter.m_state = IteratorState::NamedProperty;
+                iter.m_namedPropertyOrd = slotOrd;
+                out = iter.Advance(obj);
+                return true;
+            }
+            else if (hcType == Type::CacheableDictionary)
+            {
+                HeapPtr<CacheableDictionary> cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                uint32_t hashTableSlot = CacheableDictionary::GetHashTableSlotNumberForProperty(cacheableDict, prop);
+                if (hashTableSlot == static_cast<uint32_t>(-1))
+                {
+                    return false;
+                }
+                TableObjectIterator iter;
+                iter.m_state = IteratorState::NamedProperty;
+                iter.m_namedPropertyOrd = hashTableSlot;
+                out = iter.Advance(obj);
+                return true;
+            }
+            else
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
+        }
+
+        if (key.IsInt32(TValue::x_int32Tag))
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+
+        if (key.IsDouble(TValue::x_int32Tag))
+        {
+            double idx = key.AsDouble();
+            if (IsNaN(idx))
+            {
+                return false;
+            }
+
+            if (obj->m_butterfly == nullptr)
+            {
+                // It's impossible that a butterfly doesn't exist yet a previous 'next' call returned an array part index
+                //
+                return false;
+            }
+
+            {
+                int64_t idx64;
+                if (!TableObject::IsInt64Index(idx, idx64 /*out*/))
+                {
+                    goto get_next_from_sparse_map;
+                }
+
+                if (idx64 < ArrayGrowthPolicy::x_arrayBaseOrd || !obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64))
+                {
+                    goto get_next_from_sparse_map;
+                }
+
+                TableObjectIterator iter;
+                iter.m_state = IteratorState::VectorStorage;
+                iter.m_vectorStorageOrd = static_cast<int32_t>(idx64);
+                out = iter.Advance(obj);
+                return true;
+            }
+
+get_next_from_sparse_map:
+            {
+                if (!obj->m_butterfly->GetHeader()->HasSparseMap())
+                {
+                    // Currently we never shrink butterfly array part, so if control reaches here, it must be the user passing
+                    // in some value that is not returned from 'next'. This is undefined behavior, but we choose to not throw
+                    // an error, but instead terminates the iteration, so this doesn't break if someday we added functionality
+                    // to shrink butterfly array part
+                    //
+                    out = KeyValuePair { TValue::Nil(), TValue::Nil() };
+                    return true;
+                }
+
+                ArraySparseMap* sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
+                uint32_t slot = sparseMap->GetHashSlotOrdinal(idx);
+                if (slot == static_cast<uint32_t>(-1))
+                {
+                    return false;
+                }
+
+                TableObjectIterator iter;
+                iter.m_state = IteratorState::SparseMap;
+                iter.m_sparseMapOrd = slot;
+                out = iter.Advance(obj);
+                return true;
+            }
+        }
+
+        // TODO: handle boolean
+        //
+        ReleaseAssert(false && "unimplemented");
     }
 
     union {

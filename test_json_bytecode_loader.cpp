@@ -499,19 +499,11 @@ TEST(LuaTest, NegativeZeroAsIndex)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaTest, ForPairs)
+// We have a few different tests by slightly changing the Lua source code, but expects the same output with insensitive order
+// This function checks for that specific output..
+//
+void CheckForPairsThreeTestOutput(std::stringstream& ss)
 {
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs.lua.json"));
-    vm->LaunchScript(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-
-    std::stringstream ss(out);
     std::string line;
     ReleaseAssert(std::getline(ss, line));
     ReleaseAssert(line == "-- test 1 --");
@@ -593,6 +585,22 @@ TEST(LuaTest, ForPairs)
         expectedAnswerForTest3.erase(expectedAnswerForTest3.find(line));
     }
     ReleaseAssert(expectedAnswerForTest3.size() == 0);
+}
+
+TEST(LuaTest, ForPairs)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::stringstream ss(out);
+    CheckForPairsThreeTestOutput(ss);
 
     ReleaseAssert(err == "");
 }
@@ -613,86 +621,7 @@ TEST(LuaTest, ForPairsPoisonNext)
     std::string line;
     ReleaseAssert(std::getline(ss, line));
     ReleaseAssert(line == "0");
-    ReleaseAssert(std::getline(ss, line));
-    ReleaseAssert(line == "-- test 1 --");
-
-    std::set<std::string> expectedAnswerForTest1;
-    expectedAnswerForTest1.insert("1\t1");
-    expectedAnswerForTest1.insert("2\t3");
-    expectedAnswerForTest1.insert("a\t1");
-    expectedAnswerForTest1.insert("3\t5.6");
-    expectedAnswerForTest1.insert("c\t1.23");
-    expectedAnswerForTest1.insert("b\tx");
-
-    std::set<std::string> expectedAnswerForTest2;
-    expectedAnswerForTest2.insert("1\t1");
-    expectedAnswerForTest2.insert("2\t3");
-    expectedAnswerForTest2.insert("3\t5.6");
-    expectedAnswerForTest2.insert("4\t7");
-    expectedAnswerForTest2.insert("0\tz");
-    expectedAnswerForTest2.insert("c\t1.23");
-    expectedAnswerForTest2.insert("b\tx");
-    expectedAnswerForTest2.insert("2.5\t234");
-    expectedAnswerForTest2.insert("a\t1");
-
-    std::set<std::string> expectedAnswerForTest3;
-    expectedAnswerForTest3.insert("1	1");
-    expectedAnswerForTest3.insert("2	3");
-    expectedAnswerForTest3.insert("3	5.6");
-    expectedAnswerForTest3.insert("4	7");
-    expectedAnswerForTest3.insert("5	105");
-    expectedAnswerForTest3.insert("6	106");
-    expectedAnswerForTest3.insert("7	107");
-    expectedAnswerForTest3.insert("8	108");
-    expectedAnswerForTest3.insert("9	109");
-    expectedAnswerForTest3.insert("10	110");
-    expectedAnswerForTest3.insert("11	111");
-    expectedAnswerForTest3.insert("12	112");
-    expectedAnswerForTest3.insert("13	113");
-    expectedAnswerForTest3.insert("14	114");
-    expectedAnswerForTest3.insert("15	115");
-    expectedAnswerForTest3.insert("16	116");
-    expectedAnswerForTest3.insert("17	117");
-    expectedAnswerForTest3.insert("18	118");
-    expectedAnswerForTest3.insert("19	119");
-    expectedAnswerForTest3.insert("20	120");
-    expectedAnswerForTest3.insert("a	1");
-    expectedAnswerForTest3.insert("1000000	8.9");
-    expectedAnswerForTest3.insert("2.5	234");
-    expectedAnswerForTest3.insert("b	x");
-    expectedAnswerForTest3.insert("0	z");
-    expectedAnswerForTest3.insert("c	1.23");
-
-    while (true)
-    {
-        ReleaseAssert(std::getline(ss, line));
-        if (line == "-- test 2 --")
-        {
-            break;
-        }
-        ReleaseAssert(expectedAnswerForTest1.count(line));
-        expectedAnswerForTest1.erase(expectedAnswerForTest1.find(line));
-    }
-    ReleaseAssert(expectedAnswerForTest1.size() == 0);
-
-    while (true)
-    {
-        ReleaseAssert(std::getline(ss, line));
-        if (line == "-- test 3 --")
-        {
-            break;
-        }
-        ReleaseAssert(expectedAnswerForTest2.count(line));
-        expectedAnswerForTest2.erase(expectedAnswerForTest2.find(line));
-    }
-    ReleaseAssert(expectedAnswerForTest2.size() == 0);
-
-    while (std::getline(ss, line))
-    {
-        ReleaseAssert(expectedAnswerForTest3.count(line));
-        expectedAnswerForTest3.erase(expectedAnswerForTest3.find(line));
-    }
-    ReleaseAssert(expectedAnswerForTest3.size() == 0);
+    CheckForPairsThreeTestOutput(ss);
 
     ReleaseAssert(err == "");
 }
@@ -726,6 +655,24 @@ TEST(LuaTest, ForPairsEmpty)
     std::string err = vmoutput.GetAndResetStdErr();
 
     ReleaseAssert(out == "test start\ntest end\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, ForPairsSlowNext)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs_slow_next.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::stringstream ss(out);
+    CheckForPairsThreeTestOutput(ss);
+
     ReleaseAssert(err == "");
 }
 
