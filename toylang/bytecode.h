@@ -814,7 +814,13 @@ inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
     StackFrameHeader* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), 2 /*numRetValues*/);
+    // Lua manual states:
+    //     "When called with the last index, or with 'nil' in an empty table, 'next' returns 'nil'."
+    // So when end of table is reached, this should return "nil", not "nil, nil"...
+    //
+    AssertImp(ret->m_key.IsNil(), ret->m_value.IsNil());
+    uint64_t numReturnValues = ret->m_key.IsNil() ? 1 : 2;
+    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), numReturnValues);
 }
 
 inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
@@ -862,7 +868,7 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
         {
             double dbl = val.AsDouble();
             char buf[x_default_tostring_buffersize_double];
-            StringifyDoubleUsingDefaultLuaFormattingOptions(dbl, buf /*out*/);
+            StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
             fprintf(fp, "%s", buf);
         }
         else if (val.IsMIV(TValue::x_mivTag))
@@ -1052,6 +1058,8 @@ public:
     BcMul,                              \
     BcDiv,                              \
     BcMod,                              \
+    BcPow,                              \
+    BcConcat,                           \
     BcIsEQ,                             \
     BcIsNEQ,                            \
     BcIsLT,                             \
@@ -1522,9 +1530,42 @@ public:
     BytecodeSlot m_base;
     BytecodeSlot m_index;
 
-    static void NO_RETURN Execute(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*sfp*/, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {
-        ReleaseAssert(false && "unimplemented");
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+
+        TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index.ConstantOrd());
+        // For some reason LuaJIT bytecode stores the constant in the lower 32 bits of a double...
+        //
+        assert(tvIndex.IsDouble(TValue::x_int32Tag));
+        // This should not overflow, as Lua states:
+        //     "Fields of the form 'exp' are equivalent to [i] = exp, where i are consecutive numerical
+        //     integers, starting with 1. Fields in the other formats do not affect this counting."
+        // So in order for this index to overflow, there needs to have 2^31 terms in the table, which is impossible
+        //
+        int32_t indexStart = static_cast<int32_t>(tvIndex.m_value);
+
+        // 'm_base' is guaranteed to be a table object, as this opcode only shows up in a table initializer expression
+        //
+        assert(StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->IsPointer(TValue::x_mivTag) &&
+               StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        HeapPtr<TableObject> base = StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<TableObject>().As();
+
+        TValue* src = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
+        int32_t numTermsToPut = static_cast<int32_t>(rc->m_numVariadicRets);
+        assert(numTermsToPut != -1);
+        DEBUG_ONLY(rc->m_numVariadicRets = static_cast<uint32_t>(-1);)
+
+        // For now we simply use a naive loop of PutByIntegerVal: this isn't performance sensitive after all, so just stay simple for now
+        //
+        for (int32_t i = 0; i < numTermsToPut; i++)
+        {
+            int32_t idx = indexStart + i;
+            TableObject::PutByValIntegerIndex(base, idx, src[i]);
+        }
+
+        Dispatch(rc, sfp, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
@@ -2670,6 +2711,110 @@ public:
         {
             assert(false && "unimplemented");
         }
+    }
+} __attribute__((__packed__));
+
+class BcPow
+{
+public:
+    using Self = BcPow;
+
+    BcPow(BytecodeSlot lhs, BytecodeSlot rhs, BytecodeSlot result)
+        : m_opcode(x_opcodeId<Self>), m_lhs(lhs), m_rhs(rhs), m_result(result)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_lhs;
+    BytecodeSlot m_rhs;
+    BytecodeSlot m_result;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue lhs = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_lhs);
+        TValue rhs = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_rhs);
+        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        {
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(pow(lhs.AsDouble(), rhs.AsDouble()));
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+        else
+        {
+            assert(false && "unimplemented");
+        }
+    }
+} __attribute__((__packed__));
+
+class BcConcat
+{
+public:
+    using Self = BcConcat;
+
+    BcConcat(BytecodeSlot dst, BytecodeSlot begin, uint32_t num)
+        : m_opcode(x_opcodeId<Self>), m_dst(dst), m_begin(begin), m_num(num)
+    { }
+
+    uint8_t m_opcode;
+    BytecodeSlot m_dst;
+    BytecodeSlot m_begin;
+    uint32_t m_num;
+
+    static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+    {
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        TValue* begin = StackFrameHeader::GetLocalAddr(stackframe, bc->m_begin);
+        uint32_t num = bc->m_num;
+        bool success = true;
+        bool needNumberConversion = false;
+        for (uint32_t i = 0; i < num; i++)
+        {
+            TValue val = begin[i];
+            if (val.IsPointer(TValue::x_mivTag))
+            {
+                if (val.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::STRING)
+                {
+                    success = false;
+                    break;
+                }
+                continue;
+            }
+            if (val.IsDouble(TValue::x_int32Tag) || val.IsInt32(TValue::x_int32Tag))
+            {
+                needNumberConversion = true;
+            }
+        }
+        if (!success)
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        if (needNumberConversion)
+        {
+            for (uint32_t i = 0; i < num; i++)
+            {
+                TValue val = begin[i];
+                if (val.IsDouble(TValue::x_int32Tag))
+                {
+                    double dbl = val.AsDouble();
+                    char buf[x_default_tostring_buffersize_double];
+                    char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+                    begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
+                }
+                else if (val.IsInt32(TValue::x_int32Tag))
+                {
+                    char buf[x_default_tostring_buffersize_int];
+                    char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
+                    begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
+                }
+            }
+        }
+
+        TValue result = TValue::CreatePointer(vm->CreateStringObjectFromConcatenation(begin, num));
+        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = result;
+        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 

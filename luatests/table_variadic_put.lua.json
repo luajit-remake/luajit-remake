@@ -1,0 +1,733 @@
+{
+  "ChunkName": "@luatests/table_variadic_put.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 3,
+      "SourceLineStart": 1,
+      "SourceLineEnd": 3,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "RET",
+          "OpData": [ 0, 4 ],
+          "SourceLine": 2
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 4,
+      "SourceLineStart": 5,
+      "SourceLineEnd": 7,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 4 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "RET",
+          "OpData": [ 0, 5 ],
+          "SourceLine": 6
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 1,
+      "SourceLineStart": 9,
+      "SourceLineEnd": 11,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 10
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 29,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 35,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 1, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 3, 3 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 8, 3, 0 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 9, 3, 1 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 10, 3, 2 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 11, 3, 3 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 12, 3, 4 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 6 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 4, 4 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 0, 1 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 3 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 4, 5 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 4, 6 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 11, 3, 0 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 12, 3, 1 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 13, 3, 2 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 3, 3 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 3, 4 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 1, 8 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 5, 7 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 6, 8 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 7, 9 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 5, 7, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 6, 7, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 8, 0, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 7, 5 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 13, 7, 6 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 14, 7, 0 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 7, 1 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 16, 7, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 17, 7, 3 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 18, 7, 4 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 19, 7, 5 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 20, 7, 6 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 21, 7, 7 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 8, 1, 11 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 8, 4 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 6, 8, 1 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 5, 8, 2 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 2 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 9, 0, 1 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 3 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 13, 8, 5 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 14, 7, 6 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 15, 8, 0 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 16, 8, 1 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 17, 8, 2 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 18, 8, 3 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 9, 1, 7 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 9, 3 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 10, 0, 1 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 14, 9, 5 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 15, 9, 6 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 16, 9, 0 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 17, 9, 1 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 10, 1, 5 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 14, 10 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 18, 9 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 14, 0, 2 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 10, 1, 0 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 11, 0, 1 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "TSETM",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 15, 10, 5 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 16, 10, 6 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 17, 10, 0 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 18, 10, 1 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 19, 10, 2 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 20, 10, 3 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 21, 10, 4 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETB",
+          "OpData": [ 22, 10, 5 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 23, 10000 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 10, 23 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 24, 10001 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 24, 10, 24 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 25, 10002 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 25, 10, 25 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 26, 10003 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 26, 10, 26 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 27, 10004 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 27, 10, 27 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 28, 10005 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 28, 10, 28 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 11, 1, 15 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 33
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 1
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 2
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 123
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "b"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 456
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        },
+        {
+          "Type": "String",
+          "Value": "b"
+        },
+        {
+          "Type": "String",
+          "Value": "ccc"
+        },
+        {
+          "Type": "String",
+          "Value": "ddd"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 4
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "next"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 10000
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "a"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Double",
+          "Value": 4.503599627370497E15
+        },
+        {
+          "Type": "Double",
+          "Value": 4.503599627370499E15
+        }
+      ]
+    }
+  ]
+}

@@ -697,9 +697,16 @@ g_format_like_f:
 namespace ToyLang
 {
 
-char* StringifyDoubleUsingDefaultLuaFormattingOptions(double d, char* buf)
+char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double d)
 {
     char* res = lj_strfmt_wfnum(NULL, STRFMT_G14, d, buf);
+    *res = '\0';
+    return res;
+}
+
+char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t k)
+{
+    char* res = lj_strfmt_wint(buf, k);
     *res = '\0';
     return res;
 }

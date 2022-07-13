@@ -628,6 +628,25 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 break;
             }
+            case LJOpcode::POW:
+            {
+                TestAssert(opdata.size() == 3);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot lhs = bytecodeSlotFromVariableSlot(opdata[1]);
+                BytecodeSlot rhs = bytecodeSlotFromVariableSlot(opdata[2]);
+                bw.Append(BcPow(lhs, rhs, dst));
+                break;
+            }
+            case LJOpcode::CAT:
+            {
+                TestAssert(opdata.size() == 3);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot begin = bytecodeSlotFromVariableSlot(opdata[1]);
+                TestAssert(opdata[2] >= opdata[1]);
+                uint32_t num = static_cast<uint32_t>(opdata[2] - opdata[1] + 1);
+                bw.Append(BcConcat(dst, begin, num));
+                break;
+            }
             case LJOpcode::KSHORT:
             {
                 TestAssert(opdata.size() == 2);
@@ -1158,7 +1177,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 // This opcode reads from slot A-1...
                 //
                 TestAssert(opdata[0] >= 1);
-                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0]);
+                BytecodeSlot dst = bytecodeSlotFromVariableSlot(opdata[0] - 1);
                 BytecodeSlot index = bytecodeSlotFromNumberConstant(opdata[1]);
                 bw.Append(BcTableVariadicPutByIntegerValSeq(dst, index));
                 break;
@@ -1360,11 +1379,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                                       });
                 bw.Append(BcValidateIsNextAndBranch(base));
                 break;
-            }
-            case LJOpcode::POW: [[fallthrough]];
-            case LJOpcode::CAT:
-            {
-                ReleaseAssert(false && "unimplemented");
             }
             case LJOpcode::KCDATA: [[fallthrough]];
             case LJOpcode::ISTYPE: [[fallthrough]];

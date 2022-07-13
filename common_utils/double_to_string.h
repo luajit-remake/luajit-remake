@@ -45,6 +45,11 @@ constexpr size_t x_default_tostring_buffersize_ptr = (2+2*sizeof(ptrdiff_t)) + 1
 // 'buf' must be at least of length x_default_tostring_buffersize_double
 // Returns the address of the '\0'
 //
-char* StringifyDoubleUsingDefaultLuaFormattingOptions(double d, char* buf /*out*/);
+char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double d);
+
+// 'buf' must be at least of length x_default_tostring_buffersize_int
+// Returns the address of the '\0'
+//
+char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t k);
 
 }   // namespace ToyLang

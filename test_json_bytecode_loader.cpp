@@ -791,4 +791,61 @@ TEST(LuaTest, BooleanAsTableIndex_3)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, ArithmeticSanity)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/arithmetic_sanity.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "5\n-5\n-1\n1\n6\n6\n0.66666666666667\n0.66666666666667\n3\n-3\n-1\n1\n8\n1.4142135623731\n0.70710678118655\n-0.125\nnan\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, StringConcat)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/string_concat.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "abcdefgHIJ\na2340.66666666666667-1024g\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, TableVariadicPut)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_variadic_put.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "nil\t1\t2\t3\tnil\n123\t456\tnil\t1\t2\t3\tnil\n4\tnil\tnil\tccc\tddd\t1\t2\t3\t4\tnil\nnil\tnil\tnil\tddd\tccc\tnil\nnil\tnil\tnil\tnil\nnil\nnil\tnil\tnil\t1\t2\t3\t4\tnil\ta\tnil\tnil\tnil\tnil\tnil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace
