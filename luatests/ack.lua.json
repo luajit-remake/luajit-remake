@@ -1,0 +1,215 @@
+{
+  "ChunkName": "@luatests/ack.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 4,
+      "SourceLineEnd": 12,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "ISNEN",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 2, 1, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "ISNEN",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 2, 5 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 6, 0, 1 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "CALLT",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 6, 0, 1 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 12, 1, 1 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 0, 3 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "CALLMT",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 11
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 0,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 0
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 18,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 3 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 1, 1 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 8 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 3 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 0, 3 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 16
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "String",
+          "Value": "N"
+        },
+        {
+          "Type": "String",
+          "Value": "M"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

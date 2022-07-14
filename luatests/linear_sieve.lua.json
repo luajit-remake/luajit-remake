@@ -1,5 +1,5 @@
 {
-  "ChunkName": "@luatests/sieve.lua",
+  "ChunkName": "@luatests/linear_sieve.lua",
   "FunctionPrototypes": [
     {
       "NumFixedParams": 1,

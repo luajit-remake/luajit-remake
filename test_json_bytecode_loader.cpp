@@ -214,13 +214,13 @@ TEST(LuaTest, Fib_upvalue)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaTest, Sieve)
+TEST(LuaTest, LinearSieve)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/sieve.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/linear_sieve.lua.json"));
     vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -355,22 +355,6 @@ TEST(LuaTest, LengthOperator)
     std::string err = vmoutput.GetAndResetStdErr();
 
     ReleaseAssert(out == "sanity test\n5\n3\n4\n6\nstress test\ntest end\n");
-    ReleaseAssert(err == "");
-}
-
-TEST(LuaTest, NBody)
-{
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/n-body.lua.json"));
-    vm->LaunchScript(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "-0.16907516382852\n-0.16908760523461\n");
     ReleaseAssert(err == "");
 }
 
@@ -843,6 +827,226 @@ TEST(LuaTest, TableVariadicPut)
 
     std::string expectedOut =
             "nil\t1\t2\t3\tnil\n123\t456\tnil\t1\t2\t3\tnil\n4\tnil\tnil\tccc\tddd\t1\t2\t3\t4\tnil\nnil\tnil\tnil\tddd\tccc\tnil\nnil\tnil\tnil\tnil\nnil\nnil\tnil\tnil\t1\t2\t3\t4\tnil\ta\tnil\tnil\tnil\tnil\tnil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, NBody)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/n-body.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "-0.16907516382852\n-0.16908760523461\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Ack)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/ack.lua.json"));
+
+    // This benchmark needs a larger stack
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    delete [] rc->m_stackBegin;
+    rc->m_stackBegin = new TValue[1000000];
+
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    ReleaseAssert(out == "2045\n");
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, BinaryTrees_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/binary-trees-1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "stretch tree of depth 7\t check: -1\n"
+            "128\t trees of depth 4\t check: -128\n"
+            "32\t trees of depth 6\t check: -32\n"
+            "long lived tree of depth 6\t check: -1\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, BinaryTrees_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/binary-trees-2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "stretch tree of depth 7\t check: -1\n"
+            "128\t trees of depth 4\t check: -128\n"
+            "32\t trees of depth 6\t check: -32\n"
+            "long lived tree of depth 6\t check: -1\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Fannkuch_Redux)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/fannkuch-redux.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "228\n"
+            "Pfannkuchen(7) = 16\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Fixpoint_Fact)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/fixpoint-fact.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "9.426900168371e+157\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Mandel_NoMetatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/mandel-nometatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "P2\n"
+            "# mandelbrot set\t-2\t2\t-2\t2\t32\n"
+            "32\t32\t255\n"
+            "28620\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, QuadTree)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/qt.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "\nstep\t1\ncolor\t0\nprewhite\t4\nprewhite\t0\ncolorup\t0\narea\t1\t0\t1\nedges\t16\n"
+            "\nstep\t2\ncolor\t0\nprewhite\t14\nprewhite\t0\ncolorup\t0\narea\t0.875\t0\t0.875\nedges\t100\n"
+            "\nstep\t3\ncolor\t8\ncolor\t0\nprewhite\t34\nprewhite\t0\ncolorup\t0\narea\t0.53125\t0\t0.53125\nedges\t340\n"
+            "\nstep\t4\ncolor\t30\ncolor\t6\ncolor\t0\nprewhite\t70\nprewhite\t18\nprewhite\t0\ncolorup\t6\narea\t0.34375\t0\t0.34375\nedges\t980\n"
+            "\nstep\t5\ncolor\t78\ncolor\t13\ncolor\t1\ncolor\t0\nprewhite\t161\nprewhite\t79\nprewhite\t16\nprewhite\t0\ncolorup\t18\narea\t0.25\t0\t0.25\nedges\t2564\n"
+            "\nstep\t6\ncolor\t188\ncolor\t62\ncolor\t15\ncolor\t3\ncolor\t0\nprewhite\t396\nprewhite\t223\nprewhite\t128\nprewhite\t9\nprewhite\t0\ncolorup\t56\narea\t0.1845703125\t0\t0.1845703125\nedges\t7510\n"
+            "\nstep\t7\ncolor\t365\ncolor\t115\ncolor\t45\ncolor\t9\ncolor\t6\ncolor\t0\nprewhite\t1048\nprewhite\t630\nprewhite\t588\nprewhite\t196\nprewhite\t22\nprewhite\t0\ncolorup\t114\narea\t0.151611328125\t0\t0.151611328125\nedges\t22812\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Queen)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/queen.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut = LoadFile("luatests/queen.expected.out");
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, NlgN_Sieve)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/nlgn_sieve.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut = "10\t8192\nCount: \t1028\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, Spectral_Norm)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/spectral-norm.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut = "1.2742199912349\n";
 
     ReleaseAssert(out == expectedOut);
     ReleaseAssert(err == "");

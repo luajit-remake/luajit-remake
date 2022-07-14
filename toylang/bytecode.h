@@ -923,6 +923,75 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(sfp), 0 /*numRetValues*/);
 }
 
+inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+{
+    FILE* fp = VM::GetActiveVMForCurrentThread()->GetStdout();
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numElementsToPrint = hdr->m_numVariadicArguments;
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numElementsToPrint;
+    bool success = true;
+    for (uint32_t i = 0; i < numElementsToPrint; i++)
+    {
+        TValue val = vaBegin[i];
+        if (val.IsInt32(TValue::x_int32Tag))
+        {
+            char buf[x_default_tostring_buffersize_int];
+            char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
+            size_t len = static_cast<size_t>(bufEnd - buf);
+            size_t written = fwrite(buf, 1, len, fp);
+            if (unlikely(len != written)) { success = false; break; }
+        }
+        else if (val.IsDouble(TValue::x_int32Tag))
+        {
+            double dbl = val.AsDouble();
+            char buf[x_default_tostring_buffersize_double];
+            char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+            size_t len = static_cast<size_t>(bufEnd - buf);
+            size_t written = fwrite(buf, 1, len, fp);
+            if (unlikely(len != written)) { success = false; break; }
+        }
+        else if (val.IsPointer(TValue::x_mivTag))
+        {
+            UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
+            if (p->m_type == Type::STRING)
+            {
+                HeapString* hs = reinterpret_cast<HeapString*>(p);
+                size_t written = fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
+                if (unlikely(hs->m_length != written)) { success = false; break; }
+            }
+            else
+            {
+                ReleaseAssert(false && "error path not implemented");
+            }
+        }
+        else
+        {
+            ReleaseAssert(false && "error path not implemented");
+        }
+    }
+
+    uint64_t numRetVals;
+    if (likely(success))
+    {
+        numRetVals = 1;
+        reinterpret_cast<TValue*>(sfp)[0] = TValue::CreateTrue();
+    }
+    else
+    {
+        int err = errno;
+        reinterpret_cast<TValue*>(sfp)[0] = TValue::Nil();
+        const char* errstr = strerror(err);
+        reinterpret_cast<TValue*>(sfp)[1] = TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errstr, static_cast<uint32_t>(strlen(errstr))));
+        reinterpret_cast<TValue*>(sfp)[2] = TValue::CreateInt32(err, TValue::x_int32Tag);
+        numRetVals = 3;
+    }
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    StackFrameHeader* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(sfp), numRetVals);
+}
+
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
     HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
@@ -957,6 +1026,10 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 
     HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
     insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
+
+    HeapPtr<TableObject> ioObj = insertObject(globalObject, "io", 16);
+    insertCFunc(ioObj, "write", LJR_LIB_IO_write);
+
     return globalObject;
 }
 
@@ -1893,7 +1966,8 @@ public:
         {
             if (bc->m_numFixedRets <= x_minNilFillReturnValues)
             {
-                SafeMemcpy(StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot), retValues, sizeof(TValue) * bc->m_numFixedRets);
+                // TODO: it's always correct to move from left to right
+                memmove(StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot), retValues, sizeof(TValue) * bc->m_numFixedRets);
             }
             else
             {
@@ -2186,7 +2260,8 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         if (bc->m_numFixedRets <= x_minNilFillReturnValues)
         {
-            SafeMemcpy(StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot), retValues, sizeof(TValue) * bc->m_numFixedRets);
+            // TODO: it's always correct to move from left to right
+            memmove(StackFrameHeader::GetLocalAddr(stackframe, bc->m_funcSlot), retValues, sizeof(TValue) * bc->m_numFixedRets);
         }
         else
         {
