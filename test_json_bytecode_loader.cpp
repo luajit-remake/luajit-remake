@@ -1199,6 +1199,76 @@ TEST(LuaBenchmark, xpcall_4)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaBenchmark, xpcall_5)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_5.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "enter g\tattempt to call a nil value\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "false\t1\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, xpcall_6)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_6.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "enter g\tattempt to call a nil value\tnil\n"
+            "doing xpcall\n"
+            "enter g\tattempt to call a nil value\tnil\n"
+            "doing xpcall\n"
+            "enter g\tattempt to call a nil value\tnil\n"
+            "doing xpcall\n"
+            "enter g\tattempt to call a nil value\tnil\n"
+            "doing xpcall\n"
+            "enter g\tattempt to call a nil value\tnil\n"
+            "returned from xpcall\tfalse\t14\n"
+            "returned from xpcall\tfalse\t3\n"
+            "returned from xpcall\tfalse\t2\n"
+            "returned from xpcall\tfalse\t1\n"
+            "false\t0\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 TEST(LuaBenchmark, pcall_1)
 {
     VM* vm = VM::Create();
