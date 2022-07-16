@@ -1052,4 +1052,217 @@ TEST(LuaBenchmark, Spectral_Norm)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaBenchmark, xpcall_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut =
+            "test 1\n"
+            "enter f_bad\tnil\tnil\n"
+            "enter err handler\ttrue\tnil\n"
+            "false\t123\n"
+            "test 2\n"
+            "enter f_good\tnil\tnil\n"
+            "true\t233\t2333\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, xpcall_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut =
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "throwing error\n"
+            "enter g\tfalse\tnil\n"
+            "throwing error\n"
+            "enter g\ttrue\tnil\n"
+            "false\t1\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, xpcall_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut =
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "doing xpcall\n"
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "doing xpcall\n"
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "doing xpcall\n"
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "doing xpcall\n"
+            "enter f\tnil\tnil\n"
+            "enter g\ttrue\tnil\n"
+            "returned from xpcall\tfalse\t14\n"
+            "returned from xpcall\tfalse\t3\n"
+            "returned from xpcall\tfalse\t2\n"
+            "returned from xpcall\tfalse\t1\n"
+            "false\t0\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, xpcall_4)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_4.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "test1\n"
+            "enter h\n"
+            "false\t123\n"
+            "test2\n"
+            "enter h\n"
+            "false\t123\n"
+            "test3\n"
+            "enter f\tnil\n"
+            "true\t123\t456\t789\n"
+            "test4\n"
+            "enter f2\tnil\n"
+            "false\terror in error handling\n"
+            "test5\n"
+            "false\terror in error handling\n"
+            "test6\n"
+            "false\terror in error handling\n"
+            "test7\n"
+            "enter h\tattempt to call a nil value\n"
+            "false\t124\n"
+            "test8\n"
+            "enter h\tattempt to call a table value\n"
+            "false\t124\n"
+            "test10\n"
+            "false\terror in error handling\n"
+            "test11\n"
+            "enter f3\tnil\tnil\n"
+            "true\t21\t43\n"
+            "test12\n"
+            "enter f4\tnil\tnil\n"
+            "enter h\n"
+            "false\t123\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, pcall_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/pcall_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut =
+            "test 1\n"
+            "enter f_bad\t1\t2\n"
+            "false\ttrue\n"
+            "test 2\n"
+            "enter f_good\t1\t2\n"
+            "true\t233\t2333\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaBenchmark, pcall_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/pcall_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    std::string expectedOut =
+            "enter f\n"
+            "false\t123\n"
+            "false\tattempt to call a nil value\n"
+            "false\tattempt to call a nil value\n"
+            "false\tattempt to call a number value\n"
+            "false\tattempt to call a table value\n"
+            "enter g\tnil\tnil\tnil\n"
+            "true\t321\t654\n"
+            "enter g\t1\tnil\tnil\n"
+            "true\t321\t654\n"
+            "enter g\t1\t2\t3\n"
+            "true\t321\t654\n"
+            "enter g\t1\t2\t3\n"
+            "true\t321\t654\n"
+            "enter g2\tnil\tnil\tnil\t0\tnil\tnil\tnil\tnil\tnil\tnil\tnil\tnil\n"
+            "true\t233\t124\n"
+            "enter g2\t1\tnil\tnil\t0\tnil\tnil\tnil\tnil\tnil\tnil\tnil\tnil\n"
+            "true\t233\t124\n"
+            "enter g2\t1\t2\t3\t0\tnil\tnil\tnil\tnil\tnil\tnil\tnil\tnil\n"
+            "true\t233\t124\n"
+            "enter g2\t1\t2\t3\t2\tnil\t4\t5\tnil\tnil\tnil\tnil\tnil\n"
+            "true\t233\t124\n"
+            "enter g2\t1\t2\t3\t4\tnil\t4\t5\t6\t7\tnil\tnil\tnil\n"
+            "true\t233\t124\n"
+            "enter g2\t1\t2\t3\t6\tnil\t4\t5\t6\t7\t8\t9\tnil\n"
+            "true\t233\t124\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

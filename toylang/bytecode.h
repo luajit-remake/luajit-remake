@@ -697,9 +697,9 @@ public:
     // Must be first element: this is expected by call opcode
     //
     HeapPtr<FunctionObject> m_func;
-    // The address of the caller stack frame
+    // The address of the caller stack frame (points to the END of the stack frame header)
     //
-    StackFrameHeader* m_caller;
+    void* m_caller;
     // The return address
     //
     void* m_retAddr;
@@ -773,8 +773,8 @@ inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    StackFrameHeader* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), 3 /*numRetValues*/);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 3 /*numRetValues*/);
 }
 
 inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
@@ -813,14 +813,14 @@ inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    StackFrameHeader* callerSf = hdr->m_caller;
+    void* callerSf = hdr->m_caller;
     // Lua manual states:
     //     "When called with the last index, or with 'nil' in an empty table, 'next' returns 'nil'."
     // So when end of table is reached, this should return "nil", not "nil, nil"...
     //
     AssertImp(ret->m_key.IsNil(), ret->m_value.IsNil());
     uint64_t numReturnValues = ret->m_key.IsNil() ? 1 : 2;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(ret), numReturnValues);
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), numReturnValues);
 }
 
 inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
@@ -842,8 +842,66 @@ inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    StackFrameHeader* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(addr), 1 /*numRetValues*/);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(addr), 1 /*numRetValues*/);
+}
+
+inline void PrintTValue(FILE* fp, TValue val)
+{
+    if (val.IsInt32(TValue::x_int32Tag))
+    {
+        fprintf(fp, "%d", static_cast<int>(val.AsInt32()));
+    }
+    else if (val.IsDouble(TValue::x_int32Tag))
+    {
+        double dbl = val.AsDouble();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        fprintf(fp, "%s", buf);
+    }
+    else if (val.IsMIV(TValue::x_mivTag))
+    {
+        MiscImmediateValue miv = val.AsMIV(TValue::x_mivTag);
+        if (miv.IsNil())
+        {
+            fprintf(fp, "nil");
+        }
+        else
+        {
+            assert(miv.IsBoolean());
+            fprintf(fp, "%s", (miv.GetBooleanValue() ? "true" : "false"));
+        }
+    }
+    else
+    {
+        assert(val.IsPointer(TValue::x_mivTag));
+        UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
+        if (p->m_type == Type::STRING)
+        {
+            HeapString* hs = reinterpret_cast<HeapString*>(p);
+            fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
+        }
+        else
+        {
+            if (p->m_type == Type::FUNCTION)
+            {
+                fprintf(fp, "function");
+            }
+            else if (p->m_type == Type::TABLE)
+            {
+                fprintf(fp, "table");
+            }
+            else if (p->m_type == Type::THREAD)
+            {
+                fprintf(fp, "thread");
+            }
+            else
+            {
+                fprintf(fp, "(type %d)", static_cast<int>(p->m_type));
+            }
+            fprintf(fp, ": %p", static_cast<void*>(p));
+        }
+    }
 }
 
 inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
@@ -858,69 +916,14 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
         {
             fprintf(fp, "\t");
         }
-
-        TValue val = vaBegin[i];
-        if (val.IsInt32(TValue::x_int32Tag))
-        {
-            fprintf(fp, "%d", static_cast<int>(val.AsInt32()));
-        }
-        else if (val.IsDouble(TValue::x_int32Tag))
-        {
-            double dbl = val.AsDouble();
-            char buf[x_default_tostring_buffersize_double];
-            StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
-            fprintf(fp, "%s", buf);
-        }
-        else if (val.IsMIV(TValue::x_mivTag))
-        {
-            MiscImmediateValue miv = val.AsMIV(TValue::x_mivTag);
-            if (miv.IsNil())
-            {
-                fprintf(fp, "nil");
-            }
-            else
-            {
-                assert(miv.IsBoolean());
-                fprintf(fp, "%s", (miv.GetBooleanValue() ? "true" : "false"));
-            }
-        }
-        else
-        {
-            assert(val.IsPointer(TValue::x_mivTag));
-            UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
-            if (p->m_type == Type::STRING)
-            {
-                HeapString* hs = reinterpret_cast<HeapString*>(p);
-                fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
-            }
-            else
-            {
-                if (p->m_type == Type::FUNCTION)
-                {
-                    fprintf(fp, "function");
-                }
-                else if (p->m_type == Type::TABLE)
-                {
-                    fprintf(fp, "table");
-                }
-                else if (p->m_type == Type::THREAD)
-                {
-                    fprintf(fp, "thread");
-                }
-                else
-                {
-                    fprintf(fp, "(type %d)", static_cast<int>(p->m_type));
-                }
-                fprintf(fp, ": %p", static_cast<void*>(p));
-            }
-        }
+        PrintTValue(fp, vaBegin[i]);
     }
     fprintf(fp, "\n");
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    StackFrameHeader* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(sfp), 0 /*numRetValues*/);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(sfp), 0 /*numRetValues*/);
 }
 
 inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
@@ -988,8 +991,485 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
 
     using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
     RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    StackFrameHeader* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(sfp), numRetVals);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(sfp), numRetVals);
+}
+
+void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sfp, TValue* begin, HeapPtr<FunctionObject> target, uint32_t numFixedParamsToPass, InterpreterFn onReturn, bool passVariadicRetAsParam);
+
+// Design for pcall/xpcall:
+//     There are two return function: 'onSuccessReturn' and 'onErrorReturn'.
+//     pcall/xpcall always calls the callee using 'onSuccessReturn' as the return function.
+//     So if the Lua code did not encounter an error, 'onSuccessReturn' will take control, which simply generates the pcall/xpcall return values for the success case and return to parent.
+//     That is, the stack looks like this:
+//     [ ... Lua ... ] [ pcall ] [ Lua function being called ] [ .. more call frames .. ]
+//                                 ^
+//                       return = onSuccessReturn
+
+//     If the Lua code encounters an error, we will walk the stack to find the first stack frame with 'return = onErrorReturn'.
+//     This allows us to locate the pcall/xpcall call frame.
+//
+//     pcall/xpcall always reserve local variable slot 0. For pcall, the slot stores 'false', and for xpcall the slot stores 'true'.
+//     This allows us to know if the frame is a pcall frame or a xpcall frame.
+//
+//     Now, for pcall, we can simply return 'false' plus the error object.
+//     For xpcall, we will locate the error handler from the xpcall call frame, then call the error handler with return = onErrorReturn.
+//     That is, the stack looks like this:
+//     [ ... Lua ... ] [ xpcall ] [ Lua function being called ] [ .. more call frames .. ] [ function throwing error ] [ error handler ] .. [ error handler (due to error in error handler) ]
+//                                  ^                                                                                    ^                    ^
+//                       return = onSuccessReturn                                                               return = onErrorReturn   return = onErrorReturn
+//
+//     Then 'onErrorReturn' will eventually take control.
+//     The 'onErrorReturn' function will actually unwind the stack until the first xpcall call frame it encounters (identified by 'onSuccessReturn').
+//     Then it generates the xpcall return values for the error case, and return to the parent of xpcall
+//
+inline void LJR_LIB_OnProtectedCallSuccessReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)
+{
+    // 'stackframe' is the stack frame for pcall/xpcall
+    //
+    // Return value should be 'true' plus everything returned by callee
+    // Note that we reserved local variable slot 0, so 'retValuesU' must be at least at slot 2,
+    // so we can overwrite 'retValuesU[-1]' without worrying about clobbering anything
+    //
+    TValue* previousSlot = reinterpret_cast<TValue*>(const_cast<uint8_t*>(retValuesU)) - 1;
+    assert(previousSlot >= stackframe);
+    *previousSlot = TValue::CreateBoolean(true);
+    numRetValues++;
+
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(previousSlot), numRetValues);
+}
+
+inline void LJR_LIB_OnProtectedCallErrorReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)
+{
+    // 'stackframe' is the stack frame for the last function throwing out the error
+    // Construct the return values now. Lua 5.1 doesn't have to-be-closed variables, so we can simply overwrite at 'stackframe'
+    //
+    // Note that Lua discards all but the first return value from error handler, and if error handler returns no value, a nil is added
+    //
+    TValue* retValues;
+    if (numRetValues == 0)
+    {
+        retValues = reinterpret_cast<TValue*>(stackframe);
+        retValues[0] = TValue::CreateFalse();
+        retValues[1] = TValue::Nil();
+        numRetValues = 2;
+    }
+    else
+    {
+        TValue val = *reinterpret_cast<const TValue*>(retValuesU);
+        retValues = reinterpret_cast<TValue*>(stackframe);
+        retValues[0] = TValue::CreateFalse();
+        retValues[1] = val;
+        numRetValues = 2;
+    }
+
+    // Now we need to walk the stack and identify the xpcall call frame
+    // This must be successful, since we won't be called unless the pcall/xpcall call frame has been identified by the error path
+    //
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    while (true)
+    {
+        if (hdr->m_retAddr == reinterpret_cast<void*>(LJR_LIB_OnProtectedCallSuccessReturn))
+        {
+            break;
+        }
+        hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
+        assert(hdr != nullptr);
+    }
+
+    // Now 'hdr' is the callee of the pcall/xpcall
+    // We need to return to the caller of pcall/xpcall, so we need to walk up one more frame and return from there
+    //
+    hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
+    assert(hdr != nullptr);
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retValues), numRetValues);
+}
+
+constexpr size_t x_lua_max_nested_error_count = 50;
+
+inline TValue WARN_UNUSED MakeErrorMessage(const char* msg)
+{
+    return TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(msg, static_cast<uint32_t>(strlen(msg))));
+}
+
+inline TValue WARN_UNUSED MakeErrorMessageForTooManyNestedErrors()
+{
+    const char* errstr = "error in error handling";
+    return MakeErrorMessage(errstr);
+}
+
+inline TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
+{
+    // The Lua message is "attmpt to call a (type of badValue) value"
+    //
+    char msg[100];
+    auto makeMsg = [&](const char* ty)
+    {
+        snprintf(msg, 100, "attempt to call a %s value", ty);
+    };
+    auto makeMsg2 = [&](int d)
+    {
+        snprintf(msg, 100, "attempt to call a (internal type %d) value", d);
+    };
+
+    if (badValue.IsInt32(TValue::x_int32Tag))
+    {
+        makeMsg("number");
+    }
+    else if (badValue.IsDouble(TValue::x_int32Tag))
+    {
+        makeMsg("number");
+    }
+    else if (badValue.IsMIV(TValue::x_mivTag))
+    {
+        MiscImmediateValue miv = badValue.AsMIV(TValue::x_mivTag);
+        if (miv.IsNil())
+        {
+            makeMsg("nil");
+        }
+        else
+        {
+            assert(miv.IsBoolean());
+            makeMsg("boolean");
+        }
+    }
+    else
+    {
+        assert(badValue.IsPointer(TValue::x_mivTag));
+        UserHeapGcObjectHeader* p = TranslateToRawPointer(badValue.AsPointer<UserHeapGcObjectHeader>().As());
+        if (p->m_type == Type::STRING)
+        {
+            makeMsg("string");
+        }
+        else if (p->m_type == Type::FUNCTION)
+        {
+            makeMsg("function");
+        }
+        else if (p->m_type == Type::TABLE)
+        {
+            makeMsg("table");
+        }
+        else if (p->m_type == Type::THREAD)
+        {
+            makeMsg("thread");
+        }
+        else
+        {
+            // TODO: handle userdata type
+            //
+            makeMsg2(static_cast<int>(p->m_type));
+        }
+    }
+    return MakeErrorMessage(msg);
+}
+
+inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t errorObjectU64)
+{
+    std::ignore = bcu;  // TODO: convert bytecode location to source code location
+
+    TValue errorObject; errorObject.m_value = errorObjectU64;
+
+    size_t nestedErrorCount = 0;
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    while (hdr != nullptr)
+    {
+        if (hdr->m_retAddr == reinterpret_cast<void*>(LJR_LIB_OnProtectedCallSuccessReturn))
+        {
+            break;
+        }
+        if (hdr->m_retAddr == reinterpret_cast<void*>(LJR_LIB_OnProtectedCallErrorReturn))
+        {
+            nestedErrorCount++;
+        }
+        hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
+    }
+
+    if (hdr == nullptr)
+    {
+        // There is no pcall/xpcall on the stack
+        // TODO: make the output message and behavior consistent with Lua in this case
+        //
+        FILE* fp = VM::GetActiveVMForCurrentThread()->GetStderr();
+        fprintf(fp, "Uncaught error: ");
+        PrintTValue(fp, errorObject);
+        fprintf(fp, "\n");
+        fclose(fp);
+        abort();
+    }
+
+    StackFrameHeader* protectedCallFrame = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
+    assert(protectedCallFrame != nullptr);
+
+    bool isXpcall;
+    {
+        TValue* locals = reinterpret_cast<TValue*>(protectedCallFrame + 1);
+        assert(locals[0].IsMIV(TValue::x_mivTag) && locals[0].AsMIV(TValue::x_mivTag).IsBoolean());
+        isXpcall = locals[0].AsMIV(TValue::x_mivTag).GetBooleanValue();
+    }
+
+    if (nestedErrorCount > x_lua_max_nested_error_count)
+    {
+        // Don't call error handler any more, treat this as if it's a pcall
+        //
+        errorObject = MakeErrorMessageForTooManyNestedErrors();
+        goto handle_pcall;
+    }
+
+    if (isXpcall)
+    {
+        // We need to call error handler
+        //
+        // xpcall has already asserted that two arguments are passed, so we should be able to safely assume so
+        //
+        assert(protectedCallFrame->m_numVariadicArguments >= 2);
+        TValue errHandler = *(reinterpret_cast<TValue*>(protectedCallFrame) - protectedCallFrame->m_numVariadicArguments + 1);
+
+        // Lua 5.4 requires 'errHandler' to be a function.
+        // Lua 5.1 doesn't require 'errHandler' to be a function, but ignores its metatable any way.
+        // This function is not performance sensitive, so we will make it compatible for both (the xpcall API can check 'errHandler' to implement Lua 5.4 behavior)
+        //
+        bool isFunction = errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION;
+        if (!isFunction)
+        {
+            // The error handler is not callable, so attempting to call it will result in infinite error recursion
+            //
+            errorObject = MakeErrorMessageForTooManyNestedErrors();
+            goto handle_pcall;
+        }
+
+        // Set up the call frame
+        //
+        UserHeapPointer<FunctionObject> handler = errHandler.AsPointer<FunctionObject>();
+        uint32_t stackFrameSize;
+        if (rc->m_codeBlock->IsBytecodeFunction())
+        {
+            stackFrameSize = rc->m_codeBlock->m_stackFrameNumSlots;
+        }
+        else
+        {
+            // ThrowError() is called from a C function.
+            // Destroying all its locals should be fine, as the function should never be returned to any way
+            //
+            stackFrameSize = 0;
+        }
+
+        TValue* localsStart = reinterpret_cast<TValue*>(sfp);
+        localsStart[stackFrameSize] = TValue::CreatePointer(handler);
+        localsStart[stackFrameSize + x_numSlotsForStackFrameHeader] = errorObject;
+        void* newStackFrameBase = SetupFrameForCall(
+                    rc, sfp, localsStart + stackFrameSize, handler.As(),
+                    1 /*numFixedParamsToPass*/, LJR_LIB_OnProtectedCallErrorReturn /*onReturn*/, false /*passVariadicRetsAsParam*/);
+
+        HeapPtr<ExecutableCode> calleeEc = TCGet(handler.As()->m_executable).As();
+
+        uint8_t* calleeBytecode = calleeEc->m_bytecode;
+        InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, newStackFrameBase, calleeBytecode, 0 /*unused*/);
+    }
+    else
+    {
+handle_pcall:
+        // We should just return 'false' plus the error object
+        //
+        TValue* retValues = reinterpret_cast<TValue*>(sfp);
+        retValues[0] = TValue::CreateFalse();
+        retValues[1] = errorObject;
+
+        // We need to return to the caller of 'pcall'
+        //
+        using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+        RetFn retAddr = reinterpret_cast<RetFn>(protectedCallFrame->m_retAddr);
+        void* callerSf = protectedCallFrame->m_caller;
+        [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retValues), 2 /*numReturnValues*/);
+    }
+}
+
+inline void LJR_LIB_BASE_error(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+
+    TValue errorObject;
+    if (numArgs == 0)
+    {
+        errorObject = TValue::Nil();
+    }
+    else
+    {
+        errorObject = vaBegin[0];
+    }
+
+    // TODO: Lua appends source line information if 'errorObject' is a string or number
+    //
+    [[clang::musttail]] return ThrowError(rc, sfp, bcu, errorObject.m_value);
+}
+
+inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+
+    if (numArgs < 2)
+    {
+        // Lua always complains about argument #2 even if numArgs == 0, and this error is NOT protected by this xpcall itself
+        //
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'xpcall' (value expected)").m_value);
+    }
+
+    // Any error below should be protected by the xpcall
+    //
+
+    // Write the identification boolean at local 0. This will be read by the stack walker
+    //
+    *reinterpret_cast<TValue*>(sfp) = TValue::CreateBoolean(true /*isXpcall*/);
+
+    // There is one edge case: if the first parameter is not a function and cannot be called (through metatable), the error is still protected
+    // and the error handler shall be called. However, since the error is not thrown from the function, but from xpcall, there is no stack
+    // frame with ret = 'onSuccessReturn', so neither 'onErrorReturn' nor the 'ThrowError' could see the xpcall.
+    // To fix this, we create a dummy call frame with ret = 'LJR_LIB_OnProtectedCallSuccessReturn', then invoke the error handler. This is what
+    // the function below does.
+    //
+    auto createDummyFrameAndSetupFrameForErrorHandler = [](StackFrameHeader* curFrameHdr, UserHeapPointer<FunctionObject> errHandler, TValue errorObject) WARN_UNUSED -> TValue* /*paramForSetupCallFrame*/
+    {
+        // Note that the xpcall frame has one local, that's what the +1 in line below accounts for
+        //
+        StackFrameHeader* dummyFrameHdr = reinterpret_cast<StackFrameHeader*>(reinterpret_cast<TValue*>(curFrameHdr) + x_numSlotsForStackFrameHeader + 1);
+        dummyFrameHdr->m_caller = curFrameHdr + 1;
+        dummyFrameHdr->m_numVariadicArguments = 0;
+        dummyFrameHdr->m_retAddr = reinterpret_cast<void*>(LJR_LIB_OnProtectedCallSuccessReturn);
+        dummyFrameHdr->m_func = curFrameHdr->m_func;
+
+        TValue* errHandlerFrameStart = reinterpret_cast<TValue*>(dummyFrameHdr + 1);
+        errHandlerFrameStart[0] = TValue::CreatePointer(errHandler);
+        errHandlerFrameStart[x_numSlotsForStackFrameHeader] = errorObject;
+        return errHandlerFrameStart;
+    };
+
+    TValue func = vaBegin[0];
+    bool isCallable = false;
+    UserHeapPointer<FunctionObject> functionTarget;
+
+    // TODO: handle metatable
+    //
+    if (func.IsPointer(TValue::x_mivTag) && func.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+    {
+        isCallable = true;
+        functionTarget = func.AsPointer<FunctionObject>();
+    }
+
+    if (!isCallable)
+    {
+        // The function is not callable, so we should call the error handler.
+        // Now, check if the error handler is a FunctionObject
+        //
+        TValue errHandler = vaBegin[1];
+        if (errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+        {
+            // The error handler is a function. We need to set up the dummy frame (see comments earlier) and call it
+            //
+            UserHeapPointer<FunctionObject> errHandlerFn = errHandler.AsPointer<FunctionObject>();
+            TValue* slotStart = createDummyFrameAndSetupFrameForErrorHandler(hdr /*curFrameHdr*/, errHandlerFn, MakeErrorMessageForUnableToCall(func));
+            void* newStackFrameBase = SetupFrameForCall(
+                        rc, slotStart, slotStart, errHandlerFn.As(),
+                        1 /*numFixedParamsToPass*/, LJR_LIB_OnProtectedCallErrorReturn /*onReturn*/, false /*passVariadicRetsAsParam*/);
+            HeapPtr<ExecutableCode> calleeEc = TCGet(errHandlerFn.As()->m_executable).As();
+            uint8_t* calleeBytecode = calleeEc->m_bytecode;
+            InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+            [[clang::musttail]] return calleeFn(rc, newStackFrameBase, calleeBytecode, 0 /*unused*/);
+        }
+        else
+        {
+            // The error handler is not a function (note that Lua ignores the metatable here)
+            // So calling the error handler will result in infinite error recursion
+            // So we should return false + "error in error handler"
+            //
+            TValue* retStart = reinterpret_cast<TValue*>(sfp);
+            retStart[0] = TValue::CreateBoolean(false);
+            retStart[1] = MakeErrorMessageForTooManyNestedErrors();
+
+            using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+            RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+            void* callerSf = hdr->m_caller;
+            [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retStart), 2 /*numReturnValues*/);
+        }
+    }
+
+    // Now we know the function is callable, call it
+    //
+    reinterpret_cast<TValue*>(sfp)[1] = TValue::CreatePointer(functionTarget);
+    void* newStackFrameBase = SetupFrameForCall(rc, sfp, reinterpret_cast<TValue*>(sfp) + 1, functionTarget.As(), 0 /*numFixedParamsToPass*/, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(functionTarget.As()->m_executable).As();
+    uint8_t* calleeBytecode = calleeEc->m_bytecode;
+    InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+    [[clang::musttail]] return calleeFn(rc, newStackFrameBase, calleeBytecode, 0 /*unused*/);
+}
+
+inline void LJR_LIB_BASE_pcall(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+
+    if (numArgs == 0)
+    {
+        // This error is NOT protected by this pcall itself
+        //
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'pcall' (value expected)").m_value);
+    }
+
+    // Any error below should be protected by the pcall
+    //
+
+    // Write the identification boolean at local 0. This will be read by the stack walker
+    //
+    *reinterpret_cast<TValue*>(sfp) = TValue::CreateBoolean(false /*isXpcall*/);
+
+    TValue func = vaBegin[0];
+    bool isCallable = false;
+    UserHeapPointer<FunctionObject> functionTarget;
+
+    // TODO: handle metatable
+    //
+    if (func.IsPointer(TValue::x_mivTag) && func.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+    {
+        isCallable = true;
+        functionTarget = func.AsPointer<FunctionObject>();
+    }
+
+    if (!isCallable)
+    {
+        TValue* retStart = reinterpret_cast<TValue*>(sfp);
+        retStart[0] = TValue::CreateBoolean(false);
+        retStart[1] = MakeErrorMessageForUnableToCall(func);
+
+        using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+        RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+        void* callerSf = hdr->m_caller;
+        [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retStart), 2 /*numReturnValues*/);
+    }
+
+    TValue* callBegin = reinterpret_cast<TValue*>(sfp) + 1;
+    callBegin[0] = TValue::CreatePointer(functionTarget);
+
+    uint32_t numArgsToCall = numArgs - 1;
+    SafeMemcpy(callBegin + x_numSlotsForStackFrameHeader, vaBegin + 1, sizeof(TValue) * numArgsToCall);
+    void* newStackFrameBase = SetupFrameForCall(rc, sfp, callBegin, functionTarget.As(), numArgsToCall, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(functionTarget.As()->m_executable).As();
+    uint8_t* calleeBytecode = calleeEc->m_bytecode;
+    InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+    [[clang::musttail]] return calleeFn(rc, newStackFrameBase, calleeBytecode, 0 /*unused*/);
 }
 
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
@@ -1023,6 +1503,9 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     insertCFunc(globalObject, "pairs", LJR_LIB_BASE_pairs);
     UserHeapPointer<FunctionObject> nextFn = insertCFunc(globalObject, "next", LJR_LIB_BASE_next);
     vm->InitLibBaseDotNextFunctionObject(TValue::CreatePointer(nextFn));
+    insertCFunc(globalObject, "error", LJR_LIB_BASE_error);
+    insertCFunc(globalObject, "xpcall", LJR_LIB_BASE_xpcall);
+    insertCFunc(globalObject, "pcall", LJR_LIB_BASE_pcall);
 
     HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
     insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
@@ -1812,8 +2295,8 @@ public:
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
         using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
         RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-        StackFrameHeader* callerSf = hdr->m_caller;
-        [[clang::musttail]] return retAddr(rc, static_cast<void*>(callerSf), reinterpret_cast<uint8_t*>(pbegin), numRetValues);
+        void* callerSf = hdr->m_caller;
+        [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(pbegin), numRetValues);
     }
 } __attribute__((__packed__));
 
@@ -1864,7 +2347,7 @@ inline void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sf
         baseForNextFrame = newStackFrameHdr + 1;
         newStackFrameHdr->m_func = target;
         newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(onReturn);
-        newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+        newStackFrameHdr->m_caller = sfp;
         newStackFrameHdr->m_numVariadicArguments = static_cast<uint32_t>(argEnd - argNeeded);
         SafeMemcpy(baseForNextFrame, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * calleeEc->m_numFixedArguments);
     }
@@ -1875,7 +2358,7 @@ inline void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sf
         // m_func is already in its expected place, so just fill the other fields
         //
         newStackFrameHdr->m_retAddr = reinterpret_cast<void*>(onReturn);
-        newStackFrameHdr->m_caller = reinterpret_cast<StackFrameHeader*>(sfp);
+        newStackFrameHdr->m_caller = sfp;
         newStackFrameHdr->m_numVariadicArguments = 0;
     }
 
@@ -1947,7 +2430,7 @@ public:
         }
     }
 
-    static void OnReturn(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> retValuesU, uint64_t numRetValues)
+    static void OnReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)
     {
         const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
@@ -2248,7 +2731,7 @@ public:
         }
     }
 
-    static void OnReturn(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> retValuesU, uint64_t numRetValues)
+    static void OnReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)
     {
         const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
         StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);

@@ -1,0 +1,27 @@
+-- test recursive error in error handler
+ 
+cnt = 0
+
+f = function(a, b)
+	print('enter f', a, b)
+	error(true)
+end
+
+g = function(err, x)
+	print('enter g', err, x)
+	cnt = cnt + 1
+	if cnt < 10 then
+		print('throwing error')
+		if cnt % 2 == 0 then
+			error(false)
+		else
+			error(true)
+		end
+		print('should never reach here')
+	else
+		return 1,2,3,4
+	end
+end
+
+print(xpcall(f, g))
+
