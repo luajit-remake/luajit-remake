@@ -747,6 +747,23 @@ inline void VM::LaunchScript(ScriptModule* module)
     cb->m_bestEntryPoint(rc, stackbase, cb->m_bytecode, 0 /*unused*/);
 }
 
+inline UserHeapPointer<FunctionObject> WARN_UNUSED GetCallTargetConsideringMetatableAndFixCallParameters(TValue* begin, uint32_t& numParams /*inout*/)
+{
+    TValue func = *begin;
+    GetCallTargetConsideringMetatableResult res = GetCallTargetConsideringMetatable(func);
+    if (likely(!res.m_invokedThroughMetatable))
+    {
+        return res.m_target;
+    }
+
+    assert(res.m_target.m_value != 0);
+    memmove(begin + x_numSlotsForStackFrameHeader + 1, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * numParams);
+    begin[x_numSlotsForStackFrameHeader] = func;
+    begin[0] = TValue::CreatePointer(res.m_target);
+    numParams++;
+    return res.m_target;
+}
+
 inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
@@ -1006,7 +1023,7 @@ void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sfp, TVal
 //                                 ^
 //                       return = onSuccessReturn
 
-//     If the Lua code encounters an error, we will walk the stack to find the first stack frame with 'return = onErrorReturn'.
+//     If the Lua code encounters an error, we will walk the stack to find the first stack frame with 'return = onSuccessReturn'.
 //     This allows us to locate the pcall/xpcall call frame.
 //
 //     pcall/xpcall always reserve local variable slot 0. For pcall, the slot stores 'false', and for xpcall the slot stores 'true'.
@@ -1355,22 +1372,16 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
         return errHandlerFrameStart;
     };
 
-    TValue func = vaBegin[0];
-    bool isCallable = false;
-    UserHeapPointer<FunctionObject> functionTarget;
+    TValue* callStart = reinterpret_cast<TValue*>(sfp) + 1;
+    *callStart = vaBegin[0];
+    uint32_t numParams = 0;
+    UserHeapPointer<FunctionObject> functionTarget = GetCallTargetConsideringMetatableAndFixCallParameters(callStart, numParams /*inout*/);
 
-    // TODO: handle metatable
-    //
-    if (func.IsPointer(TValue::x_mivTag) && func.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
-    {
-        isCallable = true;
-        functionTarget = func.AsPointer<FunctionObject>();
-    }
-
-    if (!isCallable)
+    if (functionTarget.m_value == 0)
     {
         // The function is not callable, so we should call the error handler.
         // Now, check if the error handler is a FunctionObject
+        // Note that Lua won't consider the metatable of the error handler: it must be a function in order to be called
         //
         TValue errHandler = vaBegin[1];
         if (errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
@@ -1378,7 +1389,7 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
             // The error handler is a function. We need to set up the dummy frame (see comments earlier) and call it
             //
             UserHeapPointer<FunctionObject> errHandlerFn = errHandler.AsPointer<FunctionObject>();
-            TValue* slotStart = createDummyFrameAndSetupFrameForErrorHandler(hdr /*curFrameHdr*/, errHandlerFn, MakeErrorMessageForUnableToCall(func));
+            TValue* slotStart = createDummyFrameAndSetupFrameForErrorHandler(hdr /*curFrameHdr*/, errHandlerFn, MakeErrorMessageForUnableToCall(vaBegin[0]));
             void* newStackFrameBase = SetupFrameForCall(
                         rc, slotStart, slotStart, errHandlerFn.As(),
                         1 /*numFixedParamsToPass*/, LJR_LIB_OnProtectedCallErrorReturn /*onReturn*/, false /*passVariadicRetsAsParam*/);
@@ -1406,8 +1417,7 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
 
     // Now we know the function is callable, call it
     //
-    reinterpret_cast<TValue*>(sfp)[1] = TValue::CreatePointer(functionTarget);
-    void* newStackFrameBase = SetupFrameForCall(rc, sfp, reinterpret_cast<TValue*>(sfp) + 1, functionTarget.As(), 0 /*numFixedParamsToPass*/, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
+    void* newStackFrameBase = SetupFrameForCall(rc, sfp, callStart, functionTarget.As(), numParams, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
 
     HeapPtr<ExecutableCode> calleeEc = TCGet(functionTarget.As()->m_executable).As();
     uint8_t* calleeBytecode = calleeEc->m_bytecode;
@@ -1435,23 +1445,17 @@ inline void LJR_LIB_BASE_pcall(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     //
     *reinterpret_cast<TValue*>(sfp) = TValue::CreateBoolean(false /*isXpcall*/);
 
-    TValue func = vaBegin[0];
-    bool isCallable = false;
-    UserHeapPointer<FunctionObject> functionTarget;
+    TValue* callStart = reinterpret_cast<TValue*>(sfp) + 1;
+    *callStart = vaBegin[0];
+    uint32_t numArgsToCall = numArgs - 1;
+    SafeMemcpy(callStart + x_numSlotsForStackFrameHeader, vaBegin + 1, sizeof(TValue) * numArgsToCall);
+    UserHeapPointer<FunctionObject> functionTarget = GetCallTargetConsideringMetatableAndFixCallParameters(callStart, numArgsToCall /*inout*/);
 
-    // TODO: handle metatable
-    //
-    if (func.IsPointer(TValue::x_mivTag) && func.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
-    {
-        isCallable = true;
-        functionTarget = func.AsPointer<FunctionObject>();
-    }
-
-    if (!isCallable)
+    if (functionTarget.m_value == 0)
     {
         TValue* retStart = reinterpret_cast<TValue*>(sfp);
         retStart[0] = TValue::CreateBoolean(false);
-        retStart[1] = MakeErrorMessageForUnableToCall(func);
+        retStart[1] = MakeErrorMessageForUnableToCall(vaBegin[0]);
 
         using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
         RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
@@ -1459,17 +1463,241 @@ inline void LJR_LIB_BASE_pcall(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
         [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retStart), 2 /*numReturnValues*/);
     }
 
-    TValue* callBegin = reinterpret_cast<TValue*>(sfp) + 1;
-    callBegin[0] = TValue::CreatePointer(functionTarget);
-
-    uint32_t numArgsToCall = numArgs - 1;
-    SafeMemcpy(callBegin + x_numSlotsForStackFrameHeader, vaBegin + 1, sizeof(TValue) * numArgsToCall);
-    void* newStackFrameBase = SetupFrameForCall(rc, sfp, callBegin, functionTarget.As(), numArgsToCall, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
+    void* newStackFrameBase = SetupFrameForCall(rc, sfp, callStart, functionTarget.As(), numArgsToCall, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
 
     HeapPtr<ExecutableCode> calleeEc = TCGet(functionTarget.As()->m_executable).As();
     uint8_t* calleeBytecode = calleeEc->m_bytecode;
     InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
     [[clang::musttail]] return calleeFn(rc, newStackFrameBase, calleeBytecode, 0 /*unused*/);
+}
+
+inline void LJR_LIB_BASE_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    if (numArgs == 0)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'getmetatable' (value expected)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue value = vaBegin[0];
+    UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
+
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    if (metatableMaybeNull.m_value == 0)
+    {
+        ret[0] = TValue::Nil();
+    }
+    else
+    {
+        HeapPtr<TableObject> tableObj = metatableMaybeNull.As<TableObject>();
+        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetatableKind::ProtectedMt);
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(tableObj, prop, icInfo /*out*/);
+        TValue result = TableObject::GetById(tableObj, prop.As<void>(), icInfo);
+        if (result.IsNil())
+        {
+            ret[0] = TValue::CreatePointer(metatableMaybeNull);
+        }
+        else
+        {
+            ret[0] = result;
+        }
+    }
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+}
+
+inline void LJR_LIB_DEBUG_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    if (numArgs == 0)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'getmetatable' (value expected)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue value = vaBegin[0];
+    UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
+
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    if (metatableMaybeNull.m_value == 0)
+    {
+        ret[0] = TValue::Nil();
+    }
+    else
+    {
+        ret[0] = TValue::CreatePointer(metatableMaybeNull);
+    }
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+}
+
+inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+    if (numArgs == 0)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'setmetatable' (table expected, got no value)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue value = vaBegin[0];
+    if (!value.IsPointer(TValue::x_mivTag) || value.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    {
+        // TODO: make this error message consistent with Lua
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'setmetatable' (table expected)").m_value);
+    }
+
+    if (numArgs == 1)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
+    }
+
+    TValue mt = vaBegin[1];
+    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    TableObject* obj = TranslateToRawPointer(vm, value.AsPointer<TableObject>().As());
+
+    UserHeapPointer<void> metatableMaybeNull = TableObject::GetMetatable(obj).m_result;
+    if (metatableMaybeNull.m_value != 0)
+    {
+        HeapPtr<TableObject> existingMetatable = metatableMaybeNull.As<TableObject>();
+        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetatableKind::ProtectedMt);
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
+        TValue result = TableObject::GetById(existingMetatable, prop.As<void>(), icInfo);
+        if (!result.IsNil())
+        {
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("cannot change a protected metatable").m_value);
+        }
+    }
+
+    if (!mt.IsNil())
+    {
+        obj->SetMetatable(vm, mt.AsPointer());
+    }
+    else
+    {
+        obj->RemoveMetatable(vm);
+    }
+
+    // The return value of 'setmetatable' is the original object
+    //
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    *ret = value;
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+}
+
+inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+
+    if (numArgs <= 1)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue value = vaBegin[0];
+    TValue mt = vaBegin[1];
+    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
+    }
+
+    auto setExoticMetatable = [&](UserHeapPointer<void>& metatable)
+    {
+        if (mt.IsNil())
+        {
+            metatable = UserHeapPointer<void>();
+        }
+        else
+        {
+            metatable = mt.AsPointer();
+        }
+    };
+
+    if (value.IsPointer(TValue::x_mivTag))
+    {
+        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+
+        if (ty == Type::TABLE)
+        {
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            TableObject* obj = TranslateToRawPointer(vm, value.AsPointer<TableObject>().As());
+            if (!mt.IsNil())
+            {
+                obj->SetMetatable(vm, mt.AsPointer());
+            }
+            else
+            {
+                obj->RemoveMetatable(vm);
+            }
+        }
+        else if (ty == Type::STRING)
+        {
+            setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForString);
+        }
+        else if (ty == Type::FUNCTION)
+        {
+            setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForFunction);
+        }
+        else if (ty == Type::THREAD)
+        {
+            setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+    else if (value.IsMIV(TValue::x_mivTag))
+    {
+        if (value.IsNil())
+        {
+            setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
+        }
+        else
+        {
+            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
+        }
+    }
+    else
+    {
+        assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+        setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
+    }
+
+    // The return value of 'debug.setmetatable' is 'true' in Lua 5.1, but the original object in Lua 5.2 and higher
+    // For now we implement Lua 5.1 behavior
+    //
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    *ret = TValue::CreateBoolean(true);
+
+    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
+    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
+    void* callerSf = hdr->m_caller;
+    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
 }
 
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
@@ -1506,12 +1734,18 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     insertCFunc(globalObject, "error", LJR_LIB_BASE_error);
     insertCFunc(globalObject, "xpcall", LJR_LIB_BASE_xpcall);
     insertCFunc(globalObject, "pcall", LJR_LIB_BASE_pcall);
+    insertCFunc(globalObject, "getmetatable", LJR_LIB_BASE_getmetatable);
+    insertCFunc(globalObject, "setmetatable", LJR_LIB_BASE_setmetatable);
 
     HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
     insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
 
     HeapPtr<TableObject> ioObj = insertObject(globalObject, "io", 16);
     insertCFunc(ioObj, "write", LJR_LIB_IO_write);
+
+    HeapPtr<TableObject> debugObj = insertObject(globalObject, "debug", 16);
+    insertCFunc(debugObj, "getmetatable", LJR_LIB_DEBUG_getmetatable);
+    insertCFunc(debugObj, "setmetatable", LJR_LIB_DEBUG_setmetatable);
 
     return globalObject;
 }
@@ -2401,33 +2635,21 @@ public:
 
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
-        TValue func = *begin;
 
-        if (func.IsPointer(TValue::x_mivTag))
+        uint32_t numParams = bc->m_numFixedParams;
+        UserHeapPointer<FunctionObject> targetMaybeNull = GetCallTargetConsideringMetatableAndFixCallParameters(begin, numParams /*inout*/);
+        if (targetMaybeNull.m_value == 0)
         {
-            if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
-            {
-                HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
-                HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
-                void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, bc->m_numFixedParams, OnReturn, bc->m_passVariadicRetAsParam);
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(*begin).m_value);
+        }
 
-                _Pragma("clang diagnostic push")
-                _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
-                uint64_t unused;
-                uint8_t* calleeBytecode = calleeEc->m_bytecode;
-                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
-                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, unused);
-                _Pragma("clang diagnostic pop")
-            }
-            else
-            {
-                assert(false && "unimplemented");
-            }
-        }
-        else
-        {
-            assert(false && "unimplemented");
-        }
+        HeapPtr<FunctionObject> target = targetMaybeNull.As();
+        HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+        void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, numParams, OnReturn, bc->m_passVariadicRetAsParam);
+
+        uint8_t* calleeBytecode = calleeEc->m_bytecode;
+        InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, 0 /*unused*/);
     }
 
     static void OnReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)
@@ -2506,104 +2728,92 @@ public:
 
         assert(bc->m_funcSlot.IsLocal());
         TValue* begin = StackFrameHeader::GetLocalAddr(sfp, bc->m_funcSlot);
-        TValue func = *begin;
-        TValue* argEnd = begin + x_numSlotsForStackFrameHeader + bc->m_numFixedParams;
+        uint32_t numParams = bc->m_numFixedParams;
 
-        if (func.IsPointer(TValue::x_mivTag))
+        UserHeapPointer<FunctionObject> targetMaybeNull = GetCallTargetConsideringMetatableAndFixCallParameters(begin, numParams /*inout*/);
+        if (targetMaybeNull.m_value == 0)
         {
-            if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(*begin).m_value);
+        }
+
+        TValue* argEnd = begin + x_numSlotsForStackFrameHeader + numParams;
+        HeapPtr<FunctionObject> target = targetMaybeNull.As<FunctionObject>();
+
+        // First, if the call passes variadic ret as param, copy them to the expected location
+        //
+        if (unlikely(bc->m_passVariadicRetAsParam))
+        {
+            // Fast path for the common case: the variadic ret has 1 value
+            // Directly write *varRetbegin to *argEnd even if the # of variadic ret is 0 to save a branch, since this slot is overwritable any way
+            //
+            TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
+            *argEnd = *varRetbegin;
+            if (unlikely(rc->m_numVariadicRets > 1))
             {
-                HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
-
-                // First, if the call passes variadic ret as param, copy them to the expected location
-                //
-                if (unlikely(bc->m_passVariadicRetAsParam))
-                {
-                    // Fast path for the common case: the variadic ret has 1 value
-                    // Directly write *varRetbegin to *argEnd even if the # of variadic ret is 0 to save a branch, since this slot is overwritable any way
-                    //
-                    TValue* varRetbegin = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
-                    *argEnd = *varRetbegin;
-                    if (unlikely(rc->m_numVariadicRets > 1))
-                    {
-                        memmove(argEnd, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
-                    }
-                    argEnd += rc->m_numVariadicRets;
-                }
-
-                HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
-                TValue* argNeeded = begin + x_numSlotsForStackFrameHeader + calleeEc->m_numFixedArguments;
-
-                // Pad in nils if necessary
-                //
-                if (unlikely(argEnd < argNeeded))
-                {
-                    TValue val = TValue::Nil();
-                    while (argEnd < argNeeded)
-                    {
-                        *argEnd = val;
-                        argEnd++;
-                    }
-                }
-
-                // Set up the stack frame header
-                //
-                bool needRelocate = calleeEc->m_hasVariadicArguments && argEnd > argNeeded;
-                void* baseForNextFrame;
-                void* callerFrameLowestAddress = reinterpret_cast<TValue*>(hdr) - hdr->m_numVariadicArguments;
-                if (unlikely(needRelocate))
-                {
-                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(argEnd);
-                    newStackFrameHdr->m_func = target;
-                    newStackFrameHdr->m_retAddr = hdr->m_retAddr;
-                    newStackFrameHdr->m_caller = hdr->m_caller;
-                    newStackFrameHdr->m_callerBytecodeOffset = hdr->m_callerBytecodeOffset;
-                    uint32_t numVarArgs = static_cast<uint32_t>(argEnd - argNeeded);
-                    newStackFrameHdr->m_numVariadicArguments = numVarArgs;
-                    SafeMemcpy(newStackFrameHdr + 1, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * calleeEc->m_numFixedArguments);
-                    // Now we have a fully set up new stack frame, overwrite current stack frame by moving it to the lowest address of current stack frame
-                    // This provides the semantics of proper tail call (no stack overflow even with unbounded # of tail calls)
-                    //
-                    memmove(callerFrameLowestAddress, reinterpret_cast<TValue*>(newStackFrameHdr) - numVarArgs, sizeof(TValue) * static_cast<size_t>(argEnd - begin));
-                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + numVarArgs + x_numSlotsForStackFrameHeader;
-                }
-                else
-                {
-                    StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(begin);
-                    // m_func is already in its expected place, so just fill the other fields
-                    //
-                    newStackFrameHdr->m_retAddr = hdr->m_retAddr;
-                    newStackFrameHdr->m_caller = hdr->m_caller;
-                    newStackFrameHdr->m_callerBytecodeOffset = hdr->m_callerBytecodeOffset;
-                    newStackFrameHdr->m_numVariadicArguments = 0;
-                    // Move to lowest address, see above
-                    //
-                    memmove(callerFrameLowestAddress, newStackFrameHdr, sizeof(TValue) * static_cast<size_t>(argNeeded - begin));
-                    baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + x_numSlotsForStackFrameHeader;
-                }
-
-                // This static_cast actually doesn't always hold
-                // But if callee is not a bytecode function, the callee will never look at m_codeBlock, so it's fine
-                //
-                rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(calleeEc));
-
-                _Pragma("clang diagnostic push")
-                _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
-                uint64_t unused;
-                uint8_t* calleeBytecode = calleeEc->m_bytecode;
-                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
-                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, unused);
-                _Pragma("clang diagnostic pop")
+                memmove(argEnd, varRetbegin, sizeof(TValue) * rc->m_numVariadicRets);
             }
-            else
+            argEnd += rc->m_numVariadicRets;
+        }
+
+        HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+        TValue* argNeeded = begin + x_numSlotsForStackFrameHeader + calleeEc->m_numFixedArguments;
+
+        // Pad in nils if necessary
+        //
+        if (unlikely(argEnd < argNeeded))
+        {
+            TValue val = TValue::Nil();
+            while (argEnd < argNeeded)
             {
-                assert(false && "unimplemented");
+                *argEnd = val;
+                argEnd++;
             }
+        }
+
+        // Set up the stack frame header
+        //
+        bool needRelocate = calleeEc->m_hasVariadicArguments && argEnd > argNeeded;
+        void* baseForNextFrame;
+        void* callerFrameLowestAddress = reinterpret_cast<TValue*>(hdr) - hdr->m_numVariadicArguments;
+        if (unlikely(needRelocate))
+        {
+            StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(argEnd);
+            newStackFrameHdr->m_func = target;
+            newStackFrameHdr->m_retAddr = hdr->m_retAddr;
+            newStackFrameHdr->m_caller = hdr->m_caller;
+            newStackFrameHdr->m_callerBytecodeOffset = hdr->m_callerBytecodeOffset;
+            uint32_t numVarArgs = static_cast<uint32_t>(argEnd - argNeeded);
+            newStackFrameHdr->m_numVariadicArguments = numVarArgs;
+            SafeMemcpy(newStackFrameHdr + 1, begin + x_numSlotsForStackFrameHeader, sizeof(TValue) * calleeEc->m_numFixedArguments);
+            // Now we have a fully set up new stack frame, overwrite current stack frame by moving it to the lowest address of current stack frame
+            // This provides the semantics of proper tail call (no stack overflow even with unbounded # of tail calls)
+            //
+            memmove(callerFrameLowestAddress, reinterpret_cast<TValue*>(newStackFrameHdr) - numVarArgs, sizeof(TValue) * static_cast<size_t>(argEnd - begin));
+            baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + numVarArgs + x_numSlotsForStackFrameHeader;
         }
         else
         {
-            assert(false && "unimplemented");
+            StackFrameHeader* newStackFrameHdr = reinterpret_cast<StackFrameHeader*>(begin);
+            // m_func is already in its expected place, so just fill the other fields
+            //
+            newStackFrameHdr->m_retAddr = hdr->m_retAddr;
+            newStackFrameHdr->m_caller = hdr->m_caller;
+            newStackFrameHdr->m_callerBytecodeOffset = hdr->m_callerBytecodeOffset;
+            newStackFrameHdr->m_numVariadicArguments = 0;
+            // Move to lowest address, see above
+            //
+            memmove(callerFrameLowestAddress, newStackFrameHdr, sizeof(TValue) * static_cast<size_t>(argNeeded - begin));
+            baseForNextFrame = reinterpret_cast<TValue*>(callerFrameLowestAddress) + x_numSlotsForStackFrameHeader;
         }
+
+        // This static_cast actually doesn't always hold
+        // But if callee is not a bytecode function, the callee will never look at m_codeBlock, so it's fine
+        //
+        rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(calleeEc));
+
+        uint8_t* calleeBytecode = calleeEc->m_bytecode;
+        InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, 0 /*unused*/);
     }
 } __attribute__((__packed__));
 
@@ -2702,33 +2912,21 @@ public:
         begin[0] = begin[-3];
         begin[x_numSlotsForStackFrameHeader] = begin[-2];
         begin[x_numSlotsForStackFrameHeader + 1] = begin[-1];
-        TValue func = *begin;
 
-        if (func.IsPointer(TValue::x_mivTag))
+        uint32_t numParams = 2;
+        UserHeapPointer<FunctionObject> targetMaybeNull = GetCallTargetConsideringMetatableAndFixCallParameters(begin, numParams /*inout*/);
+        if (targetMaybeNull.m_value == 0)
         {
-            if (func.AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::FUNCTION)
-            {
-                HeapPtr<FunctionObject> target = func.AsPointer().As<FunctionObject>();
-                HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
-                void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, 2 /*numFixedParams*/, OnReturn, false /*passVariadicRetAsParam*/);
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(*begin).m_value);
+        }
 
-                _Pragma("clang diagnostic push")
-                _Pragma("clang diagnostic ignored \"-Wuninitialized\"")
-                uint64_t unused;
-                uint8_t* calleeBytecode = calleeEc->m_bytecode;
-                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
-                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, unused);
-                _Pragma("clang diagnostic pop")
-            }
-            else
-            {
-                assert(false && "unimplemented");
-            }
-        }
-        else
-        {
-            assert(false && "unimplemented");
-        }
+        HeapPtr<FunctionObject> target = targetMaybeNull.As();
+        HeapPtr<ExecutableCode> calleeEc = TCGet(target->m_executable).As();
+        void* baseForNextFrame = SetupFrameForCall(rc, sfp, begin, target, numParams, OnReturn, false /*passVariadicRetAsParam*/);
+
+        uint8_t* calleeBytecode = calleeEc->m_bytecode;
+        InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, 0 /*unused*/);
     }
 
     static void OnReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t numRetValues)

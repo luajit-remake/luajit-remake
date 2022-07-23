@@ -21,6 +21,42 @@ inline bool IsCompilerThread() { return t_threadKind == CompilerThread; }
 inline bool IsExecutionThread() { return t_threadKind == ExecutionThread; }
 inline bool IsGCThread() { return t_threadKind == GCThread; }
 
+#define METATABLE_NAME_LIST             \
+    /* Enum Name,    String Name */     \
+    (Call,           __call)            \
+  , (Add,            __add)             \
+  , (Sub,            __sub)             \
+  , (Mul,            __mul)             \
+  , (Div,            __div)             \
+  , (Mod,            __mod)             \
+  , (Pow,            __pow)             \
+  , (Unm,            __unm)             \
+  , (Concat,         __concat)          \
+  , (Len,            __len)             \
+  , (Eq,             __eq)              \
+  , (Lt,             __lt)              \
+  , (Le,             __le)              \
+  , (Index,          __index)           \
+  , (NewIndex,       __newindex)        \
+  , (ProtectedMt,    __metatable)
+
+enum class LuaMetatableKind
+{
+#define macro(e) PP_TUPLE_GET_1(e),
+    PP_FOR_EACH(macro, METATABLE_NAME_LIST)
+#undef macro
+};
+
+#define macro(e) +1
+constexpr size_t x_totalLuaMetatableKind = 0 PP_FOR_EACH(macro, METATABLE_NAME_LIST);
+#undef macro
+
+constexpr const char* x_luaMetatableStringName[x_totalLuaMetatableKind] = {
+#define macro(e) PP_STRINGIFY(PP_TUPLE_GET_2(e)),
+    PP_FOR_EACH(macro, METATABLE_NAME_LIST)
+#undef macro
+};
+
 // Normally for each class type, we use one free list for compiler thread and one free list for execution thread.
 // However, some classes may be allocated on the compiler thread but freed on the execution thread.
 // If that is the case, we should use a lockfree freelist to make sure the freelist is effective
@@ -828,12 +864,24 @@ public:
     bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
+        for (size_t i = 0; i < x_totalLuaMetatableKind; i++)
+        {
+            m_stringNameForMetatableKind[i] = static_cast<CRTP*>(this)->CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
+        }
         for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
         {
             m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
         }
         m_filePointerForStdout = stdout;
         m_filePointerForStderr = stderr;
+
+        m_metatableForNil = UserHeapPointer<void>();
+        m_metatableForBoolean = UserHeapPointer<void>();
+        m_metatableForNumber = UserHeapPointer<void>();
+        m_metatableForString = UserHeapPointer<void>();
+        m_metatableForFunction = UserHeapPointer<void>();
+        m_metatableForCoroutine = UserHeapPointer<void>();
+
         CreateRootCoroutine();
         return true;
     }
@@ -870,10 +918,22 @@ public:
         return m_ljrLibBaseDotNextFunctionObject;
     }
 
+    UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetatableKind kind)
+    {
+        return m_stringNameForMetatableKind[static_cast<size_t>(kind)];
+    }
+
+    static constexpr size_t OffsetofStringNameForMetatableKind()
+    {
+        return offsetof_base_v<VMGlobalDataManager, CRTP> + offsetof_member_v<&VMGlobalDataManager::m_stringNameForMetatableKind>;
+    }
+
 private:
     void CreateRootCoroutine();
 
     CoroutineRuntimeContext* m_rootCoroutine;
+
+    std::array<UserHeapPointer<HeapString>, x_totalLuaMetatableKind> m_stringNameForMetatableKind;
 
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
 
@@ -886,6 +946,16 @@ private:
     //
     FILE* m_filePointerForStdout;
     FILE* m_filePointerForStderr;
+
+public:
+    // Per-type Lua metatables
+    //
+    UserHeapPointer<void> m_metatableForNil;
+    UserHeapPointer<void> m_metatableForBoolean;
+    UserHeapPointer<void> m_metatableForNumber;
+    UserHeapPointer<void> m_metatableForString;
+    UserHeapPointer<void> m_metatableForFunction;
+    UserHeapPointer<void> m_metatableForCoroutine;
 };
 
 class ScriptModule;
@@ -930,6 +1000,12 @@ inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
 {
     constexpr size_t offset = VM::OffsetofSpecialKeyForBooleanIndex();
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(v)]);
+}
+
+inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetatableKind kind)
+{
+    constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
+    return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
 }
 
 }   // namespace ToyLang

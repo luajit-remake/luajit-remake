@@ -433,14 +433,34 @@ struct PutByIntegerIndexICInfo
     SystemHeapPointer<void> m_newHiddenClass;
 };
 
+struct GetCallTargetConsideringMetatableResult
+{
+    // If m_target.m_value == 0, an error shall be thrown
+    //
+    UserHeapPointer<FunctionObject> m_target;
+    // If this is true, it means the call happened through an metatable, so the passed in 'value' needs to be prepended as the first parameter
+    //
+    bool m_invokedThroughMetatable;
+};
+
+// In Lua 5.1-5.3, the '__call' metamethod is non-recursive: say mt_a.__call = b, and 'b' is not
+// a function, the VM will throw an error, instead of recursively considering the metatable for 'b'
+// We support Lua 5.1 behavior for now.
+//
+// In Lua 5.4 this behavior has changed and __call can be recursive, and this function will need to be extended correspondingly.
+//
+GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsideringMetatable(TValue value);
+
 class alignas(8) TableObject
 {
 public:
     static bool WARN_UNUSED ALWAYS_INLINE IsInt64Index(double vidx, int64_t& idx /*out*/)
     {
-        // FIXME: converting NaN to integer is UB and clang can actually generate faulty code
-        // if it can deduce that for some call the 'vidx' is NaN! However, if we manually check isnan,
-        // while it worksaround the UB, clang cannot optimize the check away and generates inferior code,
+        // FIXME: float-to-int conversion is UB in C/C++, and it can actually cause incorrect behavior either if
+        // clang deduces 'vidx' is out-of-range (and cause undesired "optimization" of the expression into a poison value),
+        // or on non-x86-64 architectures (e.g. ARM64) where the float-to-int instruction has saturation or other semantics.
+        // However, if we manually check for the range, while it worksaround the UB and works correctly on every
+        // architecture, clang cannot optimize the check away on x86-64 and generates inferior code on x86-64,
         // so we leave the code with the UB as for now.
         //
         idx = static_cast<int64_t>(vidx);
@@ -1953,6 +1973,170 @@ public:
         return TranslateToHeapPtr(r);
     }
 
+    struct GetMetatableResult
+    {
+        // The resulted metatable
+        //
+        UserHeapPointer<void> m_result;
+        // Whether one can IC this result using the hidden class
+        //
+        bool m_isCacheable;
+    };
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static GetMetatableResult GetMetatable(T self)
+    {
+        SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
+        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+
+        if (likely(ty == Type::Structure))
+        {
+            HeapPtr<Structure> structure = hc.As<Structure>();
+            if (Structure::HasNoMetatable(structure))
+            {
+                // Any object with this structure is guaranteed to have no metatable
+                //
+                return GetMetatableResult {
+                    .m_result = {},
+                    .m_isCacheable = true
+                };
+            }
+            else if (Structure::HasMonomorphicMetatable(structure))
+            {
+                // Any object with this structure is guaranteed to have the same metatable
+                //
+                return GetMetatableResult {
+                    .m_result = Structure::GetMonomorphicMetatable(structure),
+                    .m_isCacheable = true
+                };
+            }
+            else
+            {
+                assert(Structure::IsPolyMetatable(structure));
+                UserHeapPointer<void> res = GetPolyMetatableFromObjectWithStructureHiddenClass(TranslateToRawPointer(self), Structure::GetPolyMetatableSlot(structure), structure->m_inlineNamedStorageCapacity);
+                return GetMetatableResult {
+                    .m_result = res,
+                    .m_isCacheable = false
+                };
+            }
+        }
+        else if (ty == Type::CacheableDictionary)
+        {
+            HeapPtr<CacheableDictionary> cd = hc.As<CacheableDictionary>();
+            return GetMetatableResult {
+                .m_result = TCGet(cd->m_metatable),
+                .m_isCacheable = true
+            };
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    void SetMetatable(VM* vm, UserHeapPointer<void> newMetatable)
+    {
+        assert(newMetatable.m_value != 0);
+        SystemHeapPointer<void> hc = m_hiddenClass;
+        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+
+        if (likely(ty == Type::Structure))
+        {
+            Structure* structure = TranslateToRawPointer(vm, hc.As<Structure>());
+            Structure::AddMetatableResult result;
+            structure->SetMetatable(vm, newMetatable, result /*out*/);
+
+            if (unlikely(result.m_shouldInsertMetatable))
+            {
+                if (unlikely(result.m_shouldGrowButterfly))
+                {
+                    GrowButterfly<true /*isGrowNamedStorage*/>(result.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+                }
+
+                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                if (result.m_slotOrdinal < inlineStorageCapacity)
+                {
+                    m_inlineStorage[result.m_slotOrdinal] = TValue::CreatePointer(newMetatable);
+
+                }
+                else
+                {
+                    assert(m_butterfly != nullptr);
+                    *m_butterfly->GetNamedPropertyAddr(Butterfly::GetOutlineStorageIndex(result.m_slotOrdinal, inlineStorageCapacity)) = TValue::CreatePointer(newMetatable);
+                }
+            }
+            m_hiddenClass = result.m_newStructure.As();
+        }
+        else if (ty == Type::CacheableDictionary)
+        {
+            CacheableDictionary* cd = TranslateToRawPointer(vm, hc.As<CacheableDictionary>());
+            if (cd->m_metatable == newMetatable)
+            {
+                // The metatable is unchanged, no-op
+                //
+                return;
+            }
+
+            CacheableDictionary* newCd = cd->RelocateForAddingOrRemovingMetatable(vm);
+            newCd->m_metatable = newMetatable.As();
+            m_hiddenClass = newCd;
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    void RemoveMetatable(VM* vm)
+    {
+        SystemHeapPointer<void> hc = m_hiddenClass;
+        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+
+        if (likely(ty == Type::Structure))
+        {
+            Structure* structure = TranslateToRawPointer(vm, hc.As<Structure>());
+            Structure::RemoveMetatableResult result;
+            structure->RemoveMetatable(vm, result /*out*/);
+
+            if (unlikely(result.m_shouldInsertMetatable))
+            {
+                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                if (result.m_slotOrdinal < inlineStorageCapacity)
+                {
+                    m_inlineStorage[result.m_slotOrdinal] = TValue::Nil();
+
+                }
+                else
+                {
+                    assert(m_butterfly != nullptr);
+                    *m_butterfly->GetNamedPropertyAddr(Butterfly::GetOutlineStorageIndex(result.m_slotOrdinal, inlineStorageCapacity)) = TValue::Nil();
+                }
+            }
+            m_hiddenClass = result.m_newStructure.As();
+        }
+        else if (ty == Type::CacheableDictionary)
+        {
+            CacheableDictionary* cd = TranslateToRawPointer(vm, hc.As<CacheableDictionary>());
+            if (cd->m_metatable.m_value == 0)
+            {
+                // The metatable is unchanged, no-op
+                //
+                return;
+            }
+
+            CacheableDictionary* newCd = cd->RelocateForAddingOrRemovingMetatable(vm);
+            newCd->m_metatable.m_value = 0;
+            m_hiddenClass = newCd;
+        }
+        else
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+    }
+
     static uint32_t WARN_UNUSED GetTableLengthWithLuaSemanticsSlowPath(ArraySparseMap* sparseMap, uint32_t existentLb)
     {
         assert(existentLb > 0);
@@ -2121,6 +2305,134 @@ public:
     TValue m_inlineStorage[0];
 };
 static_assert(sizeof(TableObject) == 16);
+
+inline UserHeapPointer<void> GetMetatableForValue(TValue value)
+{
+    if (likely(value.IsPointer(TValue::x_mivTag)))
+    {
+        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+
+        if (likely(ty == Type::TABLE))
+        {
+            HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
+            TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+            return result.m_result;
+        }
+
+        if (ty == Type::STRING)
+        {
+            return VM::GetActiveVMForCurrentThread()->m_metatableForString;
+        }
+
+        if (ty == Type::FUNCTION)
+        {
+            return VM::GetActiveVMForCurrentThread()->m_metatableForFunction;
+        }
+
+        if (ty == Type::THREAD)
+        {
+            return VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine;
+        }
+
+        ReleaseAssert(false && "unimplemented");
+    }
+
+    if (value.IsMIV(TValue::x_mivTag))
+    {
+        if (value.IsNil())
+        {
+            return VM::GetActiveVMForCurrentThread()->m_metatableForNil;
+        }
+        else
+        {
+            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            return VM::GetActiveVMForCurrentThread()->m_metatableForBoolean;
+        }
+    }
+
+    assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+    return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
+}
+
+inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsideringMetatable(TValue value)
+{
+    auto getCallMetamethod = [](UserHeapPointer<void> metatableMaybeNull) -> GetCallTargetConsideringMetatableResult
+    {
+        if (metatableMaybeNull.m_value == 0)
+        {
+            return GetCallTargetConsideringMetatableResult {
+                .m_target = UserHeapPointer<FunctionObject>(),
+                .m_invokedThroughMetatable = false
+            };
+        }
+        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == Type::TABLE);
+        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Call), icInfo /*out*/);
+        TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Call).As<void>(), icInfo);
+        if (likely(target.IsPointer(TValue::x_mivTag) && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION))
+        {
+            return GetCallTargetConsideringMetatableResult {
+                .m_target = target.AsPointer<FunctionObject>(),
+                .m_invokedThroughMetatable = true
+            };
+        }
+        else
+        {
+            return GetCallTargetConsideringMetatableResult {
+                .m_target = UserHeapPointer<FunctionObject>(),
+                .m_invokedThroughMetatable = false
+            };
+        }
+    };
+
+    if (likely(value.IsPointer(TValue::x_mivTag)))
+    {
+        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+        if (likely(ty == Type::FUNCTION))
+        {
+            return GetCallTargetConsideringMetatableResult {
+                .m_target = value.AsPointer<FunctionObject>(),
+                .m_invokedThroughMetatable = false
+            };
+        }
+
+        if (likely(ty == Type::TABLE))
+        {
+            HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
+            TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+            return getCallMetamethod(result.m_result);
+        }
+
+        if (ty == Type::STRING)
+        {
+            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForString);
+        }
+
+        if (ty == Type::THREAD)
+        {
+            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
+        }
+
+        ReleaseAssert(false && "unimplemented");
+    }
+
+    if (value.IsMIV(TValue::x_mivTag))
+    {
+        if (value.IsNil())
+        {
+            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
+        }
+        else
+        {
+            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
+        }
+    }
+
+    assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+    return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
+}
 
 // TableObjectIterator: the class used by Lua to iterate all key-value pairs in a table
 //
@@ -2502,9 +2814,11 @@ get_next_from_sparse_map:
 //
 static_assert(sizeof(TableObjectIterator) == 8);
 
-inline UserHeapPointer<void> CacheableDictionary::GetPolyMetatableFromObject(TableObject* obj, uint32_t slot, uint32_t inlineCapacity, uint32_t DEBUG_ONLY(outlineCapacity))
+inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructureHiddenClass(TableObject* obj, uint32_t slot, uint32_t inlineCapacity)
 {
-    assert(slot < inlineCapacity + outlineCapacity);
+    assert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure);
+    assert(Structure::IsPolyMetatable(obj->m_hiddenClass.As<Structure>()));
+    assert(Structure::GetPolyMetatableSlot(obj->m_hiddenClass.As<Structure>()) == slot);
     TValue res;
     if (slot < inlineCapacity)
     {
@@ -2521,7 +2835,7 @@ inline UserHeapPointer<void> CacheableDictionary::GetPolyMetatableFromObject(Tab
     }
     else
     {
-        ReleaseAssert(res.IsPointer(TValue::x_mivTag));
+        assert(res.IsPointer(TValue::x_mivTag));
         return res.AsPointer<void>();
     }
 }

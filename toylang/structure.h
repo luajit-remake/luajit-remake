@@ -1044,6 +1044,12 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static bool WARN_UNUSED HasNoMetatable(T self)
+    {
+        return self->m_metatable == 0;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static bool WARN_UNUSED HasMonomorphicMetatable(T self)
     {
         return self->m_metatable < 0;
@@ -1054,6 +1060,13 @@ public:
     {
         assert(IsPolyMetatable(self));
         return static_cast<uint32_t>(self->m_metatable - 1);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
+    static HeapPtr<TableObject> WARN_UNUSED GetMonomorphicMetatable(T self)
+    {
+        assert(HasMonomorphicMetatable(self));
+        return GeneralHeapPointer<TableObject>(self->m_metatable).As();
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
@@ -1293,6 +1306,8 @@ private:
 };
 static_assert(sizeof(StructureIterator) == 16);
 
+UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructureHiddenClass(TableObject* obj, uint32_t slot, uint32_t inlineCapacity);
+
 class CacheableDictionary final : public SystemHeapGcObjectHeader
 {
 public:
@@ -1329,6 +1344,8 @@ public:
         return r;
     }
 
+    // FIXME: we need to think about the GC story and interaction with IC here
+    //
     CacheableDictionary* WARN_UNUSED RelocateForAddingOrRemovingMetatable(VM* vm)
     {
         CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
@@ -1389,8 +1406,6 @@ public:
         }
     }
 
-    static UserHeapPointer<void> GetPolyMetatableFromObject(TableObject* obj, uint32_t slot, uint32_t inlineCapacity, uint32_t outlineCapacity);
-
     // Handle the case that a structure transitions to a CacheableDictionary due to too many properties
     //
     static void CreateFromStructure(VM* vm, TableObject* obj, Structure* structure, UserHeapPointer<void> newProp, CreateFromStructureResult& result /*out*/)
@@ -1413,7 +1428,7 @@ public:
         r->m_butterflyNamedStorageCapacity = structure->m_butterflyNamedStorageCapacity;
         if (Structure::IsPolyMetatable(structure))
         {
-            r->m_metatable = GetPolyMetatableFromObject(obj, Structure::GetPolyMetatableSlot(structure), structure->m_inlineNamedStorageCapacity, structure->m_butterflyNamedStorageCapacity);
+            r->m_metatable = GetPolyMetatableFromObjectWithStructureHiddenClass(obj, Structure::GetPolyMetatableSlot(structure), structure->m_inlineNamedStorageCapacity);
         }
         else
         {
@@ -2606,7 +2621,7 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
     }
     else if (m_parentEdgeTransitionKind == TransitionKind::AddMetaTable)
     {
-        assert(HasMonomorphicMetatable(this) && m_parent.As()->m_metatable == 0);
+        assert(HasMonomorphicMetatable(this) && HasNoMetatable(m_parent.As()));
         // We can simply transit back to parent. Note that we only do this for monomorphic case,
         // since PolyMetatable may have involved a butterfly expansion. Just make things simple for now.
         //

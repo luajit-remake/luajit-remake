@@ -1335,4 +1335,95 @@ TEST(LuaBenchmark, pcall_2)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaBenchmark, GetSetMetatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/get_set_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "--- part 1 ---\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "--- part 2 ---\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "--- part 3 ---\n"
+            "nil\n"
+            "nil\n"
+            "t\n"
+            "mt_t\n"
+            "mt_t\n"
+            "abcdefg\n"
+            "mt_t\n"
+            "false\n"
+            "true\n"
+            "overwritten\n"
+            "overwritten\n"
+            "--- part 4 ---\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "--- part 5 ---\n"
+            "true\n"
+            "true\n"
+            "true\n"
+            "nil_mt\n"
+            "nil_mt\n"
+            "bool_mt\n"
+            "bool_mt\n"
+            "bool_mt\n"
+            "bool_mt\n"
+            "number_mt\n"
+            "number_mt\n"
+            "func_mt\n"
+            "func_mt\n"
+            "string_mt\n"
+            "string_mt\n"
+            "--- part 6 ---\n"
+            "protect!\n"
+            "nil_mt\n"
+            "true\n"
+            "nil_mt_2\n"
+            "--- part 7 ---\n"
+            "true\n"
+            "nil\n"
+            "false\n"
+            "true\n"
+            "nil\n"
+            "nil\n"
+            "t\n"
+            "mt_t_2\n"
+            "t\n"
+            "nil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace
