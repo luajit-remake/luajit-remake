@@ -1638,4 +1638,80 @@ TEST(LuaTest, pcall_metatable)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_add_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_add_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "687\n"
+            "138\n"
+            "139\n"
+            "1515\n"
+            "723\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_add_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_add_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "5050\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

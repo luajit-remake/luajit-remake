@@ -249,6 +249,8 @@ TEST(CallOpcode, Sanity)
                 callOp->m_numFixedParams = numFixedParams;
                 callOp->m_passVariadicRetAsParam = passVariadicRet;
 
+                rc.m_codeBlock = callerCb;
+
                 BcCall::Execute(&rc, locals, callerCb->m_bytecode, 0 /*unused*/);
 
                 ReleaseAssert(info.m_checkerHasExecuted);
