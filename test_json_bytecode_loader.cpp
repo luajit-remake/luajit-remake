@@ -1714,4 +1714,41 @@ TEST(LuaTest, metatable_add_2)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_add_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_add_3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "3\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "16.2\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "16.2\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "18\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "30\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+
+
 }   // anonymous namespace
