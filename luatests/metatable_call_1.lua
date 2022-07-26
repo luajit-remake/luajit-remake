@@ -1,37 +1,62 @@
-
-
-function f(a, b, c, d)
-	print(a,b,c,d)
+function f1(a, b, c, d)
+	print(a.name,b,c,d)
 	return 1,2,3
 end
 
-debug.setmetatable(nil, {
-	__call = f
+t1 = { name = "t1" }
+setmetatable(t1, {
+	__call = f1
 })
+print(t1(1))
 
-g = nil
-g(1)
+function f2(a, b, c, d)
+	print(a,b,c,d)
+	return 2,3,4
+end
+
+debug.setmetatable("2", {
+	__call = f2
+})
+print(("3")(4))
+
+t2 = nil
+
+debug.setmetatable(nil, {
+	__call = f2
+})
+print(t2(5))
 
 debug.setmetatable(false, {
-	__call = f
+	__call = f2
 })
 
-g = false
-g(1)
+t3 = false
+print(t3(6))
 
-g = true
-g(1)
+t3 = true
+print(t3(7))
 
+print((pcall(function()
+	local t4 = {}
+	t4(123)
+end)))
 
-h = {}
-debug.setmetatable("2", {
-	__call = f
+t5 = {}
+setmetatable(t5, {
+	__call = "233"
 })
+print((pcall(function()
+	-- recursive __call is not supported in Lua 5.1 so this should fail
+	t5(123)
+end)))
 
-g = {}
-setmetatable(g, {
-	__call = h
-})
+getmetatable(nil).__call = nil
+print((pcall(function()
+	t2(1234)
+end)))
 
-g();
- 
+getmetatable(false).__call = nil
+print((pcall(function()
+	t3(1234)
+end)))
+

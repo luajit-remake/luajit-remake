@@ -1052,7 +1052,7 @@ TEST(LuaBenchmark, Spectral_Norm)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_1)
+TEST(LuaTest, xpcall_1)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1076,7 +1076,7 @@ TEST(LuaBenchmark, xpcall_1)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_2)
+TEST(LuaTest, xpcall_2)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1114,7 +1114,7 @@ TEST(LuaBenchmark, xpcall_2)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_3)
+TEST(LuaTest, xpcall_3)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1150,7 +1150,7 @@ TEST(LuaBenchmark, xpcall_3)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_4)
+TEST(LuaTest, xpcall_4)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1199,7 +1199,7 @@ TEST(LuaBenchmark, xpcall_4)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_5)
+TEST(LuaTest, xpcall_5)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1237,7 +1237,7 @@ TEST(LuaBenchmark, xpcall_5)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, xpcall_6)
+TEST(LuaTest, xpcall_6)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1269,7 +1269,7 @@ TEST(LuaBenchmark, xpcall_6)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, pcall_1)
+TEST(LuaTest, pcall_1)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1292,7 +1292,7 @@ TEST(LuaBenchmark, pcall_1)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, pcall_2)
+TEST(LuaTest, pcall_2)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1335,7 +1335,7 @@ TEST(LuaBenchmark, pcall_2)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaBenchmark, GetSetMetatable)
+TEST(LuaTest, GetSetMetatable)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -1421,6 +1421,218 @@ TEST(LuaBenchmark, GetSetMetatable)
             "t\n"
             "nil\n"
             "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_call_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_call_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "t1\t1\tnil\tnil\n"
+            "1\t2\t3\n"
+            "3\t4\tnil\tnil\n"
+            "2\t3\t4\n"
+            "nil\t5\tnil\tnil\n"
+            "2\t3\t4\n"
+            "false\t6\tnil\tnil\n"
+            "2\t3\t4\n"
+            "true\t7\tnil\tnil\n"
+            "2\t3\t4\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_call_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_call_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "h x \n"
+            "h h x \n"
+            "h h h x \n"
+            "h h h h x \n"
+            "h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "123\t456\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_call_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_call_3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "h x \n"
+            "h h x \n"
+            "h h h x \n"
+            "h h h h x \n"
+            "h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "2\t3\t4\t5\t6\t7\t8\t9\t123\t456\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_call_4)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_call_4.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "h x \n"
+            "h h x \n"
+            "h h h x \n"
+            "h h h h x \n"
+            "h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "h h h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h x \n"
+            "h h h h x \n"
+            "h h h x \n"
+            "h h x \n"
+            "h x \n"
+            "h \n"
+            "123\t456\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_call_5)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_call_5.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "h x \n"
+            "h h x \n"
+            "h h h x \n"
+            "h h h h x \n"
+            "h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "h h h h h h h h h h x \n"
+            "h h h h h h h h h x \n"
+            "h h h h h h h h x \n"
+            "h h h h h h h x \n"
+            "h h h h h h x \n"
+            "h h h h h x \n"
+            "h h h h x \n"
+            "h h h x \n"
+            "h h x \n"
+            "h x \n"
+            "h \n"
+            "2\t3\t4\t5\t6\t7\t8\t9\t10\t11\t10\t9\t8\t7\t6\t5\t4\t3\t2\t123\t456\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, xpcall_metatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/xpcall_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "enter g\tgg\tnil\n"
+            "enter h\n"
+            "true\n"
+            "false\t123\n"
+            "enter g2\tgg\tnil\n"
+            "true\t789\t10\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, pcall_metatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/pcall_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "enter g\tgg\t1\t2\tnil\tnil\n"
+            "false\ttrue\n"
+            "enter g2\tgg\t1\t2\tnil\tnil\n"
+            "true\t1\t2\t3\t4\n";
 
     ReleaseAssert(out == expectedOut);
     ReleaseAssert(err == "");
