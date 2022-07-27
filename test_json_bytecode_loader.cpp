@@ -976,6 +976,28 @@ TEST(LuaBenchmark, Mandel_NoMetatable)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaBenchmark, Mandel)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/mandel.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "P2\n"
+            "# mandelbrot set\t-2\t2\t-2\t2\t32\n"
+            "32\t32\t255\n"
+            "28620\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 TEST(LuaBenchmark, QuadTree)
 {
     VM* vm = VM::Create();
