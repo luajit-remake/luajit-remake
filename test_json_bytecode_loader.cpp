@@ -2218,4 +2218,76 @@ TEST(LuaTest, metatable_len)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_concat)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_concat.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "enter concat a\ta\t234\n"
+            "enter concat b\t123\tb\n"
+            "x789345.6qwerty\n"
+            "\n"
+            "enter concat a\ta\t234x\n"
+            "enter concat b\t123\tb\n"
+            "789345.6qwerty\n"
+            "\n"
+            "enter concat a\ta\t234x789345.6\n"
+            "enter concat b\t123\tb\n"
+            "qwerty\n"
+            "\n"
+            "enter concat a\ta\t234\n"
+            "enter concat b\t123\tb\n"
+            "enter concat a\ta\t345.6qwerty\n"
+            "enter concat b\tx\tb\n"
+            "qwerty\n"
+            "\n"
+            "enter concat a\ta\t234\n"
+            "enter concat str\t123\tb\n"
+            "x789345.6asdf\n"
+            "\n"
+            "enter concat a\ta\t234x\n"
+            "enter concat str\t123\tb\n"
+            "789345.6asdf\n"
+            "\n"
+            "enter concat a\ta\t234x789345.6\n"
+            "enter concat str\t123\tb\n"
+            "asdf\n"
+            "\n"
+            "enter concat a\ta\t234\n"
+            "enter concat str\t123\tb\n"
+            "enter concat a\ta\t345.6asdf\n"
+            "enter concat str\tx\tb\n"
+            "asdf\n"
+            "\n"
+            "enter len\t1234\n"
+            "enter concat c\tc\t1234\t67\n"
+            "nil\n"
+            "\n"
+            "enter len\t1234\n"
+            "enter concat d\t1234\td\t67\n"
+            "nil\n"
+            "\n"
+            "enter concat a\ta\t234\n"
+            "enter concat b\t123\tb\n"
+            "false\n"
+            "\n"
+            "enter concat a\ta\t234789x\n"
+            "enter concat b\t123\tb\n"
+            "false\n"
+            "\n"
+            "false\n"
+            "ok\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

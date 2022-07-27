@@ -3230,12 +3230,13 @@ static void OnReturnFromMetamethodCall(CoroutineRuntimeContext* rc, void* stackf
     Dispatch(rc, stackframe, bcu + sizeof(C));
 }
 
-template<auto bytecodeDst>
-PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod)
+inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod, InterpreterFn onReturn)
 {
     assert(!metamethod.IsNil());
 
-    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
+    // Concat need one extra tmp slot at the end... so we need a '+1'
+    //
+    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots + 1;
     GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
     if (callTarget.m_target.m_value == 0)
     {
@@ -3264,7 +3265,7 @@ PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRun
         numParamsForMetamethodCall = 2;
     }
 
-    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, OnReturnFromMetamethodCall<bytecodeDst>, false /*passVariadicRetAsParam*/);
+    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, onReturn, false /*passVariadicRetAsParam*/);
 
     HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
     return {
@@ -3332,7 +3333,7 @@ public:
                 [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for unary minus").m_value);
             }
 
-            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall<&Self::m_dst>(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod);
+            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod, OnReturnFromMetamethodCall<&Self::m_dst>);
             if (!res.m_success)
             {
                 // Metamethod exists but is not callable, throw error
@@ -3410,7 +3411,7 @@ public:
         // but for 'length', the parameter is only 'src'.
         // Lua 5.2+ unified the behavior and always pass 'src, src', but for now we are targeting Lua 5.1.
         //
-        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall<&Self::m_dst>(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod);
+        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod, OnReturnFromMetamethodCall<&Self::m_dst>);
         if (!res.m_success)
         {
             // Metamethod exists but is not callable, throw error
@@ -3585,7 +3586,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3674,7 +3675,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3763,7 +3764,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3852,7 +3853,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3959,7 +3960,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4048,7 +4049,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4071,7 +4072,9 @@ public:
 
     BcConcat(BytecodeSlot dst, BytecodeSlot begin, uint32_t num)
         : m_opcode(x_opcodeId<Self>), m_dst(dst), m_begin(begin), m_num(num)
-    { }
+    {
+        assert(num >= 2);
+    }
 
     uint8_t m_opcode;
     BytecodeSlot m_dst;
@@ -4103,36 +4106,224 @@ public:
                 needNumberConversion = true;
             }
         }
-        if (!success)
-        {
-            ReleaseAssert(false && "unimplemented");
-        }
 
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        if (needNumberConversion)
+        if (likely(success))
         {
-            for (uint32_t i = 0; i < num; i++)
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            if (needNumberConversion)
             {
-                TValue val = begin[i];
-                if (val.IsDouble(TValue::x_int32Tag))
+                for (uint32_t i = 0; i < num; i++)
                 {
-                    double dbl = val.AsDouble();
-                    char buf[x_default_tostring_buffersize_double];
-                    char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
-                    begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
-                }
-                else if (val.IsInt32(TValue::x_int32Tag))
-                {
-                    char buf[x_default_tostring_buffersize_int];
-                    char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
-                    begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
+                    TValue val = begin[i];
+                    if (val.IsDouble(TValue::x_int32Tag))
+                    {
+                        double dbl = val.AsDouble();
+                        char buf[x_default_tostring_buffersize_double];
+                        char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+                        begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
+                    }
+                    else if (val.IsInt32(TValue::x_int32Tag))
+                    {
+                        char buf[x_default_tostring_buffersize_int];
+                        char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
+                        begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
+                    }
                 }
             }
+
+            TValue result = TValue::CreatePointer(vm->CreateStringObjectFromConcatenation(begin, num));
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = result;
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
 
-        TValue result = TValue::CreatePointer(vm->CreateStringObjectFromConcatenation(begin, num));
-        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = result;
-        Dispatch(rc, stackframe, bcu + sizeof(Self));
+        // Need to call metamethod
+        // Note that this must be executed from right to left (this semantic is expected by Lua)
+        // Do primitive concatenation until we found the first location to call metamethod
+        //
+        ScanForMetamethodCallResult fsr = ScanForMetamethodCall(begin, static_cast<int32_t>(bc->m_num) - 2, begin[bc->m_num - 1] /*initialValue*/);
+        assert(!fsr.m_exhausted);
+
+        // Store the next slot to concat on metamethod return on the last slot
+        // Note that 'SetupFrameForMetamethodCall' knows it needs to reserve one extra slot compared with normal call, so we are fine
+        //
+        reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+
+        // Call metamethod
+        //
+        TValue metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Concat>(fsr.m_lhsValue, fsr.m_rhsValue);
+        if (metamethod.IsNil())
+        {
+            // TODO: make this error consistent with Lua
+            //
+            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for concat").m_value);
+        }
+
+        PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, fsr.m_lhsValue, fsr.m_rhsValue, metamethod, OnMetamethodReturn);
+        if (!pmcr.m_success)
+        {
+            // Metamethod exists but is not callable, throw error
+            //
+            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+        }
+
+        uint8_t* calleeBytecode = pmcr.m_calleeEc->m_bytecode;
+        InterpreterFn calleeFn = pmcr.m_calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, pmcr.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+    }
+
+    struct ScanForMetamethodCallResult
+    {
+        // If true, 'm_lhsValue' stores the final value, and no more metamethod call happens
+        // If false, 'm_lhsValue' and 'm_rhsValue' shall be passed to metamethod call
+        //
+        bool m_exhausted;
+        // The slot offset minus one where 'm_lhsValue' is found, if m_exhausted == false
+        //
+        int32_t m_endOffset;
+        // The value pair for metamethod call
+        //
+        TValue m_lhsValue;
+        TValue m_rhsValue;
+    };
+
+    static std::optional<UserHeapPointer<HeapString>> TryGetStringOrConvertNumberToString(TValue value)
+    {
+        if (value.IsPointer(TValue::x_mivTag))
+        {
+            if (value.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            {
+                return value.AsPointer<HeapString>();
+            }
+        }
+        if (value.IsDouble(TValue::x_int32Tag))
+        {
+            char buf[x_default_tostring_buffersize_double];
+            char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, value.AsDouble());
+            return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf));
+        }
+        else if (value.IsInt32(TValue::x_int32Tag))
+        {
+            char buf[x_default_tostring_buffersize_int];
+            char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, value.AsInt32());
+            return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf));
+        }
+        else
+        {
+            return {};
+        }
+    }
+
+    // Try to execute loop: while startOffset != -1: curValue = base[startOffset] .. curValue, startOffset -= 1
+    // Until the loop ends or it encounters an expression where a metamethod call is needed.
+    // Returns the final value if the loop ends, or the value pair for the metamethod call.
+    //
+    static ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* base, int32_t startOffset, TValue curValue)
+    {
+        assert(startOffset >= 0);
+
+        std::optional<UserHeapPointer<HeapString>> optStr = TryGetStringOrConvertNumberToString(curValue);
+        if (!optStr)
+        {
+            return {
+                .m_exhausted = false,
+                .m_endOffset = startOffset - 1,
+                .m_lhsValue = base[startOffset],
+                .m_rhsValue = curValue
+            };
+        }
+
+        // This is tricky: curString and curValue are out of sync at the beginning of the loop (curValue might be number while curString must be string),
+        // but are always kept in sync in every later iteration (see end of the loop below), and the return inside the loop returns 'curValue'.
+        // This is required, because if no concatenation happens before metamethod call,
+        // the metamethod should see the original parameter, not the coerced-to-string parameter.
+        //
+        UserHeapPointer<HeapString> curString = optStr.value();
+        while (startOffset >= 0)
+        {
+            std::optional<UserHeapPointer<HeapString>> lhs = TryGetStringOrConvertNumberToString(base[startOffset]);
+            if (!lhs)
+            {
+                return {
+                    .m_exhausted = false,
+                    .m_endOffset = startOffset - 1,
+                    .m_lhsValue = base[startOffset],
+                    .m_rhsValue = curValue
+                };
+            }
+
+            startOffset--;
+            TValue tmp[2];
+            tmp[0] = TValue::CreatePointer(lhs.value());
+            tmp[1] = TValue::CreatePointer(curString);
+            curString = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromConcatenation(tmp, 2 /*len*/);
+            curValue = TValue::CreatePointer(curString);
+        }
+
+        return {
+            .m_exhausted = true,
+            .m_lhsValue = curValue
+        };
+    }
+
+    static void OnMetamethodReturn(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
+    {
+        const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+        StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+        uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+        ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+        const Self* bc = reinterpret_cast<const Self*>(bcu);
+        assert(bc->m_opcode == x_opcodeId<Self>);
+        rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+
+        TValue* begin = StackFrameHeader::GetLocalAddr(stackframe, bc->m_begin);
+
+        TValue curValue = *retValues;
+
+        assert(reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots].IsInt32(TValue::x_int32Tag));
+        int32_t nextSlotToConcat = reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots].AsInt32();
+        assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(bc->m_num) - 2);
+        if (nextSlotToConcat == -1)
+        {
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = curValue;
+            Dispatch(rc, stackframe, bcu + sizeof(Self));
+        }
+        else
+        {
+            ScanForMetamethodCallResult fsr = ScanForMetamethodCall(begin, nextSlotToConcat, curValue);
+            if (fsr.m_exhausted)
+            {
+                *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = fsr.m_lhsValue;
+                Dispatch(rc, stackframe, bcu + sizeof(Self));
+            }
+            else
+            {
+                reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+
+                // Call metamethod
+                //
+                TValue metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Concat>(fsr.m_lhsValue, fsr.m_rhsValue);
+                if (metamethod.IsNil())
+                {
+                    // TODO: make this error consistent with Lua
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for concat").m_value);
+                }
+
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, fsr.m_lhsValue, fsr.m_rhsValue, metamethod, OnMetamethodReturn);
+                if (!pmcr.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = pmcr.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = pmcr.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, pmcr.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+        }
     }
 } __attribute__((__packed__));
 
