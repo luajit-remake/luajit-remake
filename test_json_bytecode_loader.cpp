@@ -2146,5 +2146,76 @@ TEST(LuaTest, metatable_pow)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_unm)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_unm.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "false\n"
+            "a\ta\tnil\n"
+            "12\n"
+            "a\ta\tnil\n"
+            "nil\n"
+            "false\n"
+            "-233\n"
+            "-233\n"
+            "-563\n"
+            "false\n"
+            "-233\n"
+            "-563\n"
+            "-233\n"
+            "-563\n"
+            "0x233G\t0x233G\tnil\n"
+            "nil\n"
+            "b\ta\ta\tnil\n"
+            "1234\n"
+            "false\n"
+            "xxxx\ta\ta\tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_len)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_len.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "6\n"
+            "7\n"
+            "7\n"
+            "9\n"
+            "9\n"
+            "9\n"
+            "false\n"
+            "true\tnil\tnil\tnil\n"
+            "123\n"
+            "false\tnil\tnil\tnil\n"
+            "123\n"
+            "false\n"
+            "abc\tfalse\tnil\tnil\n"
+            "123\n"
+            "false\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
 
 }   // anonymous namespace

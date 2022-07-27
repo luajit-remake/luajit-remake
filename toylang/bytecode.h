@@ -3203,6 +3203,77 @@ public:
     }
 } __attribute__((__packed__));
 
+struct PrepareMetamethodCallResult
+{
+    bool m_success;
+    void* m_baseForNextFrame;
+    HeapPtr<ExecutableCode> m_calleeEc;
+};
+
+template<auto bytecodeDst>
+static void OnReturnFromMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
+{
+    static_assert(std::is_member_object_pointer_v<decltype(bytecodeDst)>);
+    using C = class_type_of_member_object_pointer_t<decltype(bytecodeDst)>;
+    static_assert(std::is_same_v<BytecodeSlot, value_type_of_member_object_pointer_t<decltype(bytecodeDst)>>);
+
+    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+    const C* bc = reinterpret_cast<const C*>(bcu);
+    assert(bc->m_opcode == x_opcodeId<C>);
+    *StackFrameHeader::GetLocalAddr(stackframe, bc->*bytecodeDst) = *retValues;
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+    Dispatch(rc, stackframe, bcu + sizeof(C));
+}
+
+template<auto bytecodeDst>
+PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod)
+{
+    assert(!metamethod.IsNil());
+
+    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
+    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
+    if (callTarget.m_target.m_value == 0)
+    {
+        return {
+            .m_success = false
+        };
+    }
+
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(curBytecode - rc->m_codeBlock->m_bytecode);
+
+    uint32_t numParamsForMetamethodCall;
+    if (unlikely(callTarget.m_invokedThroughMetatable))
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = metamethod;
+        start[x_numSlotsForStackFrameHeader + 1] = lhs;
+        start[x_numSlotsForStackFrameHeader + 2] = rhs;
+        numParamsForMetamethodCall = 3;
+    }
+    else
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = lhs;
+        start[x_numSlotsForStackFrameHeader + 1] = rhs;
+        numParamsForMetamethodCall = 2;
+    }
+
+    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, OnReturnFromMetamethodCall<bytecodeDst>, false /*passVariadicRetAsParam*/);
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
+    return {
+        .m_success = true,
+        .m_baseForNextFrame = baseForNextFrame,
+        .m_calleeEc = calleeEc
+    };
+}
+
 class BcUnaryMinus
 {
 public:
@@ -3229,7 +3300,49 @@ public:
         }
         else
         {
-            ReleaseAssert(false && "unimplemented");
+            if (src.IsPointer(TValue::x_mivTag) && src.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            {
+                HeapPtr<HeapString> stringObj = src.AsPointer<HeapString>().As();
+                StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+                if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
+                {
+                    double result = -ssr.d;
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(result);
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(src);
+            if (metatableMaybeNull.m_value == 0)
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for unary minus").m_value);
+            }
+
+            HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm), icInfo /*out*/);
+            TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm).As<void>(), icInfo);
+
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for unary minus").m_value);
+            }
+
+            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall<&Self::m_dst>(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod);
+            if (!res.m_success)
+            {
+                // Metamethod exists but is not callable, throw error
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+            }
+
+            uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+            InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+            [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
         }
     }
 } __attribute__((__packed__));
@@ -3263,20 +3376,51 @@ public:
             }
             else if (ty == Type::TABLE)
             {
+                // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
+                // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
+                //
                 HeapPtr<TableObject> s = src.AsPointer<TableObject>().As();
                 uint32_t result = TableObject::GetTableLengthWithLuaSemantics(s);
                 *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(result);
                 Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
-            else
-            {
-                ReleaseAssert(false && "unimplemented");
-            }
         }
-        else
+
+        UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(src);
+        if (metatableMaybeNull.m_value == 0)
         {
-            ReleaseAssert(false && "unimplemented");
+            // TODO: make this error consistent with Lua
+            //
+            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for length").m_value);
         }
+
+        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len), icInfo /*out*/);
+        TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len).As<void>(), icInfo);
+
+        if (metamethod.IsNil())
+        {
+            // TODO: make this error consistent with Lua
+            //
+            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for length").m_value);
+        }
+
+        // Lua idiosyncrasy: in Lua 5.1, for unary minus, the parameter passed to metamethod is 'src, src',
+        // but for 'length', the parameter is only 'src'.
+        // Lua 5.2+ unified the behavior and always pass 'src, src', but for now we are targeting Lua 5.1.
+        //
+        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall<&Self::m_dst>(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod);
+        if (!res.m_success)
+        {
+            // Metamethod exists but is not callable, throw error
+            //
+            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+        }
+
+        uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+        InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+        [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
     }
 } __attribute__((__packed__));
 
@@ -3366,77 +3510,6 @@ TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue 
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
         return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
     }
-}
-
-struct PrepareMetamethodCallResult
-{
-    bool m_success;
-    void* m_baseForNextFrame;
-    HeapPtr<ExecutableCode> m_calleeEc;
-};
-
-template<auto bytecodeDst>
-static void OnReturnFromMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
-{
-    static_assert(std::is_member_object_pointer_v<decltype(bytecodeDst)>);
-    using C = class_type_of_member_object_pointer_t<decltype(bytecodeDst)>;
-    static_assert(std::is_same_v<BytecodeSlot, value_type_of_member_object_pointer_t<decltype(bytecodeDst)>>);
-
-    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
-    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
-    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
-    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
-    const C* bc = reinterpret_cast<const C*>(bcu);
-    assert(bc->m_opcode == x_opcodeId<C>);
-    *StackFrameHeader::GetLocalAddr(stackframe, bc->*bytecodeDst) = *retValues;
-    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
-    Dispatch(rc, stackframe, bcu + sizeof(C));
-}
-
-template<auto bytecodeDst>
-PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod)
-{
-    assert(!metamethod.IsNil());
-
-    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
-    {
-        return {
-            .m_success = false
-        };
-    }
-
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(curBytecode - rc->m_codeBlock->m_bytecode);
-
-    uint32_t numParamsForMetamethodCall;
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        start[0] = TValue::CreatePointer(callTarget.m_target);
-        start[x_numSlotsForStackFrameHeader] = metamethod;
-        start[x_numSlotsForStackFrameHeader + 1] = lhs;
-        start[x_numSlotsForStackFrameHeader + 2] = rhs;
-        numParamsForMetamethodCall = 3;
-    }
-    else
-    {
-        start[0] = TValue::CreatePointer(callTarget.m_target);
-        start[x_numSlotsForStackFrameHeader] = lhs;
-        start[x_numSlotsForStackFrameHeader + 1] = rhs;
-        numParamsForMetamethodCall = 2;
-    }
-
-    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, OnReturnFromMetamethodCall<bytecodeDst>, false /*passVariadicRetAsParam*/);
-
-    HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
-    return {
-        .m_success = true,
-        .m_baseForNextFrame = baseForNextFrame,
-        .m_calleeEc = calleeEc
-    };
 }
 
 class BcAdd
