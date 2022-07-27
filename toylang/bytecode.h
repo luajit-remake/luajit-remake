@@ -3555,7 +3555,64 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            {
+                HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                if (result.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Sub), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Sub).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
+                    {
+                        goto do_metamethod_call;
+                    }
+                }
+            }
+
+            // Handle case that lhs/rhs are number or string that can be converted to number
+            //
+            {
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return l - r; });
+                if (res)
+                {
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Sub>(lhs, rhs);
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic sub").m_value);
+            }
+
+do_metamethod_call:
+            {
+                // We've found the (non-nil) metamethod to call
+                //
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
     }
 } __attribute__((__packed__));
@@ -3587,7 +3644,64 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            {
+                HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                if (result.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Mul), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Mul).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
+                    {
+                        goto do_metamethod_call;
+                    }
+                }
+            }
+
+            // Handle case that lhs/rhs are number or string that can be converted to number
+            //
+            {
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return l * r; });
+                if (res)
+                {
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Mul>(lhs, rhs);
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic mul").m_value);
+            }
+
+do_metamethod_call:
+            {
+                // We've found the (non-nil) metamethod to call
+                //
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
     }
 } __attribute__((__packed__));
@@ -3619,7 +3733,64 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            {
+                HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                if (result.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Div), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Div).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
+                    {
+                        goto do_metamethod_call;
+                    }
+                }
+            }
+
+            // Handle case that lhs/rhs are number or string that can be converted to number
+            //
+            {
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return l / r; });
+                if (res)
+                {
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Div>(lhs, rhs);
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic div").m_value);
+            }
+
+do_metamethod_call:
+            {
+                // We've found the (non-nil) metamethod to call
+                //
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
     }
 } __attribute__((__packed__));
@@ -3669,7 +3840,64 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            {
+                HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                if (result.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Mod), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Mod).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
+                    {
+                        goto do_metamethod_call;
+                    }
+                }
+            }
+
+            // Handle case that lhs/rhs are number or string that can be converted to number
+            //
+            {
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, ModulusWithLuaSemantics);
+                if (res)
+                {
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Mod>(lhs, rhs);
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic mod").m_value);
+            }
+
+do_metamethod_call:
+            {
+                // We've found the (non-nil) metamethod to call
+                //
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
     }
 } __attribute__((__packed__));
@@ -3701,7 +3929,64 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            {
+                HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                if (result.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Pow), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Pow).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
+                    {
+                        goto do_metamethod_call;
+                    }
+                }
+            }
+
+            // Handle case that lhs/rhs are number or string that can be converted to number
+            //
+            {
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return pow(l, r); });
+                if (res)
+                {
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
+                }
+            }
+
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Pow>(lhs, rhs);
+            if (metamethod.IsNil())
+            {
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic pow").m_value);
+            }
+
+do_metamethod_call:
+            {
+                // We've found the (non-nil) metamethod to call
+                //
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
     }
 } __attribute__((__packed__));

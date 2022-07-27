@@ -1749,6 +1749,380 @@ TEST(LuaTest, metatable_add_3)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_sub)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_sub.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "-441\n"
+            "108\n"
+            "-107\n"
+            "-387\n"
+            "-405\n"
+            "-5050\n"
+            "-1\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "-13.8\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "13.8\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "12\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "0\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_mul)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_mul.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "69372\n"
+            "1845\n"
+            "1968\n"
+            "536364\n"
+            "89676\n"
+            "0\n"
+            "2\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "18\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "18\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "45\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "225\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_div)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_div.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "0.21808510638298\n"
+            "8.2\n"
+            "0.13008130081301\n"
+            "0.59305993690852\n"
+            "0.28191489361702\n"
+            "0\n"
+            "0.5\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "0.08\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "12.5\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "5\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "1\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_mod)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_mod.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "123\n"
+            "3\n"
+            "16\n"
+            "564\n"
+            "159\n"
+            "0\n"
+            "1\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "1.2\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "0.6\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "0\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "0\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_pow)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_pow.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "a\t2333\tnil\n"
+            "12\n"
+            "a\t2333\tnil\n"
+            "12\n"
+            "321\ta\tnil\n"
+            "43\n"
+            "cba\ta\tnil\n"
+            "43\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f3\tb\ta\tnil\n"
+            "98\n"
+            "f2\ta\tb\tnil\n"
+            "67\n"
+            "f2\tb\ta\tnil\n"
+            "67\n"
+            "false\ta\t233\tnil\n"
+            "123\n"
+            "false\ta\tabb\tnil\n"
+            "123\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "false\t233\ta\tnil\n"
+            "124\n"
+            "c\ta\t234\tnil\n"
+            "98\n"
+            "c\ta\txyz\tnil\n"
+            "98\n"
+            "c\t432\ta\tnil\n"
+            "87\n"
+            "c\tzwx\ta\tnil\n"
+            "87\n"
+            "false\n"
+            "false\n"
+            "inf\n"
+            "2.231396109767e+31\n"
+            "1.2786682062094e+148\n"
+            "inf\n"
+            "inf\n"
+            "0\n"
+            "1\n"
+            "enter f\ta\t1\tnil\n"
+            "nil\n"
+            "enter f\t1\ta\tnil\n"
+            "nil\n"
+            "15.407021574586\n"
+            "enter f\t1.2\t0xG\tnil\n"
+            "nil\n"
+            "25.781578913812\n"
+            "enter f\t0xG\t1.2\tnil\n"
+            "nil\n"
+            "3375\n"
+            "enter f\t    0xG        \t3\tnil\n"
+            "nil\n"
+            "4.3789389038086e+17\n"
+            "enter f\t0xG\t 0xG \tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
 
 
 }   // anonymous namespace

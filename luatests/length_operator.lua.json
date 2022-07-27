@@ -1871,21 +1871,21 @@
             {
               "EntryKey": {
                 "Type": "String",
-                "Value": "b"
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 2
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "String",
                 "Value": "a"
               },
               "EntryValue": {
                 "Type": "Int32",
                 "Value": 1
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "b"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 2
               }
             }
           ],
