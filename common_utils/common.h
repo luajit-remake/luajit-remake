@@ -33,6 +33,7 @@
 #include <typeinfo>
 #include <random>
 #include <mutex>
+#include <optional>
 #include "pp_common.h"
 #include "function_ref.h"
 

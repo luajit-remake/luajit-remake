@@ -2368,8 +2368,8 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
         assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == Type::TABLE);
         HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
         GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Call), icInfo /*out*/);
-        TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Call).As<void>(), icInfo);
+        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
+        TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
         if (likely(target.IsPointer(TValue::x_mivTag) && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION))
         {
             return GetCallTargetConsideringMetatableResult {

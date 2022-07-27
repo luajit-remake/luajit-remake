@@ -21,7 +21,7 @@ inline bool IsCompilerThread() { return t_threadKind == CompilerThread; }
 inline bool IsExecutionThread() { return t_threadKind == ExecutionThread; }
 inline bool IsGCThread() { return t_threadKind == GCThread; }
 
-#define METATABLE_NAME_LIST             \
+#define METAMETHOD_NAME_LIST             \
     /* Enum Name,    String Name */     \
     (Call,           __call)            \
   , (Add,            __add)             \
@@ -40,20 +40,20 @@ inline bool IsGCThread() { return t_threadKind == GCThread; }
   , (NewIndex,       __newindex)        \
   , (ProtectedMt,    __metatable)
 
-enum class LuaMetatableKind
+enum class LuaMetamethodKind
 {
 #define macro(e) PP_TUPLE_GET_1(e),
-    PP_FOR_EACH(macro, METATABLE_NAME_LIST)
+    PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
 #undef macro
 };
 
 #define macro(e) +1
-constexpr size_t x_totalLuaMetatableKind = 0 PP_FOR_EACH(macro, METATABLE_NAME_LIST);
+constexpr size_t x_totalLuaMetamethodKind = 0 PP_FOR_EACH(macro, METAMETHOD_NAME_LIST);
 #undef macro
 
-constexpr const char* x_luaMetatableStringName[x_totalLuaMetatableKind] = {
+constexpr const char* x_luaMetatableStringName[x_totalLuaMetamethodKind] = {
 #define macro(e) PP_STRINGIFY(PP_TUPLE_GET_2(e)),
-    PP_FOR_EACH(macro, METATABLE_NAME_LIST)
+    PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
 #undef macro
 };
 
@@ -864,7 +864,7 @@ public:
     bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
-        for (size_t i = 0; i < x_totalLuaMetatableKind; i++)
+        for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
         {
             m_stringNameForMetatableKind[i] = static_cast<CRTP*>(this)->CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
         }
@@ -918,7 +918,7 @@ public:
         return m_ljrLibBaseDotNextFunctionObject;
     }
 
-    UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetatableKind kind)
+    UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetamethodKind kind)
     {
         return m_stringNameForMetatableKind[static_cast<size_t>(kind)];
     }
@@ -933,7 +933,7 @@ private:
 
     CoroutineRuntimeContext* m_rootCoroutine;
 
-    std::array<UserHeapPointer<HeapString>, x_totalLuaMetatableKind> m_stringNameForMetatableKind;
+    std::array<UserHeapPointer<HeapString>, x_totalLuaMetamethodKind> m_stringNameForMetatableKind;
 
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
 
@@ -1002,7 +1002,7 @@ inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(v)]);
 }
 
-inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetatableKind kind)
+inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetamethodKind kind)
 {
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);

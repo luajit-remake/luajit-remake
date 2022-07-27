@@ -1492,7 +1492,7 @@ inline void LJR_LIB_BASE_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
     else
     {
         HeapPtr<TableObject> tableObj = metatableMaybeNull.As<TableObject>();
-        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetatableKind::ProtectedMt);
+        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(tableObj, prop, icInfo /*out*/);
         TValue result = TableObject::GetById(tableObj, prop.As<void>(), icInfo);
@@ -1576,7 +1576,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
     if (metatableMaybeNull.m_value != 0)
     {
         HeapPtr<TableObject> existingMetatable = metatableMaybeNull.As<TableObject>();
-        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetatableKind::ProtectedMt);
+        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
         TValue result = TableObject::GetById(existingMetatable, prop.As<void>(), icInfo);
@@ -3280,6 +3280,165 @@ public:
     }
 } __attribute__((__packed__));
 
+// Lua allows crazy things like "1 " + " 0xf " (which yields 16): string can be silently converted to number (ignoring whitespace) when
+// performing an arithmetic operation. This function does this job. 'func' must be a lambda (double, double) -> double
+//
+template<typename Func>
+std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, const Func& func)
+{
+    double lhsNumber;
+    if (lhs.IsDouble(TValue::x_int32Tag))
+    {
+        lhsNumber = lhs.AsDouble();
+    }
+    else if (lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+    {
+        HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
+        {
+            lhsNumber = ssr.d;
+        }
+        else
+        {
+            return {};
+        }
+    }
+    else
+    {
+        return {};
+    }
+
+    double rhsNumber;
+    if (rhs.IsDouble(TValue::x_int32Tag))
+    {
+        rhsNumber = rhs.AsDouble();
+    }
+    else if (rhs.IsPointer(TValue::x_mivTag) && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+    {
+        HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
+        {
+            rhsNumber = ssr.d;
+        }
+        else
+        {
+            return {};
+        }
+    }
+    else
+    {
+        return {};
+    }
+
+    double result = func(lhsNumber, rhsNumber);
+    return result;
+}
+
+template<LuaMetamethodKind mtKind>
+TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue rhs)
+{
+    {
+        UserHeapPointer<void> lhsMetatableMaybeNull = GetMetatableForValue(lhs);
+        if (lhsMetatableMaybeNull.m_value != 0)
+        {
+            HeapPtr<TableObject> metatable = lhsMetatableMaybeNull.As<TableObject>();
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
+            TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+            if (!metamethod.IsNil())
+            {
+                return metamethod;
+            }
+        }
+    }
+
+    {
+        UserHeapPointer<void> rhsMetatableMaybeNull = GetMetatableForValue(rhs);
+        if (rhsMetatableMaybeNull.m_value == 0)
+        {
+            return TValue::Nil();
+        }
+
+        HeapPtr<TableObject> metatable = rhsMetatableMaybeNull.As<TableObject>();
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
+        return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+    }
+}
+
+struct PrepareMetamethodCallResult
+{
+    bool m_success;
+    void* m_baseForNextFrame;
+    HeapPtr<ExecutableCode> m_calleeEc;
+};
+
+template<auto bytecodeDst>
+static void OnReturnFromMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
+{
+    static_assert(std::is_member_object_pointer_v<decltype(bytecodeDst)>);
+    using C = class_type_of_member_object_pointer_t<decltype(bytecodeDst)>;
+    static_assert(std::is_same_v<BytecodeSlot, value_type_of_member_object_pointer_t<decltype(bytecodeDst)>>);
+
+    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+    const C* bc = reinterpret_cast<const C*>(bcu);
+    assert(bc->m_opcode == x_opcodeId<C>);
+    *StackFrameHeader::GetLocalAddr(stackframe, bc->*bytecodeDst) = *retValues;
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+    Dispatch(rc, stackframe, bcu + sizeof(C));
+}
+
+template<auto bytecodeDst>
+PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod)
+{
+    assert(!metamethod.IsNil());
+
+    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
+    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
+    if (callTarget.m_target.m_value == 0)
+    {
+        return {
+            .m_success = false
+        };
+    }
+
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(curBytecode - rc->m_codeBlock->m_bytecode);
+
+    uint32_t numParamsForMetamethodCall;
+    if (unlikely(callTarget.m_invokedThroughMetatable))
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = metamethod;
+        start[x_numSlotsForStackFrameHeader + 1] = lhs;
+        start[x_numSlotsForStackFrameHeader + 2] = rhs;
+        numParamsForMetamethodCall = 3;
+    }
+    else
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = lhs;
+        start[x_numSlotsForStackFrameHeader + 1] = rhs;
+        numParamsForMetamethodCall = 2;
+    }
+
+    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, OnReturnFromMetamethodCall<bytecodeDst>, false /*passVariadicRetAsParam*/);
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
+    return {
+        .m_success = true,
+        .m_baseForNextFrame = baseForNextFrame,
+        .m_calleeEc = calleeEc
+    };
+}
+
 class BcAdd
 {
 public:
@@ -3317,180 +3476,55 @@ public:
                 {
                     HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
                     GetByIdICInfo icInfo;
-                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add), icInfo /*out*/);
-                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add).As<void>(), icInfo);
-                    if (metamethod.IsNil())
-                    {
-                        goto slow_path;
-                    }
-                    else
+                    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Add), icInfo /*out*/);
+                    metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Add).As<void>(), icInfo);
+                    if (likely(!metamethod.IsNil()))
                     {
                         goto do_metamethod_call;
                     }
                 }
             }
 
-slow_path:
             // Handle case that lhs/rhs are number or string that can be converted to number
             //
             {
-                double lhsNumber;
-                if (lhs.IsDouble(TValue::x_int32Tag))
+                std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return l + r; });
+                if (res)
                 {
-                    lhsNumber = lhs.AsDouble();
-                }
-                else if (lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
-                {
-                    HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
-                    StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
-                    if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
-                    {
-                        lhsNumber = ssr.d;
-                    }
-                    else
-                    {
-                        goto slow_path_metamethod;
-                    }
-                }
-                else
-                {
-                    goto slow_path_metamethod;
-                }
-
-                double rhsNumber;
-                if (rhs.IsDouble(TValue::x_int32Tag))
-                {
-                    rhsNumber = rhs.AsDouble();
-                }
-                else if (rhs.IsPointer(TValue::x_mivTag) && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
-                {
-                    HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
-                    StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
-                    if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
-                    {
-                        rhsNumber = ssr.d;
-                    }
-                    else
-                    {
-                        goto slow_path_metamethod;
-                    }
-                }
-                else
-                {
-                    goto slow_path_metamethod;
-                }
-
-                *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhsNumber + rhsNumber);
-                Dispatch(rc, stackframe, bcu + sizeof(Self));
-            }
-
-slow_path_metamethod:
-            {
-                UserHeapPointer<void> lhsMetatableMaybeNull = GetMetatableForValue(lhs);
-                if (lhsMetatableMaybeNull.m_value == 0)
-                {
-                    goto try_rhs_metatable;
-                }
-
-                HeapPtr<TableObject> metatable = lhsMetatableMaybeNull.As<TableObject>();
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add), icInfo /*out*/);
-                metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add).As<void>(), icInfo);
-                if (metamethod.IsNil())
-                {
-                    goto try_rhs_metatable;
-                }
-                else
-                {
-                    goto do_metamethod_call;
+                    *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(res.value());
+                    Dispatch(rc, stackframe, bcu + sizeof(Self));
                 }
             }
 
-try_rhs_metatable:
+            // Now we know we will need to call metamethod, determine the metamethod to call
+            //
+            // TODO: this could have been better since we already know lhs is not a table with metatable
+            //
+            metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Add>(lhs, rhs);
+            if (metamethod.IsNil())
             {
-                UserHeapPointer<void> rhsMetatableMaybeNull = GetMetatableForValue(rhs);
-                if (rhsMetatableMaybeNull.m_value == 0)
-                {
-                    goto failure;
-                }
-
-                HeapPtr<TableObject> metatable = rhsMetatableMaybeNull.As<TableObject>();
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add), icInfo /*out*/);
-                metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetatableKind::Add).As<void>(), icInfo);
-                if (metamethod.IsNil())
-                {
-                    goto failure;
-                }
-                else
-                {
-                    goto do_metamethod_call;
-                }
+                // TODO: make this error consistent with Lua
+                //
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic add").m_value);
             }
 
 do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                assert(!metamethod.IsNil());
-
-                TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
-                GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-                if (callTarget.m_target.m_value == 0)
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall<&Self::m_result>(rc, stackframe, bcu, lhs, rhs, metamethod);
+                if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
                     //
                     [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
                 }
 
-                StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-                hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(bcu - rc->m_codeBlock->m_bytecode);
-
-                uint32_t numParamsForMetamethodCall;
-                if (unlikely(callTarget.m_invokedThroughMetatable))
-                {
-                    start[0] = TValue::CreatePointer(callTarget.m_target);
-                    start[x_numSlotsForStackFrameHeader] = metamethod;
-                    start[x_numSlotsForStackFrameHeader + 1] = lhs;
-                    start[x_numSlotsForStackFrameHeader + 2] = rhs;
-                    numParamsForMetamethodCall = 3;
-                }
-                else
-                {
-                    start[0] = TValue::CreatePointer(callTarget.m_target);
-                    start[x_numSlotsForStackFrameHeader] = lhs;
-                    start[x_numSlotsForStackFrameHeader + 1] = rhs;
-                    numParamsForMetamethodCall = 2;
-                }
-
-                void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, OnReturnFromMetamethodCall, false /*passVariadicRetAsParam*/);
-
-                HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
-                uint8_t* calleeBytecode = calleeEc->m_bytecode;
-                InterpreterFn calleeFn = calleeEc->m_bestEntryPoint;
-                [[clang::musttail]] return calleeFn(rc, baseForNextFrame, calleeBytecode, 0 /*unused*/);
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
             }
-
-failure:
-            // TODO: make this error consistent with Lua
-            //
-            [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for arithmetic add").m_value);
         }
-    }
-
-    static void OnReturnFromMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
-    {
-        const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
-        StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-        HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
-        assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
-        uint8_t* callerBytecodeStart = callerEc->m_bytecode;
-        ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
-        const Self* bc = reinterpret_cast<const Self*>(bcu);
-        assert(bc->m_opcode == x_opcodeId<Self>);
-        *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = *retValues;
-        rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
-        Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
 
