@@ -218,8 +218,8 @@ debug.setmetatable(123, {})
 
 print(t1 == t1)
 print(t1 ~= t1)
-pcall((function() print("bad", t1 == t2) end))
-pcall((function() print("bad", t1 ~= t2) end))
+print((pcall(function() print("bad", t1 == t2) end)))
+print((pcall(function() print("bad", t1 ~= t2) end)))
 
 print('test end')
  

@@ -2377,6 +2377,8 @@ TEST(LuaTest, metatable_eq_1)
             "--- test 12 ---\n"
             "true\n"
             "false\n"
+            "false\n"
+            "false\n"
             "test end\n";
 
     ReleaseAssert(out == expectedOut);

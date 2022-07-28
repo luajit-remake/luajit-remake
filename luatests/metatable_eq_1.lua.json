@@ -879,7 +879,7 @@
     {
       "NumFixedParams": 0,
       "TakesVarArg": true,
-      "MaxFrameSize": 7,
+      "MaxFrameSize": 9,
       "SourceLineStart": 0,
       "SourceLineEnd": 226,
       "HasChildPrototype": true,
@@ -3947,12 +3947,22 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 0, 62 ],
+          "OpData": [ 0, 10 ],
+          "SourceLine": 221
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 62 ],
           "SourceLine": 221
         },
         {
           "OpCode": "FNEW",
-          "OpData": [ 4, 63 ],
+          "OpData": [ 8, 63 ],
+          "SourceLine": 221
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
           "SourceLine": 221
         },
         {
@@ -3962,12 +3972,22 @@
         },
         {
           "OpCode": "GGET",
-          "OpData": [ 0, 62 ],
+          "OpData": [ 0, 10 ],
+          "SourceLine": 222
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 62 ],
           "SourceLine": 222
         },
         {
           "OpCode": "FNEW",
-          "OpData": [ 4, 64 ],
+          "OpData": [ 8, 64 ],
+          "SourceLine": 222
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
           "SourceLine": 222
         },
         {
