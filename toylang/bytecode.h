@@ -3234,9 +3234,7 @@ inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(Corou
 {
     assert(!metamethod.IsNil());
 
-    // Concat need one extra tmp slot at the end... so we need a '+1'
-    //
-    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots + 1;
+    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
     GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
     if (callTarget.m_target.m_value == 0)
     {
@@ -4143,10 +4141,10 @@ public:
         ScanForMetamethodCallResult fsr = ScanForMetamethodCall(begin, static_cast<int32_t>(bc->m_num) - 2, begin[bc->m_num - 1] /*initialValue*/);
         assert(!fsr.m_exhausted);
 
-        // Store the next slot to concat on metamethod return on the last slot
-        // Note that 'SetupFrameForMetamethodCall' knows it needs to reserve one extra slot compared with normal call, so we are fine
+        // Store the next slot to concat on metamethod return on the last slot of the values to concat
+        // This slot is clobberable (confirmed by checking LuaJIT source code).
         //
-        reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+        begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
 
         // Call metamethod
         //
@@ -4281,8 +4279,8 @@ public:
 
         TValue curValue = *retValues;
 
-        assert(reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots].IsInt32(TValue::x_int32Tag));
-        int32_t nextSlotToConcat = reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots].AsInt32();
+        assert(begin[bc->m_num - 1].IsInt32(TValue::x_int32Tag));
+        int32_t nextSlotToConcat = begin[bc->m_num - 1].AsInt32();
         assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(bc->m_num) - 2);
         if (nextSlotToConcat == -1)
         {
@@ -4299,7 +4297,7 @@ public:
             }
             else
             {
-                reinterpret_cast<TValue*>(stackframe)[rc->m_codeBlock->m_stackFrameNumSlots] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+                begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
 
                 // Call metamethod
                 //
