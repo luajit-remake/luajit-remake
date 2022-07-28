@@ -2290,4 +2290,127 @@ TEST(LuaTest, metatable_concat)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_eq_1)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_eq_1.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "--- test 1 ---\n"
+            "true\n"
+            "false\n"
+            "f1\tt1\tt2\tnil\n"
+            "true\n"
+            "f1\tt1\tt2\tnil\n"
+            "false\n"
+            "--- test 2 ---\n"
+            "true\n"
+            "false\n"
+            "f2\tt1\tt2\tnil\n"
+            "false\n"
+            "f2\tt1\tt2\tnil\n"
+            "true\n"
+            "--- test 3 ---\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "--- test 4 ---\n"
+            "true\n"
+            "false\n"
+            "t3_1\tt3\tt1\tt2\tnil\n"
+            "true\n"
+            "t3_1\tt3\tt1\tt2\tnil\n"
+            "false\n"
+            "--- test 5 ---\n"
+            "true\n"
+            "false\n"
+            "t3_2\tt3\tt1\tt2\tnil\n"
+            "false\n"
+            "t3_2\tt3\tt1\tt2\tnil\n"
+            "true\n"
+            "--- test 6 ---\n"
+            "true\n"
+            "false\n"
+            "tn\t1234\tt1\tt2\tnil\n"
+            "true\n"
+            "tn\t1234\tt1\tt2\tnil\n"
+            "false\n"
+            "--- test 7 ---\n"
+            "true\n"
+            "false\n"
+            "tn_2\t1234\tt1\tt2\tnil\n"
+            "false\n"
+            "tn_2\t1234\tt1\tt2\tnil\n"
+            "true\n"
+            "--- test 8 ---\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "--- test 9 ---\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "--- test 10 ---\n"
+            "true\n"
+            "false\n"
+            "tn_3\t0\tt1\tt2\tnil\n"
+            "true\n"
+            "tn_3\t0\tt1\tt2\tnil\n"
+            "false\n"
+            "--- test 11 ---\n"
+            "true\n"
+            "false\n"
+            "tn_4\t0\tt1\tt2\tnil\n"
+            "false\n"
+            "tn_4\t0\tt1\tt2\tnil\n"
+            "true\n"
+            "--- test 12 ---\n"
+            "true\n"
+            "false\n"
+            "test end\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, metatable_eq_2)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_eq_2.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "false\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "true\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace
