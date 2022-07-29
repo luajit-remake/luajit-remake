@@ -3509,6 +3509,23 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
 }
 
 template<LuaMetamethodKind mtKind>
+TValue WARN_UNUSED GetMetamethodForValue(TValue value)
+{
+    UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
+    if (metatableMaybeNull.m_value != 0)
+    {
+        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
+        return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+    }
+    else
+    {
+        return TValue::Nil();
+    }
+}
+
+template<LuaMetamethodKind mtKind>
 TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue rhs)
 {
     {
@@ -4447,8 +4464,12 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
         {
+            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            {
+                goto fail;
+            }
             if (lhs.AsDouble() < rhs.AsDouble())
             {
                 Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
@@ -4460,8 +4481,118 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+            if (lhs.IsPointer(TValue::x_mivTag))
+            {
+                if (!rhs.IsPointer(TValue::x_mivTag))
+                {
+                    goto fail;
+                }
+                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                if (unlikely(lhsTy != rhsTy))
+                {
+                    goto fail;
+                }
+                if (lhsTy == Type::STRING)
+                {
+                    VM* vm = VM::GetActiveVMForCurrentThread();
+                    HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
+                    HeapString* rhsString = TranslateToRawPointer(vm, rhs.AsPointer<HeapString>().As());
+                    int cmpRes = lhsString->Compare(rhsString);
+                    if (cmpRes < 0)
+                    {
+                        Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+                    }
+                    else
+                    {
+                        Dispatch(rc, stackframe, bcu + sizeof(Self));
+                    }
+                }
+                if (lhsTy == Type::TABLE)
+                {
+                    HeapPtr<TableObject> lhsMetatable;
+                    {
+                        HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                        TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                        if (result.m_result.m_value == 0)
+                        {
+                            goto fail;
+                        }
+                        lhsMetatable = result.m_result.As<TableObject>();
+                    }
+
+                    HeapPtr<TableObject> rhsMetatable;
+                    {
+                        HeapPtr<TableObject> tableObj = rhs.AsPointer<TableObject>().As();
+                        TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                        if (result.m_result.m_value == 0)
+                        {
+                            goto fail;
+                        }
+                        rhsMetatable = result.m_result.As<TableObject>();
+                    }
+
+                    metamethod = GetMetamethodFromMetatableForComparisonOperation<LuaMetamethodKind::Lt>(lhsMetatable, rhsMetatable);
+                    if (metamethod.IsNil())
+                    {
+                        goto fail;
+                    }
+                    goto do_metamethod_call;
+                }
+
+                assert(lhsTy != Type::USERDATA && "unimplemented");
+
+                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                if (metamethod.IsNil())
+                {
+                    goto fail;
+                }
+                goto do_metamethod_call;
+            }
+
+            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+
+            {
+                assert(lhs.IsMIV(TValue::x_mivTag));
+                if (!rhs.IsMIV(TValue::x_mivTag))
+                {
+                    goto fail;
+                }
+                // Must be both 'nil', or both 'boolean', in order to consider metatable
+                //
+                if (lhs.IsNil() != rhs.IsNil())
+                {
+                    goto fail;
+                }
+                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                if (metamethod.IsNil())
+                {
+                    goto fail;
+                }
+                goto do_metamethod_call;
+            }
+
+do_metamethod_call:
+            {
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
+
+                if (!pmcr.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = pmcr.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = pmcr.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, pmcr.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
+fail:
+        // TODO: make this error consistent with Lua
+        //
+        [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for less than").m_value);
     }
 } __attribute__((__packed__));
 
@@ -4494,8 +4625,12 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
         {
+            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            {
+                goto fail;
+            }
             if (!(lhs.AsDouble() < rhs.AsDouble()))
             {
                 Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
@@ -4507,8 +4642,118 @@ public:
         }
         else
         {
-            assert(false && "unimplemented");
+            TValue metamethod;
+            if (lhs.IsPointer(TValue::x_mivTag))
+            {
+                if (!rhs.IsPointer(TValue::x_mivTag))
+                {
+                    goto fail;
+                }
+                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                if (unlikely(lhsTy != rhsTy))
+                {
+                    goto fail;
+                }
+                if (lhsTy == Type::STRING)
+                {
+                    VM* vm = VM::GetActiveVMForCurrentThread();
+                    HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
+                    HeapString* rhsString = TranslateToRawPointer(vm, rhs.AsPointer<HeapString>().As());
+                    int cmpRes = lhsString->Compare(rhsString);
+                    if (!(cmpRes < 0))
+                    {
+                        Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
+                    }
+                    else
+                    {
+                        Dispatch(rc, stackframe, bcu + sizeof(Self));
+                    }
+                }
+                if (lhsTy == Type::TABLE)
+                {
+                    HeapPtr<TableObject> lhsMetatable;
+                    {
+                        HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
+                        TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                        if (result.m_result.m_value == 0)
+                        {
+                            goto fail;
+                        }
+                        lhsMetatable = result.m_result.As<TableObject>();
+                    }
+
+                    HeapPtr<TableObject> rhsMetatable;
+                    {
+                        HeapPtr<TableObject> tableObj = rhs.AsPointer<TableObject>().As();
+                        TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
+                        if (result.m_result.m_value == 0)
+                        {
+                            goto fail;
+                        }
+                        rhsMetatable = result.m_result.As<TableObject>();
+                    }
+
+                    metamethod = GetMetamethodFromMetatableForComparisonOperation<LuaMetamethodKind::Lt>(lhsMetatable, rhsMetatable);
+                    if (metamethod.IsNil())
+                    {
+                        goto fail;
+                    }
+                    goto do_metamethod_call;
+                }
+
+                assert(lhsTy != Type::USERDATA && "unimplemented");
+
+                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                if (metamethod.IsNil())
+                {
+                    goto fail;
+                }
+                goto do_metamethod_call;
+            }
+
+            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+
+            {
+                assert(lhs.IsMIV(TValue::x_mivTag));
+                if (!rhs.IsMIV(TValue::x_mivTag))
+                {
+                    goto fail;
+                }
+                // Must be both 'nil', or both 'boolean', in order to consider metatable
+                //
+                if (lhs.IsNil() != rhs.IsNil())
+                {
+                    goto fail;
+                }
+                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                if (metamethod.IsNil())
+                {
+                    goto fail;
+                }
+                goto do_metamethod_call;
+            }
+
+do_metamethod_call:
+            {
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
+
+                if (!pmcr.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = pmcr.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = pmcr.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, pmcr.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
         }
+fail:
+        // TODO: make this error consistent with Lua
+        //
+        [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for less than").m_value);
     }
 } __attribute__((__packed__));
 

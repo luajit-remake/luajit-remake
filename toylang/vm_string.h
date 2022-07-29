@@ -59,6 +59,37 @@ public:
         size_t beforeAlignment = TrailingArrayOffset() + length;
         return RoundUpToMultipleOf<8>(beforeAlignment);
     }
+
+    // Compare the string represented by 'this' and the string represented by 'other'
+    // -1 if <, 0 if ==, 1 if >
+    //
+    int WARN_UNUSED Compare(HeapString* other)
+    {
+        uint8_t* selfStr = m_string;
+        uint32_t selfLength = m_length;
+        uint8_t* otherStr = other->m_string;
+        uint32_t otherLength = other->m_length;
+        uint32_t minLen = std::min(selfLength, otherLength);
+        // Note that Lua string may contain '\0', so we must use memcmp, not strcmp.
+        //
+        int cmpResult = memcmp(selfStr, otherStr, minLen);
+        if (cmpResult != 0)
+        {
+            return cmpResult;
+        }
+        if (selfLength > minLen)
+        {
+            return 1;
+        }
+        if (otherLength > minLen)
+        {
+            return -1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
 };
 static_assert(sizeof(HeapString) == 16);
 
