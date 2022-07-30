@@ -2811,4 +2811,82 @@ TEST(LuaTest, metatable_le)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, metatable_eq_3)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_eq_3.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "f\tt1\tt2\n"
+            "true\n"
+            "f\tt1\tt2\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "f2\tt1\tt2\n"
+            "false\n"
+            "f2\tt1\tt2\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "false\n"
+            "true\n"
+            "true\n"
+            "false\n"
+            "true\n"
+            "false\n"
+            "f\tt1\tt2\n"
+            "true\n"
+            "f\tt1\tt2\n"
+            "false\n"
+            "true\n"
+            "false\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+
 }   // anonymous namespace

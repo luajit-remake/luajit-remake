@@ -456,7 +456,7 @@ class alignas(8) TableObject
 public:
     static bool WARN_UNUSED ALWAYS_INLINE IsInt64Index(double vidx, int64_t& idx /*out*/)
     {
-        // FIXME: float-to-int conversion is UB in C/C++, and it can actually cause incorrect behavior either if
+        // FIXME: out-of-range float-to-int conversion is UB in C/C++, and it can actually cause incorrect behavior either if
         // clang deduces 'vidx' is out-of-range (and cause undesired "optimization" of the expression into a poison value),
         // or on non-x86-64 architectures (e.g. ARM64) where the float-to-int instruction has saturation or other semantics.
         // However, if we manually check for the range, while it worksaround the UB and works correctly on every
@@ -2134,6 +2134,22 @@ public:
         else
         {
             ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    // If returns true, it is guaranteed that field 'mtKind' doesn't exist if 'self'
+    // If returns false, however, there is no guarantee on anything.
+    //
+    static bool WARN_UNUSED TryQuicklyRuleOutMetamethod(HeapPtr<TableObject> self, LuaMetamethodKind mtKind)
+    {
+        SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
+        if (likely(hc.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure))
+        {
+            return hc.As<Structure>()->m_knownNonexistentMetamethods & (static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << static_cast<size_t>(mtKind)));
+        }
+        else
+        {
+            return false;
         }
     }
 

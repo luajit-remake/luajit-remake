@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "thirdparty_xxhash_impl.h"
+#include "thirdparty_constexpr_xxh.h"
 
 // XXHash library marks various function as "unused" to workaround some GCC compiler warning
 // As a result, now they are triggering new false warnings on clang...

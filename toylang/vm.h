@@ -21,7 +21,7 @@ inline bool IsCompilerThread() { return t_threadKind == CompilerThread; }
 inline bool IsExecutionThread() { return t_threadKind == ExecutionThread; }
 inline bool IsGCThread() { return t_threadKind == GCThread; }
 
-#define METAMETHOD_NAME_LIST             \
+#define METAMETHOD_NAME_LIST            \
     /* Enum Name,    String Name */     \
     (Call,           __call)            \
   , (Add,            __add)             \
@@ -56,6 +56,62 @@ constexpr const char* x_luaMetatableStringName[x_totalLuaMetamethodKind] = {
     PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
 #undef macro
 };
+
+using LuaMetamethodBitVectorT = std::conditional_t<x_totalLuaMetamethodKind <= 8, uint8_t,
+                                std::conditional_t<x_totalLuaMetamethodKind <= 16, uint16_t,
+                                std::conditional_t<x_totalLuaMetamethodKind <= 32, uint32_t,
+                                std::conditional_t<x_totalLuaMetamethodKind <= 64, uint64_t,
+                                void /*fire static_assert below*/>>>>;
+static_assert(!std::is_same_v<LuaMetamethodBitVectorT, void>);
+
+constexpr LuaMetamethodBitVectorT x_luaMetamethodBitVectorFullMask = static_cast<LuaMetamethodBitVectorT>(static_cast<uint64_t>(-1) >> (64 - x_totalLuaMetamethodKind));
+
+// This corresponds to the m_high field in corresponding HeapString
+//
+constexpr std::array<uint16_t, x_totalLuaMetamethodKind> x_luaMetamethodHashes = {
+#define macro(e) constexpr_xxh3::XXH3_64bits_const( std::string_view { PP_STRINGIFY(PP_TUPLE_GET_2(e)) } ) >> 48,
+        PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
+#undef macro
+};
+
+constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
+    for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
+    {
+        for (size_t j = i + 1; j < x_totalLuaMetamethodKind; j++)
+        {
+            assert(x_luaMetamethodHashes[i] != x_luaMetamethodHashes[j]);
+        }
+    }
+
+    constexpr size_t htSize = 64;
+    std::array<uint8_t, htSize> result;
+    for (size_t i = 0; i < htSize; i++) { result[i] = 255; }
+    for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
+    {
+        uint16_t slot = static_cast<uint16_t>((x_luaMetamethodHashes[i] >> 8) % htSize);
+        while (result[slot] != 255)
+        {
+            slot = (slot + 1) % htSize;
+        }
+        result[slot] = static_cast<uint8_t>(i);
+    }
+    return result;
+}();
+
+// Return -1 if not found
+//
+constexpr int WARN_UNUSED GetLuaMetamethodOrdinalFromStringHash(uint16_t hashHigh)
+{
+    constexpr size_t htSize = std::size(x_luaMetamethodNamesSimpleHashTable);
+    uint16_t slot = static_cast<uint16_t>((hashHigh >> 8) % htSize);
+    while (true)
+    {
+        uint8_t entry = x_luaMetamethodNamesSimpleHashTable[slot];
+        if (entry == 255) { return -1; }
+        if (x_luaMetamethodHashes[entry] == hashHigh) { return entry; }
+        slot = (slot + 1) % htSize;
+    }
+}
 
 // Normally for each class type, we use one free list for compiler thread and one free list for execution thread.
 // However, some classes may be allocated on the compiler thread but freed on the execution thread.
@@ -864,10 +920,14 @@ public:
     bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
+
         for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
         {
             m_stringNameForMetatableKind[i] = static_cast<CRTP*>(this)->CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
+            assert(m_stringNameForMetatableKind[i].As()->m_hashHigh == x_luaMetamethodHashes[i]);
+            assert(GetMetamethodOrdinalFromStringName(m_stringNameForMetatableKind[i].As()) == static_cast<int>(i));
         }
+
         for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
         {
             m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
@@ -921,6 +981,23 @@ public:
     UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetamethodKind kind)
     {
         return m_stringNameForMetatableKind[static_cast<size_t>(kind)];
+    }
+
+    // return -1 if not found, otherwise return the corresponding LuaMetamethodKind
+    //
+    int WARN_UNUSED GetMetamethodOrdinalFromStringName(HeapPtr<HeapString> stringName)
+    {
+        int ord = GetLuaMetamethodOrdinalFromStringHash(stringName->m_hashHigh);
+        if (likely(ord == -1))
+        {
+            return -1;
+        }
+        assert(static_cast<size_t>(ord) < x_totalLuaMetamethodKind);
+        if (likely(m_stringNameForMetatableKind[static_cast<size_t>(ord)] == stringName))
+        {
+            return ord;
+        }
+        return -1;
     }
 
     static constexpr size_t OffsetofStringNameForMetatableKind()

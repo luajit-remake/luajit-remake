@@ -3569,6 +3569,16 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
 {
     TValue lhsMetamethod;
     {
+        // For 'eq', if either table doesn't have metamethod, the result is 'false', so it's a probable case that worth a fast path.
+        // For 'le' or 'lt', however, the behavior is to throw error, so the situtation becomes just the opposite: it's unlikely the table doesn't have metamethod.
+        //
+        if constexpr(mtKind == LuaMetamethodKind::Eq)
+        {
+            if (TableObject::TryQuicklyRuleOutMetamethod(lhsMetatable, mtKind))
+            {
+                return TValue::Nil();
+            }
+        }
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(lhsMetatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
         lhsMetamethod = TableObject::GetById(lhsMetatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -3580,6 +3590,13 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
 
     TValue rhsMetamethod;
     {
+        if constexpr(mtKind == LuaMetamethodKind::Eq)
+        {
+            if (TableObject::TryQuicklyRuleOutMetamethod(rhsMetatable, mtKind))
+            {
+                return TValue::Nil();
+            }
+        }
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(rhsMetatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
         rhsMetamethod = TableObject::GetById(rhsMetatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);

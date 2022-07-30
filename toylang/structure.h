@@ -1147,7 +1147,8 @@ public:
     //
     uint8_t m_lock;
 
-    uint16_t m_reserved;
+    static_assert(std::is_same_v<LuaMetamethodBitVectorT, uint16_t>, "you should reorder the members to minimize padding in this structure");
+    LuaMetamethodBitVectorT m_knownNonexistentMetamethods;
 
     // The hash mask of the inline hash table
     // The inline hash table contains entries for the last full block and all entries in the non-full block
@@ -2117,6 +2118,18 @@ end_setup:
     r->m_anchorHashTable = anchorTableForNewNode;
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
+    r->m_knownNonexistentMetamethods = m_knownNonexistentMetamethods;
+    if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == Type::STRING)
+    {
+        int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(key.As<HeapString>());
+        if (unlikely(metamethodOrd != -1))
+        {
+            LuaMetamethodBitVectorT mask = static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << metamethodOrd);
+            assert(r->m_knownNonexistentMetamethods & mask);
+            r->m_knownNonexistentMetamethods &= ~mask;
+        }
+    }
+
     if (needButterflyExpansion)
     {
         r->m_butterflyNamedStorageCapacity = expandedButterflyCapacity;
@@ -2407,6 +2420,7 @@ inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t 
     r->m_numSlots = 0;
     r->m_nonFullBlockLen = 0;
     r->m_arrayType = ArrayType::GetInitialArrayType();
+    r->m_knownNonexistentMetamethods = x_luaMetamethodBitVectorFullMask;
     r->m_anchorHashTable.m_value = 0;
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = inlineCapacity;
