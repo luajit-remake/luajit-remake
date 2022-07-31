@@ -1325,6 +1325,7 @@ public:
         GeneralHeapPointer<void> m_key;
         uint32_t m_slot;
     };
+    static_assert(sizeof(HashTableEntry) == 8);
 
     // Create an empty CacheableDictionary with expected 'numSlots' properties and specified inline storage capacity
     //

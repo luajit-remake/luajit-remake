@@ -2985,4 +2985,71 @@ TEST(LuaTest, getbyid_metatable)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, globalget_metatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/globalget_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "-- test 1 --\n"
+            "nil\n"
+            "nil\n"
+            "-- test 2 --\n"
+            "f1\ttrue\tx\tnil\n"
+            "123\n"
+            "f1\ttrue\ty\tnil\n"
+            "123\n"
+            "-- test 3 --\n"
+            "xx\n"
+            "f1\ttrue\ty\tnil\n"
+            "123\n"
+            "-- test 4 --\n"
+            "xx\n"
+            "ww\n"
+            "-- test 5 --\n"
+            "xx\n"
+            "y1\n"
+            "-- test 6 --\n"
+            "x1\n"
+            "y1\n"
+            "-- test 7 --\n"
+            "abc\n"
+            "y1\n"
+            "-- test 8 --\n"
+            "abc\n"
+            "f2\t233\ty\tnil\tnil\n"
+            "233\n"
+            "-- test 9 --\n"
+            "abc\n"
+            "false\n"
+            "-- test 10 --\n"
+            "abc\n"
+            "f6\tt10\ty\tnil\n"
+            "900\n"
+            "1\n"
+            "2\n"
+            "3\n"
+            "4\n"
+            "5\n"
+            "6\n"
+            "7\n"
+            "8\n"
+            "9\n"
+            "10\n"
+            "f6\tt10\ta11\tnil\n"
+            "900\n"
+            "f6\tt10\ta12\tnil\n"
+            "900\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

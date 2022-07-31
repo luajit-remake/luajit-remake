@@ -1196,7 +1196,7 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
 
     size_t nestedErrorCount = 0;
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
-    while (hdr != nullptr)
+    while (true)
     {
         if (hdr->m_retAddr == reinterpret_cast<void*>(LJR_LIB_OnProtectedCallSuccessReturn))
         {
@@ -1206,7 +1206,12 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
         {
             nestedErrorCount++;
         }
-        hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
+        hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller);
+        if (hdr == nullptr)
+        {
+            break;
+        }
+        hdr = hdr - 1;
     }
 
     if (hdr == nullptr)
@@ -1219,6 +1224,15 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
         PrintTValue(fp, errorObject);
         fprintf(fp, "\n");
         fclose(fp);
+        // Also output to stderr if the VM's stderr is redirected to somewhere else
+        //
+        if (fp != stderr)
+        {
+            fprintf(stderr, "Uncaught error: ");
+            PrintTValue(stderr, errorObject);
+            fprintf(stderr, "\n");
+            fflush(stderr);
+        }
         abort();
     }
 
@@ -1726,6 +1740,8 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
         insertField(r, propName, TValue::CreatePointer(o));
         return o.As();
     };
+
+    insertField(globalObject, "_G", TValue::CreatePointer(UserHeapPointer<TableObject> { globalObject }));
 
     insertCFunc(globalObject, "print", LJR_LIB_BASE_print);
     insertCFunc(globalObject, "pairs", LJR_LIB_BASE_pairs);
@@ -2551,13 +2567,74 @@ public:
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
-        UserHeapPointer<TableObject> base = rc->m_globalObject;
+        HeapPtr<TableObject> base = rc->m_globalObject.As();
+
+retry:
         GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(base.As<TableObject>(), index, icInfo /*out*/);
-        TValue result = TableObject::GetById(base.As(), index.As<void>(), icInfo);
+        TableObject::PrepareGetById(base, index, icInfo /*out*/);
+        TValue result = TableObject::GetById(base, index.As<void>(), icInfo);
+
+        TValue metamethodBase;
+        TValue metamethod;
+
+        if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+        {
+            TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
+            if (gmr.m_result.m_value != 0)
+            {
+                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                if (!metamethod.IsNil())
+                {
+                    metamethodBase = TValue::CreatePointer(UserHeapPointer<TableObject> { base });
+                    goto handle_metamethod;
+                }
+            }
+        }
 
         *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
         Dispatch(rc, sfp, bcu + sizeof(Self));
+
+handle_metamethod:
+        // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+        //
+        if (likely(metamethod.IsPointer(TValue::x_mivTag)))
+        {
+            Type mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (mmType == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, metamethodBase, tvIndex, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            else if (mmType == Type::TABLE)
+            {
+                base = metamethod.AsPointer<TableObject>().As();
+                goto retry;
+            }
+        }
+
+        // Now we know 'metamethod' is not a function or pointer, so we should locate its own exotic '__index' metamethod..
+        // The difference is that if the metamethod is nil, we need to throw an error
+        //
+        metamethodBase = metamethod;
+        metamethod = GetMetamethodForValue(metamethod, LuaMetamethodKind::Index);
+        if (metamethod.IsNil())
+        {
+            // TODO: make error message consistent with Lua
+            //
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for GetById").m_value);
+        }
+        goto handle_metamethod;
     }
 } __attribute__((__packed__));
 
