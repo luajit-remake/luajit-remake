@@ -1987,6 +1987,126 @@ public:
     int32_t m_offset;
 } __attribute__((__packed__));
 
+inline TValue WARN_UNUSED GetMetamethodFromMetatable(HeapPtr<TableObject> metatable, LuaMetamethodKind mtKind)
+{
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
+    return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+}
+
+inline TValue WARN_UNUSED GetMetamethodForValue(TValue value, LuaMetamethodKind mtKind)
+{
+    UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
+    if (metatableMaybeNull.m_value != 0)
+    {
+        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        return GetMetamethodFromMetatable(metatable, mtKind);
+    }
+    else
+    {
+        return TValue::Nil();
+    }
+}
+
+struct PrepareMetamethodCallResult
+{
+    bool m_success;
+    void* m_baseForNextFrame;
+    HeapPtr<ExecutableCode> m_calleeEc;
+};
+
+template<auto bytecodeDst>
+static void OnReturnFromStoreResultMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
+{
+    static_assert(std::is_member_object_pointer_v<decltype(bytecodeDst)>);
+    using C = class_type_of_member_object_pointer_t<decltype(bytecodeDst)>;
+    static_assert(std::is_same_v<BytecodeSlot, value_type_of_member_object_pointer_t<decltype(bytecodeDst)>>);
+
+    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+    const C* bc = reinterpret_cast<const C*>(bcu);
+    assert(bc->m_opcode == x_opcodeId<C>);
+    *StackFrameHeader::GetLocalAddr(stackframe, bc->*bytecodeDst) = *retValues;
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+    Dispatch(rc, stackframe, bcu + sizeof(C));
+}
+
+template<bool branchIfTruthy, auto bytecodeJumpDst>
+static void OnReturnFromComparativeMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
+{
+    static_assert(std::is_member_object_pointer_v<decltype(bytecodeJumpDst)>);
+    using C = class_type_of_member_object_pointer_t<decltype(bytecodeJumpDst)>;
+    static_assert(std::is_same_v<int32_t, value_type_of_member_object_pointer_t<decltype(bytecodeJumpDst)>>);
+
+    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
+    bool shouldBranch = (branchIfTruthy == retValues[0].IsTruthy());
+
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+    const C* bc = reinterpret_cast<const C*>(bcu);
+    assert(bc->m_opcode == x_opcodeId<C>);
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+
+    if (shouldBranch)
+    {
+        Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + (bc->*bytecodeJumpDst)));
+    }
+    else
+    {
+        Dispatch(rc, stackframe, bcu + sizeof(C));
+    }
+}
+
+inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod, InterpreterFn onReturn)
+{
+    assert(!metamethod.IsNil());
+
+    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
+    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
+    if (callTarget.m_target.m_value == 0)
+    {
+        return {
+            .m_success = false
+        };
+    }
+
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(curBytecode - rc->m_codeBlock->m_bytecode);
+
+    uint32_t numParamsForMetamethodCall;
+    if (unlikely(callTarget.m_invokedThroughMetatable))
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = metamethod;
+        start[x_numSlotsForStackFrameHeader + 1] = lhs;
+        start[x_numSlotsForStackFrameHeader + 2] = rhs;
+        numParamsForMetamethodCall = 3;
+    }
+    else
+    {
+        start[0] = TValue::CreatePointer(callTarget.m_target);
+        start[x_numSlotsForStackFrameHeader] = lhs;
+        start[x_numSlotsForStackFrameHeader + 1] = rhs;
+        numParamsForMetamethodCall = 2;
+    }
+
+    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, onReturn, false /*passVariadicRetAsParam*/);
+
+    HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
+    return {
+        .m_success = true,
+        .m_baseForNextFrame = baseForNextFrame,
+        .m_calleeEc = calleeEc
+    };
+}
+
 class BcTableGetById
 {
 public:
@@ -2012,23 +2132,73 @@ public:
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
-        if (!tvbase.IsPointer(TValue::x_mivTag))
+        TValue metamethod;
+        while (true)
         {
-            ReleaseAssert(false && "unimplemented");
-        }
-        else
-        {
-            UserHeapPointer<void> base = tvbase.AsPointer<void>();
-            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            if (!tvbase.IsPointer(TValue::x_mivTag))
             {
-                ReleaseAssert(false && "unimplemented");
+                goto not_table_object;
             }
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(base.As<TableObject>(), index, icInfo /*out*/);
-            TValue result = TableObject::GetById(base.As<TableObject>(), index.As<void>(), icInfo);
+            else
+            {
+                UserHeapPointer<void> base = tvbase.AsPointer<void>();
+                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                {
+                    goto not_table_object;
+                }
 
-            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(Self));
+                HeapPtr<TableObject> tableObj = base.As<TableObject>();
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(tableObj, index, icInfo /*out*/);
+                TValue result = TableObject::GetById(tableObj, index.As<void>(), icInfo);
+
+                if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                {
+                    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                    if (gmr.m_result.m_value != 0)
+                    {
+                        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+                        {
+                            metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                            if (!metamethod.IsNil())
+                            {
+                                goto handle_metamethod;
+                            }
+                        }
+                    }
+                }
+
+                *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+                Dispatch(rc, sfp, bcu + sizeof(Self));
+            }
+
+not_table_object:
+            metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::Index);
+            if (metamethod.IsNil())
+            {
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TableGetById").m_value);
+            }
+
+handle_metamethod:
+            // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+            // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+            //
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, tvIndex, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            tvbase = metamethod;
         }
     }
 } __attribute__((__packed__));
@@ -3203,105 +3373,6 @@ public:
     }
 } __attribute__((__packed__));
 
-struct PrepareMetamethodCallResult
-{
-    bool m_success;
-    void* m_baseForNextFrame;
-    HeapPtr<ExecutableCode> m_calleeEc;
-};
-
-template<auto bytecodeDst>
-static void OnReturnFromArithmeticMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
-{
-    static_assert(std::is_member_object_pointer_v<decltype(bytecodeDst)>);
-    using C = class_type_of_member_object_pointer_t<decltype(bytecodeDst)>;
-    static_assert(std::is_same_v<BytecodeSlot, value_type_of_member_object_pointer_t<decltype(bytecodeDst)>>);
-
-    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
-    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
-    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
-    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
-    const C* bc = reinterpret_cast<const C*>(bcu);
-    assert(bc->m_opcode == x_opcodeId<C>);
-    *StackFrameHeader::GetLocalAddr(stackframe, bc->*bytecodeDst) = *retValues;
-    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
-    Dispatch(rc, stackframe, bcu + sizeof(C));
-}
-
-template<bool branchIfTruthy, auto bytecodeJumpDst>
-static void OnReturnFromComparativeMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* retValuesU, uint64_t /*numRetValues*/)
-{
-    static_assert(std::is_member_object_pointer_v<decltype(bytecodeJumpDst)>);
-    using C = class_type_of_member_object_pointer_t<decltype(bytecodeJumpDst)>;
-    static_assert(std::is_same_v<int32_t, value_type_of_member_object_pointer_t<decltype(bytecodeJumpDst)>>);
-
-    const TValue* retValues = reinterpret_cast<const TValue*>(retValuesU);
-    bool shouldBranch = (branchIfTruthy == retValues[0].IsTruthy());
-
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
-    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
-    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
-    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
-    const C* bc = reinterpret_cast<const C*>(bcu);
-    assert(bc->m_opcode == x_opcodeId<C>);
-    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
-
-    if (shouldBranch)
-    {
-        Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + (bc->*bytecodeJumpDst)));
-    }
-    else
-    {
-        Dispatch(rc, stackframe, bcu + sizeof(C));
-    }
-}
-
-inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod, InterpreterFn onReturn)
-{
-    assert(!metamethod.IsNil());
-
-    TValue* start = reinterpret_cast<TValue*>(stackframe) + rc->m_codeBlock->m_stackFrameNumSlots;
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
-    {
-        return {
-            .m_success = false
-        };
-    }
-
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
-    hdr->m_callerBytecodeOffset = SafeIntegerCast<uint32_t>(curBytecode - rc->m_codeBlock->m_bytecode);
-
-    uint32_t numParamsForMetamethodCall;
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        start[0] = TValue::CreatePointer(callTarget.m_target);
-        start[x_numSlotsForStackFrameHeader] = metamethod;
-        start[x_numSlotsForStackFrameHeader + 1] = lhs;
-        start[x_numSlotsForStackFrameHeader + 2] = rhs;
-        numParamsForMetamethodCall = 3;
-    }
-    else
-    {
-        start[0] = TValue::CreatePointer(callTarget.m_target);
-        start[x_numSlotsForStackFrameHeader] = lhs;
-        start[x_numSlotsForStackFrameHeader + 1] = rhs;
-        numParamsForMetamethodCall = 2;
-    }
-
-    void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, onReturn, false /*passVariadicRetAsParam*/);
-
-    HeapPtr<ExecutableCode> calleeEc = TCGet(callTarget.m_target.As()->m_executable).As();
-    return {
-        .m_success = true,
-        .m_baseForNextFrame = baseForNextFrame,
-        .m_calleeEc = calleeEc
-    };
-}
-
 class BcUnaryMinus
 {
 public:
@@ -3360,7 +3431,7 @@ public:
                 [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for unary minus").m_value);
             }
 
-            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_dst>);
+            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
             if (!res.m_success)
             {
                 // Metamethod exists but is not callable, throw error
@@ -3438,7 +3509,7 @@ public:
         // but for 'length', the parameter is only 'src'.
         // Lua 5.2+ unified the behavior and always pass 'src, src', but for now we are targeting Lua 5.1.
         //
-        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_dst>);
+        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
         if (!res.m_success)
         {
             // Metamethod exists but is not callable, throw error
@@ -3506,23 +3577,6 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
 
     double result = func(lhsNumber, rhsNumber);
     return result;
-}
-
-template<LuaMetamethodKind mtKind>
-TValue WARN_UNUSED GetMetamethodForValue(TValue value)
-{
-    UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
-    if (metatableMaybeNull.m_value != 0)
-    {
-        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-        return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
-    }
-    else
-    {
-        return TValue::Nil();
-    }
 }
 
 template<LuaMetamethodKind mtKind>
@@ -3715,7 +3769,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3804,7 +3858,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3893,7 +3947,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -3982,7 +4036,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4089,7 +4143,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4178,7 +4232,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromArithmeticMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4560,7 +4614,7 @@ public:
 
                 assert(lhsTy != Type::USERDATA && "unimplemented");
 
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -4582,7 +4636,7 @@ public:
                 {
                     goto fail;
                 }
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -4721,7 +4775,7 @@ public:
 
                 assert(lhsTy != Type::USERDATA && "unimplemented");
 
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -4743,7 +4797,7 @@ public:
                 {
                     goto fail;
                 }
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Lt>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -4878,7 +4932,7 @@ public:
 
                 assert(lhsTy != Type::USERDATA && "unimplemented");
 
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Le>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -4900,7 +4954,7 @@ public:
                 {
                     goto fail;
                 }
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Le>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -5035,7 +5089,7 @@ public:
 
                 assert(lhsTy != Type::USERDATA && "unimplemented");
 
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Le>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
                 {
                     goto fail;
@@ -5057,7 +5111,7 @@ public:
                 {
                     goto fail;
                 }
-                metamethod = GetMetamethodForValue<LuaMetamethodKind::Le>(lhs);
+                metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
                 {
                     goto fail;

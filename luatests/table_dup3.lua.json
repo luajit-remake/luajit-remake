@@ -420,21 +420,21 @@
             {
               "EntryKey": {
                 "Type": "String",
-                "Value": "b"
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 3
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "String",
                 "Value": "a"
               },
               "EntryValue": {
                 "Type": "Int32",
                 "Value": 2
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "b"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 3
               }
             }
           ],
@@ -531,7 +531,7 @@
             }
           ],
           "AdditionalNamedKeys": 0,
-          "ArraySizeHint": 3
+          "ArraySizeHint": 0
         },
         {
           "Type": "String",
