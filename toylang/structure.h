@@ -694,6 +694,8 @@ public:
         Structure* newStructure = CloneStructure(vm);
         newStructure->m_parentEdgeTransitionKind = TransitionKind::AddMetaTable;
         newStructure->m_metatable = metatable.m_value;
+        assert(!newStructure->m_arrayType.MayHaveMetatable());
+        newStructure->m_arrayType.SetMayHaveMetatable(true);
         return newStructure;
     }
 
@@ -703,6 +705,8 @@ public:
         Structure* newStructure = CloneStructure(vm);
         newStructure->m_parentEdgeTransitionKind = TransitionKind::RemoveMetaTable;
         newStructure->m_metatable = 0;
+        assert(newStructure->m_arrayType.MayHaveMetatable());
+        newStructure->m_arrayType.SetMayHaveMetatable(false);
         return newStructure;
     }
 
@@ -2116,6 +2120,10 @@ end_setup:
     r->m_nonFullBlockLen = nonFullBlockCopyLengthForNewNode + static_cast<uint8_t>(shouldAddKey);
     assert(r->m_nonFullBlockLen == ComputeNonFullBlockLength(r->m_numSlots));
     r->m_arrayType = m_arrayType;
+    if (slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable)
+    {
+        r->m_arrayType.SetMayHaveMetatable(true);
+    }
     r->m_anchorHashTable = anchorTableForNewNode;
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;

@@ -595,12 +595,6 @@ public:
     {
         // TODO: handle metatable
 
-        if (IsNaN(idx))
-        {
-            // TODO: throw error NaN as table index
-            ReleaseAssert(false);
-        }
-
         {
             int64_t idx64;
             if (likely(IsInt64Index(idx, idx64 /*out*/)))
@@ -2068,6 +2062,8 @@ public:
                 }
             }
             m_hiddenClass = result.m_newStructure.As();
+            m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
+            assert(m_arrayType.MayHaveMetatable());
         }
         else if (ty == Type::CacheableDictionary)
         {
@@ -2082,6 +2078,7 @@ public:
             CacheableDictionary* newCd = cd->RelocateForAddingOrRemovingMetatable(vm);
             newCd->m_metatable = newMetatable.As();
             m_hiddenClass = newCd;
+            m_arrayType.SetMayHaveMetatable(true);
         }
         else
         {
@@ -2116,6 +2113,8 @@ public:
                 }
             }
             m_hiddenClass = result.m_newStructure.As();
+            m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
+            AssertIff(m_arrayType.MayHaveMetatable(), Structure::IsPolyMetatable(result.m_newStructure.As()));
         }
         else if (ty == Type::CacheableDictionary)
         {
@@ -2130,6 +2129,7 @@ public:
             CacheableDictionary* newCd = cd->RelocateForAddingOrRemovingMetatable(vm);
             newCd->m_metatable.m_value = 0;
             m_hiddenClass = newCd;
+            m_arrayType.SetMayHaveMetatable(false);
         }
         else
         {

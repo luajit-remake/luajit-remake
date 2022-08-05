@@ -2284,57 +2284,143 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+        TValue index = *StackFrameHeader::GetLocalAddr(sfp, bc->m_index);
+        TValue metamethod;
 
-        if (!tvbase.IsPointer(TValue::x_mivTag))
+        while (true)
         {
-            ReleaseAssert(false && "unimplemented");
-        }
-        else
-        {
-            UserHeapPointer<void> base = tvbase.AsPointer<void>();
-            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            if (unlikely(!tvbase.IsPointer(TValue::x_mivTag)))
             {
-                ReleaseAssert(false && "unimplemented");
-            }
-
-            TValue index = *StackFrameHeader::GetLocalAddr(sfp, bc->m_index);
-            TValue result;
-            if (index.IsInt32(TValue::x_int32Tag))
-            {
-                GetByIntegerIndexICInfo icInfo;
-                TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
-                result = TableObject::GetByIntegerIndex(base.As<TableObject>(), index.AsInt32(), icInfo);
-            }
-            else if (index.IsDouble(TValue::x_int32Tag))
-            {
-                GetByIntegerIndexICInfo icInfo;
-                TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
-                result = TableObject::GetByDoubleVal(base.As<TableObject>(), index.AsDouble(), icInfo);
-            }
-            else if (index.IsPointer(TValue::x_mivTag))
-            {
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(base.As<TableObject>(), index.AsPointer(), icInfo /*out*/);
-                result = TableObject::GetById(base.As<TableObject>(), index.AsPointer(), icInfo);
+                goto not_table_object;
             }
             else
             {
-                assert(index.IsMIV(TValue::x_mivTag));
-                MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
-                if (miv.IsNil())
+                UserHeapPointer<void> base = tvbase.AsPointer<void>();
+                if (unlikely(base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE))
                 {
-                    ReleaseAssert(false && "unimplemented");
+                    goto not_table_object;
                 }
-                assert(miv.IsBoolean());
-                UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
 
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(base.As<TableObject>(), specialKey, icInfo /*out*/);
-                result = TableObject::GetById(base.As<TableObject>(), specialKey.As<void>(), icInfo);
+                HeapPtr<TableObject> tableObj = base.As<TableObject>();
+                TValue result;
+                if (index.IsInt32(TValue::x_int32Tag))
+                {
+                    // TODO: we must be careful that we cannot do IC if the hidden class is CacheableDictionary
+                    //
+                    GetByIntegerIndexICInfo icInfo;
+                    TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+                    result = TableObject::GetByIntegerIndex(tableObj, index.AsInt32(), icInfo);
+                    if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                    {
+                        goto check_metatable;
+                    }
+                }
+                else if (index.IsDouble(TValue::x_int32Tag))
+                {
+                    double indexDouble = index.AsDouble();
+                    if (unlikely(IsNaN(indexDouble)))
+                    {
+                        // Indexing a table by 'NaN' for read is not an error, but always results in nil,
+                        // because indexing a table by 'NaN' for write is an error
+                        //
+                        result = TValue::Nil();
+                        goto check_metatable;
+                    }
+                    else
+                    {
+                        GetByIntegerIndexICInfo icInfo;
+                        TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+                        result = TableObject::GetByDoubleVal(tableObj, indexDouble, icInfo);
+                        if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                        {
+                            goto check_metatable;
+                        }
+                    }
+                }
+                else if (index.IsPointer(TValue::x_mivTag))
+                {
+                    GetByIdICInfo icInfo;
+                    TableObject::PrepareGetById(tableObj, index.AsPointer(), icInfo /*out*/);
+                    result = TableObject::GetById(tableObj, index.AsPointer(), icInfo);
+                    if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                    {
+                        goto check_metatable;
+                    }
+                }
+                else
+                {
+                    assert(index.IsMIV(TValue::x_mivTag));
+                    MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+                    if (miv.IsNil())
+                    {
+                        // Indexing a table by 'nil' for read is not an error, but always results in nil,
+                        // because indexing a table by 'nil' for write is an error
+                        //
+                        result = TValue::Nil();
+                        goto check_metatable;
+                    }
+                    else
+                    {
+                        assert(miv.IsBoolean());
+                        UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
+
+                        GetByIdICInfo icInfo;
+                        TableObject::PrepareGetById(tableObj, specialKey, icInfo /*out*/);
+                        result = TableObject::GetById(tableObj, specialKey.As<void>(), icInfo);
+                        if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                        {
+                            goto check_metatable;
+                        }
+                    }
+                }
+
+                *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+                Dispatch(rc, sfp, bcu + sizeof(Self));
+
+check_metatable:
+                TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                if (gmr.m_result.m_value != 0)
+                {
+                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+                    {
+                        metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                        if (!metamethod.IsNil())
+                        {
+                            goto handle_metamethod;
+                        }
+                    }
+                }
+                *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+                Dispatch(rc, sfp, bcu + sizeof(Self));
             }
 
-            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(Self));
+not_table_object:
+            metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::Index);
+            if (metamethod.IsNil())
+            {
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TableGetById").m_value);
+            }
+
+handle_metamethod:
+            // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+            // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+            //
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, index, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            tvbase = metamethod;
         }
     }
 } __attribute__((__packed__));
