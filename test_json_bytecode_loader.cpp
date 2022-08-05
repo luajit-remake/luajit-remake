@@ -3315,4 +3315,101 @@ TEST(LuaTest, getbyval_metatable)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, getbyintegerval_metatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/getbyintegerval_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "-- test 1 --\n"
+            "nil\n"
+            "nil\n"
+            "-- test 2 --\n"
+            "x\n"
+            "f1\tt\t2\tnil\n"
+            "233\n"
+            "-- test 3 --\n"
+            "f1\tt\t1\tnil\n"
+            "233\n"
+            "y\n"
+            "-- test 4 --\n"
+            "false\n"
+            "1.2\n"
+            "-- test 5 --\n"
+            "false\n"
+            "1.2\n"
+            "-- test 6 --\n"
+            "false\n"
+            "0\n"
+            "-- test 7 --\n"
+            "f3\t123\t1\tnil\tnil\n"
+            "433\n"
+            "0\n"
+            "-- test 8 --\n"
+            "false\n"
+            "0\n"
+            "-- test 9 --\n"
+            "false\n"
+            "false\n"
+            "-- test 10 --\n"
+            "f3\tfalse\t1\tnil\n"
+            "455\n"
+            "f3\tfalse\t2\tnil\n"
+            "455\n"
+            "-- test 11 --\n"
+            "false\n"
+            "false\n"
+            "-- test 12 --\n"
+            "false\n"
+            "false\n"
+            "-- test 13 --\n"
+            "f5\t566\t1\tnil\tnil\n"
+            "899\n"
+            "f5\t566\t2\tnil\tnil\n"
+            "899\n"
+            "-- test 14 --\n"
+            "1\n"
+            "2\n"
+            "3\n"
+            "4\n"
+            "5\n"
+            "6\n"
+            "7\n"
+            "8\n"
+            "9\n"
+            "10\n"
+            "f6\tt10\t11\tnil\n"
+            "900\n"
+            "f6\tt10\t1\tnil\n"
+            "900\n"
+            "2\n"
+            "3\n"
+            "f6\tt10\t11\tnil\n"
+            "900\n"
+            "-- test 15 --\n"
+            "10\n"
+            "f5\t456\t11\tnil\tnil\n"
+            "899\n"
+            "3\n"
+            "f5\t456\t11\tnil\tnil\n"
+            "899\n"
+            "-- test 16 --\n"
+            "10\n"
+            "11\n"
+            "nil\n"
+            "3\n"
+            "11\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

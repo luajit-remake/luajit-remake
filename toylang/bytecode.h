@@ -2399,7 +2399,7 @@ not_table_object:
             metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::Index);
             if (metamethod.IsNil())
             {
-                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TableGetById").m_value);
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TableGetByVal").m_value);
             }
 
 handle_metamethod:
@@ -2515,26 +2515,76 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
+        TValue metamethod;
+        int16_t index = bc->m_index;
 
-        if (!tvbase.IsPointer(TValue::x_mivTag))
+        while (true)
         {
-            ReleaseAssert(false && "unimplemented");
-        }
-        else
-        {
-            UserHeapPointer<void> base = tvbase.AsPointer<void>();
-            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            if (!tvbase.IsPointer(TValue::x_mivTag))
             {
-                ReleaseAssert(false && "unimplemented");
+                goto not_table_object;
+            }
+            else
+            {
+                UserHeapPointer<void> base = tvbase.AsPointer<void>();
+                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                {
+                    goto not_table_object;
+                }
+
+                HeapPtr<TableObject> tableObj = base.As<TableObject>();
+                TValue result;
+                GetByIntegerIndexICInfo icInfo;
+                TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+                result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
+
+                if (unlikely(icInfo.m_mayHaveMetatable && result.IsNil()))
+                {
+                    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                    if (gmr.m_result.m_value != 0)
+                    {
+                        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+                        {
+                            metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                            if (!metamethod.IsNil())
+                            {
+                                goto handle_metamethod;
+                            }
+                        }
+                    }
+                }
+
+                *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
+                Dispatch(rc, sfp, bcu + sizeof(Self));
             }
 
-            TValue result;
-            GetByIntegerIndexICInfo icInfo;
-            TableObject::PrepareGetByIntegerIndex(base.As<TableObject>(), icInfo /*out*/);
-            result = TableObject::GetByIntegerIndex(base.As<TableObject>(), bc->m_index, icInfo);
+not_table_object:
+            metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::Index);
+            if (metamethod.IsNil())
+            {
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TableGetByVal").m_value);
+            }
 
-            *StackFrameHeader::GetLocalAddr(sfp, bc->m_dst) = result;
-            Dispatch(rc, sfp, bcu + sizeof(Self));
+handle_metamethod:
+            // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+            // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+            //
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, TValue::CreateInt32(index, TValue::x_int32Tag), metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            tvbase = metamethod;
         }
     }
 } __attribute__((__packed__));
