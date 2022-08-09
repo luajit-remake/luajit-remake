@@ -685,6 +685,10 @@ private:
     int m_value;
 } __attribute__((__packed__));
 
+// The return statement is required to fill nil up to x_minNilFillReturnValues values even if it returns less than that many values
+//
+constexpr uint32_t x_minNilFillReturnValues = 3;
+
 // stack frame format:
 //     [... VarArgs ...] [Header] [... Locals ...]
 //                                ^
@@ -764,50 +768,68 @@ inline UserHeapPointer<FunctionObject> WARN_UNUSED GetCallTargetConsideringMetat
     return res.m_target;
 }
 
-inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+#define LJR_LIB_DO_RETURN(rc, hdr, retStart, numRet)                                        \
+    do {                                                                                    \
+        StackFrameHeader* doReturnTmp_hdr = (hdr);                                          \
+        InterpreterFn doReturnTmp_retAddr = reinterpret_cast<InterpreterFn>(                \
+            doReturnTmp_hdr->m_retAddr);                                                    \
+        void* doReturnTmp_retCallerSf = doReturnTmp_hdr->m_caller;                          \
+        TValue* doReturnTmp_retStart = (retStart);                                          \
+        uint64_t doReturnTmp_numRet = (numRet);                                             \
+        uint64_t doReturnTmp_idx = doReturnTmp_numRet;                                      \
+        while (doReturnTmp_idx < x_minNilFillReturnValues) {                                \
+            doReturnTmp_retStart[doReturnTmp_idx] = TValue::Nil();                          \
+            doReturnTmp_idx++;                                                              \
+        }                                                                                   \
+        [[clang::musttail]] return doReturnTmp_retAddr(                                     \
+                (rc), doReturnTmp_retCallerSf,                                              \
+                reinterpret_cast<uint8_t*>(doReturnTmp_retStart), doReturnTmp_numRet);      \
+    } while (false)
+
+inline TValue WARN_UNUSED MakeErrorMessage(const char* msg)
+{
+    return TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(msg, static_cast<uint32_t>(strlen(msg))));
+}
+
+inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t errorObjectU64);
+
+inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
     uint32_t numParams = hdr->m_numVariadicArguments;
     if (numParams < 1)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'pairs' (table expected, got no value)").m_value);
     }
     TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
     TValue input = *addr;
-    if (!input.IsPointer(TValue::x_mivTag))
+    if (!input.IsPointer(TValue::x_mivTag) || input.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'pairs' (table expected)").m_value);
     }
-    Type ty = input.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-    if (ty != Type::TABLE)
-    {
-        ReleaseAssert(false && "error path not implemented");
-    }
+
     TValue* ret = reinterpret_cast<TValue*>(sfp);
     ret[0] = VM::GetActiveVMForCurrentThread()->GetLibBaseDotNextFunctionObject();
     ret[1] = input;
     ret[2] = TValue::Nil();
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 3 /*numRetValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 3 /*numRetValues*/);
 }
 
-inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
     uint32_t numParams = hdr->m_numVariadicArguments;
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numParams;
     if (numParams < 1)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'next' (table expected, got no value)").m_value);
     }
 
     TValue tab = vaBegin[0];
-    if (tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    if (!tab.IsPointer(TValue::x_mivTag) || tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'next' (table expected)").m_value);
     }
     HeapPtr<TableObject> tabObj = tab.AsPointer<TableObject>().As();
 
@@ -825,42 +847,46 @@ inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
     bool success = TableObjectIterator::GetNextFromKey(tabObj, key, *ret /*out*/);
     if (!success)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("invalid key to 'next'").m_value);
     }
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
     // Lua manual states:
     //     "When called with the last index, or with 'nil' in an empty table, 'next' returns 'nil'."
     // So when end of table is reached, this should return "nil", not "nil, nil"...
     //
     AssertImp(ret->m_key.IsNil(), ret->m_value.IsNil());
     uint64_t numReturnValues = ret->m_key.IsNil() ? 1 : 2;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), numReturnValues);
+    LJR_LIB_DO_RETURN(rc, hdr, reinterpret_cast<TValue*>(ret), numReturnValues);
 }
 
-inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
     uint32_t numParams = hdr->m_numVariadicArguments;
     if (numParams < 1)
     {
-        ReleaseAssert(false && "error path not implemented");
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'sqrt' (number expected, got no value)").m_value);
     }
     TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
     TValue input = *addr;
-    if (!input.IsDouble(TValue::x_int32Tag))
+    double inputDouble;
+    if (input.IsDouble(TValue::x_int32Tag))
     {
-        ReleaseAssert(false && "error path not implemented");
+        inputDouble = input.AsDouble();
     }
-    double result = sqrt(input.AsDouble());
+    else if (input.IsInt32(TValue::x_int32Tag))
+    {
+        inputDouble = input.AsInt32();
+    }
+    else
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'sqrt' (number expected)").m_value);
+    }
+
+    double result = sqrt(inputDouble);
     *addr = TValue::CreateDouble(result);
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(addr), 1 /*numRetValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, addr, 1 /*numRetValues*/);
 }
 
 inline void PrintTValue(FILE* fp, TValue val)
@@ -937,13 +963,10 @@ inline void LJR_LIB_BASE_print(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     }
     fprintf(fp, "\n");
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(sfp), 0 /*numRetValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, reinterpret_cast<TValue*>(sfp), 0 /*numRetValues*/);
 }
 
-inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> /*bcu*/, uint64_t /*unused*/)
+inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
 {
     FILE* fp = VM::GetActiveVMForCurrentThread()->GetStdout();
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
@@ -981,35 +1004,35 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
             }
             else
             {
-                ReleaseAssert(false && "error path not implemented");
+                // TODO: make error message consistent with Lua
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument to 'write' (string expected)").m_value);
             }
         }
         else
         {
-            ReleaseAssert(false && "error path not implemented");
+            // TODO: make error message consistent with Lua
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument to 'write' (string expected)").m_value);
         }
     }
 
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
     uint64_t numRetVals;
     if (likely(success))
     {
         numRetVals = 1;
-        reinterpret_cast<TValue*>(sfp)[0] = TValue::CreateTrue();
+        ret[0] = TValue::CreateTrue();
     }
     else
     {
         int err = errno;
-        reinterpret_cast<TValue*>(sfp)[0] = TValue::Nil();
+        ret[0] = TValue::Nil();
         const char* errstr = strerror(err);
-        reinterpret_cast<TValue*>(sfp)[1] = TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errstr, static_cast<uint32_t>(strlen(errstr))));
-        reinterpret_cast<TValue*>(sfp)[2] = TValue::CreateInt32(err, TValue::x_int32Tag);
+        ret[1] = TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errstr, static_cast<uint32_t>(strlen(errstr))));
+        ret[2] = TValue::CreateInt32(err, TValue::x_int32Tag);
         numRetVals = 3;
     }
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(sfp), numRetVals);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, numRetVals);
 }
 
 void* WARN_UNUSED SetupFrameForCall(CoroutineRuntimeContext* rc, void* sfp, TValue* begin, HeapPtr<FunctionObject> target, uint32_t numFixedParamsToPass, InterpreterFn onReturn, bool passVariadicRetAsParam);
@@ -1104,18 +1127,10 @@ inline void LJR_LIB_OnProtectedCallErrorReturn(CoroutineRuntimeContext* rc, void
     hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
     assert(hdr != nullptr);
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retValues), numRetValues);
+    LJR_LIB_DO_RETURN(rc, hdr, retValues, numRetValues);
 }
 
 constexpr size_t x_lua_max_nested_error_count = 50;
-
-inline TValue WARN_UNUSED MakeErrorMessage(const char* msg)
-{
-    return TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(msg, static_cast<uint32_t>(strlen(msg))));
-}
 
 inline TValue WARN_UNUSED MakeErrorMessageForTooManyNestedErrors()
 {
@@ -1316,10 +1331,7 @@ handle_pcall:
 
         // We need to return to the caller of 'pcall'
         //
-        using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-        RetFn retAddr = reinterpret_cast<RetFn>(protectedCallFrame->m_retAddr);
-        void* callerSf = protectedCallFrame->m_caller;
-        [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retValues), 2 /*numReturnValues*/);
+        LJR_LIB_DO_RETURN(rc, protectedCallFrame, retValues, 2 /*numReturnValues*/);
     }
 }
 
@@ -1422,10 +1434,7 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
             retStart[0] = TValue::CreateBoolean(false);
             retStart[1] = MakeErrorMessageForTooManyNestedErrors();
 
-            using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-            RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-            void* callerSf = hdr->m_caller;
-            [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retStart), 2 /*numReturnValues*/);
+            LJR_LIB_DO_RETURN(rc, hdr, retStart, 2 /*numReturnValues*/);
         }
     }
 
@@ -1471,10 +1480,7 @@ inline void LJR_LIB_BASE_pcall(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
         retStart[0] = TValue::CreateBoolean(false);
         retStart[1] = MakeErrorMessageForUnableToCall(vaBegin[0]);
 
-        using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-        RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-        void* callerSf = hdr->m_caller;
-        [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(retStart), 2 /*numReturnValues*/);
+        LJR_LIB_DO_RETURN(rc, hdr, retStart, 2 /*numReturnValues*/);
     }
 
     void* newStackFrameBase = SetupFrameForCall(rc, sfp, callStart, functionTarget.As(), numArgsToCall, LJR_LIB_OnProtectedCallSuccessReturn /*onReturn*/, false /*passVariadicRetAsParam*/);
@@ -1520,10 +1526,7 @@ inline void LJR_LIB_BASE_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
         }
     }
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 1 /*numReturnValues*/);
 }
 
 inline void LJR_LIB_DEBUG_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
@@ -1549,10 +1552,7 @@ inline void LJR_LIB_DEBUG_getmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
         ret[0] = TValue::CreatePointer(metatableMaybeNull);
     }
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 1 /*numReturnValues*/);
 }
 
 inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
@@ -1614,10 +1614,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
     TValue* ret = reinterpret_cast<TValue*>(sfp);
     *ret = value;
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 1 /*numReturnValues*/);
 }
 
 inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
@@ -1681,6 +1678,7 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
         }
         else
         {
+            // TODO: support USERDATA
             ReleaseAssert(false && "unimplemented");
         }
     }
@@ -1708,10 +1706,144 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
     TValue* ret = reinterpret_cast<TValue*>(sfp);
     *ret = TValue::CreateBoolean(true);
 
-    using RetFn = void(*)(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/);
-    RetFn retAddr = reinterpret_cast<RetFn>(hdr->m_retAddr);
-    void* callerSf = hdr->m_caller;
-    [[clang::musttail]] return retAddr(rc, callerSf, reinterpret_cast<uint8_t*>(ret), 1 /*numReturnValues*/);
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 1 /*numReturnValues*/);
+}
+
+inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+
+    if (numArgs < 2)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'rawget' (value expected)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue base = vaBegin[0];
+    TValue index = vaBegin[1];
+    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawget' (table expected)").m_value);
+    }
+
+    HeapPtr<TableObject> tableObj = base.AsPointer().As<TableObject>();
+    TValue result;
+
+    if (index.IsInt32(TValue::x_int32Tag))
+    {
+        GetByIntegerIndexICInfo icInfo;
+        TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+        result = TableObject::GetByIntegerIndex(tableObj, index.AsInt32(), icInfo);
+    }
+    else if (index.IsDouble(TValue::x_int32Tag))
+    {
+        double indexDouble = index.AsDouble();
+        if (unlikely(IsNaN(indexDouble)))
+        {
+            // Indexing a table by 'NaN' for read is not an error, but always results in nil,
+            // because indexing a table by 'NaN' for write is an error
+            //
+            result = TValue::Nil();
+        }
+        else
+        {
+            GetByIntegerIndexICInfo icInfo;
+            TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+            result = TableObject::GetByDoubleVal(tableObj, indexDouble, icInfo);
+        }
+    }
+    else if (index.IsPointer(TValue::x_mivTag))
+    {
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(tableObj, index.AsPointer(), icInfo /*out*/);
+        result = TableObject::GetById(tableObj, index.AsPointer(), icInfo);
+    }
+    else
+    {
+        assert(index.IsMIV(TValue::x_mivTag));
+        MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+        if (miv.IsNil())
+        {
+            // Indexing a table by 'nil' for read is not an error, but always results in nil,
+            // because indexing a table by 'nil' for write is an error
+            //
+            result = TValue::Nil();
+        }
+        else
+        {
+            assert(miv.IsBoolean());
+            UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
+
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(tableObj, specialKey, icInfo /*out*/);
+            result = TableObject::GetById(tableObj, specialKey.As<void>(), icInfo);
+        }
+    }
+
+    TValue* ret = reinterpret_cast<TValue*>(sfp);
+    *ret = result;
+
+    LJR_LIB_DO_RETURN(rc, hdr, ret, 1 /*numReturnValues*/);
+}
+
+inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(sfp);
+    uint32_t numArgs = hdr->m_numVariadicArguments;
+
+    if (numArgs < 3)
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #3 to 'rawset' (value expected)").m_value);
+    }
+
+    TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
+    TValue base = vaBegin[0];
+    TValue index = vaBegin[1];
+    TValue newValue = vaBegin[2];
+    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    {
+        [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawset' (table expected)").m_value);
+    }
+
+    HeapPtr<TableObject> tableObj = base.AsPointer().As<TableObject>();
+
+    if (index.IsInt32(TValue::x_int32Tag))
+    {
+        TableObject::PutByValIntegerIndex(tableObj, index.AsInt32(), newValue);
+    }
+    else if (index.IsDouble(TValue::x_int32Tag))
+    {
+        double indexDouble = index.AsDouble();
+        if (IsNaN(indexDouble))
+        {
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("table index is NaN").m_value);
+        }
+        TableObject::PutByValDoubleIndex(tableObj, indexDouble, newValue);
+    }
+    else if (index.IsPointer(TValue::x_mivTag))
+    {
+        PutByIdICInfo icInfo;
+        TableObject::PreparePutById(tableObj, index.AsPointer(), icInfo /*out*/);
+        TableObject::PutById(tableObj, index.AsPointer(), newValue, icInfo);
+    }
+    else
+    {
+        assert(index.IsMIV(TValue::x_mivTag));
+        MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+        if (miv.IsNil())
+        {
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("table index is nil").m_value);
+        }
+        assert(miv.IsBoolean());
+        UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(miv.GetBooleanValue());
+
+        PutByIdICInfo icInfo;
+        TableObject::PreparePutById(tableObj, specialKey, icInfo /*out*/);
+        TableObject::PutById(tableObj, specialKey.As<void>(), newValue, icInfo);
+    }
+
+    LJR_LIB_DO_RETURN(rc, hdr, reinterpret_cast<TValue*>(sfp), 0 /*numReturnValues*/);
 }
 
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
@@ -1752,6 +1884,8 @@ inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     insertCFunc(globalObject, "pcall", LJR_LIB_BASE_pcall);
     insertCFunc(globalObject, "getmetatable", LJR_LIB_BASE_getmetatable);
     insertCFunc(globalObject, "setmetatable", LJR_LIB_BASE_setmetatable);
+    insertCFunc(globalObject, "rawget", LJR_LIB_BASE_rawget);
+    insertCFunc(globalObject, "rawset", LJR_LIB_BASE_rawset);
 
     HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
     insertCFunc(mathObj, "sqrt", LJR_LIB_MATH_sqrt);
@@ -1922,10 +2056,6 @@ inline void EnterInterpreter(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
     Dispatch(rc, sfp, bcu);
 }
 
-// The return statement is required to fill nil up to x_minNilFillReturnValues values even if it returns less than that many values
-//
-constexpr uint32_t x_minNilFillReturnValues = 3;
-
 class BcUpvalueGet
 {
 public:
@@ -2080,7 +2210,22 @@ static void OnReturnFromComparativeMetamethodCall(CoroutineRuntimeContext* rc, v
     }
 }
 
-inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, TValue lhs, TValue rhs, TValue metamethod, InterpreterFn onReturn)
+template<typename BytecodeKind>
+static void OnReturnFromNewIndexMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* /*retValuesU*/, uint64_t /*numRetValues*/)
+{
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframe);
+    HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
+    assert(TranslateToRawPointer(callerEc)->IsBytecodeFunction());
+    uint8_t* callerBytecodeStart = callerEc->m_bytecode;
+    ConstRestrictPtr<uint8_t> bcu = callerBytecodeStart + hdr->m_callerBytecodeOffset;
+    assert(reinterpret_cast<const BytecodeKind*>(bcu)->m_opcode == x_opcodeId<BytecodeKind>);
+    rc->m_codeBlock = static_cast<CodeBlock*>(TranslateToRawPointer(callerEc));
+
+    Dispatch(rc, stackframe, bcu + sizeof(BytecodeKind));
+}
+
+template<size_t numArgs>
+inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(CoroutineRuntimeContext* rc, void* stackframe, const uint8_t* curBytecode, std::array<TValue, numArgs> args, TValue metamethod, InterpreterFn onReturn)
 {
     assert(!metamethod.IsNil());
 
@@ -2101,16 +2246,20 @@ inline PrepareMetamethodCallResult WARN_UNUSED SetupFrameForMetamethodCall(Corou
     {
         start[0] = TValue::CreatePointer(callTarget.m_target);
         start[x_numSlotsForStackFrameHeader] = metamethod;
-        start[x_numSlotsForStackFrameHeader + 1] = lhs;
-        start[x_numSlotsForStackFrameHeader + 2] = rhs;
-        numParamsForMetamethodCall = 3;
+        for (size_t i = 0; i < numArgs; i++)
+        {
+            start[x_numSlotsForStackFrameHeader + i + 1] = args[i];
+        }
+        numParamsForMetamethodCall = static_cast<uint32_t>(numArgs + 1);
     }
     else
     {
         start[0] = TValue::CreatePointer(callTarget.m_target);
-        start[x_numSlotsForStackFrameHeader] = lhs;
-        start[x_numSlotsForStackFrameHeader + 1] = rhs;
-        numParamsForMetamethodCall = 2;
+        for (size_t i = 0; i < numArgs; i++)
+        {
+            start[x_numSlotsForStackFrameHeader + i] = args[i];
+        }
+        numParamsForMetamethodCall = static_cast<uint32_t>(numArgs);
     }
 
     void* baseForNextFrame = SetupFrameForCall(rc, stackframe, start, callTarget.m_target.As(), numParamsForMetamethodCall, onReturn, false /*passVariadicRetAsParam*/);
@@ -2202,7 +2351,7 @@ handle_metamethod:
             //
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, tvIndex, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -2243,23 +2392,74 @@ public:
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
+        TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
 
-        if (!tvbase.IsPointer(TValue::x_mivTag))
+        TValue metamethod;
+        while (true)
         {
-            ReleaseAssert(false && "unimplemented");
-        }
-        else
-        {
-            UserHeapPointer<void> base = tvbase.AsPointer<void>();
-            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            if (!tvbase.IsPointer(TValue::x_mivTag))
             {
-                ReleaseAssert(false && "unimplemented");
+                goto not_table_object;
             }
-            PutByIdICInfo icInfo;
-            TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
-            TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
-            TableObject::PutById(base.As<TableObject>(), index.As<void>(), newValue, icInfo);
-            Dispatch(rc, sfp, bcu + sizeof(Self));
+            else
+            {
+                UserHeapPointer<void> base = tvbase.AsPointer<void>();
+                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                {
+                    goto not_table_object;
+                }
+
+                HeapPtr<TableObject> tableObj = base.As<TableObject>();
+                PutByIdICInfo icInfo;
+                TableObject::PreparePutById(tableObj, index, icInfo /*out*/);
+
+                if (unlikely(TableObject::PutByIdNeedToCheckMetatable(tableObj, icInfo)))
+                {
+                    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                    if (gmr.m_result.m_value != 0)
+                    {
+                        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+                        {
+                            metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
+                            if (!metamethod.IsNil())
+                            {
+                                goto handle_metamethod;
+                            }
+                        }
+                    }
+                }
+
+                TableObject::PutById(tableObj, index.As<void>(), newValue, icInfo);
+                Dispatch(rc, sfp, bcu + sizeof(Self));
+            }
+
+not_table_object:
+            metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::NewIndex);
+            if (metamethod.IsNil())
+            {
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TablePutById").m_value);
+            }
+
+handle_metamethod:
+            // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+            // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+            //
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
+                if (!res.m_success)
+                {
+                    // Metamethod exists but is not callable, throw error
+                    //
+                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
+                }
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            tvbase = metamethod;
         }
     }
 } __attribute__((__packed__));
@@ -2408,7 +2608,7 @@ handle_metamethod:
             //
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, index, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -2572,7 +2772,7 @@ handle_metamethod:
             //
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, tvbase, TValue::CreateInt32(index, TValue::x_int32Tag), metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag) }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -2740,7 +2940,7 @@ handle_metamethod:
             Type mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
             if (mmType == Type::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, metamethodBase, tvIndex, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { metamethodBase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -2904,7 +3104,7 @@ public:
             uint32_t idx = numRetValues;
             while (idx < x_minNilFillReturnValues)
             {
-                pbegin[idx] = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
+                pbegin[idx] = TValue::Nil();
                 idx++;
             }
         }
@@ -3644,7 +3844,7 @@ public:
                 [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for unary minus").m_value);
             }
 
-            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, src /*rhs*/, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+            PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { src /*lhs*/, src /*rhs*/ }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
             if (!res.m_success)
             {
                 // Metamethod exists but is not callable, throw error
@@ -3722,7 +3922,7 @@ public:
         // but for 'length', the parameter is only 'src'.
         // Lua 5.2+ unified the behavior and always pass 'src, src', but for now we are targeting Lua 5.1.
         //
-        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, src /*lhs*/, TValue::Nil() /*rhs*/, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+        PrepareMetamethodCallResult res =  SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { src /*lhs*/, TValue::Nil() /*rhs*/ }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
         if (!res.m_success)
         {
             // Metamethod exists but is not callable, throw error
@@ -3982,7 +4182,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array{ lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4071,7 +4271,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4160,7 +4360,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4249,7 +4449,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4356,7 +4556,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4445,7 +4645,7 @@ do_metamethod_call:
             {
                 // We've found the (non-nil) metamethod to call
                 //
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_result>);
                 if (!res.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4554,7 +4754,7 @@ public:
             [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for concat").m_value);
         }
 
-        PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, fsr.m_lhsValue, fsr.m_rhsValue, metamethod, OnMetamethodReturn);
+        PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { fsr.m_lhsValue, fsr.m_rhsValue }, metamethod, OnMetamethodReturn);
         if (!pmcr.m_success)
         {
             // Metamethod exists but is not callable, throw error
@@ -4707,7 +4907,7 @@ public:
                     [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("Invalid types for concat").m_value);
                 }
 
-                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, fsr.m_lhsValue, fsr.m_rhsValue, metamethod, OnMetamethodReturn);
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { fsr.m_lhsValue, fsr.m_rhsValue }, metamethod, OnMetamethodReturn);
                 if (!pmcr.m_success)
                 {
                     // Metamethod exists but is not callable, throw error
@@ -4859,7 +5059,7 @@ public:
 
 do_metamethod_call:
             {
-                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
 
                 if (!pmcr.m_success)
                 {
@@ -5020,7 +5220,7 @@ public:
 
 do_metamethod_call:
             {
-                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
 
                 if (!pmcr.m_success)
                 {
@@ -5177,7 +5377,7 @@ public:
 
 do_metamethod_call:
             {
-                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
 
                 if (!pmcr.m_success)
                 {
@@ -5334,7 +5534,7 @@ public:
 
 do_metamethod_call:
             {
-                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
+                PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
 
                 if (!pmcr.m_success)
                 {
@@ -5438,7 +5638,7 @@ public:
                         goto not_equal;
                     }
 
-                    PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
+                    PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<true /*branchIfTruthy*/, &Self::m_offset>);
 
                     if (!pmcr.m_success)
                     {
@@ -5541,7 +5741,7 @@ public:
                         goto not_equal;
                     }
 
-                    PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, lhs, rhs, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
+                    PrepareMetamethodCallResult pmcr = SetupFrameForMetamethodCall(rc, stackframe, bcu, std::array { lhs, rhs }, metamethod, OnReturnFromComparativeMetamethodCall<false /*branchIfTruthy*/, &Self::m_offset>);
 
                     if (!pmcr.m_success)
                     {
@@ -5746,7 +5946,7 @@ public:
                 StrScanResult r = TryConvertStringToDoubleWithLuaSemantics(str, len);
                 if (r.fmt == STRSCAN_ERROR)
                 {
-                    ReleaseAssert(false && "for loop range not integer, error path not implemented");
+                    [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("'for' loop range must be a number").m_value);
                 }
                 assert(r.fmt == STRSCAN_NUM);
                 vals[i] = r.d;
@@ -5754,7 +5954,7 @@ public:
             }
             else
             {
-                ReleaseAssert(false && "for loop range not integer, error path not implemented");
+                [[clang::musttail]] return ThrowError(rc, stackframe, bcu, MakeErrorMessage("'for' loop range must be a number").m_value);
             }
         }
 

@@ -38,6 +38,16 @@
             },
             {
               "EntryKey": {
+                "Type": "Int32",
+                "Value": 2
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 302
+              }
+            },
+            {
+              "EntryKey": {
                 "Type": "String",
                 "Value": "a4"
               },
@@ -84,16 +94,6 @@
               "EntryValue": {
                 "Type": "Int32",
                 "Value": 0
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "Int32",
-                "Value": 2
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 302
               }
             },
             {

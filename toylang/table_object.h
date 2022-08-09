@@ -337,18 +337,14 @@ struct GetByIntegerIndexICInfo
 
 struct PutByIdICInfo
 {
-    // Condition on the fixed structure, whether the GetById can use inline cache
-    // Note that if the table is in dictionary mode, or will transit to dictionary mode by this PutById,
-    // then this operation is never inline cachable
+    // The destination slot of this PutById
+    // Note that for 'TransitionedToDictionaryMode', m_slot isn't filled
     //
     enum class ICKind : uint8_t
     {
-        // The PutById transitioned the table from Structure mode to CacheableDictionary mode
+        // The PutById transitioned the table from Structure mode to CacheableDictionary mode, not inline cachable
         //
         TransitionedToDictionaryMode,
-        // The table is in UncacheableDictionary mode
-        //
-        UncacheableDictionary,
         // The property should be written to the inlined storage in m_slot
         //
         InlinedStorage,
@@ -371,6 +367,9 @@ struct PutByIdICInfo
     // so we must check if the property contains value nil to decide if we need to inspect the metatable
     //
     bool m_mayHaveMetatable;
+    // Whether this PutById is cacheable
+    //
+    bool m_isInlineCacheable;
     SystemHeapPointer<void> m_hiddenClass;
     int32_t m_slot;
     SystemHeapPointer<Structure> m_newStructure;
@@ -519,8 +518,6 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static TValue ALWAYS_INLINE GetByIntegerIndex(T self, int64_t idx, GetByIntegerIndexICInfo icInfo)
     {
-        // TODO: handle metatable
-
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);
 #endif
@@ -533,7 +530,7 @@ public:
 
         // Check if the index is in vector storage range
         //
-        // TODO: when we support metatable, we should add optimization for continuous vector as the metatable check can potentially be skipped
+        // TODO: we should add optimization for continuous vector as the metatable check can potentially be skipped
         //
         if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
         {
@@ -585,15 +582,15 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static TValue GetByInt32Val(T self, int32_t idx, GetByIntegerIndexICInfo icInfo)
     {
-        // TODO: handle metatable
-
         return GetByIntegerIndex(self, idx, icInfo);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static TValue GetByDoubleVal(T self, double idx, GetByIntegerIndexICInfo icInfo)
     {
-        // TODO: handle metatable
+        // This function expects that 'idx' is not NaN
+        //
+        assert(!IsNaN(idx));
 
         {
             int64_t idx64;
@@ -714,8 +711,6 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static TValue WARN_UNUSED ALWAYS_INLINE GetById(T self, UserHeapPointer<void> /*propertyName*/, GetByIdICInfo icInfo)
     {
-        // TODO: handle metatable
-
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNil || icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable)
         {
             return TValue::Nil();
@@ -731,6 +726,7 @@ public:
             return self->m_butterfly->GetNamedProperty(icInfo.m_slot);
         }
 
+        // TODO: support UncacheableDictionary
         ReleaseAssert(false && "not implemented");
     }
 
@@ -744,6 +740,7 @@ public:
         assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
 
         icInfo.m_hiddenClass = hiddenClass;
+        icInfo.m_isInlineCacheable = true;
 
         if (likely(ty == Type::Structure))
         {
@@ -785,6 +782,7 @@ public:
                 if (unlikely(addNewPropResult.m_shouldTransitionToDictionaryMode))
                 {
                     icInfo.m_icKind = PutByIdICInfo::ICKind::TransitionedToDictionaryMode;
+                    icInfo.m_isInlineCacheable = false;
                 }
                 else
                 {
@@ -859,7 +857,38 @@ public:
         }
         else
         {
+            icInfo.m_isInlineCacheable = false;
+            // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED PutByIdNeedToCheckMetatable(T self, PutByIdICInfo icInfo)
+    {
+        if (likely(!icInfo.m_mayHaveMetatable))
+        {
+            return false;
+        }
+
+        if (!icInfo.m_propertyExists)
+        {
+            return true;
+        }
+
+        // Now we need to determine if the property is nil
+        //
+        assert(icInfo.m_icKind != PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
+        if (icInfo.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
+        {
+            TValue val = TCGet(self->m_inlineStorage[icInfo.m_slot]);
+            return val.IsNil();
+        }
+        else
+        {
+            assert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+            TValue val = TCGet(*self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot));
+            return val.IsNil();
         }
     }
 
@@ -958,6 +987,7 @@ public:
             else
             {
                 assert(hiddenClassTy == Type::UncacheableDictionary);
+                // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
             uint32_t oldButterflySlots = oldArrayStorageCapacity + oldNamedStorageCapacity + 1;
@@ -1056,13 +1086,6 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void ALWAYS_INLINE PutById(T self, UserHeapPointer<void> propertyName, TValue newValue, PutByIdICInfo icInfo)
     {
-        if (icInfo.m_icKind == PutByIdICInfo::ICKind::UncacheableDictionary)
-        {
-            ReleaseAssert(false && "unimplemented");
-        }
-
-        // TODO: check for metatable
-
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode)
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
@@ -1903,6 +1926,7 @@ public:
             else
             {
                 assert(hiddenClassTy == Type::UncacheableDictionary);
+                // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
 #endif
@@ -1956,6 +1980,7 @@ public:
         }
         else
         {
+            // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
         }
 
@@ -2025,6 +2050,7 @@ public:
         }
         else
         {
+            // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
         }
     }
@@ -2082,6 +2108,7 @@ public:
         }
         else
         {
+            // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
         }
     }
@@ -2133,6 +2160,7 @@ public:
         }
         else
         {
+            // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
         }
     }
@@ -2350,6 +2378,7 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
             return VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine;
         }
 
+        // TODO: support USERDATA type
         ReleaseAssert(false && "unimplemented");
     }
 
@@ -2430,6 +2459,7 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }
 
+        // TODO: support USERDATA type
         ReleaseAssert(false && "unimplemented");
     }
 
@@ -2521,6 +2551,7 @@ struct TableObjectIterator
             }
             else
             {
+                // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
         }
@@ -2603,6 +2634,7 @@ try_find_and_get_cd_prop:
             }
             else
             {
+                // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
 
@@ -2749,12 +2781,14 @@ finished_iteration:
             }
             else
             {
+                // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
         }
 
         if (key.IsInt32(TValue::x_int32Tag))
         {
+            // TODO: int32 type
             ReleaseAssert(false && "unimplemented");
         }
 

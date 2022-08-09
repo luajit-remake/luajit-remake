@@ -3412,4 +3412,107 @@ TEST(LuaTest, getbyintegerval_metatable)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, rawget_and_rawset)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/rawget_rawset.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "-- rawget --\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "nil\n"
+            "-- rawset --\n"
+            "false\n"
+            "false\n"
+            "-- rawget --\n"
+            "1\n"
+            "2\n"
+            "3\n"
+            "nil\n"
+            "5\n"
+            "6\n"
+            "7\n"
+            "8\n"
+            "11\n"
+            "nil\n"
+            "11\n"
+            "-- error cases --\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n"
+            "false\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, putbyid_metatable)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/putbyid_metatable.lua.json"));
+    vm->LaunchScript(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::string expectedOut =
+            "-- test 1 --\n"
+            "nil\t123\n"
+            "nil\t234\n"
+            "-- test 2 --\n"
+            "before\t1\tnil\n"
+            "t\ta\t123\tnil\n"
+            "after\t1\tnil\n"
+            "before\t2\tnil\n"
+            "t\ta\t123\tnil\n"
+            "after\t2\tnil\n"
+            "before\t3\tnil\n"
+            "t\ta\t123\tnil\n"
+            "after\t3\t246\n"
+            "before\t4\t246\n"
+            "after\t4\t123\n"
+            "before\t5\t123\n"
+            "after\t5\t123\n"
+            "before\t6\t123\n"
+            "after\t6\t123\n"
+            "-- test 2 --\n"
+            "f1\tt\txx\t20\tnil\n"
+            "f2\tt\txx\t40\tnil\n"
+            "120\n"
+            "30\n"
+            "-- test 3 --\n"
+            "false\n"
+            "f3\t233\tzz\t12\tnil\tnil\n"
+            "nil\n"
+            "f3\t233\tzz\t23\tnil\tnil\n"
+            "nil\n";
+
+    ReleaseAssert(out == expectedOut);
+    ReleaseAssert(err == "");
+}
+
 }   // anonymous namespace

@@ -642,21 +642,21 @@
             {
               "EntryKey": {
                 "Type": "String",
-                "Value": "a"
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 123
-              }
-            },
-            {
-              "EntryKey": {
-                "Type": "String",
                 "Value": "b"
               },
               "EntryValue": {
                 "Type": "Int32",
                 "Value": 456
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 123
               }
             }
           ],
