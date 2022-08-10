@@ -1816,7 +1816,7 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PutByValIntegerIndex(T self, int64_t index, TValue value)
+    static void RawPutByValIntegerIndex(T self, int64_t index, TValue value)
     {
         PutByIntegerIndexICInfo icInfo;
         PreparePutByIntegerIndex(self, index, value, icInfo /*out*/);
@@ -1834,7 +1834,7 @@ public:
         int64_t idx64;
         if (likely(IsInt64Index(index, idx64 /*out*/)))
         {
-            PutByValIntegerIndex(self, idx64, value);
+            RawPutByValIntegerIndex(self, idx64, value);
         }
         else
         {

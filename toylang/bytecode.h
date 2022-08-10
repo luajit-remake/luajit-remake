@@ -1810,7 +1810,7 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
 
     if (index.IsInt32(TValue::x_int32Tag))
     {
-        TableObject::PutByValIntegerIndex(tableObj, index.AsInt32(), newValue);
+        TableObject::RawPutByValIntegerIndex(tableObj, index.AsInt32(), newValue);
     }
     else if (index.IsDouble(TValue::x_int32Tag))
     {
@@ -2653,7 +2653,7 @@ public:
             TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
             if (index.IsInt32(TValue::x_int32Tag))
             {
-                TableObject::PutByValIntegerIndex(base.As<TableObject>(), index.AsInt32(), newValue);
+                TableObject::RawPutByValIntegerIndex(base.As<TableObject>(), index.AsInt32(), newValue);
             }
             else if (index.IsDouble(TValue::x_int32Tag))
             {
@@ -2798,21 +2798,106 @@ public:
         assert(bc->m_base.IsLocal());
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
-        if (!tvbase.IsPointer(TValue::x_mivTag))
+        int16_t index = bc->m_index;
+        TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+        TValue metamethod;
+
+        while (true)
         {
-            ReleaseAssert(false && "unimplemented");
-        }
-        else
-        {
-            UserHeapPointer<void> base = tvbase.AsPointer<void>();
-            if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+            if (!tvbase.IsPointer(TValue::x_mivTag))
             {
-                ReleaseAssert(false && "unimplemented");
+                goto not_table_object;
+            }
+            else
+            {
+                UserHeapPointer<void> base = tvbase.AsPointer<void>();
+                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                {
+                    goto not_table_object;
+                }
+
+                HeapPtr<TableObject> tableObj = base.As<TableObject>();
+
+                PutByIntegerIndexICInfo icInfo;
+                TableObject::PreparePutByIntegerIndex(tableObj, index, newValue, icInfo /*out*/);
+
+                if (likely(!icInfo.m_mayHaveMetatable))
+                {
+                    goto no_metamethod;
+                }
+                else
+                {
+                    // Try to execute the fast checks to rule out __newindex metamethod first
+                    //
+                    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                    if (likely(gmr.m_result.m_value == 0))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    // Getting the metamethod from the metatable is more expensive than getting the index value,
+                    // so get the index value and check if it's nil first
+                    //
+                    GetByIntegerIndexICInfo getIcInfo;
+                    TableObject::PrepareGetByIntegerIndex(tableObj, getIcInfo /*out*/);
+                    TValue originalVal = TableObject::GetByIntegerIndex(tableObj, index, getIcInfo);
+                    if (likely(!originalVal.IsNil()))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
+                    if (metamethod.IsNil())
+                    {
+                        goto no_metamethod;
+                    }
+
+                    // Now, we know we need to invoke the metamethod
+                    //
+                    goto handle_metamethod;
+                }
+
+no_metamethod:
+                if (!TableObject::TryPutByIntegerIndexFast(tableObj, index, newValue, icInfo))
+                {
+                    VM* vm = VM::GetActiveVMForCurrentThread();
+                    TableObject* obj = TranslateToRawPointer(vm, tableObj);
+                    obj->PutByIntegerIndexSlow(vm, index, newValue);
+                }
+
+                Dispatch(rc, sfp, bcu + sizeof(Self));
             }
 
-            TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
-            TableObject::PutByValIntegerIndex(base.As<TableObject>(), bc->m_index, newValue);
-            Dispatch(rc, sfp, bcu + sizeof(Self));
+not_table_object:
+            metamethod = GetMetamethodForValue(tvbase, LuaMetamethodKind::NewIndex);
+            if (metamethod.IsNil())
+            {
+                [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for TablePutByVal").m_value);
+            }
+
+handle_metamethod:
+            // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+            // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+            //
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag), newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+
+            tvbase = metamethod;
         }
     }
 } __attribute__((__packed__));
@@ -2862,7 +2947,7 @@ public:
         for (int32_t i = 0; i < numTermsToPut; i++)
         {
             int32_t idx = indexStart + i;
-            TableObject::PutByValIntegerIndex(base, idx, src[i]);
+            TableObject::RawPutByValIntegerIndex(base, idx, src[i]);
         }
 
         Dispatch(rc, sfp, bcu + sizeof(Self));

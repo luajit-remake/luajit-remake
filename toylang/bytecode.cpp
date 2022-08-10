@@ -448,7 +448,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         int32_t idx = it.first;
                         TValue val = it.second;
                         TestAssert(idx > 0);
-                        TableObject::PutByValIntegerIndex(obj, idx, val);
+                        TableObject::RawPutByValIntegerIndex(obj, idx, val);
                         numericIndexInserted++;
                     }
 
@@ -469,7 +469,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                             if (key <= 0)   // positive index has been inserted earlier
                             {
                                 TValue val = convertTableValue(tabEntryValue);
-                                TableObject::PutByValIntegerIndex(obj, key, val);
+                                TableObject::RawPutByValIntegerIndex(obj, key, val);
                                 numericIndexInserted++;
                             }
                         }

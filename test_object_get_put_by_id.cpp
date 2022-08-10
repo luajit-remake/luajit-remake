@@ -337,7 +337,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
             for (uint32_t i = 1; i <= initArrayPartFillSize; i++)
             {
                 TValue val = getRandomValue();
-                TableObject::PutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
+                TableObject::RawPutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
                 arrayExpected[i] = val;
             }
         }
@@ -346,7 +346,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
             for (uint32_t i = initArrayPartFillSize; i >= 1; i--)
             {
                 TValue val = getRandomValue();
-                TableObject::PutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
+                TableObject::RawPutByValIntegerIndex(obj, static_cast<int32_t>(i), val);
                 arrayExpected[i] = val;
             }
         }

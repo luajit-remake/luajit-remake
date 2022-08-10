@@ -473,7 +473,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 // insert a new value at the end
                                 //
                                 TValue val = getValueForInsert();
-                                TableObject::PutByValIntegerIndex(obj, static_cast<int64_t>(i), val);
+                                TableObject::RawPutByValIntegerIndex(obj, static_cast<int64_t>(i), val);
                                 expected[i] = val;
 
                                 validateEverything(i + 1);
@@ -483,7 +483,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 //
                                 val = getValueForInsert();
                                 int64_t idx = rand() % static_cast<int64_t>(i) + 1;
-                                TableObject::PutByValIntegerIndex(obj, idx, val);
+                                TableObject::RawPutByValIntegerIndex(obj, idx, val);
                                 expected[idx] = val;
 
                                 validateEverything(i + 1);
@@ -493,7 +493,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                             //
                             {
                                 TValue val = TValue::Nil();
-                                TableObject::PutByValIntegerIndex(obj, 123, val);
+                                TableObject::RawPutByValIntegerIndex(obj, 123, val);
                                 validateEverything(x_writeLen + 1);
                             }
 
@@ -501,11 +501,11 @@ TEST(ObjectArrayPart, ContinuousArray)
                             //
                             {
                                 TValue val = TValue::Nil();
-                                TableObject::PutByValIntegerIndex(obj, x_writeLen, val);
+                                TableObject::RawPutByValIntegerIndex(obj, x_writeLen, val);
                                 expected[x_writeLen] = val;
                                 validateEverything(x_writeLen);
 
-                                TableObject::PutByValIntegerIndex(obj, x_writeLen - 1, val);
+                                TableObject::RawPutByValIntegerIndex(obj, x_writeLen - 1, val);
                                 expected[x_writeLen - 1] = val;
                                 validateEverything(x_writeLen - 1);
                             }
@@ -633,7 +633,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 ReleaseAssert(false);
                             }
 
-                            TableObject::PutByValIntegerIndex(obj, indexToPut, lastInsertElement);
+                            TableObject::RawPutByValIntegerIndex(obj, indexToPut, lastInsertElement);
                             if (0 <= indexToPut && indexToPut <= static_cast<int64_t>(x_validateLen))
                             {
                                 expected[indexToPut] = lastInsertElement;
@@ -822,7 +822,7 @@ TEST(ObjectArrayPart, RandomTest)
             {
                 int64_t index = static_cast<int64_t>(i) + ArrayGrowthPolicy::x_arrayBaseOrd;
                 TValue val = getValueToPut();
-                TableObject::PutByValIntegerIndex(obj, index, val);
+                TableObject::RawPutByValIntegerIndex(obj, index, val);
                 arrayPropMap[static_cast<double>(index)] = val;
                 allPutArrayProperties.push_back(static_cast<double>(index));
             }
@@ -868,7 +868,7 @@ TEST(ObjectArrayPart, RandomTest)
                 index = rand() % 10000;
             }
             TValue val = getRandomValue();
-            TableObject::PutByValIntegerIndex(obj, index, val);
+            TableObject::RawPutByValIntegerIndex(obj, index, val);
             arrayPropMap[static_cast<double>(index)] = val;
             allPutArrayProperties.push_back(static_cast<double>(index));
         };
@@ -1032,7 +1032,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                     {
                         int32_t index = gap * mult;
                         TValue val = getValueToPut();
-                        TableObject::PutByValIntegerIndex(obj, index, val);
+                        TableObject::RawPutByValIntegerIndex(obj, index, val);
                         ReleaseAssert(static_cast<size_t>(index) < expected.size());
                         expected[static_cast<size_t>(index)] = val;
                     }
@@ -1108,7 +1108,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                     {
                         int32_t index = static_cast<int32_t>(ArrayGrowthPolicy::x_sparseMapUnlessContinuousCutoff * ArrayGrowthPolicy::x_vectorGrowthFactor + 10);
                         TValue val = getValueToPut();
-                        TableObject::PutByValIntegerIndex(obj, index, val);
+                        TableObject::RawPutByValIntegerIndex(obj, index, val);
 
                         ArrayType arrType = TCGet(obj->m_arrayType);
                         SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
