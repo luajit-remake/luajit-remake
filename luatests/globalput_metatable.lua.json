@@ -1,0 +1,6603 @@
+{
+  "ChunkName": "@luatests/globalput_metatable.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 3,
+      "TakesVarArg": false,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 4,
+      "SourceLineEnd": 8,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "ISEQV",
+          "OpData": [ 0, 8 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 9, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 5 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 3 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 9, 2, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 4 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 123 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 7
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "f1"
+        },
+        {
+          "Type": "String",
+          "Value": "_G"
+        },
+        {
+          "Type": "String",
+          "Value": "rawset"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 2
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 95,
+      "SourceLineEnd": 99,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 3 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 6 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 10, 2, 0 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 4 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 233 ],
+          "SourceLine": 98
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 98
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "f2"
+        },
+        {
+          "Type": "String",
+          "Value": "rawset"
+        },
+        {
+          "Type": "String",
+          "Value": "_G"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 3
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 1,
+      "SourceLineStart": 128,
+      "SourceLineEnd": 128,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 128
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "x5"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 144,
+      "SourceLineEnd": 148,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 0, 2 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 3 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 6 ],
+          "SourceLine": 145
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 10, 2, 0 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 4 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 900 ],
+          "SourceLine": 147
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 147
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "f6"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "rawset"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 100
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 233,
+      "SourceLineEnd": 237,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 0, 2 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 3 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 6 ],
+          "SourceLine": 234
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 235
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 235
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 235
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 10, 2, 0 ],
+          "SourceLine": 235
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 4 ],
+          "SourceLine": 235
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 900 ],
+          "SourceLine": 236
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 236
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "f6"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "rawset"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 100
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 298,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 5 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 6, 4 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 7 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 8 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 7 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 8 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 7 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 8 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 7 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 8 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 7 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 8 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 9 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 10 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 11 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 13 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 12 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 14 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 23 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 14 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 41
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 12 ],
+          "SourceLine": 41
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 41
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 14 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 44
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 44
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 12 ],
+          "SourceLine": 44
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 44
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 14 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 47
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 15 ],
+          "SourceLine": 47
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 47
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 45 ],
+          "SourceLine": 50
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 16 ],
+          "SourceLine": 50
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 17 ],
+          "SourceLine": 51
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 18 ],
+          "SourceLine": 51
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 53
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 53
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 19 ],
+          "SourceLine": 53
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 53
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 20 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 0, 0, 2 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 344 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 21 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 16 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 62
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 22 ],
+          "SourceLine": 62
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 62
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 21 ],
+          "SourceLine": 64
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 16 ],
+          "SourceLine": 64
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 32 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 22 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 16 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 22 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 16 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 22 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 23 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 16 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 22 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 16 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 22 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 78
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 78
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 16 ],
+          "SourceLine": 78
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 78
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 79
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 79
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 22 ],
+          "SourceLine": 79
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 79
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 43 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 16 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 82
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 22 ],
+          "SourceLine": 82
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 83
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 16 ],
+          "SourceLine": 83
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 83
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 84
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 22 ],
+          "SourceLine": 84
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 84
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 16 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 86
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 86
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 22 ],
+          "SourceLine": 86
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 86
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 24 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 65 ],
+          "SourceLine": 92
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 92
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 20 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 0, 0, 2 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 344 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 27 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 6, 26 ],
+          "SourceLine": 99
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 99
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 28 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 106
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 25 ],
+          "SourceLine": 106
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 106
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 107
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 29 ],
+          "SourceLine": 107
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 107
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 76 ],
+          "SourceLine": 109
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 109
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 87 ],
+          "SourceLine": 110
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 29 ],
+          "SourceLine": 110
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 25 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 29 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 98 ],
+          "SourceLine": 115
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 115
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 89 ],
+          "SourceLine": 116
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 29 ],
+          "SourceLine": 116
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 118
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 25 ],
+          "SourceLine": 118
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 118
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 29 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 30 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 20 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 0, 0, 2 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 344 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 124
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 25 ],
+          "SourceLine": 124
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 124
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 12 ],
+          "SourceLine": 125
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 125
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 126
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 25 ],
+          "SourceLine": 126
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 126
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 31 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 8, 32 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 128
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 130
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 33 ],
+          "SourceLine": 130
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 130
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 131
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 131
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 131
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 131
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 133
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 11 ],
+          "SourceLine": 133
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 35 ],
+          "SourceLine": 134
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 18 ],
+          "SourceLine": 134
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 36 ],
+          "SourceLine": 135
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 37 ],
+          "SourceLine": 135
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 38 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 39 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 40 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 41 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 42 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 43 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 44 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 45 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 46 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 141
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 47 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 142
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 48 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 143
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 144
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 144
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 50 ],
+          "SourceLine": 144
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 6, 49 ],
+          "SourceLine": 148
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 148
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 144
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 20 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 0, 0, 2 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 455 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 51 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 52 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 153
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 153
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 153
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 154
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 154
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 154
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 155
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 155
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 155
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 156
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 156
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 156
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 157
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 157
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 157
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 158
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 158
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 158
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 159
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 159
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 159
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 22 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 53 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 23 ],
+          "SourceLine": 162
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 162
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 24 ],
+          "SourceLine": 163
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 55 ],
+          "SourceLine": 163
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 56 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 26 ],
+          "SourceLine": 165
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 57 ],
+          "SourceLine": 165
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 27 ],
+          "SourceLine": 166
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 58 ],
+          "SourceLine": 166
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 28 ],
+          "SourceLine": 167
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 59 ],
+          "SourceLine": 167
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 169
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 169
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 169
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 170
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 170
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 170
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 173
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 173
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 173
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 174
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 174
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 174
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 175
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 175
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 175
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 11 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 177
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 18 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 178
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 37 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 179
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 39 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 180
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 41 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 181
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 43 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 29 ],
+          "SourceLine": 184
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 53 ],
+          "SourceLine": 184
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 30 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 31 ],
+          "SourceLine": 186
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 55 ],
+          "SourceLine": 186
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 32 ],
+          "SourceLine": 187
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 56 ],
+          "SourceLine": 187
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 33 ],
+          "SourceLine": 188
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 57 ],
+          "SourceLine": 188
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 189
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 58 ],
+          "SourceLine": 189
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 35 ],
+          "SourceLine": 190
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 59 ],
+          "SourceLine": 190
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 36 ],
+          "SourceLine": 191
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 61 ],
+          "SourceLine": 191
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 193
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 193
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 193
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 197
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 197
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 197
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 61 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 11 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 37 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 204
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 39 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 205
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 41 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 43 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 210
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 62 ],
+          "SourceLine": 210
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 210
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 211
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 211
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 211
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 211
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 213
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 53 ],
+          "SourceLine": 213
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 214
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 214
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 215
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 55 ],
+          "SourceLine": 215
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 56 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 57 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 58 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 59 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 61 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 63 ],
+          "SourceLine": 222
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 11 ],
+          "SourceLine": 222
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 64 ],
+          "SourceLine": 223
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 18 ],
+          "SourceLine": 223
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 65 ],
+          "SourceLine": 224
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 37 ],
+          "SourceLine": 224
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 66 ],
+          "SourceLine": 225
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 39 ],
+          "SourceLine": 225
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 67 ],
+          "SourceLine": 226
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 41 ],
+          "SourceLine": 226
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 0, 68 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 43 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 69 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 70 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 71 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 72 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 73 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 75 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 6, 74 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 76 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 6, 5, 6 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 3 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 241
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 241
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 241
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 242
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 242
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 242
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 243
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 243
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 243
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 244
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 244
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 244
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 245
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 245
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 245
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 246
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 246
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 246
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 247
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 247
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 247
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 22 ],
+          "SourceLine": 249
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 53 ],
+          "SourceLine": 249
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 23 ],
+          "SourceLine": 250
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 250
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 24 ],
+          "SourceLine": 251
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 55 ],
+          "SourceLine": 251
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 25 ],
+          "SourceLine": 252
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 56 ],
+          "SourceLine": 252
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 26 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 57 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 27 ],
+          "SourceLine": 254
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 58 ],
+          "SourceLine": 254
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 28 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 59 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 257
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 257
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 257
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 258
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 258
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 258
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 259
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 259
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 259
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 262
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 262
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 262
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 263
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 263
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 263
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 11 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 18 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 37 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 267
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 39 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 41 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 43 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 9 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 29 ],
+          "SourceLine": 272
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 53 ],
+          "SourceLine": 272
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 30 ],
+          "SourceLine": 273
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 54 ],
+          "SourceLine": 273
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 31 ],
+          "SourceLine": 274
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 55 ],
+          "SourceLine": 274
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 32 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 56 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 33 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 57 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 34 ],
+          "SourceLine": 277
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 58 ],
+          "SourceLine": 277
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 35 ],
+          "SourceLine": 278
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 59 ],
+          "SourceLine": 278
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 0, 36 ],
+          "SourceLine": 279
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 61 ],
+          "SourceLine": 279
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 281
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 53 ],
+          "SourceLine": 281
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 281
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 282
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 54 ],
+          "SourceLine": 282
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 282
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 283
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 55 ],
+          "SourceLine": 283
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 283
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 284
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 56 ],
+          "SourceLine": 284
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 284
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 285
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 57 ],
+          "SourceLine": 285
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 285
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 286
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 58 ],
+          "SourceLine": 286
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 286
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 287
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 59 ],
+          "SourceLine": 287
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 287
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 288
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 61 ],
+          "SourceLine": 288
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 288
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 11 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 290
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 18 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 291
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 37 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 292
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 39 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 293
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 41 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 294
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 60 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 53 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 54 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 55 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 8, 8, 56 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 57 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 58 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 59 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 43 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 61 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 10 ],
+          "SourceLine": 295
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 295
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 1 --"
+        },
+        {
+          "Type": "String",
+          "Value": "setmetatable"
+        },
+        {
+          "Type": "String",
+          "Value": "_G"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "__newindex"
+        },
+        {
+          "Type": "String",
+          "Value": "x1"
+        },
+        {
+          "Type": "String",
+          "Value": "y1"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 2 --"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "x2"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "xx"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "y2"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "yy"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t1"
+        },
+        {
+          "Type": "String",
+          "Value": "x2"
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "y2"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 3 --"
+        },
+        {
+          "Type": "String",
+          "Value": "x3"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "y3"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "yyy"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "x3"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "xxx"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t2"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "__newindex"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 233
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "debug"
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "y3"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 4 --"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 5 --"
+        },
+        {
+          "Type": "String",
+          "Value": "x4"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 1
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "__newindex"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 233
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "y4"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 6 --"
+        },
+        {
+          "Type": "String",
+          "Value": "pcall"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 2
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 7 --"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 1
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t1"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 2
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t2"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 3
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 4
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t3"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 6
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 5
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t3"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 9
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 8
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 7
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t4"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 10
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t4"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a5"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 15
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 13
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 12
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 11
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t5"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 14
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t5"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a5"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 20
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 18
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a6"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 21
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 17
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 16
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t6"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 19
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "t6"
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 3
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "__newindex"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 566
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "a1"
+        },
+        {
+          "Type": "String",
+          "Value": "a2"
+        },
+        {
+          "Type": "String",
+          "Value": "a3"
+        },
+        {
+          "Type": "String",
+          "Value": "a4"
+        },
+        {
+          "Type": "String",
+          "Value": "a5"
+        },
+        {
+          "Type": "String",
+          "Value": "a6"
+        },
+        {
+          "Type": "String",
+          "Value": "a7"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "a8"
+        },
+        {
+          "Type": "String",
+          "Value": "-- test 9 --"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 1
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t1"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 2
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t2"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 3
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 4
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t3"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 6
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 5
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 9
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 8
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 7
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t4"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 10
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a5"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 15
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 13
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 12
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 11
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t5"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 14
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a5"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 20
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a3"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 18
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a6"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 21
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a2"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 17
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a1"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 16
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "t6"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "a4"
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 19
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 4
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 1,
+          "ArraySizeHint": 0
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

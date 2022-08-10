@@ -2352,12 +2352,9 @@ handle_metamethod:
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
-                if (!res.m_success)
-                {
-                    // Metamethod exists but is not callable, throw error
-                    //
-                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
-                }
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
 
                 uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
@@ -2448,12 +2445,9 @@ handle_metamethod:
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
-                if (!res.m_success)
-                {
-                    // Metamethod exists but is not callable, throw error
-                    //
-                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
-                }
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
 
                 uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
@@ -2609,12 +2603,9 @@ handle_metamethod:
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
-                if (!res.m_success)
-                {
-                    // Metamethod exists but is not callable, throw error
-                    //
-                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
-                }
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
 
                 uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
@@ -2773,12 +2764,9 @@ handle_metamethod:
             if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag) }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
-                if (!res.m_success)
-                {
-                    // Metamethod exists but is not callable, throw error
-                    //
-                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
-                }
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
 
                 uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
@@ -2941,12 +2929,9 @@ handle_metamethod:
             if (mmType == Type::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { metamethodBase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
-                if (!res.m_success)
-                {
-                    // Metamethod exists but is not callable, throw error
-                    //
-                    [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessageForUnableToCall(metamethod).m_value);
-                }
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
 
                 uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
@@ -2996,13 +2981,73 @@ public:
         assert(tvIndex.IsPointer(TValue::x_mivTag));
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
         TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
+        TValue metamethod;
+        TValue metamethodBase;
 
-        UserHeapPointer<TableObject> base = rc->m_globalObject;
+        HeapPtr<TableObject> base = rc->m_globalObject.As();
+
+retry:
         PutByIdICInfo icInfo;
-        TableObject::PreparePutById(base.As<TableObject>(), index, icInfo /*out*/);
-        TableObject::PutById(base.As(), index.As<void>(), newValue, icInfo);
+        TableObject::PreparePutById(base, index, icInfo /*out*/);
 
+        if (unlikely(TableObject::PutByIdNeedToCheckMetatable(base, icInfo)))
+        {
+            TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
+            if (gmr.m_result.m_value != 0)
+            {
+                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+                {
+                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
+                    if (!metamethod.IsNil())
+                    {
+                        metamethodBase = TValue::CreatePointer(UserHeapPointer<TableObject> { base });
+                        goto handle_metamethod;
+                    }
+                }
+            }
+        }
+
+        TableObject::PutById(base, index.As<void>(), newValue, icInfo);
         Dispatch(rc, sfp, bcu + sizeof(Self));
+
+handle_metamethod:
+        // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
+        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+        //
+        if (likely(metamethod.IsPointer(TValue::x_mivTag)))
+        {
+            Type mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (mmType == Type::FUNCTION)
+            {
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { metamethodBase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
+                // We already checked that 'metamethod' is a function, so it must success
+                //
+                assert(res.m_success);
+
+                uint8_t* calleeBytecode = res.m_calleeEc->m_bytecode;
+                InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
+                [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
+            }
+            else if (mmType == Type::TABLE)
+            {
+                base = metamethod.AsPointer<TableObject>().As();
+                goto retry;
+            }
+        }
+
+        // Now we know 'metamethod' is not a function or pointer, so we should locate its own exotic '__index' metamethod..
+        // The difference is that if the metamethod is nil, we need to throw an error
+        //
+        metamethodBase = metamethod;
+        metamethod = GetMetamethodForValue(metamethod, LuaMetamethodKind::NewIndex);
+        if (metamethod.IsNil())
+        {
+            // TODO: make error message consistent with Lua
+            //
+            [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad type for PutById").m_value);
+        }
+        goto handle_metamethod;
     }
 } __attribute__((__packed__));
 

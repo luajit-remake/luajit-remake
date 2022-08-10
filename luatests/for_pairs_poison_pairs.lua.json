@@ -476,22 +476,22 @@
           "Value": [
             {
               "EntryKey": {
-                "Type": "Int32",
-                "Value": 2
-              },
-              "EntryValue": {
-                "Type": "Int32",
-                "Value": 3
-              }
-            },
-            {
-              "EntryKey": {
                 "Type": "String",
                 "Value": "x"
               },
               "EntryValue": {
                 "Type": "Int32",
                 "Value": 1
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 2
+              },
+              "EntryValue": {
+                "Type": "Int32",
+                "Value": 3
               }
             }
           ],
