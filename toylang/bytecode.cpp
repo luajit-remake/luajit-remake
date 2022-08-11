@@ -476,8 +476,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         else if (kty == "Double")
                         {
                             double key = JSONCheckedGet<double>(tabEntryKey, "Value");
+                            assert(!IsNaN(key));
                             TValue val = convertTableValue(tabEntryValue);
-                            TableObject::PutByValDoubleIndex(obj, key, val);
+                            TableObject::RawPutByValDoubleIndex(obj, key, val);
                             numericIndexInserted++;
                         }
                     }

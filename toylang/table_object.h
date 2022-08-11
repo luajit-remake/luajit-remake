@@ -1252,8 +1252,6 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static bool WARN_UNUSED TryPutByIntegerIndexFast(T self, int64_t index, TValue value, PutByIntegerIndexICInfo icInfo)
     {
-        // TODO: handle metatable
-
         switch (icInfo.m_valueCheckKind)
         {
         case PutByIntegerIndexICInfo::ValueCheckKind::Int32:
@@ -1387,17 +1385,10 @@ public:
 
     void PutByIntegerIndexSlow(VM* vm, int64_t index64, TValue value)
     {
-        // TODO: handle metatable
-
         if (index64 < ArrayGrowthPolicy::x_arrayBaseOrd || index64 > ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
         {
             PutIndexIntoSparseMap(vm, false /*isVectorQualifyingIndex*/, static_cast<double>(index64), value);
             return;
-        }
-
-        if (m_type != Type::TABLE)
-        {
-            ReleaseAssert(false && "unimplemented");
         }
 
         // This debug variable validates that we did not enter this slow-path for no reason (i.e. the fast path should have handled the case it ought to handle)
@@ -1781,8 +1772,6 @@ public:
 
         assert(!IsNaN(index));
 
-        // TODO: handle metatable
-
         ArrayType arrType = m_arrayType;
         ArrayType newArrayType = arrType;
 
@@ -1829,8 +1818,9 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PutByValDoubleIndex(T self, double index, TValue value)
+    static void RawPutByValDoubleIndex(T self, double index, TValue value)
     {
+        assert(!IsNaN(index));
         int64_t idx64;
         if (likely(IsInt64Index(index, idx64 /*out*/)))
         {
@@ -1838,12 +1828,6 @@ public:
         }
         else
         {
-            if (IsNaN(index))
-            {
-                // should throw out an error here
-                ReleaseAssert(false && "unimplemented");
-            }
-
             VM* vm = VM::GetActiveVMForCurrentThread();
             TableObject* obj = TranslateToRawPointer(vm, self);
             obj->PutIndexIntoSparseMap(vm, false /*isVectorQualifyingIndex*/, index, value);

@@ -115,7 +115,7 @@ TEST(TableObjectIterator, Sanity)
                             double key = it->first;
                             expectedArrayPart.erase(key);
 
-                            TableObject::PutByValDoubleIndex(obj, key, TValue::Nil());
+                            TableObject::RawPutByValDoubleIndex(obj, key, TValue::Nil());
                         }
                     }
                     else
@@ -163,7 +163,7 @@ TEST(TableObjectIterator, Sanity)
                             TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
                             expectedArrayPart[key] = val;
 
-                            TableObject::PutByValDoubleIndex(obj, key, val);
+                            TableObject::RawPutByValDoubleIndex(obj, key, val);
                         }
                     }
                 }
@@ -250,7 +250,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                 TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
                                 expectedArrayPart[key] = val;
 
-                                TableObject::PutByValDoubleIndex(obj, key, val);
+                                TableObject::RawPutByValDoubleIndex(obj, key, val);
                             }
                         }
 
@@ -394,7 +394,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                 ReleaseAssert(!deletedArrayPart.count(kd));
                                 deletedArrayPart.insert(kd);
 
-                                TableObject::PutByValDoubleIndex(obj, kd, TValue::Nil());
+                                TableObject::RawPutByValDoubleIndex(obj, kd, TValue::Nil());
                             }
                         }
 

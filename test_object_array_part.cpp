@@ -845,7 +845,7 @@ TEST(ObjectArrayPart, RandomTest)
                 //
                 double index = rand() / static_cast<double>(1000.0);
                 TValue val = getRandomValue();
-                TableObject::PutByValDoubleIndex(obj, index, val);
+                TableObject::RawPutByValDoubleIndex(obj, index, val);
                 arrayPropMap[index] = val;
                 allPutArrayProperties.push_back(index);
                 return;
