@@ -28,6 +28,14 @@ RUN ln -s /usr/lib/llvm-14/include/llvm /usr/local/include/llvm
 RUN ln -s /usr/lib/llvm-14/include/llvm-c /usr/local/include/llvm-c 
 RUN ln -s /usr/lib/llvm-14/include/polly /usr/local/include/polly 
 
+# install mold
+WORKDIR /usr/local/
+RUN wget -O mold.tar.gz https://github.com/rui314/mold/releases/download/v1.4.0/mold-1.4.0-x86_64-linux.tar.gz
+RUN tar xf mold.tar.gz --strip-components=1
+RUN rm -f mold.tar.gz
+RUN update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
+RUN update-alternatives --install /usr/bin/ld ld /usr/bin/x86_64-linux-gnu-ld 90
+
 # set user
 #
 RUN useradd -ms /bin/bash u
