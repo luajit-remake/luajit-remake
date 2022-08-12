@@ -81,7 +81,7 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${EXTRA_WARNING_FLAGS} ")
 #
 SET(LLVM_EXTRA_COMPILE_FLAGS "-I/usr/local/include -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS ")
 execute_process(
-  COMMAND bash "-c" "llvm-config --ldflags"
+  COMMAND bash "-c" "llvm-config --link-static --ldflags"
   OUTPUT_VARIABLE LLVM_EXTRA_LINK_FLAGS
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -97,7 +97,7 @@ SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath='$ORIGIN/share
 # (1) the LLVM libraries (which are outputted in absolute paths)
 #
 execute_process(
-  COMMAND bash "-c" "llvm-config --libfiles"
+  COMMAND bash "-c" "llvm-config --link-static --libfiles"
   OUTPUT_VARIABLE _tmp
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -107,11 +107,11 @@ string(REPLACE " " ";" LLVM_EXTRA_LINK_LIBRARIES ${_tmp})
 # We transform the output to format "foo bar", and append to LLVM_EXTRA_LINK_LIBRARIES
 #
 execute_process(
-  COMMAND bash "-c" "llvm-config --system-libs"
+  COMMAND bash "-c" "llvm-config --link-static --system-libs"
   OUTPUT_VARIABLE _tmp
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-string(REPLACE " " ";" _tmp ${_tmp})
+string(REPLACE " " ";" _tmp "${_tmp}")
 foreach(_loop_var ${_tmp})
   STRING(REGEX REPLACE "^-l" "" _libname ${_loop_var})
   LIST(APPEND LLVM_EXTRA_LINK_LIBRARIES ${_libname})

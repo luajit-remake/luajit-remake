@@ -11,9 +11,9 @@ base_dir = os.path.dirname(path)
 script_name = os.path.basename(__file__)
 
 def PrintUsageGeneralAndDie():
-    print('Usage: %s <update-docker-image|env|make> [args...]' % (script_name))
+    print('Usage: %s <update-docker|env|make> [args...]' % (script_name))
     print('Options:')
-    print('    update-docker-image:')
+    print('    update-docker:')
     print("        Update the build environment after you modify 'dockerfile/Dockerfile'.")
     print('    env: ')
     print('        Launch an interactive shell in the build environment.')
@@ -51,7 +51,7 @@ if (len(sys.argv) < 2):
 
 op = sys.argv[1]
 
-if (op != 'update-docker-image' and op != 'env' and op != 'make'):
+if (op != 'update-docker' and op != 'env' and op != 'make'):
     print('Unknown operation "%s".' % op)
     PrintUsageGeneralAndDie()
 
@@ -73,7 +73,7 @@ def BuildOrUpdateDockerImage():
     
     CreateDirIfNotExist(os.path.join(base_dir, 'shared_libs'))
     all_shared_libs = [
-        '/lib/x86_64-linux-gnu/libtinfo.so.5'
+#        '/lib/x86_64-linux-gnu/libtinfo.so.5'
     ]
     for shared_lib in all_shared_libs:
         cmd = 'docker run -v%s:/home/u/project %s:latest cp %s /home/u/project/shared_libs' % (base_dir, script_name, shared_lib)
@@ -82,7 +82,7 @@ def BuildOrUpdateDockerImage():
             print('[ERROR] Failed to copy shared library %s, exit code = %d' % (shared_lib, r))
             sys.exit(r)
 
-if (op == 'update-docker-image'):
+if (op == 'update-docker'):
     BuildOrUpdateDockerImage();
     sys.exit(0)
 

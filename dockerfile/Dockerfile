@@ -1,8 +1,10 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 # install misc dependency
 #
-RUN apt update && apt install -y git wget tar xz-utils sudo make ninja-build python ccache g++ libtinfo-dev libz-dev
+RUN apt update && apt install -y git wget tar xz-utils sudo make ninja-build python ccache g++ libtinfo-dev libz-dev lsb-release software-properties-common gnupg
 
 # install cmake 
 #
@@ -12,12 +14,19 @@ RUN mkdir -p cmake-3.23.0 && bash install_cmake.sh --skip-license --prefix=/opt/
 RUN ln -s /opt/cmake-3.23.0/bin/* /usr/local/bin
 RUN rm -f install_cmake.sh
 
-# install llvm 13.0.1
+# install llvm 14
 #
-WORKDIR /usr/local/
-RUN wget -O llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.1/clang+llvm-13.0.1-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-RUN tar xf llvm.tar.xz --strip-components=1
-RUN rm -f llvm.tar.xz
+RUN wget https://apt.llvm.org/llvm.sh
+RUN chmod +x llvm.sh
+RUN ./llvm.sh 14
+RUN rm -f llvm.sh
+RUN update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
+RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+RUN update-alternatives --install /usr/bin/cc cc /usr/bin/clang-14 100
+RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-14 100
+RUN ln -s /usr/lib/llvm-14/include/llvm /usr/local/include/llvm 
+RUN ln -s /usr/lib/llvm-14/include/llvm-c /usr/local/include/llvm-c 
+RUN ln -s /usr/lib/llvm-14/include/polly /usr/local/include/polly 
 
 # set user
 #
