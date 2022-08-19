@@ -4,6 +4,8 @@
 #include "json_utils.h"
 #include "test_vm_utils.h"
 
+// #include "deegen_api.h"
+
 using namespace ToyLang;
 
 namespace {

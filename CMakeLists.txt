@@ -28,12 +28,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 #
 set(BUILD_FLAVOR "" CACHE STRING "Build flavor, supports DEBUG/TESTREL/RELEASE")
 
+# For some reason, our program triggers a bug in gdb 11, so we workaround by using gdb 10 for now
+# However, LLVM 14 defaults to emit dwarf-5 debug info, which cannot be recognized by gdb 10 
+# so insead of using '-g', we use '-gdwarf-4' to ask LLVM to emit dwarf-4 debug info
+#
+set(DEBUG_OPTION " -gdwarf-4 ")
+
 if(BUILD_FLAVOR STREQUAL "DEBUG")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FLAVOR=DEBUG -DTESTBUILD -O0 -g ")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FLAVOR=DEBUG -DTESTBUILD -O0 ${DEBUG_OPTION} ")
   SET(GENERATED_FILES_DIR "${PROJECT_SOURCE_DIR}/__generated__/debug/generated")
   include_directories("${PROJECT_SOURCE_DIR}/__generated__/debug")
 elseif(BUILD_FLAVOR STREQUAL "TESTREL")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FLAVOR=TESTREL -DTESTBUILD -DNDEBUG -O3 -g ")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FLAVOR=TESTREL -DTESTBUILD -DNDEBUG -O3 ${DEBUG_OPTION} ")
   SET(GENERATED_FILES_DIR "${PROJECT_SOURCE_DIR}/__generated__/testrel/generated")
   include_directories("${PROJECT_SOURCE_DIR}/__generated__/testrel")
 elseif(BUILD_FLAVOR STREQUAL "RELEASE")
@@ -74,7 +80,7 @@ add_subdirectory(gtest)
 
 # Append extra cxx warning flags
 #
-SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Werror ")
+SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Werror ")
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${EXTRA_WARNING_FLAGS} ")
 
 # llvm-specific flags
@@ -120,10 +126,13 @@ endforeach()
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories("${PROJECT_SOURCE_DIR}/common_utils")
 include_directories("${PROJECT_SOURCE_DIR}/toylang")
+include_directories("${PROJECT_SOURCE_DIR}/deegen")
 
 add_subdirectory(common_utils)
 
 add_subdirectory(toylang)
+
+add_subdirectory(annotated)
 
 # add the executable
 #
@@ -137,6 +146,7 @@ add_executable(main
   test_object_array_part.cpp
   test_json_bytecode_loader.cpp
   test_table_object_iterator.cpp
+  test_annotation_switch_case.cpp
 )
 
 target_link_libraries(main PUBLIC
@@ -144,6 +154,7 @@ target_link_libraries(main PUBLIC
   -Wl,--start-group
   common_utils
   toylang
+  deegen_unit_test_ir
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )
