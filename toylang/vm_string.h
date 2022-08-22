@@ -310,7 +310,7 @@ public:
 #ifndef NDEBUG
         for (size_t i = 0; i < len; i++)
         {
-            assert(start[i].IsPointer(TValue::x_mivTag));
+            assert(start[i].IsPointer());
             assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
         }
 #endif
@@ -350,7 +350,7 @@ public:
         assert(str1.As()->m_type == HeapEntityType::STRING);
         for (size_t i = 0; i < len; i++)
         {
-            assert(start[i].IsPointer(TValue::x_mivTag));
+            assert(start[i].IsPointer());
             assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
         }
 #endif

@@ -799,7 +799,7 @@ inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     }
     TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
     TValue input = *addr;
-    if (!input.IsPointer(TValue::x_mivTag) || input.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
+    if (!input.IsPointer() || input.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'pairs' (table expected)").m_value);
     }
@@ -823,7 +823,7 @@ inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
     }
 
     TValue tab = vaBegin[0];
-    if (!tab.IsPointer(TValue::x_mivTag) || tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
+    if (!tab.IsPointer() || tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'next' (table expected)").m_value);
     }
@@ -866,11 +866,11 @@ inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
     TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
     TValue input = *addr;
     double inputDouble;
-    if (input.IsDouble(TValue::x_int32Tag))
+    if (input.IsDouble())
     {
         inputDouble = input.AsDouble();
     }
-    else if (input.IsInt32(TValue::x_int32Tag))
+    else if (input.IsInt32())
     {
         inputDouble = input.AsInt32();
     }
@@ -887,20 +887,20 @@ inline void LJR_LIB_MATH_sqrt(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
 
 inline void PrintTValue(FILE* fp, TValue val)
 {
-    if (val.IsInt32(TValue::x_int32Tag))
+    if (val.IsInt32())
     {
         fprintf(fp, "%d", static_cast<int>(val.AsInt32()));
     }
-    else if (val.IsDouble(TValue::x_int32Tag))
+    else if (val.IsDouble())
     {
         double dbl = val.AsDouble();
         char buf[x_default_tostring_buffersize_double];
         StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
         fprintf(fp, "%s", buf);
     }
-    else if (val.IsMIV(TValue::x_mivTag))
+    else if (val.IsMIV())
     {
-        MiscImmediateValue miv = val.AsMIV(TValue::x_mivTag);
+        MiscImmediateValue miv = val.AsMIV();
         if (miv.IsNil())
         {
             fprintf(fp, "nil");
@@ -913,7 +913,7 @@ inline void PrintTValue(FILE* fp, TValue val)
     }
     else
     {
-        assert(val.IsPointer(TValue::x_mivTag));
+        assert(val.IsPointer());
         UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
         if (p->m_type == HeapEntityType::STRING)
         {
@@ -972,7 +972,7 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
     for (uint32_t i = 0; i < numElementsToPrint; i++)
     {
         TValue val = vaBegin[i];
-        if (val.IsInt32(TValue::x_int32Tag))
+        if (val.IsInt32())
         {
             char buf[x_default_tostring_buffersize_int];
             char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
@@ -980,7 +980,7 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
             size_t written = fwrite(buf, 1, len, fp);
             if (unlikely(len != written)) { success = false; break; }
         }
-        else if (val.IsDouble(TValue::x_int32Tag))
+        else if (val.IsDouble())
         {
             double dbl = val.AsDouble();
             char buf[x_default_tostring_buffersize_double];
@@ -989,7 +989,7 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
             size_t written = fwrite(buf, 1, len, fp);
             if (unlikely(len != written)) { success = false; break; }
         }
-        else if (val.IsPointer(TValue::x_mivTag))
+        else if (val.IsPointer())
         {
             UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
             if (p->m_type == HeapEntityType::STRING)
@@ -1024,7 +1024,7 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
         ret[0] = TValue::Nil();
         const char* errstr = strerror(err);
         ret[1] = TValue::CreatePointer(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errstr, static_cast<uint32_t>(strlen(errstr))));
-        ret[2] = TValue::CreateInt32(err, TValue::x_int32Tag);
+        ret[2] = TValue::CreateInt32(err);
         numRetVals = 3;
     }
 
@@ -1148,17 +1148,17 @@ inline TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
         snprintf(msg, 100, "attempt to call a (internal type %d) value", d);
     };
 
-    if (badValue.IsInt32(TValue::x_int32Tag))
+    if (badValue.IsInt32())
     {
         makeMsg("number");
     }
-    else if (badValue.IsDouble(TValue::x_int32Tag))
+    else if (badValue.IsDouble())
     {
         makeMsg("number");
     }
-    else if (badValue.IsMIV(TValue::x_mivTag))
+    else if (badValue.IsMIV())
     {
-        MiscImmediateValue miv = badValue.AsMIV(TValue::x_mivTag);
+        MiscImmediateValue miv = badValue.AsMIV();
         if (miv.IsNil())
         {
             makeMsg("nil");
@@ -1171,7 +1171,7 @@ inline TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
     }
     else
     {
-        assert(badValue.IsPointer(TValue::x_mivTag));
+        assert(badValue.IsPointer());
         UserHeapGcObjectHeader* p = TranslateToRawPointer(badValue.AsPointer<UserHeapGcObjectHeader>().As());
         if (p->m_type == HeapEntityType::STRING)
         {
@@ -1253,8 +1253,8 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
     bool isXpcall;
     {
         TValue* locals = reinterpret_cast<TValue*>(protectedCallFrame + 1);
-        assert(locals[0].IsMIV(TValue::x_mivTag) && locals[0].AsMIV(TValue::x_mivTag).IsBoolean());
-        isXpcall = locals[0].AsMIV(TValue::x_mivTag).GetBooleanValue();
+        assert(locals[0].IsMIV() && locals[0].AsMIV().IsBoolean());
+        isXpcall = locals[0].AsMIV().GetBooleanValue();
     }
 
     if (nestedErrorCount > x_lua_max_nested_error_count)
@@ -1278,7 +1278,7 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
         // Lua 5.1 doesn't require 'errHandler' to be a function, but ignores its metatable any way.
         // This function is not performance sensitive, so we will make it compatible for both (the xpcall API can check 'errHandler' to implement Lua 5.4 behavior)
         //
-        bool isFunction = errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION;
+        bool isFunction = errHandler.IsPointer() && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION;
         if (!isFunction)
         {
             // The error handler is not callable, so attempting to call it will result in infinite error recursion
@@ -1406,7 +1406,7 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
         // Note that Lua won't consider the metatable of the error handler: it must be a function in order to be called
         //
         TValue errHandler = vaBegin[1];
-        if (errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+        if (errHandler.IsPointer() && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
         {
             // The error handler is a function. We need to set up the dummy frame (see comments earlier) and call it
             //
@@ -1562,7 +1562,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
 
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue value = vaBegin[0];
-    if (!value.IsPointer(TValue::x_mivTag) || value.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
+    if (!value.IsPointer() || value.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         // TODO: make this error message consistent with Lua
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'setmetatable' (table expected)").m_value);
@@ -1574,7 +1574,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
     }
 
     TValue mt = vaBegin[1];
-    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+    if (!mt.IsNil() && !(mt.IsPointer() && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
     }
@@ -1626,7 +1626,7 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue value = vaBegin[0];
     TValue mt = vaBegin[1];
-    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+    if (!mt.IsNil() && !(mt.IsPointer() && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
     }
@@ -1643,7 +1643,7 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
         }
     };
 
-    if (value.IsPointer(TValue::x_mivTag))
+    if (value.IsPointer())
     {
         HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
@@ -1678,7 +1678,7 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
             ReleaseAssert(false && "unimplemented");
         }
     }
-    else if (value.IsMIV(TValue::x_mivTag))
+    else if (value.IsMIV())
     {
         if (value.IsNil())
         {
@@ -1686,13 +1686,13 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
         }
         else
         {
-            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            assert(value.AsMIV().IsBoolean());
             setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
         }
     }
     else
     {
-        assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+        assert(value.IsDouble() || value.IsInt32());
         setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
     }
 
@@ -1718,7 +1718,7 @@ inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue base = vaBegin[0];
     TValue index = vaBegin[1];
-    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+    if (!(base.IsPointer() && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawget' (table expected)").m_value);
     }
@@ -1726,13 +1726,13 @@ inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     HeapPtr<TableObject> tableObj = base.AsPointer().As<TableObject>();
     TValue result;
 
-    if (index.IsInt32(TValue::x_int32Tag))
+    if (index.IsInt32())
     {
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         result = TableObject::GetByIntegerIndex(tableObj, index.AsInt32(), icInfo);
     }
-    else if (index.IsDouble(TValue::x_int32Tag))
+    else if (index.IsDouble())
     {
         double indexDouble = index.AsDouble();
         if (unlikely(IsNaN(indexDouble)))
@@ -1749,7 +1749,7 @@ inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> s
             result = TableObject::GetByDoubleVal(tableObj, indexDouble, icInfo);
         }
     }
-    else if (index.IsPointer(TValue::x_mivTag))
+    else if (index.IsPointer())
     {
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(tableObj, index.AsPointer(), icInfo /*out*/);
@@ -1757,8 +1757,8 @@ inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     }
     else
     {
-        assert(index.IsMIV(TValue::x_mivTag));
-        MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+        assert(index.IsMIV());
+        MiscImmediateValue miv = index.AsMIV();
         if (miv.IsNil())
         {
             // Indexing a table by 'nil' for read is not an error, but always results in nil,
@@ -1797,18 +1797,18 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     TValue base = vaBegin[0];
     TValue index = vaBegin[1];
     TValue newValue = vaBegin[2];
-    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+    if (!(base.IsPointer() && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawset' (table expected)").m_value);
     }
 
     HeapPtr<TableObject> tableObj = base.AsPointer().As<TableObject>();
 
-    if (index.IsInt32(TValue::x_int32Tag))
+    if (index.IsInt32())
     {
         TableObject::RawPutByValIntegerIndex(tableObj, index.AsInt32(), newValue);
     }
-    else if (index.IsDouble(TValue::x_int32Tag))
+    else if (index.IsDouble())
     {
         double indexDouble = index.AsDouble();
         if (IsNaN(indexDouble))
@@ -1817,7 +1817,7 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
         }
         TableObject::RawPutByValDoubleIndex(tableObj, indexDouble, newValue);
     }
-    else if (index.IsPointer(TValue::x_mivTag))
+    else if (index.IsPointer())
     {
         PutByIdICInfo icInfo;
         TableObject::PreparePutById(tableObj, index.AsPointer(), icInfo /*out*/);
@@ -1825,8 +1825,8 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     }
     else
     {
-        assert(index.IsMIV(TValue::x_mivTag));
-        MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+        assert(index.IsMIV());
+        MiscImmediateValue miv = index.AsMIV();
         if (miv.IsNil())
         {
             [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("table index is nil").m_value);
@@ -2290,13 +2290,13 @@ public:
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
-        assert(tvIndex.IsPointer(TValue::x_mivTag));
+        assert(tvIndex.IsPointer());
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
         TValue metamethod;
         while (true)
         {
-            if (!tvbase.IsPointer(TValue::x_mivTag))
+            if (!tvbase.IsPointer())
             {
                 goto not_table_object;
             }
@@ -2345,7 +2345,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2383,14 +2383,14 @@ public:
         TValue tvbase = *StackFrameHeader::GetLocalAddr(sfp, bc->m_base);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
-        assert(tvIndex.IsPointer(TValue::x_mivTag));
+        assert(tvIndex.IsPointer());
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
         TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
 
         TValue metamethod;
         while (true)
         {
-            if (!tvbase.IsPointer(TValue::x_mivTag))
+            if (!tvbase.IsPointer())
             {
                 goto not_table_object;
             }
@@ -2438,7 +2438,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2479,7 +2479,7 @@ public:
 
         while (true)
         {
-            if (unlikely(!tvbase.IsPointer(TValue::x_mivTag)))
+            if (unlikely(!tvbase.IsPointer()))
             {
                 goto not_table_object;
             }
@@ -2493,7 +2493,7 @@ public:
 
                 HeapPtr<TableObject> tableObj = base.As<TableObject>();
                 TValue result;
-                if (index.IsInt32(TValue::x_int32Tag))
+                if (index.IsInt32())
                 {
                     // TODO: we must be careful that we cannot do IC if the hidden class is CacheableDictionary
                     //
@@ -2505,7 +2505,7 @@ public:
                         goto check_metatable;
                     }
                 }
-                else if (index.IsDouble(TValue::x_int32Tag))
+                else if (index.IsDouble())
                 {
                     double indexDouble = index.AsDouble();
                     if (unlikely(IsNaN(indexDouble)))
@@ -2527,7 +2527,7 @@ public:
                         }
                     }
                 }
-                else if (index.IsPointer(TValue::x_mivTag))
+                else if (index.IsPointer())
                 {
                     GetByIdICInfo icInfo;
                     TableObject::PrepareGetById(tableObj, index.AsPointer(), icInfo /*out*/);
@@ -2539,8 +2539,8 @@ public:
                 }
                 else
                 {
-                    assert(index.IsMIV(TValue::x_mivTag));
-                    MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+                    assert(index.IsMIV());
+                    MiscImmediateValue miv = index.AsMIV();
                     if (miv.IsNil())
                     {
                         // Indexing a table by 'nil' for read is not an error, but always results in nil,
@@ -2596,7 +2596,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2638,7 +2638,7 @@ public:
 
         while (true)
         {
-            if (!tvbase.IsPointer(TValue::x_mivTag))
+            if (!tvbase.IsPointer())
             {
                 goto not_table_object;
             }
@@ -2652,7 +2652,7 @@ public:
 
                 HeapPtr<TableObject> tableObj = base.As<TableObject>();
                 int64_t i64Index;
-                if (index.IsInt32(TValue::x_int32Tag))
+                if (index.IsInt32())
                 {
                     i64Index = index.AsInt32();
 
@@ -2710,7 +2710,7 @@ no_metamethod_integer_index:
                         obj->PutByIntegerIndexSlow(vm, i64Index, newValue);
                     }
                 }
-                else if (index.IsDouble(TValue::x_int32Tag))
+                else if (index.IsDouble())
                 {
                     double indexDouble = index.AsDouble();
                     if (likely(TableObject::IsInt64Index(indexDouble, i64Index /*out*/)))
@@ -2763,7 +2763,7 @@ no_metamethod_integer_index:
 no_metamethod_double_index:
                     TableObject::RawPutByValDoubleIndex(base.As<TableObject>(), indexDouble, newValue);
                 }
-                else if (index.IsPointer(TValue::x_mivTag))
+                else if (index.IsPointer())
                 {
                     PutByIdICInfo icInfo;
                     TableObject::PreparePutById(base.As<TableObject>(), index.AsPointer(), icInfo /*out*/);
@@ -2789,8 +2789,8 @@ no_metamethod_double_index:
                 }
                 else
                 {
-                    assert(index.IsMIV(TValue::x_mivTag));
-                    MiscImmediateValue miv = index.AsMIV(TValue::x_mivTag);
+                    assert(index.IsMIV());
+                    MiscImmediateValue miv = index.AsMIV();
                     if (miv.IsNil())
                     {
                         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("table index is nil").m_value);
@@ -2835,7 +2835,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2876,7 +2876,7 @@ public:
 
         while (true)
         {
-            if (!tvbase.IsPointer(TValue::x_mivTag))
+            if (!tvbase.IsPointer())
             {
                 goto not_table_object;
             }
@@ -2926,9 +2926,9 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag) }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index) }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
                 //
                 assert(res.m_success);
@@ -2969,7 +2969,7 @@ public:
 
         while (true)
         {
-            if (!tvbase.IsPointer(TValue::x_mivTag))
+            if (!tvbase.IsPointer())
             {
                 goto not_table_object;
             }
@@ -3050,9 +3050,9 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
+            if (likely(metamethod.IsPointer()) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
-                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag), newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
+                PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index), newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
                 //
                 assert(res.m_success);
@@ -3088,7 +3088,7 @@ public:
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index.ConstantOrd());
         // For some reason LuaJIT bytecode stores the constant in the lower 32 bits of a double...
         //
-        assert(tvIndex.IsDouble(TValue::x_int32Tag));
+        assert(tvIndex.IsDouble());
         // This should not overflow, as Lua states:
         //     "Fields of the form 'exp' are equivalent to [i] = exp, where i are consecutive numerical
         //     integers, starting with 1. Fields in the other formats do not affect this counting."
@@ -3098,7 +3098,7 @@ public:
 
         // 'm_base' is guaranteed to be a table object, as this opcode only shows up in a table initializer expression
         //
-        assert(StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->IsPointer(TValue::x_mivTag) &&
+        assert(StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->IsPointer() &&
                StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         HeapPtr<TableObject> base = StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<TableObject>().As();
 
@@ -3138,7 +3138,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
-        assert(tvIndex.IsPointer(TValue::x_mivTag));
+        assert(tvIndex.IsPointer());
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
 
         HeapPtr<TableObject> base = rc->m_globalObject.As();
@@ -3173,7 +3173,7 @@ handle_metamethod:
         // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
         //
-        if (likely(metamethod.IsPointer(TValue::x_mivTag)))
+        if (likely(metamethod.IsPointer()))
         {
             HeapEntityType mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
             if (mmType == HeapEntityType::FUNCTION)
@@ -3228,7 +3228,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tvIndex = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_index);
-        assert(tvIndex.IsPointer(TValue::x_mivTag));
+        assert(tvIndex.IsPointer());
         UserHeapPointer<HeapString> index = tvIndex.AsPointer<HeapString>();
         TValue newValue = *StackFrameHeader::GetLocalAddr(sfp, bc->m_src);
         TValue metamethod;
@@ -3265,7 +3265,7 @@ handle_metamethod:
         // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
         //
-        if (likely(metamethod.IsPointer(TValue::x_mivTag)))
+        if (likely(metamethod.IsPointer()))
         {
             HeapEntityType mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
             if (mmType == HeapEntityType::FUNCTION)
@@ -3347,7 +3347,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
 
         TValue tpl = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_src);
-        assert(tpl.IsPointer(TValue::x_mivTag));
+        assert(tpl.IsPointer());
         assert(tpl.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         VM* vm = VM::GetActiveVMForCurrentThread();
         TableObject* obj = TranslateToRawPointer(vm, tpl.AsPointer<TableObject>().As());
@@ -3557,7 +3557,7 @@ public:
                     memmove(dst, retValues, sizeof(TValue) * numRetValues);
                     while (numRetValues < bc->m_numFixedRets)
                     {
-                        dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
+                        dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil());
                         numRetValues++;
                     }
                 }
@@ -3819,7 +3819,7 @@ public:
                 memmove(dst, retValues, sizeof(TValue) * numRetValues);
                 while (numRetValues < bc->m_numFixedRets)
                 {
-                    dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil(), TValue::x_mivTag);
+                    dst[numRetValues] = TValue::CreateMIV(MiscImmediateValue::CreateNil());
                     numRetValues++;
                 }
             }
@@ -3940,7 +3940,7 @@ public:
         {
             // Check 2: addr[-2] is a table
             TValue v = addr[-2];
-            if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE)
+            if (v.IsPointer() && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE)
             {
                 // Check 3: addr[-1] is nil
                 //
@@ -4099,7 +4099,7 @@ public:
         const Self* bc = reinterpret_cast<const Self*>(bcu);
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
-        if (src.IsDouble(TValue::x_int32Tag))
+        if (src.IsDouble())
         {
             double result = -src.AsDouble();
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(result);
@@ -4107,7 +4107,7 @@ public:
         }
         else
         {
-            if (src.IsPointer(TValue::x_mivTag) && src.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
+            if (src.IsPointer() && src.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 HeapPtr<HeapString> stringObj = src.AsPointer<HeapString>().As();
                 StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4172,7 +4172,7 @@ public:
         const Self* bc = reinterpret_cast<const Self*>(bcu);
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
-        if (src.IsPointer(TValue::x_mivTag))
+        if (src.IsPointer())
         {
             HeapEntityType ty = src.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
             if (ty == HeapEntityType::STRING)
@@ -4238,11 +4238,11 @@ template<typename Func>
 std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, const Func& func)
 {
     double lhsNumber;
-    if (lhs.IsDouble(TValue::x_int32Tag))
+    if (lhs.IsDouble())
     {
         lhsNumber = lhs.AsDouble();
     }
-    else if (lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
+    else if (lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
     {
         HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4261,11 +4261,11 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
     }
 
     double rhsNumber;
-    if (rhs.IsDouble(TValue::x_int32Tag))
+    if (rhs.IsDouble())
     {
         rhsNumber = rhs.AsDouble();
     }
-    else if (rhs.IsPointer(TValue::x_mivTag) && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
+    else if (rhs.IsPointer() && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
     {
         HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4364,14 +4364,14 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
         rhsMetamethod = TableObject::GetById(rhsMetatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
     }
 
-    assert(!lhsMetamethod.IsInt32(TValue::x_int32Tag) && "unimplemented");
-    assert(!rhsMetamethod.IsInt32(TValue::x_int32Tag) && "unimplemented");
+    assert(!lhsMetamethod.IsInt32() && "unimplemented");
+    assert(!rhsMetamethod.IsInt32() && "unimplemented");
 
     // Now, perform a primitive comparison of lhsMetamethod and rhsMetamethod
     //
-    if (unlikely(lhsMetamethod.IsDouble(TValue::x_int32Tag)))
+    if (unlikely(lhsMetamethod.IsDouble()))
     {
-        if (!rhsMetamethod.IsDouble(TValue::x_int32Tag))
+        if (!rhsMetamethod.IsDouble())
         {
             return TValue::Nil();
         }
@@ -4424,7 +4424,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() + rhs.AsDouble());
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4433,7 +4433,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4513,7 +4513,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() - rhs.AsDouble());
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4522,7 +4522,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4602,7 +4602,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() * rhs.AsDouble());
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4611,7 +4611,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4691,7 +4691,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() / rhs.AsDouble());
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4700,7 +4700,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4798,7 +4798,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(ModulusWithLuaSemantics(lhs.AsDouble(), rhs.AsDouble()));
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4807,7 +4807,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4887,7 +4887,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_lhs);
         TValue rhs = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_rhs);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(pow(lhs.AsDouble(), rhs.AsDouble()));
             Dispatch(rc, stackframe, bcu + sizeof(Self));
@@ -4896,7 +4896,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
+            if (likely(lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4983,7 +4983,7 @@ public:
         for (uint32_t i = 0; i < num; i++)
         {
             TValue val = begin[i];
-            if (val.IsPointer(TValue::x_mivTag))
+            if (val.IsPointer())
             {
                 if (val.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::STRING)
                 {
@@ -4992,7 +4992,7 @@ public:
                 }
                 continue;
             }
-            if (val.IsDouble(TValue::x_int32Tag) || val.IsInt32(TValue::x_int32Tag))
+            if (val.IsDouble() || val.IsInt32())
             {
                 needNumberConversion = true;
             }
@@ -5006,14 +5006,14 @@ public:
                 for (uint32_t i = 0; i < num; i++)
                 {
                     TValue val = begin[i];
-                    if (val.IsDouble(TValue::x_int32Tag))
+                    if (val.IsDouble())
                     {
                         double dbl = val.AsDouble();
                         char buf[x_default_tostring_buffersize_double];
                         char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
                         begin[i] = TValue::CreatePointer(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)));
                     }
-                    else if (val.IsInt32(TValue::x_int32Tag))
+                    else if (val.IsInt32())
                     {
                         char buf[x_default_tostring_buffersize_int];
                         char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, val.AsInt32());
@@ -5037,7 +5037,7 @@ public:
         // Store the next slot to concat on metamethod return on the last slot of the values to concat
         // This slot is clobberable (confirmed by checking LuaJIT source code).
         //
-        begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+        begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset);
 
         // Call metamethod
         //
@@ -5079,20 +5079,20 @@ public:
 
     static std::optional<UserHeapPointer<HeapString>> TryGetStringOrConvertNumberToString(TValue value)
     {
-        if (value.IsPointer(TValue::x_mivTag))
+        if (value.IsPointer())
         {
             if (value.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 return value.AsPointer<HeapString>();
             }
         }
-        if (value.IsDouble(TValue::x_int32Tag))
+        if (value.IsDouble())
         {
             char buf[x_default_tostring_buffersize_double];
             char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, value.AsDouble());
             return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf));
         }
-        else if (value.IsInt32(TValue::x_int32Tag))
+        else if (value.IsInt32())
         {
             char buf[x_default_tostring_buffersize_int];
             char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, value.AsInt32());
@@ -5172,7 +5172,7 @@ public:
 
         TValue curValue = *retValues;
 
-        assert(begin[bc->m_num - 1].IsInt32(TValue::x_int32Tag));
+        assert(begin[bc->m_num - 1].IsInt32());
         int32_t nextSlotToConcat = begin[bc->m_num - 1].AsInt32();
         assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(bc->m_num) - 2);
         if (nextSlotToConcat == -1)
@@ -5190,7 +5190,7 @@ public:
             }
             else
             {
-                begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset, TValue::x_int32Tag);
+                begin[bc->m_num - 1] = TValue::CreateInt32(fsr.m_endOffset);
 
                 // Call metamethod
                 //
@@ -5243,9 +5243,9 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble()))
         {
-            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            if (unlikely(!rhs.IsDouble()))
             {
                 goto fail;
             }
@@ -5261,9 +5261,9 @@ public:
         else
         {
             TValue metamethod;
-            if (lhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer())
             {
-                if (!rhs.IsPointer(TValue::x_mivTag))
+                if (!rhs.IsPointer())
                 {
                     goto fail;
                 }
@@ -5330,11 +5330,11 @@ public:
                 goto do_metamethod_call;
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
 
             {
-                assert(lhs.IsMIV(TValue::x_mivTag));
-                if (!rhs.IsMIV(TValue::x_mivTag))
+                assert(lhs.IsMIV());
+                if (!rhs.IsMIV())
                 {
                     goto fail;
                 }
@@ -5404,9 +5404,9 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble()))
         {
-            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            if (unlikely(!rhs.IsDouble()))
             {
                 goto fail;
             }
@@ -5422,9 +5422,9 @@ public:
         else
         {
             TValue metamethod;
-            if (lhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer())
             {
-                if (!rhs.IsPointer(TValue::x_mivTag))
+                if (!rhs.IsPointer())
                 {
                     goto fail;
                 }
@@ -5491,11 +5491,11 @@ public:
                 goto do_metamethod_call;
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
 
             {
-                assert(lhs.IsMIV(TValue::x_mivTag));
-                if (!rhs.IsMIV(TValue::x_mivTag))
+                assert(lhs.IsMIV());
+                if (!rhs.IsMIV())
                 {
                     goto fail;
                 }
@@ -5561,9 +5561,9 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble()))
         {
-            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            if (unlikely(!rhs.IsDouble()))
             {
                 goto fail;
             }
@@ -5579,9 +5579,9 @@ public:
         else
         {
             TValue metamethod;
-            if (lhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer())
             {
-                if (!rhs.IsPointer(TValue::x_mivTag))
+                if (!rhs.IsPointer())
                 {
                     goto fail;
                 }
@@ -5648,11 +5648,11 @@ public:
                 goto do_metamethod_call;
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
 
             {
-                assert(lhs.IsMIV(TValue::x_mivTag));
-                if (!rhs.IsMIV(TValue::x_mivTag))
+                assert(lhs.IsMIV());
+                if (!rhs.IsMIV())
                 {
                     goto fail;
                 }
@@ -5718,9 +5718,9 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble()))
         {
-            if (unlikely(!rhs.IsDouble(TValue::x_int32Tag)))
+            if (unlikely(!rhs.IsDouble()))
             {
                 goto fail;
             }
@@ -5736,9 +5736,9 @@ public:
         else
         {
             TValue metamethod;
-            if (lhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer())
             {
-                if (!rhs.IsPointer(TValue::x_mivTag))
+                if (!rhs.IsPointer())
                 {
                     goto fail;
                 }
@@ -5805,11 +5805,11 @@ public:
                 goto do_metamethod_call;
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
 
             {
-                assert(lhs.IsMIV(TValue::x_mivTag));
-                if (!rhs.IsMIV(TValue::x_mivTag))
+                assert(lhs.IsMIV());
+                if (!rhs.IsMIV())
                 {
                     goto fail;
                 }
@@ -5875,7 +5875,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             if (UnsafeFloatEqual(lhs.AsDouble(), rhs.AsDouble()))
             {
@@ -5893,10 +5893,10 @@ public:
                 Dispatch(rc, stackframe, reinterpret_cast<ConstRestrictPtr<uint8_t>>(reinterpret_cast<intptr_t>(bcu) + bc->m_offset));
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
-            assert(!rhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
+            assert(!rhs.IsInt32() && "unimplemented");
 
-            if (lhs.IsPointer(TValue::x_mivTag) && rhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer() && rhs.IsPointer())
             {
                 // Consider metamethod call
                 //
@@ -5978,7 +5978,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble(TValue::x_int32Tag) && rhs.IsDouble(TValue::x_int32Tag)))
+        if (likely(lhs.IsDouble() && rhs.IsDouble()))
         {
             if (!UnsafeFloatEqual(lhs.AsDouble(), rhs.AsDouble()))
             {
@@ -5996,10 +5996,10 @@ public:
                 Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
 
-            assert(!lhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
-            assert(!rhs.IsInt32(TValue::x_int32Tag) && "unimplemented");
+            assert(!lhs.IsInt32() && "unimplemented");
+            assert(!rhs.IsInt32() && "unimplemented");
 
-            if (lhs.IsPointer(TValue::x_mivTag) && rhs.IsPointer(TValue::x_mivTag))
+            if (lhs.IsPointer() && rhs.IsPointer())
             {
                 // Consider metamethod call
                 //
@@ -6229,11 +6229,11 @@ public:
         for (uint32_t i = 0; i < 3; i++)
         {
             TValue v = addr[i];
-            if (v.IsDouble(TValue::x_int32Tag))
+            if (v.IsDouble())
             {
                 vals[i] = v.AsDouble();
             }
-            else if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
+            else if (v.IsPointer() && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 HeapPtr<HeapString> hs = v.AsPointer<HeapString>().As();
                 uint8_t* str = TranslateToRawPointer(hs->m_string);

@@ -12,11 +12,11 @@ TEST(NaNBoxing, Correctness)
         uint32_t v = (static_cast<uint32_t>(x1) << 16) + static_cast<uint32_t>(x2);
         int32_t value = static_cast<int32_t>(v);
 
-        TValue r = TValue::CreateInt32(value, TValue::x_int32Tag);
-        ReleaseAssert(r.IsInt32(TValue::x_int32Tag));
-        ReleaseAssert(!r.IsMIV(TValue::x_mivTag));
-        ReleaseAssert(!r.IsDouble(TValue::x_int32Tag));
-        ReleaseAssert(!r.IsPointer(TValue::x_mivTag));
+        TValue r = TValue::CreateInt32(value);
+        ReleaseAssert(r.IsInt32());
+        ReleaseAssert(!r.IsMIV());
+        ReleaseAssert(!r.IsDouble());
+        ReleaseAssert(!r.IsPointer());
         ReleaseAssert(r.AsInt32() == value);
     }
 
@@ -25,12 +25,12 @@ TEST(NaNBoxing, Correctness)
     {
         auto testValue = [](MiscImmediateValue value)
         {
-            TValue r = TValue::CreateMIV(value, TValue::x_mivTag);
-            ReleaseAssert(!r.IsInt32(TValue::x_int32Tag));
-            ReleaseAssert(r.IsMIV(TValue::x_mivTag));
-            ReleaseAssert(!r.IsDouble(TValue::x_int32Tag));
-            ReleaseAssert(!r.IsPointer(TValue::x_mivTag));
-            ReleaseAssert(r.AsMIV(TValue::x_mivTag).m_value == value.m_value);
+            TValue r = TValue::CreateMIV(value);
+            ReleaseAssert(!r.IsInt32());
+            ReleaseAssert(r.IsMIV());
+            ReleaseAssert(!r.IsDouble());
+            ReleaseAssert(!r.IsPointer());
+            ReleaseAssert(r.AsMIV().m_value == value.m_value);
         };
 
         testValue(MiscImmediateValue { MiscImmediateValue::x_nil });
@@ -45,10 +45,10 @@ TEST(NaNBoxing, Correctness)
         auto testValue = [](double value)
         {
             TValue r = TValue::CreateDouble(value);
-            ReleaseAssert(!r.IsInt32(TValue::x_int32Tag));
-            ReleaseAssert(!r.IsMIV(TValue::x_mivTag));
-            ReleaseAssert(r.IsDouble(TValue::x_int32Tag));
-            ReleaseAssert(!r.IsPointer(TValue::x_mivTag));
+            ReleaseAssert(!r.IsInt32());
+            ReleaseAssert(!r.IsMIV());
+            ReleaseAssert(r.IsDouble());
+            ReleaseAssert(!r.IsPointer());
             if (std::isnan(value))
             {
                 ReleaseAssert(std::isnan(r.AsDouble()));
@@ -96,10 +96,10 @@ TEST(NaNBoxing, Correctness)
             UserHeapPointer<void> value { reinterpret_cast<HeapPtr<void>>(ptr) };
 
             TValue r = TValue::CreatePointer(value);
-            ReleaseAssert(!r.IsInt32(TValue::x_int32Tag));
-            ReleaseAssert(!r.IsMIV(TValue::x_mivTag));
-            ReleaseAssert(!r.IsDouble(TValue::x_int32Tag));
-            ReleaseAssert(r.IsPointer(TValue::x_mivTag));
+            ReleaseAssert(!r.IsInt32());
+            ReleaseAssert(!r.IsMIV());
+            ReleaseAssert(!r.IsDouble());
+            ReleaseAssert(r.IsPointer());
             ReleaseAssert(r.AsPointer() == value);
         }
     }

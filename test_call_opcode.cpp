@@ -84,7 +84,7 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
     TValue* callerLocals = reinterpret_cast<TValue*>(info->m_expectedSfh) + x_numSlotsForStackFrameHeader;
     for (uint32_t i = 0; i < info->m_callerNumStackSlots; i++)
     {
-        ReleaseAssert(callerLocals[i].IsInt32(TValue::x_int32Tag));
+        ReleaseAssert(callerLocals[i].IsInt32());
         ReleaseAssert(callerLocals[i].AsInt32() == static_cast<int32_t>(i + 10000));
     }
 
@@ -100,13 +100,13 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
     {
         if (i < totalArgumentsProvidedByCaller)
         {
-            ReleaseAssert(calleeLocals[i].IsInt32(TValue::x_int32Tag));
+            ReleaseAssert(calleeLocals[i].IsInt32());
             ReleaseAssert(calleeLocals[i].AsInt32() == static_cast<int32_t>(i + 1));
         }
         else
         {
-            ReleaseAssert(calleeLocals[i].IsMIV(TValue::x_mivTag));
-            ReleaseAssert(calleeLocals[i].AsMIV(TValue::x_mivTag) == MiscImmediateValue::CreateNil());
+            ReleaseAssert(calleeLocals[i].IsMIV());
+            ReleaseAssert(calleeLocals[i].AsMIV() == MiscImmediateValue::CreateNil());
         }
     }
 
@@ -117,7 +117,7 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
         TValue* vaBegin = reinterpret_cast<TValue*>(newHdr) - expectedVarArgRegionLength;
         for (uint32_t i = 0; i < expectedVarArgRegionLength; i++)
         {
-            ReleaseAssert(vaBegin[i].IsInt32(TValue::x_int32Tag));
+            ReleaseAssert(vaBegin[i].IsInt32());
             ReleaseAssert(vaBegin[i].AsInt32() == static_cast<int32_t>(i + info->m_calleeNumFixedArgs + 1));
         }
     }
@@ -186,7 +186,7 @@ TEST(CallOpcode, Sanity)
                 //
                 for (uint32_t i = 0; i < callerCb->m_stackFrameNumSlots; i++)
                 {
-                    locals[i] = TValue::CreateInt32(static_cast<int32_t>(i + 10000), TValue::x_int32Tag);
+                    locals[i] = TValue::CreateInt32(static_cast<int32_t>(i + 10000));
                 }
 
                 // roll out how many fixed arguments the callee is accepting
@@ -207,7 +207,7 @@ TEST(CallOpcode, Sanity)
                 locals[funcStart] = TValue::CreatePointer(UserHeapPointer<FunctionObject> { calleeFunc });
                 for (uint32_t i = 0; i < numFixedParams; i++)
                 {
-                    locals[funcStart + i + x_numSlotsForStackFrameHeader] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
+                    locals[funcStart + i + x_numSlotsForStackFrameHeader] = TValue::CreateInt32(paramV);
                     paramV++;
                 }
                 info.m_callerArgStart = funcStart;
@@ -222,7 +222,7 @@ TEST(CallOpcode, Sanity)
                     uint32_t slotBegin = callerCb->m_stackFrameNumSlots + static_cast<uint32_t>(rand()) % 40;
                     for (uint32_t i = 0; i < numVariadicRet; i++)
                     {
-                        locals[slotBegin + i] = TValue::CreateInt32(paramV, TValue::x_int32Tag);
+                        locals[slotBegin + i] = TValue::CreateInt32(paramV);
                         paramV++;
                     }
                     rc.m_variadicRetSlotBegin = static_cast<int32_t>(slotBegin);

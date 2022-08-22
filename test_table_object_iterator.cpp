@@ -40,7 +40,7 @@ TEST(TableObjectIterator, Sanity)
                             ReleaseAssert(kv.m_value.IsNil());
                             break;
                         }
-                        if (kv.m_key.IsDouble(TValue::x_int32Tag))
+                        if (kv.m_key.IsDouble())
                         {
                             double key = kv.m_key.AsDouble();
                             ReleaseAssert(!showedUpArrayProps.count(key));
@@ -48,7 +48,7 @@ TEST(TableObjectIterator, Sanity)
                             ReleaseAssert(expectedArrayPart.count(key));
                             ReleaseAssert(expectedArrayPart[key].m_value == kv.m_value.m_value);
                         }
-                        else if (kv.m_key.IsInt32(TValue::x_int32Tag))
+                        else if (kv.m_key.IsInt32())
                         {
                             double key = kv.m_key.AsInt32();
                             ReleaseAssert(!showedUpArrayProps.count(key));
@@ -58,7 +58,7 @@ TEST(TableObjectIterator, Sanity)
                         }
                         else
                         {
-                            ReleaseAssert(kv.m_key.IsPointer(TValue::x_mivTag));
+                            ReleaseAssert(kv.m_key.IsPointer());
                             int64_t key = kv.m_key.AsPointer().m_value;
                             ReleaseAssert(!showedUpNamedProps.count(key));
                             showedUpNamedProps.insert(key);
@@ -133,7 +133,7 @@ TEST(TableObjectIterator, Sanity)
                                 propToAdd = choice;
                                 break;
                             }
-                            TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                            TValue val = TValue::CreateInt32(rand());
                             expectedNamedProps[propToAdd.m_value] = val;
 
                             PutByIdICInfo icInfo;
@@ -158,7 +158,7 @@ TEST(TableObjectIterator, Sanity)
                             {
                                 key = rand() % 8000;
                             }
-                            TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                            TValue val = TValue::CreateInt32(rand());
                             expectedArrayPart[key] = val;
 
                             TableObject::RawPutByValDoubleIndex(obj, key, val);
@@ -220,7 +220,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                     propToAdd = choice;
                                     break;
                                 }
-                                TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                                TValue val = TValue::CreateInt32(rand());
                                 expectedNamedProps[propToAdd.m_value] = val;
 
                                 PutByIdICInfo icInfo;
@@ -245,7 +245,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                 {
                                     key = rand() % 8000;
                                 }
-                                TValue val = TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                                TValue val = TValue::CreateInt32(rand());
                                 expectedArrayPart[key] = val;
 
                                 TableObject::RawPutByValDoubleIndex(obj, key, val);
@@ -289,7 +289,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                     break;
                                 }
 
-                                if (key.IsPointer(TValue::x_mivTag))
+                                if (key.IsPointer())
                                 {
                                     int64_t kp = key.AsPointer().m_value;
                                     ReleaseAssert(expectedNamedProps.count(kp));
@@ -301,13 +301,13 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                 else
                                 {
                                     double kd;
-                                    if (key.IsInt32(TValue::x_int32Tag))
+                                    if (key.IsInt32())
                                     {
                                         kd = key.AsInt32();
                                     }
                                     else
                                     {
-                                        ReleaseAssert(key.IsDouble(TValue::x_int32Tag));
+                                        ReleaseAssert(key.IsDouble());
                                         kd = key.AsDouble();
                                     }
                                     ReleaseAssert(expectedArrayPart.count(kd));
@@ -365,7 +365,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                                 }
                             }
 
-                            if (keyToDelete.IsPointer(TValue::x_mivTag))
+                            if (keyToDelete.IsPointer())
                             {
                                 int64_t kp = keyToDelete.AsPointer().m_value;
                                 ReleaseAssert(expectedNamedProps.count(kp));
@@ -379,13 +379,13 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                             else
                             {
                                 double kd;
-                                if (keyToDelete.IsInt32(TValue::x_int32Tag))
+                                if (keyToDelete.IsInt32())
                                 {
                                     kd = keyToDelete.AsInt32();
                                 }
                                 else
                                 {
-                                    ReleaseAssert(keyToDelete.IsDouble(TValue::x_int32Tag));
+                                    ReleaseAssert(keyToDelete.IsDouble());
                                     kd = keyToDelete.AsDouble();
                                 }
                                 ReleaseAssert(expectedArrayPart.count(kd));

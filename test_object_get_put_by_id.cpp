@@ -43,7 +43,7 @@ TEST(ObjectGetPutById, Sanity)
         }
         else
         {
-            ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+            ReleaseAssert(result.IsInt32());
             ReleaseAssert(expectedVal == result.AsInt32());
         }
     };
@@ -68,7 +68,7 @@ TEST(ObjectGetPutById, Sanity)
             for (uint32_t i = 0; i < initArrayPartSize; i++)
             {
                 ReleaseAssert(curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(i + ArrayGrowthPolicy::x_arrayBaseOrd))->IsNil());
-                *curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(i + ArrayGrowthPolicy::x_arrayBaseOrd)) = TValue::CreateInt32(static_cast<int32_t>(i + 12345), TValue::x_int32Tag);
+                *curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(i + ArrayGrowthPolicy::x_arrayBaseOrd)) = TValue::CreateInt32(static_cast<int32_t>(i + 12345));
             }
         }
 
@@ -116,7 +116,7 @@ TEST(ObjectGetPutById, Sanity)
             }
             ReleaseAssert(icInfo.m_hiddenClass.As<Structure>() != icInfo.m_newStructure.As());
 
-            TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456)), icInfo);
 
             // Check the PutById didn't screw the array part
             //
@@ -141,7 +141,7 @@ TEST(ObjectGetPutById, Sanity)
                 for (uint32_t k = 0; k < initArrayPartSize; k++)
                 {
                     TValue val = *curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(k) + ArrayGrowthPolicy::x_arrayBaseOrd);
-                    ReleaseAssert(val.IsInt32(TValue::x_int32Tag) && val.AsInt32() == static_cast<int32_t>(k + 12345));
+                    ReleaseAssert(val.IsInt32() && val.AsInt32() == static_cast<int32_t>(k + 12345));
                 }
             }
 
@@ -206,14 +206,14 @@ TEST(ObjectGetPutById, Sanity)
             for (uint32_t i = 0; i < inlineCapacity; i++)
             {
                 TValue val = TCGet(obj->m_inlineStorage[i]);
-                ReleaseAssert(val.IsInt32(TValue::x_int32Tag));
+                ReleaseAssert(val.IsInt32());
                 ReleaseAssert(val.AsInt32() == static_cast<int32_t>(i + expectedBaseValue));
             }
 
             for (uint32_t i = inlineCapacity; i < numProps; i++)
             {
                 TValue val = obj->m_butterfly->GetNamedProperty(static_cast<int32_t>(inlineCapacity - i - 1));
-                ReleaseAssert(val.IsInt32(TValue::x_int32Tag));
+                ReleaseAssert(val.IsInt32());
                 ReleaseAssert(val.AsInt32() == static_cast<int32_t>(i + expectedBaseValue));
             }
 
@@ -253,7 +253,7 @@ TEST(ObjectGetPutById, Sanity)
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity - i - 1));
             }
 
-            TableObject::PutById(obj, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 7890), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(obj, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 7890)), icInfo);
         }
     }
 
@@ -279,7 +279,7 @@ TEST(ObjectGetPutById, Sanity)
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(curObject, prop, icInfo /*out*/);
             ReleaseAssert(!icInfo.m_propertyExists);
-            TableObject::PutById(curObject, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 45678), TValue::x_int32Tag), icInfo);
+            TableObject::PutById(curObject, prop.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 45678)), icInfo);
         }
 
         ReleaseAssert(curObject != allObjects[testcase]);
@@ -318,7 +318,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
             int dice = rand() % 3;
             if (dice == 0)
             {
-                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                return TValue::CreateInt32(rand());
             }
             else if (dice == 1)
             {
@@ -412,7 +412,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
         UserHeapPointer<HeapString> propToAdd = strings[i];
         PutByIdICInfo icInfo;
         TableObject::PreparePutById(curObject, propToAdd, icInfo /*out*/);
-        TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456), TValue::x_int32Tag), icInfo);
+        TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456)), icInfo);
     }
 
     {

@@ -101,15 +101,7 @@ struct TValue
 
     // Translates to a single ANDN instruction with BMI1 support
     //
-    bool ALWAYS_INLINE IsInt32(uint64_t int32Tag) const
-    {
-        assert(int32Tag == x_int32Tag);
-        bool result = (m_value & int32Tag) == int32Tag;
-        AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsInt32() const
+    bool IsInt32() const
     {
         bool result = (m_value & x_int32Tag) == x_int32Tag;
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
@@ -118,31 +110,14 @@ struct TValue
 
     // Translates to imm8 LEA instruction + ANDN instruction with BMI1 support
     //
-    bool ALWAYS_INLINE IsMIV(uint64_t mivTag) const
-    {
-        assert(mivTag == x_mivTag);
-        bool result = (m_value & (mivTag - 0x7F)) == (mivTag - 0x7F);
-        AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsMIV() const
+    bool IsMIV() const
     {
         bool result = (m_value & (x_mivTag - 0x7F)) == (x_mivTag - 0x7F);
         AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
         return result;
     }
 
-    bool ALWAYS_INLINE IsPointer(uint64_t mivTag) const
-    {
-        assert(mivTag == x_mivTag);
-        bool result = (m_value > mivTag);
-        AssertIff(result, static_cast<uint32_t>(m_value >> 32) >= 0xFFFFFFFCU &&
-                          static_cast<uint32_t>(m_value >> 32) <= 0xFFFFFFFEU);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsPointer() const
+    bool IsPointer() const
     {
         bool result = (m_value > x_mivTag);
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) >= 0xFFFFFFFCU &&
@@ -150,15 +125,7 @@ struct TValue
         return result;
     }
 
-    bool ALWAYS_INLINE IsDouble(uint64_t int32Tag) const
-    {
-        assert(int32Tag == x_int32Tag);
-        bool result = m_value < int32Tag;
-        AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
-        return result;
-    }
-
-    bool ALWAYS_INLINE IsDouble() const
+    bool IsDouble() const
     {
         bool result = m_value < x_int32Tag;
         AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
@@ -176,15 +143,15 @@ struct TValue
         return m_value == x_pureNaN;
     }
 
-    double ALWAYS_INLINE AsDouble() const
+    double AsDouble() const
     {
-        assert(IsDouble(x_int32Tag) && !IsMIV(x_mivTag) && !IsPointer(x_mivTag) && !IsInt32(x_int32Tag));
+        assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
         return cxx2a_bit_cast<double>(m_value);
     }
 
-    int32_t ALWAYS_INLINE AsInt32() const
+    int32_t AsInt32() const
     {
-        assert(IsInt32(x_int32Tag) && !IsMIV(x_mivTag) && !IsPointer(x_mivTag) && !IsDouble(x_int32Tag));
+        assert(IsInt32() && !IsMIV() && !IsPointer() && !IsDouble());
         return BitwiseTruncateTo<int32_t>(m_value);
     }
 
@@ -196,40 +163,26 @@ struct TValue
     }
 
     template<typename T = void>
-    UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
+    UserHeapPointer<T> AsPointer() const
     {
-        assert(IsPointer(x_mivTag) && !IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag));
+        assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
         return UserHeapPointer<T> { reinterpret_cast<HeapPtr<T>>(m_value) };
     }
 
-    MiscImmediateValue ALWAYS_INLINE AsMIV(uint64_t mivTag) const
+    MiscImmediateValue AsMIV() const
     {
-        assert(mivTag == x_mivTag && IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag) && !IsPointer(x_mivTag));
-        return MiscImmediateValue { m_value ^ mivTag };
-    }
-
-    MiscImmediateValue ALWAYS_INLINE AsMIV() const
-    {
-        assert(IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag) && !IsPointer(x_mivTag));
+        assert(IsMIV() && !IsDouble() && !IsInt32() && !IsPointer());
         return MiscImmediateValue { m_value ^ x_mivTag };
     }
 
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateInt32(int32_t value, uint64_t int32Tag)
-    {
-        assert(int32Tag == x_int32Tag);
-        TValue result { int32Tag | ZeroExtendTo<uint64_t>(value) };
-        assert(result.AsInt32() == value);
-        return result;
-    }
-
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateInt32(int32_t value)
+    static TValue WARN_UNUSED CreateInt32(int32_t value)
     {
         TValue result { x_int32Tag | ZeroExtendTo<uint64_t>(value) };
         assert(result.AsInt32() == value);
         return result;
     }
 
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateDouble(double value)
+    static TValue WARN_UNUSED CreateDouble(double value)
     {
         TValue result { cxx2a_bit_cast<uint64_t>(value) };
         SUPRESS_FLOAT_EQUAL_WARNING(
@@ -240,7 +193,7 @@ struct TValue
     }
 
     template<typename T>
-    static TValue WARN_UNUSED ALWAYS_INLINE CreatePointer(UserHeapPointer<T> ptr)
+    static TValue WARN_UNUSED CreatePointer(UserHeapPointer<T> ptr)
     {
         TValue result { static_cast<uint64_t>(ptr.m_value) };
         assert(result.AsPointer<T>() == ptr);
@@ -248,7 +201,7 @@ struct TValue
     }
 
     template<typename T>
-    static TValue WARN_UNUSED ALWAYS_INLINE CreatePointer(HeapPtr<T> ptr)
+    static TValue WARN_UNUSED CreatePointer(HeapPtr<T> ptr)
     {
         uint64_t val = reinterpret_cast<uint64_t>(ptr);
         assert(val >= 0xFFFFFFFC00000000ULL);
@@ -256,32 +209,31 @@ struct TValue
         return result;
     }
 
-    static TValue WARN_UNUSED ALWAYS_INLINE CreateMIV(MiscImmediateValue miv, uint64_t mivTag)
+    static TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
     {
-        assert(mivTag == x_mivTag);
-        TValue result { miv.m_value ^ mivTag };
-        assert(result.AsMIV(mivTag).m_value == miv.m_value);
+        TValue result { miv.m_value ^ x_mivTag };
+        assert(result.AsMIV().m_value == miv.m_value);
         return result;
     }
 
     static TValue CreateTrue()
     {
-        return TValue::CreateMIV(MiscImmediateValue::CreateTrue(), x_mivTag);
+        return TValue::CreateMIV(MiscImmediateValue::CreateTrue());
     }
 
     static TValue CreateFalse()
     {
-        return TValue::CreateMIV(MiscImmediateValue::CreateFalse(), x_mivTag);
+        return TValue::CreateMIV(MiscImmediateValue::CreateFalse());
     }
 
     static TValue CreateBoolean(bool v)
     {
-        return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(v), x_mivTag);
+        return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(v));
     }
 
     static TValue Nil()
     {
-        return TValue::CreateMIV(MiscImmediateValue::CreateNil(), x_mivTag);
+        return TValue::CreateMIV(MiscImmediateValue::CreateNil());
     }
 
     bool IsNil() const

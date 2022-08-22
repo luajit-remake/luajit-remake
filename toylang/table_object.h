@@ -533,8 +533,8 @@ public:
             // If the array is actually continuous, result must be non-nil
             //
             AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.IsNil());
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32(TValue::x_int32Tag));
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble(TValue::x_int32Tag));
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32());
+            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble());
             return res;
         }
 
@@ -620,8 +620,8 @@ public:
         HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
         TValue res = TranslateToRawPointer(sparseMap)->GetByVal(idx);
 #ifndef NDEBUG
-        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32(TValue::x_int32Tag));
-        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble(TValue::x_int32Tag));
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32());
+        AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble());
 #endif
         return res;
     }
@@ -1161,12 +1161,12 @@ public:
             };
 
             icInfo.m_indexCheckKind = PutByIntegerIndexICInfo::IndexCheckKind::NoArrayPart;
-            if (value.IsInt32(TValue::x_int32Tag))
+            if (value.IsInt32())
             {
                 icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::Int32;
                 setNewStructureAndArrayType(ArrayType::Kind::Int32);
             }
-            else if (value.IsDouble(TValue::x_int32Tag))
+            else if (value.IsDouble())
             {
                 icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::Double;
                 setNewStructureAndArrayType(ArrayType::Kind::Double);
@@ -1251,7 +1251,7 @@ public:
         {
         case PutByIntegerIndexICInfo::ValueCheckKind::Int32:
         {
-            if (!value.IsInt32(TValue::x_int32Tag))
+            if (!value.IsInt32())
             {
                 return false;
             }
@@ -1259,7 +1259,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::Int32OrNil:
         {
-            if (!value.IsInt32(TValue::x_int32Tag) && !value.IsNil())
+            if (!value.IsInt32() && !value.IsNil())
             {
                 return false;
             }
@@ -1267,7 +1267,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::Double:
         {
-            if (!value.IsDouble(TValue::x_int32Tag))
+            if (!value.IsDouble())
             {
                 return false;
             }
@@ -1275,7 +1275,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::DoubleOrNil:
         {
-            if (!value.IsDouble(TValue::x_int32Tag) && !value.IsNil())
+            if (!value.IsDouble() && !value.IsNil())
             {
                 return false;
             }
@@ -1470,11 +1470,11 @@ public:
 
             // Update the ArrayType Kind
             //
-            if (value.IsInt32(TValue::x_int32Tag))
+            if (value.IsInt32())
             {
                 newArrayType.SetArrayKind(ArrayType::Kind::Int32);
             }
-            else if (value.IsDouble(TValue::x_int32Tag))
+            else if (value.IsDouble())
             {
                 newArrayType.SetArrayKind(ArrayType::Kind::Double);
             }
@@ -1668,14 +1668,14 @@ public:
             //
             if (arrType.ArrayKind() == ArrayType::Kind::Int32)
             {
-                if (!value.IsInt32(TValue::x_int32Tag) && !value.IsNil())
+                if (!value.IsInt32() && !value.IsNil())
                 {
                     newArrayType.SetArrayKind(ArrayType::Kind::Any);
                 }
             }
             else if (arrType.ArrayKind() == ArrayType::Kind::Double)
             {
-                if (!value.IsDouble(TValue::x_int32Tag) && !value.IsNil())
+                if (!value.IsDouble() && !value.IsNil())
                 {
                     newArrayType.SetArrayKind(ArrayType::Kind::Any);
                 }
@@ -2331,7 +2331,7 @@ static_assert(sizeof(TableObject) == 16);
 
 inline UserHeapPointer<void> GetMetatableForValue(TValue value)
 {
-    if (likely(value.IsPointer(TValue::x_mivTag)))
+    if (likely(value.IsPointer()))
     {
         HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
@@ -2361,7 +2361,7 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
         ReleaseAssert(false && "unimplemented");
     }
 
-    if (value.IsMIV(TValue::x_mivTag))
+    if (value.IsMIV())
     {
         if (value.IsNil())
         {
@@ -2369,12 +2369,12 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
         }
         else
         {
-            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            assert(value.AsMIV().IsBoolean());
             return VM::GetActiveVMForCurrentThread()->m_metatableForBoolean;
         }
     }
 
-    assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+    assert(value.IsDouble() || value.IsInt32());
     return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
 }
 
@@ -2394,7 +2394,7 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
         TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
-        if (likely(target.IsPointer(TValue::x_mivTag) && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION))
+        if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION))
         {
             return GetCallTargetConsideringMetatableResult {
                 .m_target = target.AsPointer<FunctionObject>(),
@@ -2410,7 +2410,7 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
         }
     };
 
-    if (likely(value.IsPointer(TValue::x_mivTag)))
+    if (likely(value.IsPointer()))
     {
         HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
         if (likely(ty == HeapEntityType::FUNCTION))
@@ -2442,7 +2442,7 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
         ReleaseAssert(false && "unimplemented");
     }
 
-    if (value.IsMIV(TValue::x_mivTag))
+    if (value.IsMIV())
     {
         if (value.IsNil())
         {
@@ -2450,12 +2450,12 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
         }
         else
         {
-            assert(value.AsMIV(TValue::x_mivTag).IsBoolean());
+            assert(value.AsMIV().IsBoolean());
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
         }
     }
 
-    assert(value.IsDouble(TValue::x_int32Tag) || value.IsInt32(TValue::x_int32Tag));
+    assert(value.IsDouble() || value.IsInt32());
     return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
 }
 
@@ -2710,9 +2710,9 @@ finished_iteration:
             return true;
         }
 
-        if (key.IsMIV(TValue::x_mivTag))
+        if (key.IsMIV())
         {
-            MiscImmediateValue miv = key.AsMIV(TValue::x_mivTag);
+            MiscImmediateValue miv = key.AsMIV();
             if (miv.IsNil())
             {
                 return false;
@@ -2721,7 +2721,7 @@ finished_iteration:
             key = TValue::CreatePointer(VM_GetSpecialKeyForBoolean(miv.GetBooleanValue()));
         }
 
-        if (key.IsPointer(TValue::x_mivTag))
+        if (key.IsPointer())
         {
             // Input key is a pointer, locate its slot ordinal and iterate from there
             //
@@ -2765,13 +2765,13 @@ finished_iteration:
             }
         }
 
-        if (key.IsInt32(TValue::x_int32Tag))
+        if (key.IsInt32())
         {
             // TODO: int32 type
             ReleaseAssert(false && "unimplemented");
         }
 
-        assert(key.IsDouble(TValue::x_int32Tag));
+        assert(key.IsDouble());
         double idx = key.AsDouble();
         if (IsNaN(idx))
         {
@@ -2864,7 +2864,7 @@ inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructure
     }
     else
     {
-        assert(res.IsPointer(TValue::x_mivTag));
+        assert(res.IsPointer());
         return res.AsPointer<void>();
     }
 }

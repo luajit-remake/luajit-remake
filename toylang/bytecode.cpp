@@ -269,7 +269,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     }
                     else
                     {
-                        tv = TValue::CreateInt32(value, TValue::x_int32Tag);
+                        tv = TValue::CreateInt32(value);
                     }
                     ucb->m_cstTable[i].m_tv = tv;
                 }
@@ -323,7 +323,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         if (vty == "Boolean")
                         {
                             bool value = JSONCheckedGet<bool>(tabEntryValue, "Value");
-                            return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(value), TValue::x_mivTag);
+                            return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(value));
                         }
                         else if (vty == "String")
                         {
@@ -341,7 +341,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                             }
                             else
                             {
-                                tv = TValue::CreateInt32(value, TValue::x_int32Tag);
+                                tv = TValue::CreateInt32(value);
                             }
                             return tv;
                         }
@@ -655,7 +655,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 else
                 {
-                    tv = TValue::CreateInt32(data, TValue::x_int32Tag);
+                    tv = TValue::CreateInt32(data);
                 }
                 bw.Append(BcConstant(dst, tv));
                 break;
@@ -1055,12 +1055,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 }
                 else if (src == 1)
                 {
-                    val = TValue::CreateMIV(MiscImmediateValue::CreateFalse(), TValue::x_mivTag);
+                    val = TValue::CreateMIV(MiscImmediateValue::CreateFalse());
                 }
                 else
                 {
                     TestAssert(src == 2);
-                    val = TValue::CreateMIV(MiscImmediateValue::CreateTrue(), TValue::x_mivTag);
+                    val = TValue::CreateMIV(MiscImmediateValue::CreateTrue());
                 }
                 bw.Append(BcConstant(dst, val));
                 break;

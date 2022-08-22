@@ -78,7 +78,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             {
                                 PutByIdICInfo icInfo;
                                 TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(12345 + i), TValue::x_int32Tag), icInfo);
+                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(12345 + i)), icInfo);
                             }
 
                             if (hasButterfly && obj->m_butterfly == nullptr)
@@ -115,7 +115,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             }
                             case PutType::Int32:
                             {
-                                value = TValue::CreateInt32(6789, TValue::x_int32Tag);
+                                value = TValue::CreateInt32(6789);
                                 break;
                             }
                             case PutType::Double:
@@ -231,7 +231,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
                                 TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
-                                ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                ReleaseAssert(result.IsInt32());
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(12345 + i));
                             }
 
@@ -312,7 +312,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
                                 TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
-                                ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                ReleaseAssert(result.IsInt32());
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(12345 + i));
                             }
 
@@ -371,7 +371,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                     {
                         if (baseType == PutType::Int32)
                         {
-                            return TValue::CreateInt32(rand() % 10000, TValue::x_int32Tag);
+                            return TValue::CreateInt32(rand() % 10000);
                         }
                         else if (baseType == PutType::Double)
                         {
@@ -414,7 +414,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                             {
                                 PutByIdICInfo icInfo;
                                 TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                                TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i)), icInfo);
                             }
 
                             constexpr size_t x_validateLen = 30;
@@ -460,7 +460,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                     GetByIdICInfo icInfo;
                                     TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
                                     TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
-                                    ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                    ReleaseAssert(result.IsInt32());
                                     ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                                 }
                             };
@@ -536,7 +536,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 }
                                 else if (baseType == PutType::Double)
                                 {
-                                    return TValue::CreateInt32(rand() % 10000, TValue::x_int32Tag);
+                                    return TValue::CreateInt32(rand() % 10000);
                                 }
                                 else
                                 {
@@ -691,7 +691,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 GetByIdICInfo icInfo;
                                 TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
                                 TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
-                                ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                                ReleaseAssert(result.IsInt32());
                                 ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                             }
                         }
@@ -750,7 +750,7 @@ TEST(ObjectArrayPart, RandomTest)
             int dice = rand() % 3;
             if (dice == 0)
             {
-                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                return TValue::CreateInt32(rand());
             }
             else if (dice == 1)
             {
@@ -804,7 +804,7 @@ TEST(ObjectArrayPart, RandomTest)
             {
                 if (dice == 0)
                 {
-                    return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                    return TValue::CreateInt32(rand());
                 }
                 else if (dice == 1)
                 {
@@ -977,7 +977,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                         {
                             PutByIdICInfo icInfo;
                             TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i)), icInfo);
                         }
                     }
 
@@ -993,7 +993,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                             if (baseTy == PutType::Int32 || (baseTy == PutType::MixInt32Double && state == 0))
                             {
                                 state = 1;
-                                return TValue::CreateInt32(rand(), TValue::x_int32Tag);
+                                return TValue::CreateInt32(rand());
                             }
                             else if (baseTy == PutType::Double || (baseTy == PutType::MixInt32Double && state == 1))
                             {
@@ -1079,7 +1079,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                         {
                             PutByIdICInfo icInfo;
                             TableObject::PreparePutById(obj, strings[i], icInfo /*out*/);
-                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i), TValue::x_int32Tag), icInfo);
+                            TableObject::PutById(obj, strings[i].As<void>(), TValue::CreateInt32(static_cast<int32_t>(54321 + i)), icInfo);
                         }
                     }
 
@@ -1098,7 +1098,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                         GetByIdICInfo icInfo;
                         TableObject::PrepareGetById(obj, strings[i], icInfo /*out*/);
                         TValue result = TableObject::GetById(obj, strings[i].As<void>(), icInfo);
-                        ReleaseAssert(result.IsInt32(TValue::x_int32Tag));
+                        ReleaseAssert(result.IsInt32());
                         ReleaseAssert(result.AsInt32() == static_cast<int32_t>(54321 + i));
                     }
 
