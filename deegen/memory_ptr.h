@@ -115,10 +115,6 @@ struct UserHeapPointer
     {
         static_assert(TypeMayLiveInUserHeap<T>);
         assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
-        if constexpr(!std::is_same_v<T, void>)
-        {
-            assert(m_value % static_cast<int64_t>(std::alignment_of_v<T>) == 0);
-        }
         assert(As<U>() == value);
     }
 
