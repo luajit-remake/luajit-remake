@@ -3,9 +3,6 @@
 #include <type_traits>
 #include "common.h"
 
-namespace CommonUtils
-{
-
 // std::bit_cast is only supported in C++20, which is still officially in experimental state.
 //
 // Fortunately the compiler magic '__builtin_bit_cast' (internally used by clang++ STL
@@ -13,13 +10,13 @@ namespace CommonUtils
 //
 // This helper imports the std::bit_cast utility. Code directly stolen from libc++ source code.
 //
-template<class _ToType, class _FromType>
-constexpr _ToType cxx2a_bit_cast(_FromType const& __from) noexcept
+template<class ToType, class FromType>
+constexpr ToType cxx2a_bit_cast(FromType const& from) noexcept
 {
-    static_assert(sizeof(_ToType) == sizeof(_FromType));
-    static_assert(std::is_trivially_copyable_v<_ToType>);
-    static_assert(std::is_trivially_copyable_v<_FromType>);
-    return __builtin_bit_cast(_ToType, __from);
+    static_assert(sizeof(ToType) == sizeof(FromType));
+    static_assert(std::is_trivially_copyable_v<ToType>);
+    static_assert(std::is_trivially_copyable_v<FromType>);
+    return __builtin_bit_cast(ToType, from);
 }
 
 template<typename T>
@@ -85,5 +82,3 @@ constexpr T WARN_UNUSED get_all_bits_zero_value()
         return cxx2a_bit_cast<T>(static_cast<uint64_t>(0));
     }
 }
-
-}   // namespace CommonUtils

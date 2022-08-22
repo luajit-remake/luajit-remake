@@ -1,8 +1,5 @@
 #include "common.h"
 
-namespace CommonUtils
-{
-
 template<typename T>
 struct is_member_function_const /*intentionally undefined*/;
 
@@ -186,28 +183,65 @@ void ALWAYS_INLINE ConstructInPlace(T* ptr, Args&&... args)
 namespace internal
 {
 
-// This is a 2^n implementation but probably it's good enough for now
-//
 template<typename... Types>
-struct is_typelist_pairwise_distinct_impl;
+struct is_typelist_pairwise_distinct_impl
+{
+    template<typename First, typename Second, typename... Remaining>
+    static constexpr bool check_first_against_remaining()
+    {
+        if constexpr(std::is_same_v<First, Second>)
+        {
+            return false;
+        }
+        else if constexpr(sizeof...(Remaining) > 0)
+        {
+            return check_first_against_remaining<First, Remaining...>();
+        }
+        else
+        {
+            return true;
+        }
+    }
 
-template<typename T1, typename T2, typename... Types>
-struct is_typelist_pairwise_distinct_impl<T1, T2, Types...>
- : std::integral_constant<bool,
-        !std::is_same<T1, T2>::value &&
-        is_typelist_pairwise_distinct_impl<T1, Types...>::value &&
-        is_typelist_pairwise_distinct_impl<T2, Types...>::value> { };
+    template<typename First, typename... Remaining>
+    static constexpr bool check_all_pairs()
+    {
+        if constexpr(sizeof...(Remaining) == 0)
+        {
+            return true;
+        }
+        else
+        {
+            if constexpr(!check_first_against_remaining<First, Remaining...>())
+            {
+                return false;
+            }
+            else
+            {
+                return check_all_pairs<Remaining...>();
+            }
+        }
+    }
 
-template<typename T1>
-struct is_typelist_pairwise_distinct_impl<T1> : std::true_type { };
+    static constexpr bool compute()
+    {
+        if constexpr(sizeof...(Types) <= 1)
+        {
+            return true;
+        }
+        else
+        {
+            return check_all_pairs<Types...>();
+        }
+    }
+
+    static constexpr bool value = compute();
+};
 
 }   // namespace internal
 
 template<typename... Types>
 constexpr bool is_typelist_pairwise_distinct = internal::is_typelist_pairwise_distinct_impl<Types...>::value;
 
-
 template<int N, typename... Types>
 using parameter_pack_nth_t = std::tuple_element_t<N, std::tuple<Types...>>;
-
-}   // namespace CommonUtils

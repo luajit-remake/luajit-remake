@@ -33,9 +33,6 @@
 #include "common.h"
 #include "simple_string_stream.h"
 
-namespace ToyLang
-{
-
 /* Maximum buffer sizes for conversions. */
 constexpr size_t x_default_tostring_buffersize_xint = (1+22) + 1;  /* '0' prefix + uint64_t in octal. */
 constexpr size_t x_default_tostring_buffersize_int = (1+10) + 1;  /* Sign + int32_t in decimal. */
@@ -51,5 +48,3 @@ char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double 
 // Returns the address of the '\0'
 //
 char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t k);
-
-}   // namespace ToyLang

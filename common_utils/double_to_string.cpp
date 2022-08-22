@@ -376,7 +376,7 @@ static int nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, uint32_t hilen
 /* -- Formatted conversions to buffer ------------------------------------- */
 
 /* Write formatted floating-point number to either sb or p. */
-static char *lj_strfmt_wfnum(ToyLang::SimpleTempStringStream *sb, SFormat sf, double n, char *p)
+static char *lj_strfmt_wfnum(SimpleTempStringStream *sb, SFormat sf, double n, char *p)
 {
     uint32_t width = STRFMT_WIDTH(sf), prec = STRFMT_PREC(sf), len;
     union {
@@ -694,9 +694,6 @@ g_format_like_f:
 
 /* -- Conversions to strings ---------------------------------------------- */
 
-namespace ToyLang
-{
-
 char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double d)
 {
     char* res = lj_strfmt_wfnum(NULL, STRFMT_G14, d, buf);
@@ -710,7 +707,5 @@ char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t 
     *res = '\0';
     return res;
 }
-
-}   // namespace ToyLang
 
 #pragma clang diagnostic pop

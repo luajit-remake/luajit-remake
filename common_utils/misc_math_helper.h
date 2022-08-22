@@ -2,9 +2,6 @@
 
 #include "common.h"
 
-namespace CommonUtils
-{
-
 // Left/right shift on negative number in C is undefined behavior.
 // The two functions below avoids this UB by doing a sign-extended shift.
 // The compiler is smart enough to just generate an arithmetic shift instruction as one would normally expect.
@@ -377,5 +374,3 @@ inline void ALWAYS_INLINE SafeMemcpy(void* dst, const void* src, size_t len)
     assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
     memcpy(dst, src, len);
 }
-
-}   // namespace CommonUtils

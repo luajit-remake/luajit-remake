@@ -4,9 +4,6 @@
 #include "global_arena_memory_pool.h"
 #include "constexpr_power_helper.h"
 
-namespace CommonUtils
-{
-
 inline GlobalArenaMemoryPool g_arenaMemoryPool;
 
 class TempArenaAllocator
@@ -91,26 +88,24 @@ private:
 
 static_assert(is_power_of_2(__STDCPP_DEFAULT_NEW_ALIGNMENT__), "std default new alignment is not a power of 2");
 
-}   // namespace CommonUtils
-
-inline void* operator new(std::size_t count, CommonUtils::TempArenaAllocator& taa)
+inline void* operator new(std::size_t count, TempArenaAllocator& taa)
 {
     return taa.Allocate(__STDCPP_DEFAULT_NEW_ALIGNMENT__, count);
 }
 
-inline void* operator new[](std::size_t count, CommonUtils::TempArenaAllocator& taa)
+inline void* operator new[](std::size_t count, TempArenaAllocator& taa)
 {
     return taa.Allocate(__STDCPP_DEFAULT_NEW_ALIGNMENT__, count);
 }
 
-inline void* operator new(std::size_t count, std::align_val_t al, CommonUtils::TempArenaAllocator& taa)
+inline void* operator new(std::size_t count, std::align_val_t al, TempArenaAllocator& taa)
 {
-    TestAssert(CommonUtils::is_power_of_2(static_cast<int>(al)));
+    TestAssert(is_power_of_2(static_cast<int>(al)));
     return taa.Allocate(static_cast<size_t>(al), count);
 }
 
-inline void* operator new[](std::size_t count, std::align_val_t al, CommonUtils::TempArenaAllocator& taa)
+inline void* operator new[](std::size_t count, std::align_val_t al, TempArenaAllocator& taa)
 {
-    TestAssert(CommonUtils::is_power_of_2(static_cast<int>(al)));
+    TestAssert(is_power_of_2(static_cast<int>(al)));
     return taa.Allocate(static_cast<size_t>(al), count);
 }

@@ -1,8 +1,6 @@
 #include "bytecode.h"
 #include "gtest/gtest.h"
 
-using namespace ToyLang;
-
 TEST(NaNBoxing, Correctness)
 {
     // test int

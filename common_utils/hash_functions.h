@@ -10,9 +10,6 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
 
-namespace CommonUtils
-{
-
 template<typename T>
 uint64_t WARN_UNUSED HashPrimitiveTypes(T value)
 {
@@ -80,7 +77,5 @@ StringLengthAndHash WARN_UNUSED HashMultiPieceString(Iterator iterator)
         .m_hashValue = hash
     };
 }
-
-}   // namespace CommonUtils
 
 #pragma clang diagnostic pop

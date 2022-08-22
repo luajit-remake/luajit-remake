@@ -30,9 +30,6 @@
 
 #include "common.h"
 
-namespace ToyLang
-{
-
 /* Returned format. */
 // DEVNOTE: Don't touch this enum! LuaJIT has fragile code that relies on the ordering of this enum...
 //
@@ -67,5 +64,3 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleWithLuaSemantics(const void* s
 // The returned 'fmt' must be STRSCAN_ERROR or STRSCAN_NUM or STRSCAN_INT
 //
 StrScanResult WARN_UNUSED TryConvertStringToDoubleOrInt32WithLuaSemantics(const void* str, size_t len);
-
-}   // namespace ToyLang

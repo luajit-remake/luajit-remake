@@ -3,9 +3,6 @@
 #include "common.h"
 #include <immintrin.h>
 
-namespace CommonUtils
-{
-
 enum class X64SegmentationRegisterKind
 {
     FS,
@@ -64,5 +61,3 @@ uint64_t X64_GetSegmentationRegister()
         return X64_GetSegmentationRegisterBySyscall(kind);
     }
 }
-
-}   // namespace CommonUtils

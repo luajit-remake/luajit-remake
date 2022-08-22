@@ -3,11 +3,6 @@
 #include "common_utils.h"
 #include "memory_ptr.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 struct MiscImmediateValue
 {
     // All misc immediate values must be between [0, 127]
@@ -76,6 +71,7 @@ struct MiscImmediateValue
 
 struct TValue
 {
+
     // We use the following NaN boxing scheme:
     //          / 0000 **** **** ****
     // double  {          ...
@@ -112,12 +108,26 @@ struct TValue
         return result;
     }
 
+    bool ALWAYS_INLINE IsInt32() const
+    {
+        bool result = (m_value & x_int32Tag) == x_int32Tag;
+        AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
+        return result;
+    }
+
     // Translates to imm8 LEA instruction + ANDN instruction with BMI1 support
     //
     bool ALWAYS_INLINE IsMIV(uint64_t mivTag) const
     {
         assert(mivTag == x_mivTag);
         bool result = (m_value & (mivTag - 0x7F)) == (mivTag - 0x7F);
+        AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
+        return result;
+    }
+
+    bool ALWAYS_INLINE IsMIV() const
+    {
+        bool result = (m_value & (x_mivTag - 0x7F)) == (x_mivTag - 0x7F);
         AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
         return result;
     }
@@ -131,12 +141,38 @@ struct TValue
         return result;
     }
 
+    bool ALWAYS_INLINE IsPointer() const
+    {
+        bool result = (m_value > x_mivTag);
+        AssertIff(result, static_cast<uint32_t>(m_value >> 32) >= 0xFFFFFFFCU &&
+                          static_cast<uint32_t>(m_value >> 32) <= 0xFFFFFFFEU);
+        return result;
+    }
+
     bool ALWAYS_INLINE IsDouble(uint64_t int32Tag) const
     {
         assert(int32Tag == x_int32Tag);
         bool result = m_value < int32Tag;
         AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
         return result;
+    }
+
+    bool ALWAYS_INLINE IsDouble() const
+    {
+        bool result = m_value < x_int32Tag;
+        AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
+        return result;
+    }
+
+    bool IsDoubleNotNaN() const
+    {
+        return !IsNaN(cxx2a_bit_cast<double>(m_value));
+    }
+
+    bool IsDoubleNaN() const
+    {
+        static constexpr uint64_t x_pureNaN = 0x7ff8000000000000ULL;
+        return m_value == x_pureNaN;
     }
 
     double ALWAYS_INLINE AsDouble() const
@@ -171,10 +207,23 @@ struct TValue
         return MiscImmediateValue { m_value ^ mivTag };
     }
 
+    MiscImmediateValue ALWAYS_INLINE AsMIV() const
+    {
+        assert(IsMIV(x_mivTag) && !IsDouble(x_int32Tag) && !IsInt32(x_int32Tag) && !IsPointer(x_mivTag));
+        return MiscImmediateValue { m_value ^ x_mivTag };
+    }
+
     static TValue WARN_UNUSED ALWAYS_INLINE CreateInt32(int32_t value, uint64_t int32Tag)
     {
         assert(int32Tag == x_int32Tag);
         TValue result { int32Tag | ZeroExtendTo<uint64_t>(value) };
+        assert(result.AsInt32() == value);
+        return result;
+    }
+
+    static TValue WARN_UNUSED ALWAYS_INLINE CreateInt32(int32_t value)
+    {
+        TValue result { x_int32Tag | ZeroExtendTo<uint64_t>(value) };
         assert(result.AsInt32() == value);
         return result;
     }
@@ -233,4 +282,3 @@ struct TValue
     uint64_t m_value;
 };
 
-}   // namespace ToyLang

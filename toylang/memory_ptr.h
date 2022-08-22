@@ -3,11 +3,6 @@
 #include "common_utils.h"
 #include "heap_object_common.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 class VM;
 
 // The whole point here is to not include "vm.h", so we have to hardcode the value
@@ -566,5 +561,3 @@ remove_heap_ptr_t<T> TranslateToRawPointer(T ptr)
         return ptr;
     }
 }
-
-}   // namespace ToyLang

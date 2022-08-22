@@ -2,8 +2,6 @@
 #include "gtest/gtest.h"
 #include "test_vm_utils.h"
 
-using namespace ToyLang;
-
 namespace {
 
 // Test the transition on NoButterflyPart, that is, test the array type is
@@ -427,7 +425,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                             {
                                 ArrayType arrType = TCGet(obj->m_arrayType);
                                 SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
-                                if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                                if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                                 {
                                     ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                                 }
@@ -641,7 +639,7 @@ TEST(ObjectArrayPart, ContinuousArray)
 
                             ArrayType arrType = TCGet(obj->m_arrayType);
                             SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
-                            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                             {
                                 ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                             }
@@ -940,7 +938,7 @@ TEST(ObjectArrayPart, RandomTest)
 
             ArrayType arrType = TCGet(obj->m_arrayType);
             SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
-            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+            if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
             {
                 ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
             }
@@ -1041,7 +1039,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                     {
                         ArrayType arrType = TCGet(obj->m_arrayType);
                         SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
-                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                         {
                             ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                         }
@@ -1112,7 +1110,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
 
                         ArrayType arrType = TCGet(obj->m_arrayType);
                         SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
-                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+                        if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                         {
                             ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                         }

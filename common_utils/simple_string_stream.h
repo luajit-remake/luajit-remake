@@ -2,9 +2,6 @@
 
 #include "common.h"
 
-namespace ToyLang
-{
-
 // A simple stream that destroys the buffer on class destruction
 //
 class SimpleTempStringStream
@@ -50,5 +47,3 @@ public:
     uint8_t* m_bufferCur;
     uint8_t* m_bufferEnd;
 };
-
-}   // namespace ToyLang

@@ -2,9 +2,6 @@
 
 #include "concurrent_queue.h"
 
-namespace CommonUtils
-{
-
 class GlobalArenaMemoryPool
 {
 public:
@@ -75,5 +72,3 @@ private:
     std::atomic<int> m_freeListSizeApproximation;
     ConcurrentQueue<uintptr_t> m_freeList;
 };
-
-}   // namespace CommonUtils

@@ -7,10 +7,6 @@
 #include "structure.h"
 #include "table_object.h"
 
-namespace ToyLang {
-
-using namespace CommonUtils;
-
 class IRNode
 {
 public:
@@ -142,7 +138,7 @@ public:
     void CloseUpvalues(TValue* base);
 
     uint32_t m_hiddenClass;  // Always x_hiddenClassForCoroutineRuntimeContext
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;
 
     uint16_t m_reserved1;
@@ -503,7 +499,7 @@ public:
     // However, we are not doing this now because our stack is currently not placed in the VM memory range.
     //
     SystemHeapPointer<void> m_hiddenClass;
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;
     // Always equal to (m_ptr == &m_u.tv)
     //
@@ -624,7 +620,7 @@ public:
     // so the upvalue list does not contain the global object (if the ExecutableCode is not a CodeBlock, then the global object doesn't matter either)
     //
     SystemHeapPointer<ExecutableCode> m_executable;
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;
 
     uint16_t m_numUpvalues;
@@ -803,7 +799,7 @@ inline void LJR_LIB_BASE_pairs(CoroutineRuntimeContext* rc, RestrictPtr<void> sf
     }
     TValue* addr = reinterpret_cast<TValue*>(hdr) - 1;
     TValue input = *addr;
-    if (!input.IsPointer(TValue::x_mivTag) || input.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    if (!input.IsPointer(TValue::x_mivTag) || input.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'pairs' (table expected)").m_value);
     }
@@ -827,7 +823,7 @@ inline void LJR_LIB_BASE_next(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp
     }
 
     TValue tab = vaBegin[0];
-    if (!tab.IsPointer(TValue::x_mivTag) || tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    if (!tab.IsPointer(TValue::x_mivTag) || tab.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'next' (table expected)").m_value);
     }
@@ -919,22 +915,22 @@ inline void PrintTValue(FILE* fp, TValue val)
     {
         assert(val.IsPointer(TValue::x_mivTag));
         UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
-        if (p->m_type == Type::STRING)
+        if (p->m_type == HeapEntityType::STRING)
         {
             HeapString* hs = reinterpret_cast<HeapString*>(p);
             fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
         }
         else
         {
-            if (p->m_type == Type::FUNCTION)
+            if (p->m_type == HeapEntityType::FUNCTION)
             {
                 fprintf(fp, "function");
             }
-            else if (p->m_type == Type::TABLE)
+            else if (p->m_type == HeapEntityType::TABLE)
             {
                 fprintf(fp, "table");
             }
-            else if (p->m_type == Type::THREAD)
+            else if (p->m_type == HeapEntityType::THREAD)
             {
                 fprintf(fp, "thread");
             }
@@ -996,7 +992,7 @@ inline void LJR_LIB_IO_write(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp,
         else if (val.IsPointer(TValue::x_mivTag))
         {
             UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
-            if (p->m_type == Type::STRING)
+            if (p->m_type == HeapEntityType::STRING)
             {
                 HeapString* hs = reinterpret_cast<HeapString*>(p);
                 size_t written = fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
@@ -1177,19 +1173,19 @@ inline TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
     {
         assert(badValue.IsPointer(TValue::x_mivTag));
         UserHeapGcObjectHeader* p = TranslateToRawPointer(badValue.AsPointer<UserHeapGcObjectHeader>().As());
-        if (p->m_type == Type::STRING)
+        if (p->m_type == HeapEntityType::STRING)
         {
             makeMsg("string");
         }
-        else if (p->m_type == Type::FUNCTION)
+        else if (p->m_type == HeapEntityType::FUNCTION)
         {
             makeMsg("function");
         }
-        else if (p->m_type == Type::TABLE)
+        else if (p->m_type == HeapEntityType::TABLE)
         {
             makeMsg("table");
         }
-        else if (p->m_type == Type::THREAD)
+        else if (p->m_type == HeapEntityType::THREAD)
         {
             makeMsg("thread");
         }
@@ -1282,7 +1278,7 @@ inline void ThrowError(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, Const
         // Lua 5.1 doesn't require 'errHandler' to be a function, but ignores its metatable any way.
         // This function is not performance sensitive, so we will make it compatible for both (the xpcall API can check 'errHandler' to implement Lua 5.4 behavior)
         //
-        bool isFunction = errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION;
+        bool isFunction = errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION;
         if (!isFunction)
         {
             // The error handler is not callable, so attempting to call it will result in infinite error recursion
@@ -1410,7 +1406,7 @@ inline void LJR_LIB_BASE_xpcall(CoroutineRuntimeContext* rc, RestrictPtr<void> s
         // Note that Lua won't consider the metatable of the error handler: it must be a function in order to be called
         //
         TValue errHandler = vaBegin[1];
-        if (errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+        if (errHandler.IsPointer(TValue::x_mivTag) && errHandler.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
         {
             // The error handler is a function. We need to set up the dummy frame (see comments earlier) and call it
             //
@@ -1566,7 +1562,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
 
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue value = vaBegin[0];
-    if (!value.IsPointer(TValue::x_mivTag) || value.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::TABLE)
+    if (!value.IsPointer(TValue::x_mivTag) || value.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::TABLE)
     {
         // TODO: make this error message consistent with Lua
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'setmetatable' (table expected)").m_value);
@@ -1578,7 +1574,7 @@ inline void LJR_LIB_BASE_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<v
     }
 
     TValue mt = vaBegin[1];
-    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
     }
@@ -1630,7 +1626,7 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue value = vaBegin[0];
     TValue mt = vaBegin[1];
-    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    if (!mt.IsNil() && !(mt.IsPointer(TValue::x_mivTag) && mt.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #2 to 'setmetatable' (nil or table expected)").m_value);
     }
@@ -1649,9 +1645,9 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
 
     if (value.IsPointer(TValue::x_mivTag))
     {
-        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+        HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
-        if (ty == Type::TABLE)
+        if (ty == HeapEntityType::TABLE)
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
             TableObject* obj = TranslateToRawPointer(vm, value.AsPointer<TableObject>().As());
@@ -1664,15 +1660,15 @@ inline void LJR_LIB_DEBUG_setmetatable(CoroutineRuntimeContext* rc, RestrictPtr<
                 obj->RemoveMetatable(vm);
             }
         }
-        else if (ty == Type::STRING)
+        else if (ty == HeapEntityType::STRING)
         {
             setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForString);
         }
-        else if (ty == Type::FUNCTION)
+        else if (ty == HeapEntityType::FUNCTION)
         {
             setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForFunction);
         }
-        else if (ty == Type::THREAD)
+        else if (ty == HeapEntityType::THREAD)
         {
             setExoticMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }
@@ -1722,7 +1718,7 @@ inline void LJR_LIB_BASE_rawget(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     TValue* vaBegin = reinterpret_cast<TValue*>(hdr) - numArgs;
     TValue base = vaBegin[0];
     TValue index = vaBegin[1];
-    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawget' (table expected)").m_value);
     }
@@ -1801,7 +1797,7 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
     TValue base = vaBegin[0];
     TValue index = vaBegin[1];
     TValue newValue = vaBegin[2];
-    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+    if (!(base.IsPointer(TValue::x_mivTag) && base.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
     {
         [[clang::musttail]] return ThrowError(rc, sfp, bcu, MakeErrorMessage("bad argument #1 to 'rawset' (table expected)").m_value);
     }
@@ -2307,7 +2303,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                if (base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE)
                 {
                     goto not_table_object;
                 }
@@ -2349,7 +2345,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2401,7 +2397,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                if (base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE)
                 {
                     goto not_table_object;
                 }
@@ -2442,7 +2438,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2490,7 +2486,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (unlikely(base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE))
+                if (unlikely(base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE))
                 {
                     goto not_table_object;
                 }
@@ -2600,7 +2596,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2649,7 +2645,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                if (base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE)
                 {
                     goto not_table_object;
                 }
@@ -2839,7 +2835,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, index, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2887,7 +2883,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                if (base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE)
                 {
                     goto not_table_object;
                 }
@@ -2930,7 +2926,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag) }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -2980,7 +2976,7 @@ public:
             else
             {
                 UserHeapPointer<void> base = tvbase.AsPointer<void>();
-                if (base.As<UserHeapGcObjectHeader>()->m_type != Type::TABLE)
+                if (base.As<UserHeapGcObjectHeader>()->m_type != HeapEntityType::TABLE)
                 {
                     goto not_table_object;
                 }
@@ -3054,7 +3050,7 @@ handle_metamethod:
             // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
             // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
             //
-            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION)
+            if (likely(metamethod.IsPointer(TValue::x_mivTag)) && metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { tvbase, TValue::CreateInt32(index, TValue::x_int32Tag), newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -3103,7 +3099,7 @@ public:
         // 'm_base' is guaranteed to be a table object, as this opcode only shows up in a table initializer expression
         //
         assert(StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->IsPointer(TValue::x_mivTag) &&
-               StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+               StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         HeapPtr<TableObject> base = StackFrameHeader::GetLocalAddr(sfp, bc->m_base)->AsPointer<TableObject>().As();
 
         TValue* src = reinterpret_cast<TValue*>(sfp) + rc->m_variadicRetSlotBegin;
@@ -3179,8 +3175,8 @@ handle_metamethod:
         //
         if (likely(metamethod.IsPointer(TValue::x_mivTag)))
         {
-            Type mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-            if (mmType == Type::FUNCTION)
+            HeapEntityType mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (mmType == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { metamethodBase, tvIndex }, metamethod, OnReturnFromStoreResultMetamethodCall<&Self::m_dst>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -3191,7 +3187,7 @@ handle_metamethod:
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
                 [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
             }
-            else if (mmType == Type::TABLE)
+            else if (mmType == HeapEntityType::TABLE)
             {
                 base = metamethod.AsPointer<TableObject>().As();
                 goto retry;
@@ -3271,8 +3267,8 @@ handle_metamethod:
         //
         if (likely(metamethod.IsPointer(TValue::x_mivTag)))
         {
-            Type mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-            if (mmType == Type::FUNCTION)
+            HeapEntityType mmType = metamethod.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (mmType == HeapEntityType::FUNCTION)
             {
                 PrepareMetamethodCallResult res = SetupFrameForMetamethodCall(rc, sfp, bcu, std::array { metamethodBase, tvIndex, newValue }, metamethod, OnReturnFromNewIndexMetamethodCall<Self>);
                 // We already checked that 'metamethod' is a function, so it must success
@@ -3283,7 +3279,7 @@ handle_metamethod:
                 InterpreterFn calleeFn = res.m_calleeEc->m_bestEntryPoint;
                 [[clang::musttail]] return calleeFn(rc, res.m_baseForNextFrame, calleeBytecode, 0 /*unused*/);
             }
-            else if (mmType == Type::TABLE)
+            else if (mmType == HeapEntityType::TABLE)
             {
                 base = metamethod.AsPointer<TableObject>().As();
                 goto retry;
@@ -3352,7 +3348,7 @@ public:
 
         TValue tpl = CodeBlock::GetConstantAsTValue(rc->m_codeBlock, bc->m_src);
         assert(tpl.IsPointer(TValue::x_mivTag));
-        assert(tpl.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        assert(tpl.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         VM* vm = VM::GetActiveVMForCurrentThread();
         TableObject* obj = TranslateToRawPointer(vm, tpl.AsPointer<TableObject>().As());
         HeapPtr<TableObject> newObject = obj->ShallowCloneTableObject(vm);
@@ -3944,7 +3940,7 @@ public:
         {
             // Check 2: addr[-2] is a table
             TValue v = addr[-2];
-            if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE)
+            if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE)
             {
                 // Check 3: addr[-1] is nil
                 //
@@ -4111,7 +4107,7 @@ public:
         }
         else
         {
-            if (src.IsPointer(TValue::x_mivTag) && src.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            if (src.IsPointer(TValue::x_mivTag) && src.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 HeapPtr<HeapString> stringObj = src.AsPointer<HeapString>().As();
                 StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4178,14 +4174,14 @@ public:
         TValue src = *StackFrameHeader::GetLocalAddr(stackframe, bc->m_src);
         if (src.IsPointer(TValue::x_mivTag))
         {
-            Type ty = src.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-            if (ty == Type::STRING)
+            HeapEntityType ty = src.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            if (ty == HeapEntityType::STRING)
             {
                 HeapPtr<HeapString> s = src.AsPointer<HeapString>().As();
                 *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreateDouble(s->m_length);
                 Dispatch(rc, stackframe, bcu + sizeof(Self));
             }
-            else if (ty == Type::TABLE)
+            else if (ty == HeapEntityType::TABLE)
             {
                 // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
                 // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
@@ -4246,7 +4242,7 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
     {
         lhsNumber = lhs.AsDouble();
     }
-    else if (lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+    else if (lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
     {
         HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4269,7 +4265,7 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
     {
         rhsNumber = rhs.AsDouble();
     }
-    else if (rhs.IsPointer(TValue::x_mivTag) && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+    else if (rhs.IsPointer(TValue::x_mivTag) && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
     {
         HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -4437,7 +4433,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4526,7 +4522,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4615,7 +4611,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4704,7 +4700,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4811,7 +4807,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4900,7 +4896,7 @@ public:
         {
             TValue metamethod;
 
-            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE))
+            if (likely(lhs.IsPointer(TValue::x_mivTag) && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE))
             {
                 HeapPtr<TableObject> tableObj = lhs.AsPointer<TableObject>().As();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
@@ -4989,7 +4985,7 @@ public:
             TValue val = begin[i];
             if (val.IsPointer(TValue::x_mivTag))
             {
-                if (val.AsPointer<UserHeapGcObjectHeader>().As()->m_type != Type::STRING)
+                if (val.AsPointer<UserHeapGcObjectHeader>().As()->m_type != HeapEntityType::STRING)
                 {
                     success = false;
                     break;
@@ -5085,7 +5081,7 @@ public:
     {
         if (value.IsPointer(TValue::x_mivTag))
         {
-            if (value.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            if (value.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 return value.AsPointer<HeapString>();
             }
@@ -5271,13 +5267,13 @@ public:
                 {
                     goto fail;
                 }
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
                 if (unlikely(lhsTy != rhsTy))
                 {
                     goto fail;
                 }
-                if (lhsTy == Type::STRING)
+                if (lhsTy == HeapEntityType::STRING)
                 {
                     VM* vm = VM::GetActiveVMForCurrentThread();
                     HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
@@ -5292,7 +5288,7 @@ public:
                         Dispatch(rc, stackframe, bcu + sizeof(Self));
                     }
                 }
-                if (lhsTy == Type::TABLE)
+                if (lhsTy == HeapEntityType::TABLE)
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -5324,7 +5320,7 @@ public:
                     goto do_metamethod_call;
                 }
 
-                assert(lhsTy != Type::USERDATA && "unimplemented");
+                assert(lhsTy != HeapEntityType::USERDATA && "unimplemented");
 
                 metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
@@ -5432,13 +5428,13 @@ public:
                 {
                     goto fail;
                 }
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
                 if (unlikely(lhsTy != rhsTy))
                 {
                     goto fail;
                 }
-                if (lhsTy == Type::STRING)
+                if (lhsTy == HeapEntityType::STRING)
                 {
                     VM* vm = VM::GetActiveVMForCurrentThread();
                     HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
@@ -5453,7 +5449,7 @@ public:
                         Dispatch(rc, stackframe, bcu + sizeof(Self));
                     }
                 }
-                if (lhsTy == Type::TABLE)
+                if (lhsTy == HeapEntityType::TABLE)
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -5485,7 +5481,7 @@ public:
                     goto do_metamethod_call;
                 }
 
-                assert(lhsTy != Type::USERDATA && "unimplemented");
+                assert(lhsTy != HeapEntityType::USERDATA && "unimplemented");
 
                 metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
                 if (metamethod.IsNil())
@@ -5589,13 +5585,13 @@ public:
                 {
                     goto fail;
                 }
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
                 if (unlikely(lhsTy != rhsTy))
                 {
                     goto fail;
                 }
-                if (lhsTy == Type::STRING)
+                if (lhsTy == HeapEntityType::STRING)
                 {
                     VM* vm = VM::GetActiveVMForCurrentThread();
                     HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
@@ -5610,7 +5606,7 @@ public:
                         Dispatch(rc, stackframe, bcu + sizeof(Self));
                     }
                 }
-                if (lhsTy == Type::TABLE)
+                if (lhsTy == HeapEntityType::TABLE)
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -5642,7 +5638,7 @@ public:
                     goto do_metamethod_call;
                 }
 
-                assert(lhsTy != Type::USERDATA && "unimplemented");
+                assert(lhsTy != HeapEntityType::USERDATA && "unimplemented");
 
                 metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
@@ -5746,13 +5742,13 @@ public:
                 {
                     goto fail;
                 }
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
                 if (unlikely(lhsTy != rhsTy))
                 {
                     goto fail;
                 }
-                if (lhsTy == Type::STRING)
+                if (lhsTy == HeapEntityType::STRING)
                 {
                     VM* vm = VM::GetActiveVMForCurrentThread();
                     HeapString* lhsString = TranslateToRawPointer(vm, lhs.AsPointer<HeapString>().As());
@@ -5767,7 +5763,7 @@ public:
                         Dispatch(rc, stackframe, bcu + sizeof(Self));
                     }
                 }
-                if (lhsTy == Type::TABLE)
+                if (lhsTy == HeapEntityType::TABLE)
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -5799,7 +5795,7 @@ public:
                     goto do_metamethod_call;
                 }
 
-                assert(lhsTy != Type::USERDATA && "unimplemented");
+                assert(lhsTy != HeapEntityType::USERDATA && "unimplemented");
 
                 metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Le);
                 if (metamethod.IsNil())
@@ -5904,10 +5900,10 @@ public:
             {
                 // Consider metamethod call
                 //
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
-                if (likely(lhsTy == Type::TABLE && rhsTy == Type::TABLE))
+                if (likely(lhsTy == HeapEntityType::TABLE && rhsTy == HeapEntityType::TABLE))
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -6007,10 +6003,10 @@ public:
             {
                 // Consider metamethod call
                 //
-                Type lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-                Type rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+                HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
-                if (likely(lhsTy == Type::TABLE && rhsTy == Type::TABLE))
+                if (likely(lhsTy == HeapEntityType::TABLE && rhsTy == HeapEntityType::TABLE))
                 {
                     HeapPtr<TableObject> lhsMetatable;
                     {
@@ -6237,7 +6233,7 @@ public:
             {
                 vals[i] = v.AsDouble();
             }
-            else if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::STRING)
+            else if (v.IsPointer(TValue::x_mivTag) && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::STRING)
             {
                 HeapPtr<HeapString> hs = v.AsPointer<HeapString>().As();
                 uint8_t* str = TranslateToRawPointer(hs->m_string);
@@ -6361,5 +6357,3 @@ public:
         Dispatch(rc, stackframe, bcu + sizeof(Self));
     }
 } __attribute__((__packed__));
-
-}   // namespace ToyLang

@@ -3,9 +3,6 @@
 #include "watchpoint.h"
 #include "vm.h"
 
-namespace ToyLang
-{
-
 inline DeferredWatchpointFire::DeferredWatchpointFire()
 {
     m_set = VM::GetActiveVMForCurrentThread()->AllocateFromSpdsRegionUninitialized<WatchpointSet>();
@@ -20,5 +17,3 @@ inline DeferredWatchpointFire::~DeferredWatchpointFire()
     VM::GetActiveVMForCurrentThread()->DeallocateSpdsRegionObject(m_set);
     m_set = nullptr;
 }
-
-}   // namespace ToyLang

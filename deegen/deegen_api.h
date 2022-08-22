@@ -5,8 +5,6 @@
 namespace DeegenAPI
 {
 
-using namespace ToyLang;
-
 // Return zero or one value as the result of the operation
 //
 void NO_RETURN Return(TValue value);

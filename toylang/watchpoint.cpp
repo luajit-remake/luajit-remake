@@ -3,11 +3,6 @@
 #include "watchpoint.hpp"
 #include "vm.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 constexpr size_t x_watchpointClassOffsetForWatchpointKind[x_numWatchpointKinds + 1] = {
 #define macro(wpk) static_cast<size_t>(WPK_CPP_NAME(wpk)::WPK_CPP_OFFSET(wpk)) ,
 PP_FOR_EACH(macro, WATCHPOINT_KIND_LIST)
@@ -129,5 +124,3 @@ void WatchpointSet::SlowpathInvalidate()
     TransferWatchpointsTo(this, deferObj);
     SetStateToInvalidated(this);
 }
-
-}   // namespace ToyLang

@@ -2,8 +2,6 @@
 #include "gtest/gtest.h"
 #include "test_vm_utils.h"
 
-using namespace ToyLang;
-
 namespace {
 
 TEST(TableObjectIterator, Sanity)

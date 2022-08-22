@@ -6,9 +6,6 @@
 #include <elf.h>
 #include "x64_segmentation_register_utils.h"
 
-namespace CommonUtils
-{
-
 // Everything below are Linux specific, figure out portability issues later...
 //
 // https://www.kernel.org/doc/html/latest/x86/x86_64/fsgs.html
@@ -53,5 +50,3 @@ uint64_t X64_GetSegmentationRegisterBySyscall(X64SegmentationRegisterKind kind)
     }
     return output;
 }
-
-}   // namespace CommonUtils

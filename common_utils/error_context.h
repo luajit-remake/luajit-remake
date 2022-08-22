@@ -2,9 +2,6 @@
 
 #include "common.h"
 
-namespace CommonUtils
-{
-
 // Error reporting utility
 //
 struct ErrorContext
@@ -92,4 +89,3 @@ private:
     } \
 } while (false)
 
-}   // namespace CommonUtils

@@ -3,7 +3,7 @@
 #include "tinysha1.h"
 #include "common.h"
 
-std::string WARN_UNUSED GetSHA1HashHex(const std::string& value)
+inline std::string WARN_UNUSED GetSHA1HashHex(const std::string& value)
 {
     char hexresult[41];
     uint32_t digest[5];

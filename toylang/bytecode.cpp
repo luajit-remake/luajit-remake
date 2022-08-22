@@ -4,11 +4,6 @@
 
 #include "json_utils.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 const InterpreterFn x_interpreter_dispatches[x_numOpcodes] = {
 #define macro(opcodeCppName) &opcodeCppName::Execute,
     PP_FOR_EACH(macro, OPCODE_LIST)
@@ -1447,5 +1442,3 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
     return r;
 }
-
-}   // namespace ToyLang

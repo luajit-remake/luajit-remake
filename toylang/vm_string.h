@@ -4,11 +4,6 @@
 #include "heap_object_common.h"
 #include "tvalue.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 class alignas(8) HeapString
 {
 public:
@@ -16,7 +11,7 @@ public:
     // Common object header
     //
     uint32_t m_structure;   // always x_StringStructure
-    Type m_type;            // always TypeEnumForHeapObject<HeapString>
+    HeapEntityType m_type;            // always TypeEnumForHeapObject<HeapString>
     GcCellState m_cellState;
 
     // This is the high 16 bits of the XXHash64 value, for quick comparison
@@ -316,7 +311,7 @@ public:
         for (size_t i = 0; i < len; i++)
         {
             assert(start[i].IsPointer(TValue::x_mivTag));
-            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::STRING);
+            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
         }
 #endif
         struct Iterator
@@ -352,11 +347,11 @@ public:
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len)
     {
 #ifndef NDEBUG
-        assert(str1.As()->m_type == Type::STRING);
+        assert(str1.As()->m_type == HeapEntityType::STRING);
         for (size_t i = 0; i < len; i++)
         {
             assert(start[i].IsPointer(TValue::x_mivTag));
-            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == Type::STRING);
+            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
         }
 #endif
 
@@ -534,5 +529,3 @@ private:
     //
     UserHeapPointer<HeapString> m_specialKeyForBooleanIndex[2];
 };
-
-}   // namespace ToyLang

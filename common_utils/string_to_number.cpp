@@ -39,9 +39,6 @@
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 #pragma clang diagnostic ignored "-Wfloat-equal"
 
-namespace ToyLang
-{
-
 #define LJ_CHAR_CNTRL	0x01
 #define LJ_CHAR_SPACE	0x02
 #define LJ_CHAR_PUNCT	0x04
@@ -617,7 +614,5 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleOrInt32WithLuaSemantics(const 
 #undef DNEXT
 #undef DPREV
 #undef DLEN
-
-} // namespace ToyLang
 
 #pragma clang diagnostic pop

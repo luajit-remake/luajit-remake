@@ -6,10 +6,6 @@
 #include "heap_object_common.h"
 #include "vm.h"
 
-namespace ToyLang {
-
-using namespace CommonUtils;
-
 // An array is implemented by a vector part and a sparse map part
 // This class describes the policy of when to use vector part and when to use sparse map part
 //
@@ -286,14 +282,14 @@ struct StructureKeyHashHelper
     static uint32_t GetHashValueForStringKey(UserHeapPointer<HeapString> stringKey)
     {
         HeapPtr<HeapString> s = stringKey.As<HeapString>();
-        assert(s->m_type == Type::STRING);
+        assert(s->m_type == HeapEntityType::STRING);
         return s->m_hashLow;
     }
 
     static uint32_t GetHashValueForMaybeNonStringKey(UserHeapPointer<void> key)
     {
         HeapPtr<UserHeapGcObjectHeader> hdr = key.As<UserHeapGcObjectHeader>();
-        if (hdr->m_type == Type::STRING)
+        if (hdr->m_type == HeapEntityType::STRING)
         {
             return GetHashValueForStringKey(UserHeapPointer<HeapString>(key.As()));
         }
@@ -1208,7 +1204,7 @@ public:
     StructureIterator(SystemHeapPointer<Structure> hc)
     {
         HeapPtr<Structure> hiddenClass = hc.As();
-        assert(hiddenClass->m_type == Type::Structure);
+        assert(hiddenClass->m_type == HeapEntityType::Structure);
         SystemHeapPointer<StructureAnchorHashTable> aht = TCGet(hiddenClass->m_anchorHashTable);
 
         m_hiddenClass = hc;
@@ -2128,7 +2124,7 @@ end_setup:
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
     r->m_knownNonexistentMetamethods = m_knownNonexistentMetamethods;
-    if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == Type::STRING)
+    if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING)
     {
         int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(key.As<HeapString>());
         if (unlikely(metamethodOrd != -1))
@@ -2498,7 +2494,7 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
 
 inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/)
 {
-    assert(key.As<UserHeapGcObjectHeader>()->m_type == Type::TABLE);
+    assert(key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::TABLE);
     GeneralHeapPointer<void> metatable { key.As() };
     constexpr int32_t transitionKey = StructureTransitionTable::x_key_add_or_to_poly_metatable;
     Structure* transitionStructure;
@@ -2699,5 +2695,3 @@ inline Structure* WARN_UNUSED Structure::UpdateArrayType(VM* vm, ArrayType newAr
     assert(transitionStructure->m_arrayType.m_asValue == newArrayType.m_asValue);
     return transitionStructure;
 }
-
-}   // namespace ToyLang

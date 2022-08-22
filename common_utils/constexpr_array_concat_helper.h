@@ -2,9 +2,6 @@
 
 #include "common.h"
 
-namespace CommonUtils
-{
-
 // From: https://gist.github.com/klemens-morgenstern/b75599292667a4f53007
 //
 // constexpr_std_array_concat: concatenate two constexpr std::array
@@ -59,5 +56,3 @@ constexpr std::array<T, LL+RL> constexpr_std_array_concat(std::array<T, LL> lhs,
                 typename constexpr_std_array_concat_internal::counter_tuple<LL>::type(),
                 typename constexpr_std_array_concat_internal::counter_tuple<RL>::type());
 }
-
-}   // namespace CommonUtils

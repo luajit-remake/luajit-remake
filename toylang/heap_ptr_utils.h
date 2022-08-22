@@ -2,11 +2,6 @@
 
 #include "common_utils.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 template<typename T>
 using RestrictPtr = T* __restrict__;
 
@@ -264,5 +259,3 @@ void ALWAYS_INLINE TCSet(HeapRef<Packed<T>> target, T obj)
     static_assert(std::is_trivially_copyable_v<T>);
     UnalignedStore<T>(target.m_storage, obj);
 }
-
-}   // namespace ToyLang

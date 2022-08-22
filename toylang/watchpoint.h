@@ -3,11 +3,6 @@
 #include "common_utils.h"
 #include "memory_ptr.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 // There are two use patterns for watchpoint classes:
 // (1) A class containing a fixed number of watchpoint nodes.
 // (2) A class containing a variant number of watchpoint nodes.
@@ -690,6 +685,3 @@ void WatchpointSet::TransferWatchpointsTo(T self, DeferredWatchpointFire& deferr
 {
     WatchpointList::TransferAllElementsTo(&self->m_watchpoints, deferredObj.m_set->m_watchpoints /*out*/);
 }
-
-}   // namespace ToyLang
-

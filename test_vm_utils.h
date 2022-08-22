@@ -2,9 +2,6 @@
 
 #include "bytecode.h"
 
-namespace ToyLang
-{
-
 class VMOutputInterceptor
 {
 public:
@@ -93,13 +90,13 @@ inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
 
 inline TableObject* AssertAndGetTableObject(TValue t)
 {
-    ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+    ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
     return TranslateToRawPointer(t.AsPointer<TableObject>().As());
 }
 
 inline Structure* AssertAndGetStructure(TableObject* obj)
 {
-    ReleaseAssert(TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == Type::Structure);
+    ReleaseAssert(TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
     return TranslateToRawPointer(TCGet(obj->m_hiddenClass).As<Structure>());
 }
 
@@ -132,5 +129,3 @@ inline StringList GetStringList(VM* vm, size_t n)
     ReleaseAssert(used.size() == n && ptrSet.size() == n && result.size() == n);
     return result;
 }
-
-}   // namespace ToyLang

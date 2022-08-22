@@ -16,9 +16,6 @@ using json = nlohmann::json;
 #include "common.h"
 #include "misc_math_helper.h"
 
-namespace ToyLang
-{
-
 template<typename T>
 T JSONCheckedGet(json& j, const char* prop)
 {
@@ -92,5 +89,3 @@ T JSONCheckedGet(json& j, const char* prop)
         return it->get<bool>();
     }
 }
-
-}   // namespace ToyLang

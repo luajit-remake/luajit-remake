@@ -3,27 +3,27 @@
 #include "common_utils.h"
 #include "heap_ptr_utils.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 #define HOI_SYS_HEAP 1
 #define HOI_USR_HEAP 2
-#define HEAP_OBJECT_INFO_LIST                                                           \
+
+#define LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST                                          \
   /* Enum Name                      C++ name                        Lives in       */   \
     (STRING,                        HeapString,                     HOI_USR_HEAP)       \
   , (FUNCTION,                      FunctionObject,                 HOI_USR_HEAP)       \
   , (USERDATA,                      HeapCDataObject,                HOI_USR_HEAP)       \
   , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
   , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
+
+#define HEAP_OBJECT_INFO_LIST                                                           \
+  /* Enum Name                      C++ name                        Lives in       */   \
+    LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST                                              \
   , (ArraySparseMap,                ArraySparseMap,                 HOI_USR_HEAP)       \
   , (Upvalue,                       Upvalue,                        HOI_USR_HEAP)       \
   , (ExecutableCode,                ExecutableCode,                 HOI_SYS_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (StructureAnchorHashTable,      StructureAnchorHashTable,       HOI_SYS_HEAP)       \
   , (CacheableDictionary,           CacheableDictionary,            HOI_SYS_HEAP)       \
-  , (UncacheableDictionary,         UncacheableDictionary,          HOI_SYS_HEAP)
+  , (UncacheableDictionary,         UncacheableDictionary,          HOI_SYS_HEAP)       \
 
 #define HOI_ENUM_NAME(hoi) PP_TUPLE_GET_1(hoi)
 #define HOI_CLASS_NAME(hoi) PP_TUPLE_GET_2(hoi)
@@ -35,12 +35,8 @@ using namespace CommonUtils;
 PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
 #undef macro
 
-enum class Type : uint8_t
+enum class HeapEntityType : uint8_t
 {
-    NIL,
-    BOOLEAN,
-    DOUBLE,
-
     // Declare enum for heap object types
     //
 #define macro(hoi) HOI_ENUM_NAME(hoi),
@@ -53,12 +49,12 @@ PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
 template<typename T>
 struct TypeEnumForHeapObjectImpl
 {
-    static constexpr Type value = Type::X_END_OF_ENUM;
+    static constexpr HeapEntityType value = HeapEntityType::X_END_OF_ENUM;
 };
 
-#define macro(hoi)                                                     \
-    template<> struct TypeEnumForHeapObjectImpl<HOI_CLASS_NAME(hoi)> { \
-        static constexpr Type value = Type::HOI_ENUM_NAME(hoi);        \
+#define macro(hoi)                                                                      \
+    template<> struct TypeEnumForHeapObjectImpl<HOI_CLASS_NAME(hoi)> {                  \
+        static constexpr HeapEntityType value = HeapEntityType::HOI_ENUM_NAME(hoi);     \
     };
 PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
 #undef macro
@@ -66,10 +62,25 @@ PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
 // Type mapping from class name to enum name
 //
 template<typename T>
-constexpr Type TypeEnumForHeapObject = TypeEnumForHeapObjectImpl<T>::value;
+constexpr HeapEntityType TypeEnumForHeapObject = TypeEnumForHeapObjectImpl<T>::value;
 
 template<typename T>
-constexpr bool IsHeapObjectType = (TypeEnumForHeapObject<T> != Type::X_END_OF_ENUM);
+constexpr bool IsHeapObjectType = (TypeEnumForHeapObject<T> != HeapEntityType::X_END_OF_ENUM);
+
+template<HeapEntityType ty>
+struct HeapObjectTypeForEnumImpl;
+
+#define macro(hoi)                                                                      \
+    template<> struct HeapObjectTypeForEnumImpl<HeapEntityType::HOI_ENUM_NAME(hoi)> {   \
+        using type = HOI_CLASS_NAME(hoi);                                               \
+    };
+PP_FOR_EACH(macro, HEAP_OBJECT_INFO_LIST)
+#undef macro
+
+// Type mapping from class name to enum name
+//
+template<HeapEntityType ty>
+using HeapObjectTypeForEnum = typename HeapObjectTypeForEnumImpl<ty>::type;
 
 // FIXME
 template<typename T>
@@ -125,7 +136,7 @@ class UserHeapGcObjectHeader
 {
 public:
     uint32_t m_structure;
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;     // reserved for GC
 
     template<typename T>
@@ -147,7 +158,7 @@ static_assert(sizeof(GcCellState) == 1 && offsetof_member_v<&UserHeapGcObjectHea
 class SystemHeapGcObjectHeader
 {
 public:
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;     // reserved for GC
 
     template<typename T>
@@ -163,5 +174,3 @@ public:
         self->m_cellState = GcCellState::White;
     }
 };
-
-}   // namespace ToyLang

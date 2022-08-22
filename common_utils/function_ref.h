@@ -3,9 +3,6 @@
 #include <cstdint>
 #include <utility>
 
-namespace CommonUtils
-{
-
 // Copied from LLVM::function_ref
 //
 // An efficient, type-erasing, non-owning reference to a callable. This is
@@ -61,5 +58,3 @@ public:
 
     explicit operator bool() const { return m_callback; }
 };
-
-}   // namespace CommonUtils

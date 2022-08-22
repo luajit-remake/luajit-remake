@@ -7,7 +7,6 @@
 #include "lambda_parser.h"
 #include "switch_case.h"
 
-using namespace ToyLang;
 using namespace DeegenAPI;
 using namespace llvm;
 using namespace dast;
@@ -26,4 +25,5 @@ TEST(AnnotationParser, SwitchCaseSanity)
     ReleaseAssert(GetDemangledName(switchCaseList[0].m_owner) == "testfn(int, int, int)");
     ReleaseAssert(switchCaseList[0].m_cases.size() == 2);
     ReleaseAssert(switchCaseList[0].m_hasDefaultClause);
+    ReleaseAssert(lm.size() == 0);
 }

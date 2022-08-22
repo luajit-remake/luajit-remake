@@ -4,10 +4,6 @@
 #include "json_utils.h"
 #include "test_vm_utils.h"
 
-// #include "deegen_api.h"
-
-using namespace ToyLang;
-
 namespace {
 
 // Just make sure the json parser library works
@@ -155,18 +151,18 @@ TEST(LuaTest, TestTableSizeHint)
 
     {
         TValue t = GetGlobalVariable(vm, "t");
-        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         TableObject* obj = AssertAndGetTableObject(t);
         Structure* structure = AssertAndGetStructure(obj);
-        ReleaseAssert(structure->m_inlineNamedStorageCapacity == ToyLang::internal::x_optimalInlineCapacityArray[4]);
+        ReleaseAssert(structure->m_inlineNamedStorageCapacity == internal::x_optimalInlineCapacityArray[4]);
     }
 
     {
         TValue t = GetGlobalVariable(vm, "t2");
-        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::TABLE);
+        ReleaseAssert(t.IsPointer(TValue::x_mivTag) && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
         TableObject* obj = AssertAndGetTableObject(t);
         Structure* structure = AssertAndGetStructure(obj);
-        ReleaseAssert(structure->m_inlineNamedStorageCapacity == ToyLang::internal::x_optimalInlineCapacityArray[3]);
+        ReleaseAssert(structure->m_inlineNamedStorageCapacity == internal::x_optimalInlineCapacityArray[3]);
     }
 }
 

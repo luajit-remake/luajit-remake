@@ -6,11 +6,6 @@
 #include "vm_string.h"
 #include "structure.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 // This doesn't really need to inherit the GC header, but for now let's make thing simple..
 //
 class alignas(8) ArraySparseMap final : public UserHeapGcObjectHeader
@@ -637,15 +632,15 @@ public:
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
         SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
-        Type ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
         icInfo.m_hiddenClass = hiddenClass;
 
         uint32_t slotOrd;
         uint32_t inlineStorageCapacity;
         bool found;
 
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             HeapPtr<Structure> structure = hiddenClass.As<Structure>();
             icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
@@ -660,7 +655,7 @@ public:
                 found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, propertyName, slotOrd /*out*/);
             }
         }
-        else if (likely(ty == Type::CacheableDictionary))
+        else if (likely(ty == HeapEntityType::CacheableDictionary))
         {
             HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
             icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
@@ -696,13 +691,13 @@ public:
         }
         else
         {
-            if (ty == Type::Structure)
+            if (ty == HeapEntityType::Structure)
             {
                 icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
             }
             else
             {
-                assert(ty == Type::CacheableDictionary);
+                assert(ty == HeapEntityType::CacheableDictionary);
                 icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNilButUncacheable;
             }
         }
@@ -736,13 +731,13 @@ public:
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
         SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
-        Type ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         icInfo.m_hiddenClass = hiddenClass;
         icInfo.m_isInlineCacheable = true;
 
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             HeapPtr<Structure> structure = hiddenClass.As<Structure>();
             icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
@@ -804,7 +799,7 @@ public:
                 }
             }
         }
-        else if (ty == Type::CacheableDictionary)
+        else if (ty == HeapEntityType::CacheableDictionary)
         {
             HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
 
@@ -917,11 +912,11 @@ public:
         if (m_butterfly == nullptr)
         {
 #ifndef NDEBUG
-            if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure)
+            if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
             {
                 assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
             }
-            else if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::CacheableDictionary)
+            else if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary)
             {
                 assert(m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity == 0);
             }
@@ -975,18 +970,18 @@ public:
         {
             uint32_t oldArrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
             uint32_t oldNamedStorageCapacity;
-            Type hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            if (hiddenClassTy == Type::Structure)
+            HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+            if (hiddenClassTy == HeapEntityType::Structure)
             {
                 oldNamedStorageCapacity = m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
             }
-            else if (hiddenClassTy == Type::CacheableDictionary)
+            else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
             {
                 oldNamedStorageCapacity = m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity;
             }
             else
             {
-                assert(hiddenClassTy == Type::UncacheableDictionary);
+                assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
                 // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
@@ -1122,7 +1117,7 @@ public:
         ArrayType arrType = TCGet(self->m_arrayType);
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
         icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
-        AssertImp(icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure,
+        AssertImp(icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
                   arrType.m_asValue == icInfo.m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
 
         auto setForceSlowPath = [&icInfo]() ALWAYS_INLINE
@@ -1133,7 +1128,7 @@ public:
 
         // We cannot IC any fast path if the object is in dictionary mode: see comment on IndexCheckKind::ForceSlowPath
         //
-        if (icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != Type::Structure)
+        if (icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure)
         {
             setForceSlowPath();
             return;
@@ -1397,7 +1392,7 @@ public:
 
         // The fast path can only handle the case where the hidden class is structure
         //
-        DEBUG_ONLY(didSomethingNontrivial |= (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != Type::Structure));
+        DEBUG_ONLY(didSomethingNontrivial |= (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure));
 
         int32_t index = static_cast<int32_t>(index64);
         ArrayType arrType = m_arrayType;
@@ -1695,9 +1690,9 @@ public:
         //
         if (arrType.m_asValue != newArrayType.m_asValue)
         {
-            Type hiddenClassType = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hiddenClassType == Type::Structure || hiddenClassType == Type::CacheableDictionary || hiddenClassType == Type::UncacheableDictionary);
-            if (hiddenClassType == Type::Structure)
+            HeapEntityType hiddenClassType = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+            assert(hiddenClassType == HeapEntityType::Structure || hiddenClassType == HeapEntityType::CacheableDictionary || hiddenClassType == HeapEntityType::UncacheableDictionary);
+            if (hiddenClassType == HeapEntityType::Structure)
             {
                 Structure* structure = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>());
                 Structure* newStructure = structure->UpdateArrayType(vm, newArrayType);
@@ -1790,9 +1785,9 @@ public:
 
         if (arrType.m_asValue != newArrayType.m_asValue)
         {
-            Type ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
-            if (ty == Type::Structure)
+            HeapEntityType ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+            assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+            if (ty == HeapEntityType::Structure)
             {
                 m_hiddenClass = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>())->UpdateArrayType(vm, newArrayType);
                 m_arrayType = newArrayType;
@@ -1898,18 +1893,18 @@ public:
         {
             uint32_t arrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
 #ifndef NDEBUG
-            Type hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            if (hiddenClassTy == Type::Structure)
+            HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+            if (hiddenClassTy == HeapEntityType::Structure)
             {
                 assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
             }
-            else if (hiddenClassTy == Type::CacheableDictionary)
+            else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
             {
                 assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
             }
             else
             {
-                assert(hiddenClassTy == Type::UncacheableDictionary);
+                assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
                 // TODO: support UncacheableDictionary
                 ReleaseAssert(false && "unimplemented");
             }
@@ -1941,20 +1936,20 @@ public:
 
     HeapPtr<TableObject> WARN_UNUSED ShallowCloneTableObject(VM* vm)
     {
-        Type ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         SystemHeapPointer<void> newHiddenClass;
         uint8_t inlineCapacity;
         uint32_t butterflyNamedStorageCapacity;
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
             inlineCapacity = structure->m_inlineNamedStorageCapacity;
             butterflyNamedStorageCapacity = structure->m_butterflyNamedStorageCapacity;
             newHiddenClass = m_hiddenClass;
         }
-        else if (ty == Type::CacheableDictionary)
+        else if (ty == HeapEntityType::CacheableDictionary)
         {
             CacheableDictionary* cd = TranslateToRawPointer(m_hiddenClass.As<CacheableDictionary>());
             CacheableDictionary* cloneCd = cd->Clone(vm);
@@ -1990,10 +1985,10 @@ public:
     static GetMetatableResult GetMetatable(T self)
     {
         SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
-        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             HeapPtr<Structure> structure = hc.As<Structure>();
             if (Structure::HasNoMetatable(structure))
@@ -2024,7 +2019,7 @@ public:
                 };
             }
         }
-        else if (ty == Type::CacheableDictionary)
+        else if (ty == HeapEntityType::CacheableDictionary)
         {
             HeapPtr<CacheableDictionary> cd = hc.As<CacheableDictionary>();
             return GetMetatableResult {
@@ -2043,10 +2038,10 @@ public:
     {
         assert(newMetatable.m_value != 0);
         SystemHeapPointer<void> hc = m_hiddenClass;
-        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             Structure* structure = TranslateToRawPointer(vm, hc.As<Structure>());
             Structure::AddMetatableResult result;
@@ -2075,7 +2070,7 @@ public:
             m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
             assert(m_arrayType.MayHaveMetatable());
         }
-        else if (ty == Type::CacheableDictionary)
+        else if (ty == HeapEntityType::CacheableDictionary)
         {
             CacheableDictionary* cd = TranslateToRawPointer(vm, hc.As<CacheableDictionary>());
             if (cd->m_metatable == newMetatable)
@@ -2100,10 +2095,10 @@ public:
     void RemoveMetatable(VM* vm)
     {
         SystemHeapPointer<void> hc = m_hiddenClass;
-        Type ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == Type::Structure || ty == Type::CacheableDictionary || ty == Type::UncacheableDictionary);
+        HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
-        if (likely(ty == Type::Structure))
+        if (likely(ty == HeapEntityType::Structure))
         {
             Structure* structure = TranslateToRawPointer(vm, hc.As<Structure>());
             Structure::RemoveMetatableResult result;
@@ -2127,7 +2122,7 @@ public:
             m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
             AssertIff(m_arrayType.MayHaveMetatable(), Structure::IsPolyMetatable(result.m_newStructure.As()));
         }
-        else if (ty == Type::CacheableDictionary)
+        else if (ty == HeapEntityType::CacheableDictionary)
         {
             CacheableDictionary* cd = TranslateToRawPointer(vm, hc.As<CacheableDictionary>());
             if (cd->m_metatable.m_value == 0)
@@ -2155,7 +2150,7 @@ public:
     static bool WARN_UNUSED TryQuicklyRuleOutMetamethod(HeapPtr<TableObject> self, LuaMetamethodKind mtKind)
     {
         SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
-        if (likely(hc.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure))
+        if (likely(hc.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure))
         {
             return hc.As<Structure>()->m_knownNonexistentMetamethods & (static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << static_cast<size_t>(mtKind)));
         }
@@ -2323,7 +2318,7 @@ public:
     // Object header
     //
     SystemHeapPointer<void> m_hiddenClass;
-    Type m_type;
+    HeapEntityType m_type;
     GcCellState m_cellState;
 
     ArrayType m_arrayType;
@@ -2338,26 +2333,26 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
 {
     if (likely(value.IsPointer(TValue::x_mivTag)))
     {
-        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+        HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
-        if (likely(ty == Type::TABLE))
+        if (likely(ty == HeapEntityType::TABLE))
         {
             HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return result.m_result;
         }
 
-        if (ty == Type::STRING)
+        if (ty == HeapEntityType::STRING)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForString;
         }
 
-        if (ty == Type::FUNCTION)
+        if (ty == HeapEntityType::FUNCTION)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForFunction;
         }
 
-        if (ty == Type::THREAD)
+        if (ty == HeapEntityType::THREAD)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine;
         }
@@ -2394,12 +2389,12 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
                 .m_invokedThroughMetatable = false
             };
         }
-        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == Type::TABLE);
+        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::TABLE);
         HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
         TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
-        if (likely(target.IsPointer(TValue::x_mivTag) && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION))
+        if (likely(target.IsPointer(TValue::x_mivTag) && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION))
         {
             return GetCallTargetConsideringMetatableResult {
                 .m_target = target.AsPointer<FunctionObject>(),
@@ -2417,8 +2412,8 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
 
     if (likely(value.IsPointer(TValue::x_mivTag)))
     {
-        Type ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-        if (likely(ty == Type::FUNCTION))
+        HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+        if (likely(ty == HeapEntityType::FUNCTION))
         {
             return GetCallTargetConsideringMetatableResult {
                 .m_target = value.AsPointer<FunctionObject>(),
@@ -2426,19 +2421,19 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
             };
         }
 
-        if (likely(ty == Type::TABLE))
+        if (likely(ty == HeapEntityType::TABLE))
         {
             HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return getCallMetamethod(result.m_result);
         }
 
-        if (ty == Type::STRING)
+        if (ty == HeapEntityType::STRING)
         {
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForString);
         }
 
-        if (ty == Type::THREAD)
+        if (ty == HeapEntityType::THREAD)
         {
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }
@@ -2506,7 +2501,7 @@ struct TableObjectIterator
 
     KeyValuePair WARN_UNUSED Advance(HeapPtr<TableObject> obj)
     {
-        Type hcType;
+        HeapEntityType hcType;
         HeapPtr<Structure> structure;
         HeapPtr<CacheableDictionary> cacheableDict;
         ArraySparseMap* sparseMap;
@@ -2514,8 +2509,8 @@ struct TableObjectIterator
         if (unlikely(m_state == IteratorState::Uninitialized))
         {
             hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
-            if (hcType == Type::Structure)
+            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
+            if (hcType == HeapEntityType::Structure)
             {
                 structure = TCGet(obj->m_hiddenClass).As<Structure>();
                 if (unlikely(structure->m_numSlots == 0))
@@ -2526,7 +2521,7 @@ struct TableObjectIterator
                 m_namedPropertyOrd = static_cast<uint32_t>(-1);
                 goto try_get_next_structure_prop;
             }
-            else if (hcType == Type::CacheableDictionary)
+            else if (hcType == HeapEntityType::CacheableDictionary)
             {
                 cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
                 m_state = IteratorState::NamedProperty;
@@ -2543,9 +2538,9 @@ struct TableObjectIterator
         if (m_state == IteratorState::NamedProperty)
         {
             hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
+            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
 
-            if (likely(hcType == Type::Structure))
+            if (likely(hcType == HeapEntityType::Structure))
             {
                 structure = TCGet(obj->m_hiddenClass).As<Structure>();
 
@@ -2590,7 +2585,7 @@ try_get_next_structure_prop:
                     .m_value = value
                 };
             }
-            else if (hcType == Type::CacheableDictionary)
+            else if (hcType == HeapEntityType::CacheableDictionary)
             {
                 cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
                 m_namedPropertyOrd++;
@@ -2730,10 +2725,10 @@ finished_iteration:
         {
             // Input key is a pointer, locate its slot ordinal and iterate from there
             //
-            Type hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == Type::Structure || hcType == Type::CacheableDictionary || hcType == Type::UncacheableDictionary);
+            HeapEntityType hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
             UserHeapPointer<void> prop = key.AsPointer();
-            if (hcType == Type::Structure)
+            if (hcType == HeapEntityType::Structure)
             {
                 HeapPtr<Structure> structure = TCGet(obj->m_hiddenClass).As<Structure>();
                 uint32_t slotOrd;
@@ -2749,7 +2744,7 @@ finished_iteration:
                 out = iter.Advance(obj);
                 return true;
             }
-            else if (hcType == Type::CacheableDictionary)
+            else if (hcType == HeapEntityType::CacheableDictionary)
             {
                 HeapPtr<CacheableDictionary> cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
                 uint32_t hashTableSlot = CacheableDictionary::GetHashTableSlotNumberForProperty(cacheableDict, prop);
@@ -2850,7 +2845,7 @@ static_assert(sizeof(TableObjectIterator) == 8);
 
 inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructureHiddenClass(TableObject* obj, uint32_t slot, uint32_t inlineCapacity)
 {
-    assert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == Type::Structure);
+    assert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
     assert(Structure::IsPolyMetatable(obj->m_hiddenClass.As<Structure>()));
     assert(Structure::GetPolyMetatableSlot(obj->m_hiddenClass.As<Structure>()) == slot);
     TValue res;
@@ -2873,5 +2868,3 @@ inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructure
         return res.AsPointer<void>();
     }
 }
-
-}   // namespace ToyLang

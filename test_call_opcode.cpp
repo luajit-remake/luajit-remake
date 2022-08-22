@@ -1,8 +1,6 @@
 #include "bytecode.h"
 #include "gtest/gtest.h"
 
-using namespace ToyLang;
-
 namespace {
 
 CodeBlock* AllocateInterpreterCodeBlockWithBytecodeSize(size_t bytecodeSize)
@@ -128,6 +126,8 @@ void CheckStackLayout(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe,
     ReleaseAssert(bcu == calleeFuncBytecode);
     ReleaseAssert(rc == info->m_expectedRc);
 }
+
+}   // anonymous namespace
 
 TEST(CallOpcode, Sanity)
 {
@@ -258,5 +258,3 @@ TEST(CallOpcode, Sanity)
         }
     }
 }
-
-}   // anonymous namespace

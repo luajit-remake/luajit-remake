@@ -2,8 +2,6 @@
 
 #include "common.h"
 
-namespace CommonUtils {
-
 // From Itanium C++ ABI Section 2.3: [https://itanium-cxx-abi.github.io/cxx-abi/abi.html#member-pointers]
 //     A pointer to member function is a pair as follows:
 //     ptr:
@@ -107,4 +105,3 @@ void* GetClassMethodOrPlainFunctionPtr(MethPtr p)
     }
 }
 
-}   // namespace CommonUtils

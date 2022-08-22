@@ -3,11 +3,6 @@
 #include "memory_ptr.h"
 #include "vm_string.h"
 
-namespace ToyLang
-{
-
-using namespace CommonUtils;
-
 enum ThreadKind : uint8_t
 {
     ExecutionThread,
@@ -969,7 +964,7 @@ public:
     void InitLibBaseDotNextFunctionObject(TValue val)
     {
         assert(val.IsPointer(TValue::x_mivTag));
-        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == Type::FUNCTION);
+        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION);
         m_ljrLibBaseDotNextFunctionObject = val;
     }
 
@@ -1084,5 +1079,3 @@ inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetametho
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
 }
-
-}   // namespace ToyLang
