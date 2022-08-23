@@ -7,7 +7,7 @@ void CheckStringObjectIsAsExpected(UserHeapPointer<HeapString> p, const void* ex
 {
     uint64_t expectedHash = HashString(expectedStr, expectedLen);
     HeapPtr<HeapString> s = p.As<HeapString>();
-    ReleaseAssert(s->m_type == HeapEntityType::STRING);
+    ReleaseAssert(s->m_type == HeapEntityType::String);
     ReleaseAssert(static_cast<size_t>(s->m_length) == expectedLen);
     ReleaseAssert(s->m_hashHigh == static_cast<uint16_t>(expectedHash >> 48));
     ReleaseAssert(s->m_hashLow == static_cast<uint32_t>(expectedHash));

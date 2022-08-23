@@ -2335,24 +2335,24 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
     {
         HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 
-        if (likely(ty == HeapEntityType::TABLE))
+        if (likely(ty == HeapEntityType::Table))
         {
             HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return result.m_result;
         }
 
-        if (ty == HeapEntityType::STRING)
+        if (ty == HeapEntityType::String)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForString;
         }
 
-        if (ty == HeapEntityType::FUNCTION)
+        if (ty == HeapEntityType::Function)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForFunction;
         }
 
-        if (ty == HeapEntityType::THREAD)
+        if (ty == HeapEntityType::Thread)
         {
             return VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine;
         }
@@ -2389,12 +2389,12 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
                 .m_invokedThroughMetatable = false
             };
         }
-        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::TABLE);
+        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
         HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
         TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
-        if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION))
+        if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function))
         {
             return GetCallTargetConsideringMetatableResult {
                 .m_target = target.AsPointer<FunctionObject>(),
@@ -2413,7 +2413,7 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
     if (likely(value.IsPointer()))
     {
         HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-        if (likely(ty == HeapEntityType::FUNCTION))
+        if (likely(ty == HeapEntityType::Function))
         {
             return GetCallTargetConsideringMetatableResult {
                 .m_target = value.AsPointer<FunctionObject>(),
@@ -2421,19 +2421,19 @@ inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsider
             };
         }
 
-        if (likely(ty == HeapEntityType::TABLE))
+        if (likely(ty == HeapEntityType::Table))
         {
             HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return getCallMetamethod(result.m_result);
         }
 
-        if (ty == HeapEntityType::STRING)
+        if (ty == HeapEntityType::String)
         {
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForString);
         }
 
-        if (ty == HeapEntityType::THREAD)
+        if (ty == HeapEntityType::Thread)
         {
             return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }

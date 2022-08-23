@@ -964,7 +964,7 @@ public:
     void InitLibBaseDotNextFunctionObject(TValue val)
     {
         assert(val.IsPointer());
-        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::FUNCTION);
+        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function);
         m_ljrLibBaseDotNextFunctionObject = val;
     }
 

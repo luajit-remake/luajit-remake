@@ -90,7 +90,7 @@ inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
 
 inline TableObject* AssertAndGetTableObject(TValue t)
 {
-    ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
+    ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Table);
     return TranslateToRawPointer(t.AsPointer<TableObject>().As());
 }
 

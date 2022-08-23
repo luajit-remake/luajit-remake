@@ -282,14 +282,14 @@ struct StructureKeyHashHelper
     static uint32_t GetHashValueForStringKey(UserHeapPointer<HeapString> stringKey)
     {
         HeapPtr<HeapString> s = stringKey.As<HeapString>();
-        assert(s->m_type == HeapEntityType::STRING);
+        assert(s->m_type == HeapEntityType::String);
         return s->m_hashLow;
     }
 
     static uint32_t GetHashValueForMaybeNonStringKey(UserHeapPointer<void> key)
     {
         HeapPtr<UserHeapGcObjectHeader> hdr = key.As<UserHeapGcObjectHeader>();
-        if (hdr->m_type == HeapEntityType::STRING)
+        if (hdr->m_type == HeapEntityType::String)
         {
             return GetHashValueForStringKey(UserHeapPointer<HeapString>(key.As()));
         }
@@ -2124,7 +2124,7 @@ end_setup:
     r->m_inlineHashTableMask = htMaskToStore;
     r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
     r->m_knownNonexistentMetamethods = m_knownNonexistentMetamethods;
-    if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING)
+    if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String)
     {
         int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(key.As<HeapString>());
         if (unlikely(metamethodOrd != -1))
@@ -2494,7 +2494,7 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
 
 inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/)
 {
-    assert(key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::TABLE);
+    assert(key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
     GeneralHeapPointer<void> metatable { key.As() };
     constexpr int32_t transitionKey = StructureTransitionTable::x_key_add_or_to_poly_metatable;
     Structure* transitionStructure;

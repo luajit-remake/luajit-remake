@@ -151,7 +151,7 @@ TEST(LuaTest, TestTableSizeHint)
 
     {
         TValue t = GetGlobalVariable(vm, "t");
-        ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
+        ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Table);
         TableObject* obj = AssertAndGetTableObject(t);
         Structure* structure = AssertAndGetStructure(obj);
         ReleaseAssert(structure->m_inlineNamedStorageCapacity == internal::x_optimalInlineCapacityArray[4]);
@@ -159,7 +159,7 @@ TEST(LuaTest, TestTableSizeHint)
 
     {
         TValue t = GetGlobalVariable(vm, "t2");
-        ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::TABLE);
+        ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Table);
         TableObject* obj = AssertAndGetTableObject(t);
         Structure* structure = AssertAndGetStructure(obj);
         ReleaseAssert(structure->m_inlineNamedStorageCapacity == internal::x_optimalInlineCapacityArray[3]);

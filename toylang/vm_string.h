@@ -311,7 +311,7 @@ public:
         for (size_t i = 0; i < len; i++)
         {
             assert(start[i].IsPointer());
-            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
+            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
         }
 #endif
         struct Iterator
@@ -347,11 +347,11 @@ public:
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len)
     {
 #ifndef NDEBUG
-        assert(str1.As()->m_type == HeapEntityType::STRING);
+        assert(str1.As()->m_type == HeapEntityType::String);
         for (size_t i = 0; i < len; i++)
         {
             assert(start[i].IsPointer());
-            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::STRING);
+            assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
         }
 #endif
 

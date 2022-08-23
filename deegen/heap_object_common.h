@@ -8,11 +8,11 @@
 
 #define LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST                                          \
   /* Enum Name                      C++ name                        Lives in       */   \
-    (STRING,                        HeapString,                     HOI_USR_HEAP)       \
-  , (FUNCTION,                      FunctionObject,                 HOI_USR_HEAP)       \
-  , (USERDATA,                      HeapCDataObject,                HOI_USR_HEAP)       \
-  , (THREAD,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
-  , (TABLE,                         TableObject,                    HOI_USR_HEAP)       \
+    (String,                        HeapString,                     HOI_USR_HEAP)       \
+  , (Function,                      FunctionObject,                 HOI_USR_HEAP)       \
+  , (Userdata,                      HeapCDataObject,                HOI_USR_HEAP)       \
+  , (Thread,                        CoroutineRuntimeContext,        HOI_USR_HEAP)       \
+  , (Table,                         TableObject,                    HOI_USR_HEAP)       \
 
 #define HEAP_OBJECT_INFO_LIST                                                           \
   /* Enum Name                      C++ name                        Lives in       */   \
