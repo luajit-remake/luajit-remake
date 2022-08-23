@@ -670,3 +670,11 @@ struct compute_type_speculation_mask
 
 template<typename T>
 constexpr TypeSpeculationMask x_typeSpeculationMaskFor = detail::compute_type_speculation_mask::value<T>;
+
+// Returns the human readable definitions of each type speculation mask
+//
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculationDefinitions();
+
+// Returns the human readable string of a speculation
+//
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask);

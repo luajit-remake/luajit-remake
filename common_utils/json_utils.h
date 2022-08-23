@@ -6,6 +6,7 @@
 #pragma clang diagnostic ignored "-Wswitch-enum"
 #pragma clang diagnostic ignored "-Wtautological-overlap-compare"
 #pragma clang diagnostic ignored "-Wcovered-switch-default"
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #include "thirdparty_json.hpp"
 

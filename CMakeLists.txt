@@ -134,6 +134,8 @@ add_subdirectory(toylang)
 
 add_subdirectory(annotated)
 
+add_subdirectory(deegen)
+
 # add the executable
 #
 add_executable(main
@@ -147,6 +149,7 @@ add_executable(main
   test_json_bytecode_loader.cpp
   test_table_object_iterator.cpp
   test_annotation_switch_case.cpp
+  test_dump_type_speculation.cpp
 )
 
 target_link_libraries(main PUBLIC
@@ -154,6 +157,7 @@ target_link_libraries(main PUBLIC
   -Wl,--start-group
   common_utils
   toylang
+  deegen_rt
   deegen_unit_test_ir
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
