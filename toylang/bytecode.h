@@ -4424,7 +4424,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         TValue lhs = bc->m_lhs.Get(rc, stackframe);
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
-        if (likely(lhs.IsDouble() && rhs.IsDouble()))
+        if (likely(lhs.Is<tDouble>() && rhs.Is<tDouble>()))
         {
             *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() + rhs.AsDouble());
             Dispatch(rc, stackframe, bcu + sizeof(Self));

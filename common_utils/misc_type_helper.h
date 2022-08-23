@@ -245,3 +245,15 @@ constexpr bool is_typelist_pairwise_distinct = internal::is_typelist_pairwise_di
 
 template<int N, typename... Types>
 using parameter_pack_nth_t = std::tuple_element_t<N, std::tuple<Types...>>;
+
+template<size_t N, typename T>
+struct arg_nth_impl;
+
+template<size_t N, typename R, typename... Args>
+struct arg_nth_impl<N, R(*)(Args...)>
+{
+    using type = parameter_pack_nth_t<N, Args...>;
+};
+
+template<typename T, size_t N>
+using arg_nth_t = arg_nth_impl<N, T>;

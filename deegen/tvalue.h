@@ -241,6 +241,15 @@ struct TValue
         return m_value == Nil().m_value;
     }
 
+    template<typename T>
+    bool WARN_UNUSED Is();
+
+    template<typename T>
+    auto WARN_UNUSED As();
+
+    template<typename T>
+    static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
+
     uint64_t m_value;
 };
 
@@ -313,7 +322,7 @@ struct tDoubleNaN
 
     static bool check(TValue v)
     {
-        return v.IsDoubleNotNaN();
+        return v.IsDoubleNaN();
     }
 
     static TValue encode()
@@ -678,3 +687,25 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculationDefinitions();
 // Returns the human readable string of a speculation
 //
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask);
+
+template<typename T>
+bool WARN_UNUSED TValue::Is()
+{
+    static_assert(IsValidTypeSpecialization<T>);
+    return T::check(*this);
+}
+
+template<typename T>
+auto WARN_UNUSED TValue::As()
+{
+    static_assert(IsValidTypeSpecialization<T>);
+    assert(Is<T>());
+    return T::decode(*this);
+}
+
+template<typename T>
+TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val)
+{
+    static_assert(IsValidTypeSpecialization<T>);
+    return T::encode(val);
+}
