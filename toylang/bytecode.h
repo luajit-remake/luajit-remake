@@ -4426,7 +4426,7 @@ public:
         TValue rhs = bc->m_rhs.Get(rc, stackframe);
         if (likely(lhs.Is<tDouble>() && rhs.Is<tDouble>()))
         {
-            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::CreateDouble(lhs.AsDouble() + rhs.AsDouble());
+            *StackFrameHeader::GetLocalAddr(stackframe, bc->m_result) = TValue::Create<tDouble>(lhs.As<tDouble>() + rhs.As<tDouble>());
             Dispatch(rc, stackframe, bcu + sizeof(Self));
         }
         else

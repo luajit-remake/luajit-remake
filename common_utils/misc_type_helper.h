@@ -256,4 +256,4 @@ struct arg_nth_impl<N, R(*)(Args...)>
 };
 
 template<typename T, size_t N>
-using arg_nth_t = arg_nth_impl<N, T>;
+using arg_nth_t = typename arg_nth_impl<N, T>::type;
