@@ -1,0 +1,11 @@
+BasedOnStyle: WebKit
+AlignAfterOpenBracket: Align
+AllowShortCaseLabelsOnASingleLine: true
+BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Allman
+BreakConstructorInitializers: BeforeColon
+IndentGotoLabels: false
+SortIncludes: false
+SpaceAfterTemplateKeyword: false
+SpacesBeforeTrailingComments: 2
+ 
