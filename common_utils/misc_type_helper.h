@@ -257,3 +257,14 @@ struct arg_nth_impl<N, R(*)(Args...)>
 
 template<typename T, size_t N>
 using arg_nth_t = typename arg_nth_impl<N, T>::type;
+
+template<typename U, typename T>
+struct tuple_append_element_impl;
+
+template<typename U, typename... Args>
+struct tuple_append_element_impl<U, std::tuple<Args...>> {
+    using type = std::tuple<Args..., U>;
+};
+
+template<typename T, typename U>
+using tuple_append_element_t = typename tuple_append_element_impl<U, T>::type;

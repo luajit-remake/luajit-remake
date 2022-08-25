@@ -96,15 +96,32 @@ void DoWork(bool selfBinaryChanged, const std::vector<std::string>& files, const
     }
 }
 
+std::vector<std::string> GetFileList(std::string semicolonSeparatedFiles)
+{
+    std::vector<std::string> out;
+    size_t curPos = 0;
+    while (true)
+    {
+        size_t nextPos = semicolonSeparatedFiles.find(";", curPos);
+        if (nextPos == std::string::npos)
+        {
+            ReleaseAssert(curPos < semicolonSeparatedFiles.length());
+            out.push_back(semicolonSeparatedFiles.substr(curPos));
+            break;
+        }
+        ReleaseAssert(curPos < nextPos);
+        out.push_back(semicolonSeparatedFiles.substr(curPos, nextPos - curPos));
+        curPos = nextPos + 1;
+    }
+    return out;
+}
+
 int main(int argc, char** argv)
 {
-    ReleaseAssert(argc >= 2);
-    std::string outputDirectory = argv[argc - 1];
-    std::vector<std::string> files;
-    for (int i = 1; i < argc - 1; i++)
-    {
-        files.push_back(std::string(argv[i]));
-    }
+    ReleaseAssert(argc == 3);
+    std::string outputDirectory = argv[2];
+    std::string semicolonSeparatedFiles = argv[1];
+    std::vector<std::string> files = GetFileList(semicolonSeparatedFiles);
 
     std::string self_binary = argv[0];
     bool selfBinaryChanged = !CheckMd5Match(self_binary);
