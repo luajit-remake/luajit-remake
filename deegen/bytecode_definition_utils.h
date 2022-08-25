@@ -331,16 +331,19 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
 #define DEEGEN_DEFINE_BYTECODE(name) DEEGEN_DEFINE_BYTECODE_IMPL(name, __COUNTER__)
 #define DEEGEN_DEFINE_BYTECODE_IMPL(name, counter)      \
     static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value, "DEEGEN_DEFINE_BYTECODE should not be used after DEEGEN_END_BYTECODE_DEFINITIONS");  \
+    namespace {                                                                                                                                                             \
+    /* define in anonymous namespace to trigger compiler warning if user forgot to write 'DEEGEN_END_BYTECODE_DEFINITIONS' at the end of the file */                        \
     struct DeegenUserBytecodeDefinitionImpl_ ## name final : public DeegenBytecodeDefinitionDescriptor {                                                                    \
         consteval DeegenUserBytecodeDefinitionImpl_ ## name ();                                                                                                             \
     };                                                                                                                                                                      \
+    }   /* anonymous namespace */                                                                                                                                           \
     namespace detail {                                                                                                                                                      \
     template<> struct deegen_bytecode_definition_info<counter> {                                                                                                            \
         using tuple_type = tuple_append_element_t<typename deegen_bytecode_definition_info<counter-1>::tuple_type, DeegenUserBytecodeDefinitionImpl_ ## name>;              \
         static constexpr auto value = constexpr_std_array_concat(                                                                                                           \
                     deegen_bytecode_definition_info<counter-1>::value, std::array<const char*, 1> { PP_STRINGIFY(name) });                                                  \
     };                                                                                                                                                                      \
-    }   /*namespace detail*/                                                                                                                                                \
+    }   /* namespace detail */                                                                                                                                              \
     consteval DeegenUserBytecodeDefinitionImpl_ ## name :: DeegenUserBytecodeDefinitionImpl_ ## name()
 
 // Example usage:
