@@ -5,12 +5,12 @@
 #include "common.h"
 #include "llvm/IR/Function.h"
 
-bool WARN_UNUSED IsCXXSymbol(const std::string& symbol)
+inline bool WARN_UNUSED IsCXXSymbol(const std::string& symbol)
 {
     return symbol.starts_with("_Z");
 }
 
-std::string WARN_UNUSED DemangleCXXSymbol(const std::string& symbol)
+inline std::string WARN_UNUSED DemangleCXXSymbol(const std::string& symbol)
 {
     // https://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.3/a01696.html
     //
@@ -27,7 +27,7 @@ std::string WARN_UNUSED DemangleCXXSymbol(const std::string& symbol)
 // Get the demangled name of 'func'
 // 'func' must be a C++ function
 //
-std::string WARN_UNUSED GetDemangledName(llvm::Function* func)
+inline std::string WARN_UNUSED GetDemangledName(llvm::Function* func)
 {
     std::string funcName = func->getName().str();
     ReleaseAssert(IsCXXSymbol(funcName));

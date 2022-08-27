@@ -376,6 +376,18 @@ struct tInt32
     }
 };
 
+namespace detail
+{
+
+// This function is only for internal use, user should never call this function
+//
+inline HeapEntityType WARN_UNUSED DeegenTValueGetPointerType(TValue v)
+{
+    return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+}
+
+}   // namespace detail
+
 #define macro(hoi)                                                                                                              \
     struct PP_CAT(t, HOI_ENUM_NAME(hoi)) {                                                                                      \
         using TSMDef = TypeSpeculationLeaf;                                                                                     \
@@ -383,7 +395,7 @@ struct tInt32
                                                                                                                                 \
         static bool check(TValue v)                                                                                             \
         {                                                                                                                       \
-            return v.IsPointer() && v.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::HOI_ENUM_NAME(hoi);   \
+            return v.IsPointer() && detail::DeegenTValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                \
         }                                                                                                                       \
                                                                                                                                 \
         static TValue encode(HeapPtr<PtrType> o)                                                                                \

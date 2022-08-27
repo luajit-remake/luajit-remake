@@ -6,6 +6,7 @@
 #include "dump_llvm_module.h"
 #include "lambda_parser.h"
 #include "switch_case.h"
+#include "parse_bytecode_definition.h"
 
 using namespace DeegenAPI;
 using namespace llvm;
@@ -26,4 +27,14 @@ TEST(AnnotationParser, SwitchCaseSanity)
     ReleaseAssert(switchCaseList[0].m_cases.size() == 2);
     ReleaseAssert(switchCaseList[0].m_hasDefaultClause);
     ReleaseAssert(lm.size() == 0);
+}
+
+TEST(AnnotationParser, BytecodeDefinitionSanity)
+{
+    std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
+    LLVMContext& ctx = *llvmCtxHolder.get();
+
+    std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "bytecode_definition_api");
+
+    std::ignore = DeegenBytecodeDefinitionParser::ParseList(module.get());
 }

@@ -41,7 +41,7 @@ constexpr bool DeegenBytecodeOperandIsLiteralType(DeegenBytecodeOperandType valu
 
 }   // namespace detail
 
-struct DeegenBytecodeDefinitionDescriptor
+struct DeegenFrontendBytecodeDefinitionDescriptor
 {
     constexpr static size_t x_maxOperands = 10;
     constexpr static size_t x_maxQuickenings = 10;
@@ -107,8 +107,8 @@ struct DeegenBytecodeDefinitionDescriptor
             return *this;
         }
 
-        std::array<SpecializedOperand, x_maxOperands> m_base;
-        std::array<std::array<SpecializedOperand, x_maxOperands>, x_maxQuickenings> m_quickenings;
+        SpecializedOperand m_base[x_maxOperands];
+        SpecializedOperand m_quickenings[x_maxQuickenings][x_maxOperands];
     };
 
     struct OperandRef
@@ -257,7 +257,7 @@ struct DeegenBytecodeDefinitionDescriptor
         ReleaseAssert(false);
     }
 
-    consteval DeegenBytecodeDefinitionDescriptor()
+    consteval DeegenFrontendBytecodeDefinitionDescriptor()
         : m_operandTypeListInitialized(false)
         , m_implementationInitialized(false)
         , m_implementationFn(nullptr)
@@ -272,8 +272,8 @@ struct DeegenBytecodeDefinitionDescriptor
     void* m_implementationFn;
     size_t m_numOperands;
     size_t m_numVariants;
-    std::array<Operand, x_maxOperands> m_operandTypes;
-    std::array<SpecializedVariant, x_maxVariants> m_variants;
+    Operand m_operandTypes[x_maxOperands];
+    SpecializedVariant m_variants[x_maxVariants];
 };
 
 namespace detail
@@ -294,7 +294,7 @@ struct deegen_get_bytecode_def_list_impl;
 template<>
 struct deegen_get_bytecode_def_list_impl<std::tuple<>>
 {
-    static constexpr std::array<DeegenBytecodeDefinitionDescriptor, 0> value { };
+    static constexpr std::array<DeegenFrontendBytecodeDefinitionDescriptor, 0> value { };
 };
 
 template<typename Arg1, typename... Args>
@@ -302,13 +302,46 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
 {
     static constexpr Arg1 curv {};
 
-    static_assert(std::is_base_of_v<DeegenBytecodeDefinitionDescriptor, Arg1>);
+    static_assert(std::is_base_of_v<DeegenFrontendBytecodeDefinitionDescriptor, Arg1>);
     static_assert(curv.m_operandTypeListInitialized);
     static_assert(curv.m_implementationInitialized);
     static_assert(curv.m_numVariants > 0);
 
-    static constexpr auto value = constexpr_std_array_concat(std::array<DeegenBytecodeDefinitionDescriptor, 1> { curv }, deegen_get_bytecode_def_list_impl<std::tuple<Args...>>::value);
+    static constexpr auto value = constexpr_std_array_concat(std::array<DeegenFrontendBytecodeDefinitionDescriptor, 1> { curv }, deegen_get_bytecode_def_list_impl<std::tuple<Args...>>::value);
 };
+
+// It's really hard (and STL-implementation-dependent) to parse a constexpr std::array in LLVM bitcode. This is why we introduce this helper
+//
+template<typename T, size_t N>
+struct llvm_friendly_std_array
+{
+    constexpr size_t size() const { return N; }
+    T v[N];
+};
+
+template<typename T>
+struct std_array_to_llvm_friendly_array_impl;
+
+template<typename T, size_t N>
+struct std_array_to_llvm_friendly_array_impl<std::array<T, N>>
+{
+    template<size_t... I>
+    static consteval llvm_friendly_std_array<T, N> impl(std::array<T, N> v, std::index_sequence<I...>)
+    {
+        return llvm_friendly_std_array<T, N> { v[I]... };
+    }
+
+    static consteval llvm_friendly_std_array<T, N> get(std::array<T, N> v)
+    {
+        return impl(v, std::make_index_sequence<N>{ });
+    }
+};
+
+template<typename T>
+consteval auto std_array_to_llvm_friendly_array(T v)
+{
+    return std_array_to_llvm_friendly_array_impl<T>::get(v);
+}
 
 }   // namespace detail
 
@@ -320,9 +353,9 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
 #define DEEGEN_END_BYTECODE_DEFINITIONS_IMPL(counter)                                                                                                                                                       \
     static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value, "DEEGEN_END_BYTECODE_DEFINITIONS should only be used once per translation unit, after all DEEGEN_DEFINE_BYTECODE");  \
     namespace detail { template<> struct deegen_end_bytecode_definitions_macro_used<counter + 1> { static constexpr bool value = true; }; }                                                                 \
-    __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_names_in_this_tu = detail::deegen_bytecode_definition_info<counter>::value;                                                  \
-    __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_defs_in_this_tu = detail::deegen_get_bytecode_def_list_impl<                                                                 \
-        typename detail::deegen_bytecode_definition_info<counter>::tuple_type>::value;                                                                                                                      \
+    __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_names_in_this_tu = detail::std_array_to_llvm_friendly_array(detail::deegen_bytecode_definition_info<counter>::value);        \
+    __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_defs_in_this_tu = detail::std_array_to_llvm_friendly_array(detail::deegen_get_bytecode_def_list_impl<                        \
+        typename detail::deegen_bytecode_definition_info<counter>::tuple_type>::value);                                                                                                                     \
     static_assert(x_deegen_impl_all_bytecode_names_in_this_tu.size() == x_deegen_impl_all_bytecode_defs_in_this_tu.size());
 
 // DEEGEN_DEFINE_BYTECODE:
@@ -333,7 +366,7 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
     static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value, "DEEGEN_DEFINE_BYTECODE should not be used after DEEGEN_END_BYTECODE_DEFINITIONS");  \
     namespace {                                                                                                                                                             \
     /* define in anonymous namespace to trigger compiler warning if user forgot to write 'DEEGEN_END_BYTECODE_DEFINITIONS' at the end of the file */                        \
-    struct DeegenUserBytecodeDefinitionImpl_ ## name final : public DeegenBytecodeDefinitionDescriptor {                                                                    \
+    struct DeegenUserBytecodeDefinitionImpl_ ## name final : public DeegenFrontendBytecodeDefinitionDescriptor {                                                            \
         consteval DeegenUserBytecodeDefinitionImpl_ ## name ();                                                                                                             \
     };                                                                                                                                                                      \
     }   /* anonymous namespace */                                                                                                                                           \

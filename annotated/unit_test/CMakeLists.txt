@@ -6,6 +6,7 @@
 SET(DEEGEN_UNIT_TEST_IR_SOURCES
   switch_case.cpp
   bytecode_definition_api.cpp
+  llvm_constant_parser.cpp
 )
 
 add_library(deegen_unit_test_ir_sources OBJECT

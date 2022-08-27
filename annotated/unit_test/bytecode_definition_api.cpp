@@ -32,10 +32,6 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode2)
         Op("x").IsBytecodeSlot(),
         Op("y").IsConstant<tTable>()
     );
-    Variant(
-        Op("x").IsConstant<tTable>(),
-        Op("y").IsBytecodeSlot()
-    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -150,6 +150,7 @@ add_executable(main
   test_table_object_iterator.cpp
   test_annotation_switch_case.cpp
   test_dump_type_speculation.cpp
+  test_llvm_constant_parser.cpp
 )
 
 target_link_libraries(main PUBLIC
