@@ -2,67 +2,11 @@
 
 #include <sstream>
 
-namespace
-{
-
-template<typename T>
-struct get_type_speculation_defs;
-
-template<typename... Args>
-struct get_type_speculation_defs<std::tuple<Args...>>
-{
-    static constexpr size_t count = sizeof...(Args);
-
-    template<typename T>
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> get_one()
-    {
-        return std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> { std::make_pair(x_typeSpeculationMaskFor<T>, __stringify_type__<T>()) };
-    }
-
-    template<typename First, typename... Remaining>
-    static constexpr auto get_impl()
-    {
-        if constexpr(sizeof...(Remaining) == 0)
-        {
-            return get_one<First>();
-        }
-        else
-        {
-            return constexpr_std_array_concat(get_one<First>(), get_impl<Remaining...>());
-        }
-    }
-
-    static constexpr auto get()
-    {
-        return get_impl<Args...>();
-    }
-
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> value = get();
-
-    static constexpr auto get_sorted()
-    {
-        using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
-        auto arr = value;
-        std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
-            if (lhs.first != rhs.first)
-            {
-                return lhs.first > rhs.first;
-            }
-            return lhs.second < rhs.second;
-        });
-        return arr;
-    }
-
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> sorted_value = get_sorted();
-};
-
-}   // anonymous namespace
-
 std::string DumpHumanReadableTypeSpeculationDefinitions()
 {
     using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
-    constexpr size_t n = get_type_speculation_defs<TypeSpecializationList>::count;
-    std::array<ElementT, n> arr = get_type_speculation_defs<TypeSpecializationList>::value;
+    constexpr size_t n = detail::get_type_speculation_defs<TypeSpecializationList>::count;
+    std::array<ElementT, n> arr = detail::get_type_speculation_defs<TypeSpecializationList>::value;
 
     std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
         int lhsOnes = std::popcount(lhs.first);
@@ -142,16 +86,23 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
     return result;
 }
 
-std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask)
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask, bool printMaskValue)
 {
     using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
-    constexpr size_t n = get_type_speculation_defs<TypeSpecializationList>::count;
-    constexpr std::array<ElementT, n> arr = get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+    constexpr size_t n = detail::get_type_speculation_defs<TypeSpecializationList>::count;
+    constexpr std::array<ElementT, n> arr = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
 
     std::stringstream ss;
     if (mask == 0)
     {
-        ss << "tBottom (0x0)";
+        if (printMaskValue)
+        {
+            ss << "tBottom (0x0)";
+        }
+        else
+        {
+            ss << "tBottom";
+        }
     }
     else
     {
@@ -173,7 +124,10 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mas
             }
         }
         ReleaseAssert(mask == 0);
-        ss << " (0x" << std::hex << originalVal << std::dec << ")";
+        if (printMaskValue)
+        {
+            ss << " (0x" << std::hex << originalVal << std::dec << ")";
+        }
     }
     std::string result = ss.str();
     return result;

@@ -255,8 +255,53 @@ struct arg_nth_impl<N, R(*)(Args...)>
     using type = parameter_pack_nth_t<N, Args...>;
 };
 
+template<size_t N, typename R, typename... Args>
+struct arg_nth_impl<N, NO_RETURN R(*)(Args...)>
+{
+    using type = parameter_pack_nth_t<N, Args...>;
+};
+
 template<typename T, size_t N>
 using arg_nth_t = typename arg_nth_impl<N, T>::type;
+
+template<typename T>
+struct is_no_return_function : std::false_type { };
+
+template<typename R, typename... Args>
+struct is_no_return_function<NO_RETURN R(*)(Args...)> : std::true_type { };
+
+template<typename T>
+constexpr bool is_no_return_function_v = is_no_return_function<T>::value;
+
+template<typename T>
+struct num_args_in_function_impl;
+
+template<typename R, typename... Args>
+struct num_args_in_function_impl<R(*)(Args...)>
+{
+    static constexpr size_t value = sizeof...(Args);
+};
+
+template<typename R, typename... Args>
+struct num_args_in_function_impl<NO_RETURN R(*)(Args...)>
+{
+    static constexpr size_t value = sizeof...(Args);
+};
+
+template<typename T>
+constexpr size_t num_args_in_function = num_args_in_function_impl<T>::value;
+
+template<typename T>
+struct function_return_type_impl;
+
+template<typename R, typename... Args>
+struct function_return_type_impl<R(*)(Args...)>
+{
+    using type = R;
+};
+
+template<typename T>
+using function_return_type_t = typename function_return_type_impl<T>::type;
 
 template<typename U, typename T>
 struct tuple_append_element_impl;

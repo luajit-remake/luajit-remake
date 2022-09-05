@@ -10,8 +10,18 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/CFG.h"
+#include "llvm/Transforms/Utils.h"
+#include "llvm/Pass.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include "cxx_symbol_demangler.h"
+#include "deegen_desugaring_level.h"
 
 namespace dast
 {
@@ -178,6 +188,21 @@ template<typename T>
 bool WARN_UNUSED llvm_constant_has_value(llvm::Constant* cst, T expectedValue)
 {
     return GetValueOfLLVMConstantInt<T>(cst) == expectedValue;
+}
+
+template<typename T>
+llvm::ConstantInt* CreateLLVMConstantInt(llvm::LLVMContext& ctx, T value)
+{
+    static_assert(std::is_integral_v<T>);
+    using namespace llvm;
+    if constexpr(std::is_same_v<T, bool>)
+    {
+        return ConstantInt::get(ctx, APInt(1 /*numBits*/, static_cast<uint64_t>(value), false /*isSigned*/));
+    }
+    else
+    {
+        return ConstantInt::get(ctx, APInt(sizeof(T) * 8 /*numBits*/, static_cast<uint64_t>(value), std::is_signed_v<T> /*isSigned*/));
+    }
 }
 
 class LLVMConstantStructReader
@@ -485,14 +510,15 @@ private:
 // We currently only support two representations: strings directly represented as an array of i8,
 // and strings represented as i8* GetElementPtr (some_global, 0, 0)
 //
-inline std::string GetLLVMConstantString(llvm::Constant* value)
+inline std::string GetValueFromLLVMConstantCString(llvm::Constant* value)
 {
     using namespace llvm;
     ConstantDataArray* cda = dyn_cast<ConstantDataArray>(value);
+    std::string r;
     if (cda != nullptr)
     {
         ReleaseAssert(llvm_type_has_type<uint8_t>(cda->getType()->getElementType()));
-        return cda->getAsString().str();
+        r = cda->getAsString().str();
     }
     else
     {
@@ -510,8 +536,15 @@ inline std::string GetLLVMConstantString(llvm::Constant* value)
         cda = dyn_cast<ConstantDataArray>(gvi);
         ReleaseAssert(cda != nullptr);
         ReleaseAssert(llvm_type_has_type<uint8_t>(cda->getType()->getElementType()));
-        return cda->getAsString().str();
+        r = cda->getAsString().str();
     }
+    ReleaseAssert(r.length() > 0 && r[r.length() - 1] == '\0');
+    for (size_t i = 0; i < r.length() - 1; i++)
+    {
+        ReleaseAssert(r[i] != '\0');
+    }
+    r = r.substr(0, r.length() - 1);
+    return r;
 }
 
 inline llvm::Constant* GetConstexprGlobalValue(llvm::Module* module, std::string name)
@@ -521,6 +554,97 @@ inline llvm::Constant* GetConstexprGlobalValue(llvm::Module* module, std::string
     ReleaseAssert(gv != nullptr);
     ReleaseAssert(gv->isConstant());
     return gv->getInitializer();
+}
+
+inline void RunLLVMOptimizePass(llvm::Module* module)
+{
+    using namespace llvm;
+
+    PassBuilder passBuilder;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+    ModulePassManager MPM;
+
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    MPM = passBuilder.buildPerModuleDefaultPipeline(OptimizationLevel::O3);
+
+    ReleaseAssert(module != nullptr);
+    MPM.run(*module, MAM);
+}
+
+// In LLVM, a function A may be inlined into a function B only if B's target-features
+// is a superset of that of A. (This is because B may be calling into A only after checking
+// the CPU features needed by A exists. If A were inlined into B, the logic of A may be moved
+// around by optimizer to outside of the CPU feature check, resulting in a bug).
+//
+// Fortunately, since our IR will be run on the same CPU as the cpp source files, we can simply
+// copy the target features from a Clang-generated function definition.
+//
+// We also additionally copy a bunch of other attributes just to avoid other potential surprises
+// like the above one that prevents inlining.
+//
+inline void CopyFunctionAttributes(llvm::Function* dstFunc, llvm::Function* srcFunc)
+{
+    using namespace llvm;
+    constexpr const char* featuresToCopy[] = {
+        "target-cpu",
+        "target-features",
+        "tune-cpu",
+        "frame-pointer",
+        "min-legal-vector-width",
+        "no-trapping-math",
+        "stack-protector-buffer-size"
+    };
+    constexpr size_t numFeatures = std::extent_v<decltype(featuresToCopy), 0 /*dimension*/>;
+    for (size_t i = 0; i < numFeatures; i++)
+    {
+        const char* feature = featuresToCopy[i];
+        ReleaseAssert(!dstFunc->hasFnAttribute(feature));
+        ReleaseAssert(srcFunc->hasFnAttribute(feature));
+        Attribute attr = srcFunc->getFnAttribute(feature);
+        dstFunc->addFnAttr(attr);
+        ReleaseAssert(dstFunc->hasFnAttribute(feature));
+    }
+}
+
+inline void ValidateLLVMFunction(llvm::Function* func)
+{
+    using namespace llvm;
+    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
+    ReleaseAssert(verifyFunction(*func, &tmp) == false);
+}
+
+inline void ValidateLLVMModule(llvm::Module* module)
+{
+    using namespace llvm;
+    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
+    ReleaseAssert(verifyModule(*module, &tmp) == false);
+}
+
+// Each call on the same module may only increase DesugaringLevel
+//
+void DesugarAndSimplifyLLVMModule(llvm::Module* module, DesugaringLevel level);
+
+// Remove anything unrelated to the specified function:
+// function bodies of all other functions are dropped, then all unreferenced symbols are removed.
+//
+// Note that this creates a new module, and invalidates any reference to the old module.
+//
+void ExtractFunction(llvm::Module*& module /*inout*/, std::string functionName);
+
+inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* value)
+{
+    ReleaseAssert(inst->getType() == value->getType());
+    using namespace llvm;
+    BasicBlock::iterator BI(inst);
+    ReplaceInstWithValue(inst->getParent()->getInstList(), BI, value);
 }
 
 }   // namespace dast

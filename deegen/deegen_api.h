@@ -10,6 +10,8 @@ namespace DeegenAPI
 void NO_RETURN Return(TValue value);
 void NO_RETURN Return();
 
+void NO_RETURN Error(const char* msg);
+
 namespace detail {
 
 template<typename Lambda>

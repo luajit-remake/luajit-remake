@@ -374,3 +374,11 @@ inline void ALWAYS_INLINE SafeMemcpy(void* dst, const void* src, size_t len)
     assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
     memcpy(dst, src, len);
 }
+
+template<typename T>
+constexpr T WARN_UNUSED SingletonBitmask(size_t bitOrd)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_unsigned_v<T>);
+    assert(bitOrd < sizeof(T) * 8);
+    return static_cast<T>(static_cast<T>(1) << bitOrd);
+}

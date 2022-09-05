@@ -16,6 +16,15 @@ enum class DeegenBytecodeOperandType
     UInt32
 };
 
+enum class DeegenSpecializationKind : uint8_t
+{
+    NotSpecialized,
+    Literal,
+    SpeculatedTypeForOptimizer,
+    BytecodeSlot,
+    BytecodeConstantWithType
+};
+
 namespace detail
 {
 
@@ -71,18 +80,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         return Operand { name, DeegenBytecodeOperandType::Constant };
     }
 
-    enum class SpecializationKind : uint8_t
-    {
-        NotSpecialized,
-        Literal,
-        SpeculatedTypeForOptimizer,
-        BytecodeSlot,
-        BytecodeConstantWithType
-    };
-
     struct SpecializedOperand
     {
-        SpecializationKind m_kind;
+        DeegenSpecializationKind m_kind;
         // The interpretation of 'm_value' depends on 'm_kind'
         // m_kind == Literal: m_value is the value of the literal casted to uint64_t
         // m_kind == SpeculatedTypeForOptimizer: m_value is the type speculation mask
@@ -118,7 +118,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         {
             static_assert(std::is_integral_v<T>);
             ReleaseAssert(detail::DeegenBytecodeOperandIsLiteralType(m_operand.m_type));
-            return { .m_operand = { .m_kind = SpecializationKind::Literal, .m_value = static_cast<uint64_t>(val) }, .m_ord = m_ord };
+            return { .m_operand = { .m_kind = DeegenSpecializationKind::Literal, .m_value = static_cast<uint64_t>(val) }, .m_ord = m_ord };
         }
 
         template<typename T>
@@ -126,13 +126,13 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         {
             static_assert(IsValidTypeSpecialization<T>);
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot);
-            return { .m_operand = { .m_kind = SpecializationKind::SpeculatedTypeForOptimizer, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+            return { .m_operand = { .m_kind = DeegenSpecializationKind::SpeculatedTypeForOptimizer, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
         }
 
         consteval SpecializedOperandRef IsBytecodeSlot()
         {
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
-            return { .m_operand = { .m_kind = SpecializationKind::BytecodeSlot, .m_value = 0 }, .m_ord = m_ord };
+            return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeSlot, .m_value = 0 }, .m_ord = m_ord };
         }
 
         template<typename T>
@@ -140,7 +140,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         {
             static_assert(IsValidTypeSpecialization<T>);
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
-            return { .m_operand = { .m_kind = SpecializationKind::BytecodeConstantWithType, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+            return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeConstantWithType, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
         }
 
         size_t m_ord;
@@ -185,17 +185,17 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             }
             case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
             {
-                ReleaseAssert((o.m_kind == SpecializationKind::BytecodeSlot || o.m_kind == SpecializationKind::BytecodeConstantWithType) && "All BytecodeSlotOrConstant must be specialized in each variant");
+                ReleaseAssert((o.m_kind == DeegenSpecializationKind::BytecodeSlot || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType) && "All BytecodeSlotOrConstant must be specialized in each variant");
                 break;
             }
             case DeegenBytecodeOperandType::BytecodeSlot:
             {
-                ReleaseAssert(o.m_kind == SpecializationKind::NotSpecialized);
+                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized);
                 break;
             }
             case DeegenBytecodeOperandType::Constant:
             {
-                ReleaseAssert(o.m_kind == SpecializationKind::NotSpecialized || o.m_kind == SpecializationKind::BytecodeConstantWithType);
+                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType);
                 break;
             }
             case DeegenBytecodeOperandType::Int8:
@@ -205,7 +205,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             case DeegenBytecodeOperandType::Int32:
             case DeegenBytecodeOperandType::UInt32:
             {
-                ReleaseAssert(o.m_kind == SpecializationKind::NotSpecialized || o.m_kind == SpecializationKind::Literal);
+                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::Literal);
                 break;
             }
             }
@@ -236,12 +236,73 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         }
     }
 
+    template<size_t ord, typename T>
+    consteval void ValidateImplementationPrototype()
+    {
+        static_assert(is_no_return_function_v<T>, "the function should be annotated with NO_RETURN");
+        static_assert(ord <= num_args_in_function<T>);
+        if constexpr(ord == num_args_in_function<T>)
+        {
+            ReleaseAssert(ord == m_numOperands);
+            return;
+        }
+        else
+        {
+            using Arg = arg_nth_t<T, ord>;
+            ReleaseAssert(ord < m_numOperands);
+            DeegenBytecodeOperandType opType = m_operandTypes[ord].m_type;
+            switch (opType)
+            {
+            case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
+            case DeegenBytecodeOperandType::BytecodeSlot:
+            case DeegenBytecodeOperandType::Constant:
+            {
+                ReleaseAssert((std::is_same_v<Arg, TValue>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int8:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int8_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt8:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint8_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int16:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int16_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt16:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint16_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int32:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int32_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt32:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint32_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::INVALID_TYPE:
+                ReleaseAssert(false);
+            }
+        }
+    }
+
     template<typename T>
     consteval void Implementation(T v)
     {
         ReleaseAssert(!m_implementationInitialized);
         m_implementationInitialized = true;
         m_implementationFn = FOLD_CONSTEXPR(reinterpret_cast<void*>(v));
+        ValidateImplementationPrototype<0, T>();
     }
 
     consteval OperandRef Op(std::string_view name)
@@ -309,39 +370,6 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
 
     static constexpr auto value = constexpr_std_array_concat(std::array<DeegenFrontendBytecodeDefinitionDescriptor, 1> { curv }, deegen_get_bytecode_def_list_impl<std::tuple<Args...>>::value);
 };
-
-// It's really hard (and STL-implementation-dependent) to parse a constexpr std::array in LLVM bitcode. This is why we introduce this helper
-//
-template<typename T, size_t N>
-struct llvm_friendly_std_array
-{
-    constexpr size_t size() const { return N; }
-    T v[N];
-};
-
-template<typename T>
-struct std_array_to_llvm_friendly_array_impl;
-
-template<typename T, size_t N>
-struct std_array_to_llvm_friendly_array_impl<std::array<T, N>>
-{
-    template<size_t... I>
-    static consteval llvm_friendly_std_array<T, N> impl(std::array<T, N> v, std::index_sequence<I...>)
-    {
-        return llvm_friendly_std_array<T, N> { v[I]... };
-    }
-
-    static consteval llvm_friendly_std_array<T, N> get(std::array<T, N> v)
-    {
-        return impl(v, std::make_index_sequence<N>{ });
-    }
-};
-
-template<typename T>
-consteval auto std_array_to_llvm_friendly_array(T v)
-{
-    return std_array_to_llvm_friendly_array_impl<T>::get(v);
-}
 
 }   // namespace detail
 

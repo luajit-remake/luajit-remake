@@ -20,49 +20,54 @@ struct MiscImmediateValue
         assert(m_value == x_nil || m_value == x_true || m_value == x_false);
     }
 
-    bool ALWAYS_INLINE IsNil() const
+    bool IsNil() const
     {
         return m_value == 0;
     }
 
-    bool ALWAYS_INLINE IsBoolean() const
+    bool IsTrue() const
+    {
+        return m_value == x_true;
+    }
+
+    bool IsBoolean() const
     {
         return m_value != 0;
     }
 
-    bool ALWAYS_INLINE GetBooleanValue() const
+    bool GetBooleanValue() const
     {
         assert(IsBoolean());
         return m_value & 1;
     }
 
-    MiscImmediateValue WARN_UNUSED ALWAYS_INLINE FlipBooleanValue() const
+    MiscImmediateValue WARN_UNUSED FlipBooleanValue() const
     {
         assert(IsBoolean());
         return MiscImmediateValue { m_value ^ 1 };
     }
 
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateNil()
+    static MiscImmediateValue WARN_UNUSED CreateNil()
     {
         return MiscImmediateValue { x_nil };
     }
 
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateBoolean(bool v)
+    static MiscImmediateValue WARN_UNUSED CreateBoolean(bool v)
     {
         return MiscImmediateValue { v ? x_true : x_false };
     }
 
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateFalse()
+    static MiscImmediateValue WARN_UNUSED CreateFalse()
     {
         return MiscImmediateValue { x_false };
     }
 
-    static MiscImmediateValue WARN_UNUSED ALWAYS_INLINE CreateTrue()
+    static MiscImmediateValue WARN_UNUSED CreateTrue()
     {
         return MiscImmediateValue { x_true };
     }
 
-    bool WARN_UNUSED ALWAYS_INLINE operator==(const MiscImmediateValue& rhs) const
+    bool WARN_UNUSED operator==(const MiscImmediateValue& rhs) const
     {
         return m_value == rhs.m_value;
     }
@@ -93,15 +98,15 @@ struct TValue
     // but currently we don't need it either.
     //
 
-    TValue() : m_value(0) { }
-    TValue(uint64_t value) : m_value(value) { }
+    ALWAYS_INLINE TValue() : m_value(0) { }
+    ALWAYS_INLINE TValue(uint64_t value) : m_value(value) { }
 
     static constexpr uint64_t x_int32Tag = 0xFFFBFFFF00000000ULL;
     static constexpr uint64_t x_mivTag = 0xFFFCFFFF0000007FULL;
 
     // Translates to a single ANDN instruction with BMI1 support
     //
-    bool IsInt32() const
+    bool ALWAYS_INLINE IsInt32() const
     {
         bool result = (m_value & x_int32Tag) == x_int32Tag;
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
@@ -110,14 +115,14 @@ struct TValue
 
     // Translates to imm8 LEA instruction + ANDN instruction with BMI1 support
     //
-    bool IsMIV() const
+    bool ALWAYS_INLINE IsMIV() const
     {
         bool result = (m_value & (x_mivTag - 0x7F)) == (x_mivTag - 0x7F);
         AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
         return result;
     }
 
-    bool IsPointer() const
+    bool ALWAYS_INLINE IsPointer() const
     {
         bool result = (m_value > x_mivTag);
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) >= 0xFFFFFFFCU &&
@@ -125,31 +130,31 @@ struct TValue
         return result;
     }
 
-    bool IsDouble() const
+    bool ALWAYS_INLINE IsDouble() const
     {
         bool result = m_value < x_int32Tag;
         AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
         return result;
     }
 
-    bool IsDoubleNotNaN() const
+    bool ALWAYS_INLINE IsDoubleNotNaN() const
     {
         return !IsNaN(cxx2a_bit_cast<double>(m_value));
     }
 
-    bool IsDoubleNaN() const
+    bool ALWAYS_INLINE IsDoubleNaN() const
     {
         static constexpr uint64_t x_pureNaN = 0x7ff8000000000000ULL;
         return m_value == x_pureNaN;
     }
 
-    double AsDouble() const
+    double ALWAYS_INLINE AsDouble() const
     {
         assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
         return cxx2a_bit_cast<double>(m_value);
     }
 
-    int32_t AsInt32() const
+    int32_t ALWAYS_INLINE AsInt32() const
     {
         assert(IsInt32() && !IsMIV() && !IsPointer() && !IsDouble());
         return BitwiseTruncateTo<int32_t>(m_value);
@@ -157,19 +162,19 @@ struct TValue
 
     // Return true if the value is not 'nil' or 'false'
     //
-    bool IsTruthy() const
+    bool ALWAYS_INLINE IsTruthy() const
     {
         return m_value != Nil().m_value && m_value != CreateFalse().m_value;
     }
 
     template<typename T = void>
-    UserHeapPointer<T> AsPointer() const
+    UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
         assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
         return UserHeapPointer<T> { reinterpret_cast<HeapPtr<T>>(m_value) };
     }
 
-    MiscImmediateValue AsMIV() const
+    MiscImmediateValue ALWAYS_INLINE AsMIV() const
     {
         assert(IsMIV() && !IsDouble() && !IsInt32() && !IsPointer());
         return MiscImmediateValue { m_value ^ x_mivTag };
@@ -236,16 +241,16 @@ struct TValue
         return TValue::CreateMIV(MiscImmediateValue::CreateNil());
     }
 
-    bool IsNil() const
+    bool ALWAYS_INLINE IsNil() const
     {
         return m_value == Nil().m_value;
     }
 
     template<typename T>
-    bool WARN_UNUSED Is();
+    bool WARN_UNUSED ALWAYS_INLINE Is();
 
     template<typename T>
-    auto WARN_UNUSED As();
+    auto WARN_UNUSED ALWAYS_INLINE As();
 
     template<typename T>
     static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
@@ -255,6 +260,10 @@ struct TValue
 
 // Below are the type speculation / specialization definitions
 //
+// TSMDef: the bitmask definition of the type
+// x_estimatedCheckCost: the estimated cost to execute a check of this type.
+// The estimation is currently a bit arbitrary, but "one single-cycle instruction = 10 cost" is a good baseline
+//
 
 struct TypeSpeculationLeaf;
 template<typename... Args> struct tsm_or;
@@ -263,6 +272,7 @@ template<typename Arg> struct tsm_not;
 struct tNil
 {
     using TSMDef = TypeSpeculationLeaf;
+    static constexpr size_t x_estimatedCheckCost = 10;
 
     static bool check(TValue v)
     {
@@ -277,11 +287,12 @@ struct tNil
 
 struct tBool
 {
-    using TSMDef = TypeSpeculationLeaf;
+    using TSMDef = TypeSpeculationLeaf; 
+    static constexpr size_t x_estimatedCheckCost = 60;
 
     static bool check(TValue v)
     {
-        return v.IsMIV() && v.AsMIV().IsBoolean();
+        return v.IsMIV() && !v.IsNil();
     }
 
     static TValue encode(bool v)
@@ -295,9 +306,31 @@ struct tBool
     }
 };
 
+struct tMIV
+{
+    using TSMDef = tsm_or<tNil, tBool>;
+    static constexpr size_t x_estimatedCheckCost = 30;
+
+    static bool check(TValue v)
+    {
+        return v.IsMIV();
+    }
+
+    static TValue encode(MiscImmediateValue v)
+    {
+        return TValue::CreateMIV(v);
+    }
+
+    static MiscImmediateValue decode(TValue v)
+    {
+        return v.AsMIV();
+    }
+};
+
 struct tDoubleNotNaN
 {
     using TSMDef = TypeSpeculationLeaf;
+    static constexpr size_t x_estimatedCheckCost = 10;
 
     static bool check(TValue v)
     {
@@ -319,6 +352,7 @@ struct tDoubleNotNaN
 struct tDoubleNaN
 {
     using TSMDef = TypeSpeculationLeaf;
+    static constexpr size_t x_estimatedCheckCost = 30;
 
     static bool check(TValue v)
     {
@@ -339,6 +373,7 @@ struct tDoubleNaN
 struct tDouble
 {
     using TSMDef = tsm_or<tDoubleNotNaN, tDoubleNaN>;
+    static constexpr size_t x_estimatedCheckCost = 20;
 
     static bool check(TValue v)
     {
@@ -359,6 +394,7 @@ struct tDouble
 struct tInt32
 {
     using TSMDef = TypeSpeculationLeaf;
+    static constexpr size_t x_estimatedCheckCost = 10;
 
     static bool check(TValue v)
     {
@@ -376,26 +412,23 @@ struct tInt32
     }
 };
 
-namespace detail
-{
-
 // This function is only for internal use, user should never call this function
+// Don't change this function name: it is hardcoded for our LLVM logic
 //
-inline HeapEntityType WARN_UNUSED DeegenTValueGetPointerType(TValue v)
+inline HeapEntityType WARN_UNUSED DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 }
 
-}   // namespace detail
-
 #define macro(hoi)                                                                                                              \
     struct PP_CAT(t, HOI_ENUM_NAME(hoi)) {                                                                                      \
         using TSMDef = TypeSpeculationLeaf;                                                                                     \
+        static constexpr size_t x_estimatedCheckCost = 100;                                                                     \
         using PtrType = HeapObjectTypeForEnum<HeapEntityType::HOI_ENUM_NAME(hoi)>;                                              \
                                                                                                                                 \
         static bool check(TValue v)                                                                                             \
         {                                                                                                                       \
-            return v.IsPointer() && detail::DeegenTValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                \
+            return v.IsPointer() && DeegenImpl_TValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                   \
         }                                                                                                                       \
                                                                                                                                 \
         static TValue encode(HeapPtr<PtrType> o)                                                                                \
@@ -418,6 +451,8 @@ struct tHeapEntity
     using TSMDef = tsm_or<tsm_or<> PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)>;
 #undef macro
 
+    static constexpr size_t x_estimatedCheckCost = 10;
+
     static bool check(TValue v)
     {
         return v.IsPointer();
@@ -438,6 +473,8 @@ struct tHeapEntity
 //
 struct tBottom
 {
+    static constexpr size_t x_estimatedCheckCost = 0;
+
     static bool check(TValue /*v*/)
     {
         return false;
@@ -446,6 +483,8 @@ struct tBottom
 
 struct tTop
 {
+    static constexpr size_t x_estimatedCheckCost = 0;
+
     static bool check(TValue /*v*/)
     {
         return true;
@@ -465,6 +504,7 @@ struct tTop
 using TypeSpecializationList = std::tuple<
     tNil
   , tBool
+  , tMIV
   , tDoubleNotNaN
   , tDoubleNaN
   , tInt32
@@ -564,6 +604,12 @@ struct num_leaves_in_type_speculation_list<std::tuple<Args...>>
     static constexpr size_t value = count_leaves<Args...>();
 };
 
+}   // namespace detail
+
+constexpr size_t x_numUsefulBitsInTypeSpeculationMask = detail::num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
+
+namespace detail {
+
 template<typename T> struct leaf_ordinal_in_type_speculation_list;
 
 template<typename... Args>
@@ -598,7 +644,7 @@ static_assert(std::is_unsigned_v<TypeSpeculationMask> && std::is_integral_v<Type
 
 constexpr TypeSpeculationMask ComputeTypeSpeculationMaskForTop()
 {
-    constexpr size_t numLeaves = num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
+    constexpr size_t numLeaves = x_numUsefulBitsInTypeSpeculationMask;
     static_assert(numLeaves <= sizeof(TypeSpeculationMask) * 8);
     return static_cast<TypeSpeculationMask>(-1) >> (sizeof(TypeSpeculationMask) * 8 - numLeaves);
 }
@@ -692,27 +738,249 @@ struct compute_type_speculation_mask
 template<typename T>
 constexpr TypeSpeculationMask x_typeSpeculationMaskFor = detail::compute_type_speculation_mask::value<T>;
 
+namespace detail {
+
+template<typename T>
+struct get_type_speculation_defs;
+
+template<typename... Args>
+struct get_type_speculation_defs<std::tuple<Args...>>
+{
+    static constexpr size_t count = sizeof...(Args);
+
+    template<typename T>
+    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> get_one()
+    {
+        return std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> { std::make_pair(x_typeSpeculationMaskFor<T>, __stringify_type__<T>()) };
+    }
+
+    template<typename First, typename... Remaining>
+    static constexpr auto get_impl()
+    {
+        if constexpr(sizeof...(Remaining) == 0)
+        {
+            return get_one<First>();
+        }
+        else
+        {
+            return constexpr_std_array_concat(get_one<First>(), get_impl<Remaining...>());
+        }
+    }
+
+    static constexpr auto get()
+    {
+        return get_impl<Args...>();
+    }
+
+    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> value = get();
+
+    static constexpr auto get_sorted()
+    {
+        using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
+        auto arr = value;
+        std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
+            if (lhs.first != rhs.first)
+            {
+                return lhs.first > rhs.first;
+            }
+            return lhs.second < rhs.second;
+        });
+        return arr;
+    }
+
+    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> sorted_value = get_sorted();
+};
+
+}   // namespace detail
+
 // Returns the human readable definitions of each type speculation mask
 //
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculationDefinitions();
 
 // Returns the human readable string of a speculation
 //
-std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask);
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask, bool printMaskValue = false);
+
+// Some utility logic and macros for typecheck strength reduction definitions
+//
+struct tvalue_typecheck_strength_reduction_rule
+{
+    // The type mask to check
+    //
+    TypeSpeculationMask m_typeToCheck;
+    // The proven type mask precondition
+    //
+    TypeSpeculationMask m_typePrecondition;
+    // The function to do the job
+    //
+    using Fn = bool(*)(TValue);
+    Fn m_implementation;
+    // The estimated cost
+    //
+    size_t m_estimatedCost;
+};
+
+template<typename T, typename U> struct tvalue_typecheck_strength_reduction_impl_holder /*intentionally undefined*/;
+
+template<int v> struct tvalue_typecheck_strength_reduction_def_helper : tvalue_typecheck_strength_reduction_def_helper<v-1> {};
+
+template<>
+struct tvalue_typecheck_strength_reduction_def_helper<-1>
+{
+    static constexpr std::array<tvalue_typecheck_strength_reduction_rule, 0> value {};
+};
+
+// Some helper code to get the basic versions (no type precondition) of the type check logic
+//
+namespace detail {
 
 template<typename T>
-bool WARN_UNUSED TValue::Is()
+struct get_basic_tvalue_typecheck_impls;
+
+template<typename... Args>
+struct get_basic_tvalue_typecheck_impls<std::tuple<Args...>>
 {
-    static_assert(IsValidTypeSpecialization<T>);
-    return T::check(*this);
+    template<typename First, typename... Remaining>
+    static constexpr auto get_impl()
+    {
+        return constexpr_std_array_concat(
+            get_basic_tvalue_typecheck_impls<std::tuple<Remaining...>>::value,
+            std::array<tvalue_typecheck_strength_reduction_rule, 1> {
+                tvalue_typecheck_strength_reduction_rule {
+                    .m_typeToCheck = x_typeSpeculationMaskFor<First>,
+                    .m_typePrecondition = x_typeSpeculationMaskFor<tTop>,
+                    .m_implementation = First::check,
+                    .m_estimatedCost = First::x_estimatedCheckCost
+                }
+            });
+    }
+
+    static constexpr auto get()
+    {
+        if constexpr(sizeof...(Args) == 0)
+        {
+            return std::array<tvalue_typecheck_strength_reduction_rule, 0> {};
+        }
+        else
+        {
+            return get_impl<Args...>();
+        }
+    }
+
+    static constexpr auto value = get();
+};
+
+// It's really hard (and STL-implementation-dependent) to parse a constexpr std::array in LLVM bitcode. This is why we introduce this helper
+//
+template<typename T, size_t N>
+struct llvm_friendly_std_array
+{
+    constexpr size_t size() const { return N; }
+    T v[N];
+};
+
+template<typename T>
+struct std_array_to_llvm_friendly_array_impl;
+
+template<typename T, size_t N>
+struct std_array_to_llvm_friendly_array_impl<std::array<T, N>>
+{
+    template<size_t... I>
+    static consteval llvm_friendly_std_array<T, N> impl(std::array<T, N> v, std::index_sequence<I...>)
+    {
+        return llvm_friendly_std_array<T, N> { v[I]... };
+    }
+
+    static consteval llvm_friendly_std_array<T, N> get(std::array<T, N> v)
+    {
+        return impl(v, std::make_index_sequence<N> {});
+    }
+};
+
+template<typename T>
+consteval auto std_array_to_llvm_friendly_array(T v)
+{
+    return std_array_to_llvm_friendly_array_impl<T>::get(v);
+}
+
+}  // namespace detail
+
+#define DEFINE_TVALUE_TYPECHECK_STRENGTH_REDUCTION(typeToCheck, typePrecondition, estimatedCost, argName) DEFINE_TVALUE_TYPECHECK_STRENGTH_REDUCTION_IMPL(typeToCheck, typePrecondition, estimatedCost, argName, __COUNTER__)
+#define DEFINE_TVALUE_TYPECHECK_STRENGTH_REDUCTION_IMPL(typeToCheck, typePrecondition, estimatedCost, argName, counter)                              \
+    template<>                                                                                                                                       \
+    struct tvalue_typecheck_strength_reduction_impl_holder<typeToCheck, typePrecondition>                                                            \
+    {                                                                                                                                                \
+        static bool impl(TValue);                                                                                                                    \
+    };                                                                                                                                               \
+    template<>                                                                                                                                       \
+    struct tvalue_typecheck_strength_reduction_def_helper<counter>                                                                                   \
+    {                                                                                                                                                \
+        static_assert((x_typeSpeculationMaskFor<typeToCheck> & x_typeSpeculationMaskFor<typePrecondition>) == x_typeSpeculationMaskFor<typeToCheck>, \
+                      "precondition must be a superset of the types to check");                                                                      \
+        static constexpr auto value = constexpr_std_array_concat(                                                                                    \
+            tvalue_typecheck_strength_reduction_def_helper<counter - 1>::value,                                                                      \
+            std::array<tvalue_typecheck_strength_reduction_rule, 1> {                                                                                \
+                tvalue_typecheck_strength_reduction_rule {                                                                                           \
+                    .m_typeToCheck = x_typeSpeculationMaskFor<typeToCheck>,                                                                          \
+                    .m_typePrecondition = x_typeSpeculationMaskFor<typePrecondition>,                                                                \
+                    .m_implementation = tvalue_typecheck_strength_reduction_impl_holder<typeToCheck, typePrecondition>::impl,                        \
+                    .m_estimatedCost = (estimatedCost) } });                                                                                         \
+    };                                                                                                                                               \
+    inline bool tvalue_typecheck_strength_reduction_impl_holder<typeToCheck, typePrecondition>::impl(TValue argName)
+
+#define END_OF_TVALUE_TYPECHECK_STRENGTH_REDUCTION_DEFINITIONS                                              \
+    __attribute__((__used__)) inline constexpr auto x_list_of_tvalue_typecheck_strength_reduction_rules =   \
+        detail::std_array_to_llvm_friendly_array(                                                           \
+            constexpr_std_array_concat(                                                                     \
+                tvalue_typecheck_strength_reduction_def_helper<__COUNTER__>::value,                         \
+                detail::get_basic_tvalue_typecheck_impls<TypeSpecializationList>::value));
+
+// Define the additional strength reduction rules
+//
+// For now, we only need the rules that remove the IsPointer() check
+//
+#define macro(hoi)                                                                                                  \
+    DEFINE_TVALUE_TYPECHECK_STRENGTH_REDUCTION(PP_CAT(t, HOI_ENUM_NAME(hoi)), tHeapEntity, 60 /*estimatedCost*/, v) \
+    {                                                                                                               \
+        return DeegenImpl_TValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                            \
+    }
+
+PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)
+#undef macro
+
+END_OF_TVALUE_TYPECHECK_STRENGTH_REDUCTION_DEFINITIONS
+
+// Internal use only, do not call from user code
+// Do not change this function name: it is hardcoded for our LLVM logic
+//
+template<typename T>
+bool DeegenImpl_TValueIs(TValue val)
+{
+    return T::check(val);
+}
+
+// Internal use only, do not call from user code
+// Do not change this function name: it is hardcoded for our LLVM logic
+//
+template<typename T>
+auto DeegenImpl_TValueAs(TValue val)
+{
+    return T::decode(val);
 }
 
 template<typename T>
-auto WARN_UNUSED TValue::As()
+bool WARN_UNUSED ALWAYS_INLINE TValue::Is()
+{
+    static_assert(IsValidTypeSpecialization<T>);
+    return DeegenImpl_TValueIs<T>(*this);
+}
+
+template<typename T>
+auto WARN_UNUSED ALWAYS_INLINE TValue::As()
 {
     static_assert(IsValidTypeSpecialization<T>);
     assert(Is<T>());
-    return T::decode(*this);
+    return DeegenImpl_TValueAs<T>(*this);
 }
 
 template<typename T>
@@ -721,4 +989,3 @@ TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> 
     static_assert(IsValidTypeSpecialization<T>);
     return T::encode(val);
 }
-

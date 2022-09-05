@@ -20,7 +20,6 @@
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <immintrin.h>
 #include <thread>
@@ -35,6 +34,8 @@
 #include <random>
 #include <mutex>
 #include <optional>
+#include <sstream>
+#include <string>
 #include "pp_common.h"
 #include "function_ref.h"
 
