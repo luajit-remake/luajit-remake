@@ -10,7 +10,7 @@
 
 namespace dast {
 
-void ExtractFunction(llvm::Module*& module /*inout*/, std::string functionName)
+llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName)
 {
     using namespace llvm;
 
@@ -359,8 +359,6 @@ void ExtractFunction(llvm::Module*& module /*inout*/, std::string functionName)
                 llvmErr.print("extract_ir", errs());
                 abort();
             }
-            // The old module is leaked.. but let's worry about it later
-            //
             module = newModule.release();
         }
     }
@@ -475,6 +473,8 @@ void ExtractFunction(llvm::Module*& module /*inout*/, std::string functionName)
     };
 
     SanityCheckGlobals();
+
+    return module;
 }
 
 }  // namespace dast

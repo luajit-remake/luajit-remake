@@ -8,61 +8,6 @@
 namespace dast
 {
 
-inline bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr)
-{
-    std::string fnName = func->getName().str();
-    ReleaseAssert(fnName != "");
-    if (!IsCXXSymbol(fnName))
-    {
-        return false;
-    }
-    std::string demangledName = GetDemangledName(func);
-    constexpr const char* expected_prefix = "bool DeegenImpl_TValueIs<";
-    constexpr const char* expected_suffix = ">(TValue)";
-    if (demangledName.starts_with(expected_prefix) && demangledName.ends_with(expected_suffix))
-    {
-        if (typeMask != nullptr)
-        {
-            demangledName = demangledName.substr(strlen(expected_prefix));
-            demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
-
-            bool found = false;
-            constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
-            for (size_t i = 0; i < defs.size(); i++)
-            {
-                if (demangledName == defs[i].second)
-                {
-                    *typeMask = defs[i].first;
-                    found = true;
-                    break;
-                }
-            }
-            ReleaseAssert(found);
-        }
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-inline DesugarDecision ShouldDesugarTValueAPI(llvm::Function* func, DesugaringLevel level)
-{
-    if (!IsTValueTypeCheckAPIFunction(func))
-    {
-        return DesugarDecision::DontCare;
-    }
-    if (level >= DesugaringLevel::TypeSpecialization)
-    {
-        return DesugarDecision::MustInline;
-    }
-    else
-    {
-        return DesugarDecision::MustNotInline;
-    }
-}
-
 class BcOperand;
 
 // A LLVM function that implements a bytecode

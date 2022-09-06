@@ -1,6 +1,6 @@
 #include "deegen_desugaring_level.h"
 #include "misc_llvm_helper.h"
-#include "parse_bytecode_definition.h"
+#include "tvalue_typecheck_optimization.h"
 
 namespace dast
 {
@@ -25,7 +25,7 @@ static DesugarDecision WARN_UNUSED GetDesugarDecisionForFunction(llvm::Function*
 {
     constexpr DesugarDecisionFn funcs[] = {
         AlwaysInlineAndNoInlineChecker,
-        ShouldDesugarTValueAPI,
+        ShouldDesugarTValueTypecheckAPI,
     };
     constexpr size_t numFuncs = std::extent_v<decltype(funcs), 0 /*dim*/>;
     DesugarDecision decision = DesugarDecision::DontCare;

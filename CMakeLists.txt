@@ -151,6 +151,7 @@ add_executable(main
   test_annotation_switch_case.cpp
   test_dump_type_speculation.cpp
   test_llvm_constant_parser.cpp
+  test_proven_type_specialization.cpp
 )
 
 target_link_libraries(main PUBLIC

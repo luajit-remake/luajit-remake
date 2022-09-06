@@ -3,7 +3,6 @@
 #include "deegen_api.h"
 #include "annotated/unit_test/unit_test_ir_accessor.h"
 
-#include "dump_llvm_module.h"
 #include "lambda_parser.h"
 #include "switch_case.h"
 #include "parse_bytecode_definition.h"
@@ -30,6 +29,7 @@ TEST(AnnotationParser, SwitchCaseSanity)
     ReleaseAssert(lm.size() == 0);
 }
 
+#if 0
 TEST(AnnotationParser, BytecodeDefinitionSanity)
 {
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
@@ -65,7 +65,7 @@ TEST(AnnotationParser, BytecodeDefinitionSanity)
     pass.DoOptimization();
 
     defs[5]->m_currentModule->dump();
-#if 0
+
     defs[0]->m_ifunc.GetImplFunction()->addFnAttr(Attribute::AttrKind::AlwaysInline);
     RunLLVMOptimizePass(defs[0]->m_currentModule);
 
@@ -82,5 +82,5 @@ TEST(AnnotationParser, BytecodeDefinitionSanity)
         def->dump(ss);
         printf("%s\n", ss.str().c_str());
     }
-#endif
 }
+#endif

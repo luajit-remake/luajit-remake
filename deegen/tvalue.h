@@ -415,7 +415,11 @@ struct tInt32
 // This function is only for internal use, user should never call this function
 // Don't change this function name: it is hardcoded for our LLVM logic
 //
-inline HeapEntityType WARN_UNUSED DeegenImpl_TValueGetPointerType(TValue v)
+// The compiler cannot automatically figure out that the pointer dereference here always yield the
+// same value for the same pointer, since this fact comes from high-level knowledge of the system.
+// So we manually add 'readnone' (which is GCC/Clang attribute '__const__') to this function.
+//
+inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 }
@@ -820,6 +824,8 @@ struct tvalue_typecheck_strength_reduction_rule
     size_t m_estimatedCost;
 };
 
+// Don't rename: this name is hardcoded for our LLVM logic
+//
 template<typename T, typename U> struct tvalue_typecheck_strength_reduction_impl_holder /*intentionally undefined*/;
 
 template<int v> struct tvalue_typecheck_strength_reduction_def_helper : tvalue_typecheck_strength_reduction_def_helper<v-1> {};
@@ -829,6 +835,24 @@ struct tvalue_typecheck_strength_reduction_def_helper<-1>
 {
     static constexpr std::array<tvalue_typecheck_strength_reduction_rule, 0> value {};
 };
+
+// Internal use only, do not call from user code
+// Do not change this function name: it is hardcoded for our LLVM logic
+//
+template<typename T>
+bool DeegenImpl_TValueIs(TValue val)
+{
+    return T::check(val);
+}
+
+// Internal use only, do not call from user code
+// Do not change this function name: it is hardcoded for our LLVM logic
+//
+template<typename T>
+auto DeegenImpl_TValueAs(TValue val)
+{
+    return T::decode(val);
+}
 
 // Some helper code to get the basic versions (no type precondition) of the type check logic
 //
@@ -849,7 +873,7 @@ struct get_basic_tvalue_typecheck_impls<std::tuple<Args...>>
                 tvalue_typecheck_strength_reduction_rule {
                     .m_typeToCheck = x_typeSpeculationMaskFor<First>,
                     .m_typePrecondition = x_typeSpeculationMaskFor<tTop>,
-                    .m_implementation = First::check,
+                    .m_implementation = DeegenImpl_TValueIs<First>,
                     .m_estimatedCost = First::x_estimatedCheckCost
                 }
             });
@@ -949,24 +973,6 @@ PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)
 #undef macro
 
 END_OF_TVALUE_TYPECHECK_STRENGTH_REDUCTION_DEFINITIONS
-
-// Internal use only, do not call from user code
-// Do not change this function name: it is hardcoded for our LLVM logic
-//
-template<typename T>
-bool DeegenImpl_TValueIs(TValue val)
-{
-    return T::check(val);
-}
-
-// Internal use only, do not call from user code
-// Do not change this function name: it is hardcoded for our LLVM logic
-//
-template<typename T>
-auto DeegenImpl_TValueAs(TValue val)
-{
-    return T::decode(val);
-}
 
 template<typename T>
 bool WARN_UNUSED ALWAYS_INLINE TValue::Is()

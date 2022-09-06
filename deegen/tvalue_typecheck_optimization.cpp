@@ -1,9 +1,76 @@
 #include "tvalue_typecheck_optimization.h"
-#include "parse_bytecode_definition.h"
 #include "llvm/Transforms/Utils/SCCPSolver.h"
 #include "llvm/Transforms/Utils/Local.h"
 
 namespace dast {
+
+bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
+{
+    std::string fnName = func->getName().str();
+    ReleaseAssert(fnName != "");
+    if (!IsCXXSymbol(fnName))
+    {
+        return false;
+    }
+    std::string demangledName = GetDemangledName(func);
+    constexpr const char* expected_prefix = "bool DeegenImpl_TValueIs<";
+    constexpr const char* expected_suffix = ">(TValue)";
+    if (demangledName.starts_with(expected_prefix) && demangledName.ends_with(expected_suffix))
+    {
+        if (typeMask != nullptr)
+        {
+            demangledName = demangledName.substr(strlen(expected_prefix));
+            demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
+
+            bool found = false;
+            constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
+            for (size_t i = 0; i < defs.size(); i++)
+            {
+                if (demangledName == defs[i].second)
+                {
+                    *typeMask = defs[i].first;
+                    found = true;
+                    break;
+                }
+            }
+            ReleaseAssert(found);
+        }
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool IsTValueTypeCheckStrengthReductionFunction(llvm::Function* func)
+{
+    std::string fnName = func->getName().str();
+    ReleaseAssert(fnName != "");
+    if (!IsCXXSymbol(fnName))
+    {
+        return false;
+    }
+    std::string demangledName = GetDemangledName(func);
+    constexpr const char* expected_prefix = "tvalue_typecheck_strength_reduction_impl_holder<";
+    return demangledName.starts_with(expected_prefix);
+}
+
+DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, DesugaringLevel level)
+{
+    if (!IsTValueTypeCheckAPIFunction(func) && !IsTValueTypeCheckStrengthReductionFunction(func))
+    {
+        return DesugarDecision::DontCare;
+    }
+    if (level >= DesugaringLevel::TypeSpecialization)
+    {
+        return DesugarDecision::MustInline;
+    }
+    else
+    {
+        return DesugarDecision::MustNotInline;
+    }
+}
 
 struct RunSCCPAnalysisPassHelper
 {
@@ -214,11 +281,11 @@ static bool SCCPPassCanRemoveInstruction(llvm::Instruction* I)
 void TValueTypecheckOptimizationPass::DoAnalysis()
 {
     using namespace llvm;
-    ReleaseAssert(m_targetFunction != nullptr);
+    ReleaseAssert(m_targetFunction != nullptr && m_isOperandListSet && m_constraint.get() != nullptr);
     ReleaseAssert(!m_didAnalysis);
     m_didAnalysis = true;
 
-    if (m_typeInfo.size() == 0)
+    if (m_operandList.size() == 0)
     {
         return;
     }
@@ -227,28 +294,27 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
     constexpr size_t numTypes = x_numUsefulBitsInTypeSpeculationMask;
     size_t enumMax = 1;
-    for (size_t i = 0; i < m_typeInfo.size(); i++)
+    for (size_t i = 0; i < m_operandList.size(); i++)
     {
-        ReleaseAssert(m_typeInfo[i].second != 0);
         enumMax *= numTypes;
         if (enumMax > 10000000)
         {
-            fprintf(stderr, "%llu ^ %llu is too many type combinations.\n", static_cast<unsigned long long>(numTypes), static_cast<unsigned long long>(m_typeInfo.size()));
+            fprintf(stderr, "%llu ^ %llu is too many type combinations.\n", static_cast<unsigned long long>(numTypes), static_cast<unsigned long long>(m_operandList.size()));
             abort();
         }
     }
 
     // Figure out all the TValue typecheck API calls on values with proven type
     //
-    std::unordered_map<uint32_t /*argOrd*/, std::vector<TValueTypecheckInstData*>> targetedAPICalls;
-    for (auto& operandWithProvenType : m_typeInfo)
+    std::vector<std::vector<TValueTypecheckInstData*>> targetedAPICalls;
+    targetedAPICalls.resize(m_operandList.size());
+    for (size_t listOrd = 0; listOrd < m_operandList.size(); listOrd++)
     {
-        uint32_t argOrd = operandWithProvenType.first;
-        ReleaseAssert(!targetedAPICalls.count(argOrd));
-        std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[argOrd];
+        std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[listOrd];
 
-        ReleaseAssert(argOrd < m_targetFunction->arg_size());
-        Argument* arg = m_targetFunction->getArg(argOrd);
+        uint32_t operandOrd = m_operandList[listOrd];
+        ReleaseAssert(operandOrd < m_targetFunction->arg_size());
+        Argument* arg = m_targetFunction->getArg(operandOrd);
 
         // TODO: We currently don't do anything for PHI-Node-use of 'value', and rely on user to prevent this case by e.g., manually
         //       rotate the loops. In theory we probably could have done something automatically. for example, by pushing down the TypeCheck.
@@ -279,10 +345,9 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     }
 
     std::unordered_set<Instruction*> replacementInstructionSet;
-    for (auto& it : targetedAPICalls)
+    for (auto& dataList : targetedAPICalls)
     {
-        std::vector<TValueTypecheckInstData*>& q = it.second;
-        for (TValueTypecheckInstData* data : q)
+        for (TValueTypecheckInstData* data : dataList)
         {
             data->PopulateReplacementInstructionSet(replacementInstructionSet /*inout*/);
         }
@@ -308,8 +373,8 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     {
         ReleaseAssert(!possibleMasks.count(&bb));
         std::vector<TypeSpeculationMask>& v = possibleMasks[&bb];
-        v.resize(m_typeInfo.size());
-        for (size_t i = 0; i < m_typeInfo.size(); i++)
+        v.resize(m_operandList.size());
+        for (size_t i = 0; i < m_operandList.size(); i++)
         {
             v[i] = 0;
         }
@@ -438,29 +503,24 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     }
 
     std::vector<TypeSpeculationMask> currentComb;
-    currentComb.resize(m_typeInfo.size());
+    currentComb.resize(m_operandList.size());
     for (size_t curCombVal = 0; curCombVal < enumMax; curCombVal++)
     {
         // Create the current type combination to test
         //
         {
-            bool valid = true;
+            std::unordered_map<uint32_t, TypeSpeculationMask> val;
             size_t tmp = curCombVal;
             for (size_t i = 0; i < currentComb.size(); i++)
             {
                 size_t curTypeOrd = tmp % numTypes;
                 currentComb[i] = SingletonBitmask<TypeSpeculationMask>(curTypeOrd);
                 tmp /= numTypes;
-
-                TypeSpeculationMask passed = currentComb[i] & m_typeInfo[i].second;
-                ReleaseAssert(passed == 0 || passed == currentComb[i]);
-                if (passed == 0)
-                {
-                    valid = false;
-                    break;
-                }
+                val[m_operandList[i]] = currentComb[i];
             }
-            if (!valid)
+            ReleaseAssert(tmp == 0);
+
+            if (!m_constraint->eval(val))
             {
                 continue;
             }
@@ -468,13 +528,11 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
         // Temporarily change Typecheck calls to 'false' or 'true' based on the current combination
         //
-        for (size_t specOrd = 0; specOrd < m_typeInfo.size(); specOrd++)
+        for (size_t listOrd = 0; listOrd < m_operandList.size(); listOrd++)
         {
-            uint32_t argOrd = m_typeInfo[specOrd].first;
-            ReleaseAssert(targetedAPICalls.count(argOrd));
-            std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[argOrd];
+            TypeSpeculationMask currentTyMask = currentComb[listOrd];
 
-            TypeSpeculationMask currentTyMask = currentComb[specOrd];
+            std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[listOrd];
             for (TValueTypecheckInstData* item : q)
             {
                 TypeSpeculationMask passed = item->GetMask() & currentTyMask;
@@ -544,15 +602,11 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
         // Restore the Typecheck calls
         //
-        for (size_t specOrd = 0; specOrd < m_typeInfo.size(); specOrd++)
+        for (auto& dataList : targetedAPICalls)
         {
-            uint32_t argOrd = m_typeInfo[specOrd].first;
-            ReleaseAssert(targetedAPICalls.count(argOrd));
-            std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[argOrd];
-
-            for (TValueTypecheckInstData* item : q)
+            for (TValueTypecheckInstData* data : dataList)
             {
-                item->ReplaceBackToCall();
+                data->ReplaceBackToCall();
             }
         }
     }
@@ -585,12 +639,9 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     // Record proven precondition for each type check
     //
     ReleaseAssert(m_provenPreconditionForTypeChecks.empty());
-    for (size_t specOrd = 0; specOrd < m_typeInfo.size(); specOrd++)
+    for (size_t listOrd = 0; listOrd < m_operandList.size(); listOrd++)
     {
-        uint32_t argOrd = m_typeInfo[specOrd].first;
-        TypeSpeculationMask provenType = m_typeInfo[specOrd].second;
-        ReleaseAssert(targetedAPICalls.count(argOrd));
-        std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[argOrd];
+        std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[listOrd];
 
         for (TValueTypecheckInstData* item : q)
         {
@@ -602,11 +653,10 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
             ReleaseAssert(possibleMasks.count(bb));
             ReleaseAssert(isBasicBlockReachable.count(bb));
 
-            ReleaseAssert(specOrd < possibleMasks[bb].size());
-            TypeSpeculationMask possibleMaskForThisInst = possibleMasks[bb][specOrd];
+            ReleaseAssert(listOrd < possibleMasks[bb].size());
+            TypeSpeculationMask possibleMaskForThisInst = possibleMasks[bb][listOrd];
             ReleaseAssert(0 <= possibleMaskForThisInst && possibleMaskForThisInst <= x_typeSpeculationMaskFor<tTop>);
 
-            ReleaseAssert((possibleMaskForThisInst & provenType) == possibleMaskForThisInst);
             ReleaseAssertIff(possibleMaskForThisInst == 0, !isBasicBlockReachable[bb]);
 
             ReleaseAssert(!m_provenPreconditionForTypeChecks.count(inst));
@@ -614,14 +664,14 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
         }
     }
 
-    for (auto& it : targetedAPICalls)
+    for (auto& dataList : targetedAPICalls)
     {
-        for (TValueTypecheckInstData* item : it.second)
+        for (TValueTypecheckInstData* item : dataList)
         {
             delete item;
         }
-        it.second.clear();
     }
+    targetedAPICalls.clear();
 
     // Record unreachable basic blocks
     //
@@ -714,6 +764,8 @@ static std::vector<TypecheckStrengthReductionCandidate> WARN_UNUSED ParseTypeche
         Constant* impl = reader.Get<&tvalue_typecheck_strength_reduction_rule::m_implementation>();
         Function* implFunc = dyn_cast<Function>(impl);
         ReleaseAssert(implFunc != nullptr);
+        ReleaseAssert(IsTValueTypeCheckAPIFunction(implFunc) || IsTValueTypeCheckStrengthReductionFunction(implFunc));
+
         size_t estimatedCost = reader.GetValue<&tvalue_typecheck_strength_reduction_rule::m_estimatedCost>();
         ReleaseAssert((checkedMask & precondMask) == checkedMask);
 
@@ -738,6 +790,11 @@ void TValueTypecheckOptimizationPass::DoOptimization()
     ReleaseAssert(m_didAnalysis && !m_didOptimization);
     m_didOptimization = true;
 
+    if (m_operandList.size() == 0)
+    {
+        return;
+    }
+
     LLVMContext& ctx = m_targetFunction->getContext();
 
     std::vector<TypecheckStrengthReductionCandidate> allStrengthReductionCandidates = ParseTypecheckStrengthReductionCandidateList(m_targetFunction->getParent());
@@ -761,7 +818,6 @@ void TValueTypecheckOptimizationPass::DoOptimization()
                 }
             }
         }
-        ReleaseAssert(result != nullptr);
         return std::make_pair(result, minimumCost);
     };
 
@@ -805,11 +861,13 @@ void TValueTypecheckOptimizationPass::DoOptimization()
             if (choice1.second <= choice2.second)
             {
                 Function* newCallee = choice1.first;
+                ReleaseAssert(newCallee != nullptr);
                 callInst->setCalledFunction(newCallee);
             }
             else
             {
                 Function* newCallee = choice2.first;
+                ReleaseAssert(newCallee != nullptr);
                 callInst->setCalledFunction(newCallee);
                 // We cannot directly insert %1 = not %callInst and RAUW since that would replace the operand of our 'not' instruction
                 // So we create the 'not' instruction with a fake operand, then RAUW the callInst, then change the operand of 'not' to callInst

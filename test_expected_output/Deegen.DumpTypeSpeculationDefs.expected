@@ -1,0 +1,19 @@
+== Type Speculation Mask Defintions ==
+
+Defintion for each bit:
+Bit 0: tNil (0x1)
+Bit 1: tBool (0x2)
+Bit 2: tDoubleNotNaN (0x4)
+Bit 3: tDoubleNaN (0x8)
+Bit 4: tInt32 (0x10)
+Bit 5: tString (0x20)
+Bit 6: tFunction (0x40)
+Bit 7: tUserdata (0x80)
+Bit 8: tThread (0x100)
+Bit 9: tTable (0x200)
+
+Compound Mask Definitions:
+tMIV (0x3): tNil | tBool
+tDouble (0xc): tDoubleNotNaN | tDoubleNaN
+tHeapEntity (0x3e0): tString | tFunction | tUserdata | tThread | tTable
+tTop (0x3ff): tNil | tBool | tDoubleNotNaN | tDoubleNaN | tInt32 | tString | tFunction | tUserdata | tThread | tTable

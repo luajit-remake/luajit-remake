@@ -19,6 +19,7 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 
 #include "cxx_symbol_demangler.h"
 #include "deegen_desugaring_level.h"
@@ -635,9 +636,9 @@ void DesugarAndSimplifyLLVMModule(llvm::Module* module, DesugaringLevel level);
 // Remove anything unrelated to the specified function:
 // function bodies of all other functions are dropped, then all unreferenced symbols are removed.
 //
-// Note that this creates a new module, and invalidates any reference to the old module.
+// Note that this creates a new module (which is returned), and invalidates any reference to the old module.
 //
-void ExtractFunction(llvm::Module*& module /*inout*/, std::string functionName);
+llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName);
 
 inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* value)
 {
@@ -645,6 +646,24 @@ inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* va
     using namespace llvm;
     BasicBlock::iterator BI(inst);
     ReplaceInstWithValue(inst->getParent()->getInstList(), BI, value);
+}
+
+inline void DumpLLVMModuleForDebug(llvm::Module* module)
+{
+    std::string _dst;
+    llvm::raw_string_ostream rso(_dst /*target*/);
+    module->print(rso, nullptr);
+    std::string& dump = rso.str();
+    printf("%s\n", dump.c_str());
+}
+
+inline std::string DumpLLVMModuleAsString(llvm::Module* module)
+{
+    std::string _dst;
+    llvm::raw_string_ostream rso(_dst /*target*/);
+    module->print(rso, nullptr);
+    std::string dump = rso.str();
+    return dump;
 }
 
 }   // namespace dast

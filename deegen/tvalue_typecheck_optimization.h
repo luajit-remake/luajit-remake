@@ -5,12 +5,6 @@
 
 namespace dast {
 
-struct TValueOperandWithProvenTypeDesc
-{
-    uint32_t m_ord;
-    TypeSpeculationMask m_provenType;
-};
-
 // The purpose of this pass is to optimize the function based on the *proven* type information of the operands.
 // It does two optimizations:
 // 1. Strength reduction on TValue::Is<XXX>() type checks through an accurate type precondition analysis.
@@ -40,7 +34,7 @@ struct TValueOperandWithProvenTypeDesc
 // If we have type proof that 'a' and 'b' cannot be both double, we shall remove the if-check and the true-branch
 // even though we cannot prove either 'a.Is<tDouble>()' or 'b.Is<tDouble>' produces a constant.
 //
-// The input of this pass is the proven types of the operands.
+// The input of this pass is the proven type constraints of the operands.
 //
 // We do a brute-force (exponential) enumeration of all the valid type combinations of the operands,
 // and do Sparse Conditional Constant Propagation (SCCP) to figure out if each typecheck call or boolean
@@ -56,7 +50,9 @@ class TValueTypecheckOptimizationPass
 public:
     TValueTypecheckOptimizationPass()
         : m_targetFunction(nullptr)
-        , m_typeInfo()
+        , m_operandList()
+        , m_constraint()
+        , m_isOperandListSet(false)
         , m_didAnalysis(false)
         , m_didOptimization(false)
         , m_provenPreconditionForTypeChecks()
@@ -65,26 +61,113 @@ public:
         , m_isControlFlowEdgeFeasible()
     { }
 
+    class Constraint
+    {
+        MAKE_NONCOPYABLE(Constraint);
+        MAKE_NONMOVABLE(Constraint);
+    public:
+        Constraint() { }
+        virtual ~Constraint() { }
+
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) = 0;
+    };
+
+    class AndConstraint final : public Constraint
+    {
+    public:
+        void AddClause(std::unique_ptr<Constraint> constraint)
+        {
+            ReleaseAssert(constraint.get() != nullptr);
+            m_clauses.push_back(std::move(constraint));
+        }
+
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        {
+            for (auto& it : m_clauses)
+            {
+                if (!it->eval(comb))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    private:
+        std::vector<std::unique_ptr<Constraint>> m_clauses;
+    };
+
+    class NotConstraint final : public Constraint
+    {
+    public:
+        NotConstraint(std::unique_ptr<Constraint> clause)
+            : m_clause(std::move(clause))
+        {
+            ReleaseAssert(m_clause.get() != nullptr);
+        }
+
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        {
+            return !m_clause->eval(comb);
+        }
+
+    private:
+        std::unique_ptr<Constraint> m_clause;
+    };
+
+    class LeafConstraint final : public Constraint
+    {
+    public:
+        LeafConstraint(uint32_t operandOrd, TypeSpeculationMask allowedMask)
+            : m_operandOrd(operandOrd), m_allowedMask(allowedMask)
+        { }
+
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        {
+            auto it = comb.find(m_operandOrd);
+            ReleaseAssert(it != comb.end());
+            TypeSpeculationMask singletonMask = it->second;
+            TypeSpeculationMask passed = m_allowedMask & singletonMask;
+            ReleaseAssert(passed == 0 || passed == singletonMask);
+            return passed == singletonMask;
+        }
+
+    private:
+        uint32_t m_operandOrd;
+        TypeSpeculationMask m_allowedMask;
+    };
+
     void SetTargetFunction(llvm::Function* func)
     {
         ReleaseAssert(m_targetFunction == nullptr && func != nullptr);
         m_targetFunction = func;
     }
 
-    void AddOperandTypeInfo(uint32_t argOrd, TypeSpeculationMask info)
+    void SetOperandList(const std::vector<uint32_t>& operandList)
     {
-        ReleaseAssert(m_targetFunction != nullptr);
-        ReleaseAssert(m_targetFunction->arg_size() > argOrd);
-        ReleaseAssert(llvm_type_has_type<uint64_t>(m_targetFunction->getArg(argOrd)->getType()));
-        for (auto& item : m_typeInfo)
+        ReleaseAssert(!m_isOperandListSet);
+        m_isOperandListSet = true;
+        m_operandList = operandList;
+        for (size_t i = 0; i < m_operandList.size(); i++)
         {
-            ReleaseAssert(item.first != argOrd);
+            for (size_t j = i + 1; j < m_operandList.size(); j++)
+            {
+                ReleaseAssert(m_operandList[i] != m_operandList[j]);
+            }
         }
-        if (info == x_typeSpeculationMaskFor<tTop>)
-        {
-            return;
-        }
-        m_typeInfo.push_back(std::make_pair(argOrd, info));
+    }
+
+    void SetConstraint(std::unique_ptr<Constraint> constraint)
+    {
+        ReleaseAssert(constraint.get() != nullptr);
+        ReleaseAssert(m_constraint.get() == nullptr);
+        m_constraint = std::move(constraint);
+    }
+
+    void Run()
+    {
+        DoAnalysis();
+        DoOptimization();
     }
 
     void DoAnalysis();
@@ -92,7 +175,9 @@ public:
 
 private:
     llvm::Function* m_targetFunction;
-    std::vector<std::pair<uint32_t /*argOrd*/, TypeSpeculationMask /*provenType*/>> m_typeInfo;
+    std::vector<uint32_t /*operandOrd*/> m_operandList;
+    std::unique_ptr<Constraint> m_constraint;
+    bool m_isOperandListSet;
     bool m_didAnalysis;
     bool m_didOptimization;
     // Maps each TValue::Is<XXX>(arg) call to the proven type mask precondition of 'arg'
@@ -108,6 +193,10 @@ private:
     //
     std::unordered_map<llvm::BasicBlock*, std::unordered_map<llvm::BasicBlock*, bool>> m_isControlFlowEdgeFeasible;
 };
+
+bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr);
+bool IsTValueTypeCheckStrengthReductionFunction(llvm::Function* func);
+DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, DesugaringLevel level);
 
 struct TValueOperandSpecialization
 {
