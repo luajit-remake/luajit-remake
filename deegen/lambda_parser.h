@@ -64,16 +64,15 @@ private:
     // 'func' must be a 'PreserveLambdaInfo' function
     // The IR looks like the following:
     //
-    //  define internal void @"_ZN9DeegenAPI6detail18PreserveLambdaInfoIZ6testfniiiE3$_0EEvRKT_"(%class.anon* noundef nonnull align 8 dereferenceable(16) %0) #11 {
-    //      %2 = alloca %class.anon*, align 8
-    //      store %class.anon* %0, %class.anon** %2, align 8, !tbaa !5
-    //      %3 = load %class.anon*, %class.anon** %2, align 8, !tbaa !5
-    //      %4 = bitcast %class.anon* %3 to i8*
-    //      call void @_ZN9DeegenAPI6detail22ImplPreserveLambdaInfoEPKvS2_(i8* noundef %4, i8* noundef bitcast ({ i64, i64 }* @"_ZN9DeegenAPI6detail31lambda_functor_member_pointer_vIZ6testfniiiE3$_0EE" to i8*))
+    //   define internal void @"_ZN9DeegenAPI6detail18PreserveLambdaInfoIZ6testfniiiE3$_0EEvRKT_"(ptr noundef nonnull align 8 dereferenceable(16) %0) #15 {
+    //      %2 = alloca ptr, align 8
+    //      store ptr %0, ptr %2, align 8, !tbaa !5
+    //      %3 = load ptr, ptr %2, align 8, !tbaa !5
+    //      call void @_ZN9DeegenAPI6detail22ImplPreserveLambdaInfoEPKvS2_(ptr noundef %3, ptr noundef @"_ZN9DeegenAPI6detail31lambda_functor_member_pointer_vIZ6testfniiiE3$_0EE")
     //      ret void
-    //  }
+    //   }
     //
-    // we want to parse out and return the first i64 in the 'bitcast' part in the call
+    // We want to parse out and return the second parameter in the call.
     //
     static llvm::Function* WARN_UNUSED GetCodeFromLLVM(llvm::Function* func)
     {
