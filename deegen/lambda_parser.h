@@ -72,7 +72,7 @@ private:
     //      ret void
     //   }
     //
-    // We want to parse out and return the second parameter in the call.
+    // We want to parse out and return the first i64 in the second parameter in the call.
     //
     static llvm::Function* WARN_UNUSED GetCodeFromLLVM(llvm::Function* func)
     {
