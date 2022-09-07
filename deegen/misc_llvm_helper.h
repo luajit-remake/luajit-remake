@@ -60,21 +60,7 @@ inline llvm::Type* WARN_UNUSED llvm_type_of(llvm::LLVMContext& ctx)
     else
     {
         static_assert(std::is_pointer_v<T>, "unhandled type");
-        using PointeeType = std::remove_pointer_t<T>;
-        // Special case:
-        // (1) We store a bool value in i8. This is required to maintain compatibility with C++ ABI.
-        //     So, type for 'bool' will be i1. But type for 'bool*' will be 'i8*', 'bool**' be 'i8**', etc
-        // (2) void* has type i8* instead of void* in LLVM. (void** is i8**, etc).
-        //     This is also required to maintain compatibility with C++ ABI.
-        //
-        if constexpr(std::is_same_v<PointeeType, bool> || std::is_same_v<PointeeType, void>)
-        {
-            return Type::getInt8PtrTy(ctx);
-        }
-        else
-        {
-            return llvm_type_of<PointeeType>(ctx)->getPointerTo();
-        }
+        return PointerType::getUnqual(ctx);
     }
 }
 

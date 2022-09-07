@@ -216,8 +216,7 @@ public:
         GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecodeStruct, { CreateLLVMConstantInt<uint64_t>(ctx, m_offsetInBytecodeStruct) }, "", targetBB);
         ReleaseAssert(llvm_value_has_type<uint8_t*>(gep));
         Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(m_sizeInBytecodeStruct * 8));
-        CastInst* castToStorageType = BitCastInst::CreatePointerBitCastOrAddrSpaceCast(gep, storageTypeInBytecodeStruct->getPointerTo(), "", targetBB);
-        LoadInst* storageValue = new LoadInst(storageTypeInBytecodeStruct, castToStorageType, "", targetBB);
+        LoadInst* storageValue = new LoadInst(storageTypeInBytecodeStruct, gep, "", targetBB);
 
         Type* dstType = Type::getIntNTy(ctx, static_cast<uint32_t>(ValueByteLength() * 8));
         Value* result;
@@ -796,12 +795,8 @@ struct DeegenBytecodeDefinitionParser
 
             std::string implFuncName;
             {
-                Constant* implFunc = curDefReader.Get<&Desc::m_implementationFn>();
-                ConstantExpr* bitCastExpr = dyn_cast<ConstantExpr>(implFunc);
-                ReleaseAssert(bitCastExpr != nullptr);
-                ReleaseAssert(bitCastExpr->getOpcode() == Instruction::BitCast);
-                Constant* bitCastOperand = bitCastExpr->getOperand(0);
-                Function* fnc = dyn_cast<Function>(bitCastOperand);
+                Constant* cst = curDefReader.Get<&Desc::m_implementationFn>();
+                Function* fnc = dyn_cast<Function>(cst);
                 ReleaseAssert(fnc != nullptr);
                 implFuncName = fnc->getName().str();
             }

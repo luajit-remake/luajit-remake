@@ -95,13 +95,7 @@ private:
                 ReleaseAssert(GetDemangledName(callee) == "DeegenAPI::detail::ImplPreserveLambdaInfo(void const*, void const*)");
                 ReleaseAssert(callee->arg_size() == 2);
                 Value* arg = callInst->getArgOperand(1);
-                BitCastOperator* bco = dyn_cast<BitCastOperator>(arg);
-                ReleaseAssert(bco != nullptr);
-                ReleaseAssert(bco->getNumOperands() == 1);
-                ReleaseAssert(bco->getDestTy() == Type::getInt8PtrTy(ctx));
-                ReleaseAssert(bco->getSrcTy()->isPointerTy());
-                Value* operand = bco->getOperand(0);
-                GlobalVariable* gv = dyn_cast<GlobalVariable>(operand);
+                GlobalVariable* gv = dyn_cast<GlobalVariable>(arg);
                 ReleaseAssert(gv != nullptr);
                 ReleaseAssert(gv->isConstant());
                 Constant* iv =  gv->getInitializer();
@@ -179,6 +173,21 @@ private:
             User* u = *it;
             if (isa<CallInst>(u))
             {
+                // ignore 'llvm.lifetime.start' and 'llvm.lifetime.end' intrinsic calls
+                //
+                {
+                    CallInst* tmp = cast<CallInst>(u);
+                    Function* calledFn = tmp->getCalledFunction();
+                    if (calledFn != nullptr)
+                    {
+                        std::string fnName = calledFn->getName().str();
+                        if (fnName.starts_with("llvm.lifetime.start") || fnName.starts_with("llvm.lifetime.end"))
+                        {
+                            continue;
+                        }
+                    }
+                }
+
                 ReleaseAssert(!foundCallInst);
                 foundCallInst = true;
                 callInst = cast<CallInst>(u);

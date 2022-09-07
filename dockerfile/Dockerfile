@@ -14,9 +14,9 @@ RUN mkdir -p cmake-3.23.0 && bash install_cmake.sh --skip-license --prefix=/opt/
 RUN ln -s /opt/cmake-3.23.0/bin/* /usr/local/bin
 RUN rm -f install_cmake.sh
 
-# install llvm 14
+# install llvm 15
 #
-ARG LLVM_VERSION=14
+ARG LLVM_VERSION=15
 RUN wget https://apt.llvm.org/llvm.sh
 RUN chmod +x llvm.sh
 RUN ./llvm.sh $LLVM_VERSION all

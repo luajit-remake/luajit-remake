@@ -18,7 +18,6 @@ TEST(AnnotationParser, SwitchCaseSanity)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "switch_case");
-
     DAPILambdaMap lm = CXXLambda::ParseDastLambdaMap(module.get());
     std::vector<SwitchCase> switchCaseList = SwitchCase::ParseAll(module.get(), lm);
 

@@ -6,11 +6,11 @@ target triple = "x86_64-pc-linux-gnu"
 @.str = private unnamed_addr constant [14 x i8] c"cannot handle\00", align 1
 
 ; Function Attrs: noreturn
-declare void @_ZN9DeegenAPI5ErrorEPKc(i8* noundef) local_unnamed_addr #0
+declare void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef) local_unnamed_addr #0
 
 ; Function Attrs: noreturn nounwind uwtable
 define dso_local void @testfn3(i64 %0) #1 {
-  tail call void @_ZN9DeegenAPI5ErrorEPKc(i8* noundef getelementptr inbounds ([14 x i8], [14 x i8]* @.str, i64 0, i64 0)) #2
+  tail call void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef nonnull @.str) #2
   unreachable
 }
 
@@ -25,5 +25,5 @@ attributes #2 = { noreturn nounwind }
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"PIC Level", i32 2}
 !2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{i32 7, !"uwtable", i32 1}
-!4 = !{!"Ubuntu clang version 14.0.6-++20220622053131+f28c006a5895-1~exp1~20220622173215.157"}
+!3 = !{i32 7, !"uwtable", i32 2}
+!4 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}

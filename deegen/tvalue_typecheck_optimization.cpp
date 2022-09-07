@@ -1,6 +1,8 @@
 #include "tvalue_typecheck_optimization.h"
 #include "llvm/Transforms/Utils/SCCPSolver.h"
 #include "llvm/Transforms/Utils/Local.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/ValueLattice.h"
 
 namespace dast {
 

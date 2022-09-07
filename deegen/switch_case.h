@@ -66,7 +66,6 @@ public:
                 // arg 0 is the hidden 'this' pointer
                 //
                 ReleaseAssert(callSite->getArgOperand(0)->getType()->isPointerTy());
-                ReleaseAssert(callSite->getArgOperand(0)->getType()->getPointerElementType()->isStructTy());
 
                 static_assert(static_cast<int>(DeegenAPI::detail::SwitchCaseTag::tag) != static_cast<int>(DeegenAPI::detail::SwitchDefaultTag::tag));
 
