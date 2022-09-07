@@ -6,7 +6,6 @@
 
 #include "tvalue_typecheck_optimization.h"
 
-using namespace DeegenAPI;
 using namespace llvm;
 using namespace dast;
 

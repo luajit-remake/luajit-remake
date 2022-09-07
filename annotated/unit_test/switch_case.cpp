@@ -1,7 +1,5 @@
 #include "deegen_api.h"
 
-using namespace DeegenAPI;
-
 void testfn(int a, int b, int c)
 {
     SwitchOnMutuallyExclusiveCases

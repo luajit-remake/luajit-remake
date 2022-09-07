@@ -54,7 +54,7 @@ public:
     }
 
 private:
-    static constexpr const char* x_lambda_preserver_signature = "void DeegenAPI::detail::PreserveLambdaInfo<";
+    static constexpr const char* x_lambda_preserver_signature = "void detail::PreserveLambdaInfo<";
 
     static bool IsLambdaPreserverFunction(llvm::Function* func)
     {
@@ -91,7 +91,7 @@ private:
 
                 Function* callee = callInst->getCalledFunction();
                 ReleaseAssert(callee != nullptr);
-                ReleaseAssert(GetDemangledName(callee) == "DeegenAPI::detail::ImplPreserveLambdaInfo(void const*, void const*)");
+                ReleaseAssert(GetDemangledName(callee) == "detail::ImplPreserveLambdaInfo(void const*, void const*)");
                 ReleaseAssert(callee->arg_size() == 2);
                 Value* arg = callInst->getArgOperand(1);
                 GlobalVariable* gv = dyn_cast<GlobalVariable>(arg);

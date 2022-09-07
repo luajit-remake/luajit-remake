@@ -3,7 +3,6 @@
 
 inline void NO_RETURN testfn(TValue lhs, TValue rhs)
 {
-    using namespace DeegenAPI;
     if (lhs.Is<tDouble>() && rhs.Is<tDouble>())
     {
         Return(TValue::Create<tDouble>(lhs.As<tDouble>() + rhs.As<tDouble>()));
@@ -51,7 +50,6 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode1)
 
 inline void NO_RETURN testfn2(TValue x)
 {
-    using namespace DeegenAPI;
     if (x.Is<tBool>())
     {
         Return(x);
@@ -79,7 +77,6 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode2)
 
 inline void NO_RETURN testfn3(TValue lhs, TValue rhs)
 {
-    using namespace DeegenAPI;
     if (!lhs.Is<tDouble>() || !rhs.Is<tDouble>())
     {
         Error("cannot handle");

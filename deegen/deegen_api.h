@@ -2,9 +2,6 @@
 
 #include "tvalue.h"
 
-namespace DeegenAPI
-{
-
 // Return zero or one value as the result of the operation
 //
 void NO_RETURN Return(TValue value);
@@ -80,7 +77,5 @@ struct SwitchOnMutuallyExclusiveCases
     }
 };
 
-#define CASE(...) ::DeegenAPI::detail::x_switchCaseTag, [&]() -> bool { return (__VA_ARGS__); }, [&]() -> void
-#define DEFAULT() ::DeegenAPI::detail::x_switchDefaultTag, [&]() -> void
-
-}   // namespace DeegenAPI
+#define CASE(...) ::detail::x_switchCaseTag, [&]() -> bool { return (__VA_ARGS__); }, [&]() -> void
+#define DEFAULT() ::detail::x_switchDefaultTag, [&]() -> void

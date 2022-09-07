@@ -67,7 +67,7 @@ public:
                 //
                 ReleaseAssert(callSite->getArgOperand(0)->getType()->isPointerTy());
 
-                static_assert(static_cast<int>(DeegenAPI::detail::SwitchCaseTag::tag) != static_cast<int>(DeegenAPI::detail::SwitchDefaultTag::tag));
+                static_assert(static_cast<int>(::detail::SwitchCaseTag::tag) != static_cast<int>(::detail::SwitchDefaultTag::tag));
 
                 uint32_t curArg = 1;
                 while (curArg < numArgs)
@@ -79,8 +79,8 @@ public:
                     ReleaseAssert(gv->isConstant());
                     ReleaseAssert(gv->getType() == Type::getInt32PtrTy(ctx));
                     int32_t val = GetValueOfLLVMConstantInt<int32_t>(gv->getInitializer());
-                    ReleaseAssert(val == static_cast<int32_t>(DeegenAPI::detail::SwitchCaseTag::tag) || val == static_cast<int32_t>(DeegenAPI::detail::SwitchDefaultTag::tag));
-                    if (val == static_cast<int32_t>(DeegenAPI::detail::SwitchCaseTag::tag))
+                    ReleaseAssert(val == static_cast<int32_t>(::detail::SwitchCaseTag::tag) || val == static_cast<int32_t>(::detail::SwitchDefaultTag::tag));
+                    if (val == static_cast<int32_t>(::detail::SwitchCaseTag::tag))
                     {
                         ReleaseAssert(curArg + 3 <= numArgs);
 
@@ -130,7 +130,7 @@ public:
     }
 
 private:
-    static constexpr const char* x_switch_case_api_signature = "DeegenAPI::SwitchOnMutuallyExclusiveCases::SwitchOnMutuallyExclusiveCases<";
+    static constexpr const char* x_switch_case_api_signature = "SwitchOnMutuallyExclusiveCases::SwitchOnMutuallyExclusiveCases<";
 
     static bool IsSwitchCaseAPI(llvm::Function* func)
     {

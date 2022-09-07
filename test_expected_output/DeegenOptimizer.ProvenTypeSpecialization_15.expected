@@ -7,7 +7,7 @@ target triple = "x86_64-pc-linux-gnu"
 declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI4tNilEb6TValue(i64) #0
 
 ; Function Attrs: noreturn
-declare void @_ZN9DeegenAPI6ReturnE6TValue(i64) local_unnamed_addr #1
+declare void @_Z6Return6TValue(i64) local_unnamed_addr #1
 
 ; Function Attrs: noreturn nounwind uwtable
 define dso_local void @testfn3(i64 %0) #2 {
@@ -15,11 +15,11 @@ define dso_local void @testfn3(i64 %0) #2 {
   br i1 %2, label %3, label %4
 
 3:                                                ; preds = %1
-  tail call void @_ZN9DeegenAPI6ReturnE6TValue(i64 4642437159633027072) #3
+  tail call void @_Z6Return6TValue(i64 4642437159633027072) #3
   unreachable
 
 4:                                                ; preds = %1
-  tail call void @_ZN9DeegenAPI6ReturnE6TValue(i64 %0) #3
+  tail call void @_Z6Return6TValue(i64 %0) #3
   unreachable
 }
 

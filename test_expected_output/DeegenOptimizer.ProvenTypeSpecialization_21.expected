@@ -15,10 +15,10 @@ declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValu
 declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI7tDoubleEb6TValue(i64) #0
 
 ; Function Attrs: noreturn
-declare void @_ZN9DeegenAPI6ReturnE6TValue(i64) local_unnamed_addr #1
+declare void @_Z6Return6TValue(i64) local_unnamed_addr #1
 
 ; Function Attrs: noreturn
-declare void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef) local_unnamed_addr #1
+declare void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #1
 
 ; Function Attrs: noreturn nounwind uwtable
 define dso_local void @testfn4(i64 %0) #2 {
@@ -26,7 +26,7 @@ define dso_local void @testfn4(i64 %0) #2 {
   br i1 %2, label %3, label %4
 
 3:                                                ; preds = %1
-  tail call void @_ZN9DeegenAPI6ReturnE6TValue(i64 4644776920376934400) #3
+  tail call void @_Z6Return6TValue(i64 4644776920376934400) #3
   unreachable
 
 4:                                                ; preds = %1
@@ -34,7 +34,7 @@ define dso_local void @testfn4(i64 %0) #2 {
   br i1 %5, label %6, label %7
 
 6:                                                ; preds = %4
-  tail call void @_ZN9DeegenAPI6ReturnE6TValue(i64 %0) #3
+  tail call void @_Z6Return6TValue(i64 %0) #3
   unreachable
 
 7:                                                ; preds = %4
@@ -42,11 +42,11 @@ define dso_local void @testfn4(i64 %0) #2 {
   br i1 %8, label %9, label %10
 
 9:                                                ; preds = %7
-  tail call void @_ZN9DeegenAPI6ReturnE6TValue(i64 4646729653027864576) #3
+  tail call void @_Z6Return6TValue(i64 4646729653027864576) #3
   unreachable
 
 10:                                               ; preds = %7
-  tail call void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef nonnull @.str) #3
+  tail call void @_Z5ErrorPKc(ptr noundef nonnull @.str) #3
   unreachable
 }
 

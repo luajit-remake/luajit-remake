@@ -6,11 +6,11 @@ target triple = "x86_64-pc-linux-gnu"
 @.str = private unnamed_addr constant [14 x i8] c"cannot handle\00", align 1
 
 ; Function Attrs: noreturn
-declare void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef) local_unnamed_addr #0
+declare void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #0
 
 ; Function Attrs: noreturn nounwind uwtable
 define dso_local void @testfn4(i64 %0) #1 {
-  tail call void @_ZN9DeegenAPI5ErrorEPKc(ptr noundef nonnull @.str) #2
+  tail call void @_Z5ErrorPKc(ptr noundef nonnull @.str) #2
   unreachable
 }
 

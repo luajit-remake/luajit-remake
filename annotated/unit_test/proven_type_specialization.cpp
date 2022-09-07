@@ -3,7 +3,6 @@
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue rhs)
 {
-    using namespace DeegenAPI;
     if (lhs.Is<tDouble>() && rhs.Is<tDouble>())
     {
         Return(lhs);
@@ -20,7 +19,6 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue r
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue x)
 {
-    using namespace DeegenAPI;
     if (x.Is<tBool>())
     {
         Return(x);
@@ -37,7 +35,6 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue x)
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn3(TValue x)
 {
-    using namespace DeegenAPI;
     if (x.Is<tNil>())
     {
         Return(TValue::Create<tDouble>(234));
@@ -54,7 +51,6 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn3(TValue x)
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn4(TValue x)
 {
-    using namespace DeegenAPI;
     if (x.Is<tTable>())
     {
         Return(TValue::Create<tDouble>(345));
