@@ -61,8 +61,8 @@ public:
     std::vector<Arg> m_args;
     llvm::Function* m_continuation;
 
-    // Preprocess the module to rewrite usage of the MakeCall family APIs to a format that is easier to work with
-    // After this function call, one can use ForEachAstMakeCall to iterate through each use of MakeCall family API.
+    // Preprocess the module to pre-parse all use of the MakeCall family APIs
+    // After this function call, one can use GetAllUseInFunction to iterate through each use of MakeCall family API.
     // The desugaring level of the module should be at least PerFunctionSimplifyOnly
     //
     static void PreprocessModule(llvm::Module* module);
