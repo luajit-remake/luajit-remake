@@ -851,6 +851,7 @@ bool DeegenImpl_TValueIs(TValue val)
 template<typename T>
 auto DeegenImpl_TValueAs(TValue val)
 {
+    assert(val.Is<T>());
     return T::decode(val);
 }
 
@@ -985,7 +986,6 @@ template<typename T>
 auto WARN_UNUSED ALWAYS_INLINE TValue::As()
 {
     static_assert(IsValidTypeSpecialization<T>);
-    assert(Is<T>());
     return DeegenImpl_TValueAs<T>(*this);
 }
 

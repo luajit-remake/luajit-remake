@@ -18,15 +18,18 @@ namespace dast {
 //
 enum class DesugaringLevel
 {
-    // Nothing is inlined
+    // Impossible value
     //
     Bottom,
-    // AlwaysInline functions are inlined
+    // AlwaysInline functions are inlined, but no other simplification (e.g., no mem2reg)
     //
     AlwaysInline,
+    // Run simplification pass on each function, but no inlining (except always_inline ones) allowed
+    //
+    PerFunctionSimplifyOnly,
     // General (non-API) functions may be inlined
     //
-    GeneralFunctions,
+    InlineGeneralFunctions,
     // TValue-related APIs are inlined
     //
     TypeSpecialization,

@@ -4,5 +4,6 @@ add_library(deegen_rt
   llvm_extract_function.cpp
   deegen_desugaring_level.cpp
   tvalue_typecheck_optimization.cpp
+  deegen_ast_make_call.cpp
 ) 
 

@@ -152,6 +152,7 @@ add_executable(main
   test_dump_type_speculation.cpp
   test_llvm_constant_parser.cpp
   test_proven_type_specialization.cpp
+  test_deegen_make_call_api.cpp
 )
 
 target_link_libraries(main PUBLIC

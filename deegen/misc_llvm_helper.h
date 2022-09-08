@@ -132,7 +132,7 @@ T WARN_UNUSED GetValueOfLLVMConstantInt(llvm::Constant* value)
     ReleaseAssert(value != nullptr);
     if constexpr(std::is_same_v<T, bool>)
     {
-        ReleaseAssert(value->getType() == llvm_type_of<uint8_t>(value->getContext()));
+        ReleaseAssert(value->getType() == llvm_type_of<uint8_t>(value->getContext()) || value->getType() == llvm_type_of<bool>(value->getContext()));
     }
     else
     {
@@ -140,7 +140,14 @@ T WARN_UNUSED GetValueOfLLVMConstantInt(llvm::Constant* value)
     }
     ConstantInt* ci = dyn_cast<ConstantInt>(value);
     ReleaseAssert(ci != nullptr);
-    ReleaseAssert(ci->getBitWidth() == sizeof(T) * 8);
+    if constexpr(std::is_same_v<T, bool>)
+    {
+        ReleaseAssert(ci->getBitWidth() == 1 || ci->getBitWidth() == 8);
+    }
+    else
+    {
+        ReleaseAssert(ci->getBitWidth() == sizeof(T) * 8);
+    }
     if constexpr(std::is_enum_v<T>)
     {
         using U = std::underlying_type_t<T>;
@@ -169,6 +176,15 @@ T WARN_UNUSED GetValueOfLLVMConstantInt(llvm::Constant* value)
             return static_cast<T>(v);
         }
     }
+}
+
+template<typename T>
+T WARN_UNUSED GetValueOfLLVMConstantInt(llvm::Value* value)
+{
+    using namespace llvm;
+    Constant* cst = dyn_cast<Constant>(value);
+    ReleaseAssert(cst != nullptr);
+    return GetValueOfLLVMConstantInt<T>(cst);
 }
 
 template<typename T>
@@ -624,7 +640,9 @@ void DesugarAndSimplifyLLVMModule(llvm::Module* module, DesugaringLevel level);
 //
 // Note that this creates a new module (which is returned), and invalidates any reference to the old module.
 //
-llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName);
+// 'ignoreLinkageIssues = true' should only be used in unit tests.
+//
+llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues = false);
 
 inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* value)
 {

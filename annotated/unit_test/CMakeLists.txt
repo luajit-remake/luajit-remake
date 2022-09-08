@@ -8,6 +8,7 @@ SET(DEEGEN_UNIT_TEST_IR_SOURCES
   bytecode_definition_api.cpp
   llvm_constant_parser.cpp
   proven_type_specialization.cpp
+  deegen_make_call_api.cpp
 )
 
 add_library(deegen_unit_test_ir_sources OBJECT

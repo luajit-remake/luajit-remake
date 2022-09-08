@@ -10,7 +10,7 @@
 
 namespace dast {
 
-llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName)
+llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues)
 {
     using namespace llvm;
 
@@ -189,12 +189,19 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         if (callee->getLinkage() == GlobalValue::LinkageTypes::PrivateLinkage ||
             callee->getLinkage() == GlobalValue::LinkageTypes::InternalLinkage)
         {
-            fprintf(stderr, "[ERROR] Function '%s' called function '%s', which "
-                            "has local linkage type. To include the function in runtime libary, "
-                            "you have to make it have external linkage type (by removing the 'static' keyword etc).",
-                    functionTarget->getName().str().c_str(),
-                    callee->getName().str().c_str());
-            abort();
+            if (!ignoreLinkageIssues)
+            {
+                fprintf(stderr, "[ERROR] Function '%s' called function '%s', which "
+                                "has local linkage type. To include the function in runtime libary, "
+                                "you have to make it have external linkage type (by removing the 'static' keyword etc).",
+                        functionTarget->getName().str().c_str(),
+                        callee->getName().str().c_str());
+                abort();
+            }
+            else
+            {
+                callee->setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
+            }
         }
     }
 
@@ -411,7 +418,7 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         }
     }
 
-    auto SanityCheckGlobals = [&module, &functionName, &mustDropDefintion]() {
+    auto SanityCheckGlobals = [&module, &functionName, &mustDropDefintion, ignoreLinkageIssues]() {
         Function* target = module->getFunction(functionName);
         ReleaseAssert(target != nullptr);
         ReleaseAssert(!target->empty());
@@ -425,16 +432,23 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
             {
                 if (gv.hasLocalLinkage())
                 {
-                    fprintf(stderr, "[ERROR] Function '%s' referenced global "
-                                    "variable '%s', which has local linkage type. To include the function in "
-                                    "runtime libary, you have to make global variable '%s' have external linkage type "
-                                    "(by removing the 'static' keyword etc). If it is a static variable inside a "
-                                    "function, try to move the function to a header file and add 'inline', which will "
-                                    "give the static variable linkonce_odr linkage.\n",
-                            functionName.c_str(),
-                            gv.getGlobalIdentifier().c_str(),
-                            gv.getGlobalIdentifier().c_str());
-                    abort();
+                    if (!ignoreLinkageIssues)
+                    {
+                        fprintf(stderr, "[ERROR] Function '%s' referenced global "
+                                        "variable '%s', which has local linkage type. To include the function in "
+                                        "runtime libary, you have to make global variable '%s' have external linkage type "
+                                        "(by removing the 'static' keyword etc). If it is a static variable inside a "
+                                        "function, try to move the function to a header file and add 'inline', which will "
+                                        "give the static variable linkonce_odr linkage.\n",
+                                functionName.c_str(),
+                                gv.getGlobalIdentifier().c_str(),
+                                gv.getGlobalIdentifier().c_str());
+                        abort();
+                    }
+                    else
+                    {
+                        gv.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
+                    }
                 }
                 // We have dropped the definition earlier. Just sanity check again.
                 //

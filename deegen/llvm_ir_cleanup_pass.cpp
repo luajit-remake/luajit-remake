@@ -160,18 +160,21 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
     MPM.addPass(Annotation2MetadataPass());
     MPM.addPass(ForceFunctionAttrsPass());
 
-    if (level == DesugaringLevel::AlwaysInline)
+    if (level == DesugaringLevel::AlwaysInline || level == DesugaringLevel::PerFunctionSimplifyOnly)
     {
         MPM.addPass(AlwaysInlinerPass(true /* InsertLifetimeIntrinsics */));
     }
 
-    MPM.addPass(CreateSimplificationPasses());
+    if (level >= DesugaringLevel::PerFunctionSimplifyOnly)
+    {
+        MPM.addPass(CreateSimplificationPasses());
+    }
 
     // The set of function names with 'noinline' attribute
     //
     std::unordered_set<std::string> originalNoInlineFunctions;
 
-    if (level > DesugaringLevel::AlwaysInline)
+    if (level > DesugaringLevel::PerFunctionSimplifyOnly)
     {
         // Desugaring will add AlwaysInline and NoInline attributes.
         // It's OK to keep AlwaysInline attributes, since we can only raise desugaring level.
@@ -201,7 +204,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
 
     MPM.run(*module, MAM);
 
-    if (level > DesugaringLevel::AlwaysInline)
+    if (level > DesugaringLevel::PerFunctionSimplifyOnly)
     {
         // Remove the added 'NoInline' attributes
         //
