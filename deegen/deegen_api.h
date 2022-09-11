@@ -2,6 +2,28 @@
 
 #include "tvalue.h"
 
+class CodeBlock;
+
+// APIs for accessing some environment state
+//
+struct DeegenEnv
+{
+    // Only available for use inside a return continuation
+    // Get the return value for the specified ordinal
+    //
+    template<size_t ord>
+    static TValue WARN_UNUSED GetRetVal();
+
+    // Only available for use inside a return continuation
+    // Store the whole return values as variadic ret
+    //
+    static void StoreReturnValuesAsVariadicRet();
+
+    // Access the current CodeBlock
+    //
+    static CodeBlock* WARN_UNUSED GetCodeBlock();
+};
+
 // Return zero or one value as the result of the operation
 //
 void NO_RETURN Return(TValue value);
@@ -23,13 +45,13 @@ extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParamList(void* handler, 
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportTarget(void* handler, uint64_t target);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportOption(void* handler, size_t option);
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallInfo();
-extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallPassingVariadicRetInfo();
+extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallPassingVariadicResInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceCallInfo();
-extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceCallPassingVariadicRetInfo();
+extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallInfo();
-extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallPassingVariadicRetInfo();
+extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallPassingVariadicResInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallInfo();
-extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicRetInfo();
+extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo();
 
 namespace detail {
 
@@ -38,6 +60,15 @@ struct MakeCallArgHandlerImpl;
 
 template<typename... ContinuationFnArgs>
 struct MakeCallArgHandlerImpl<void(*)(ContinuationFnArgs...)>
+{
+    static void NO_RETURN ALWAYS_INLINE handle(void* handler, void(*func)(ContinuationFnArgs...))
+    {
+        DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(func));
+    }
+};
+
+template<typename... ContinuationFnArgs>
+struct MakeCallArgHandlerImpl<NO_RETURN void(*)(ContinuationFnArgs...)>
 {
     static void NO_RETURN ALWAYS_INLINE handle(void* handler, void(*func)(ContinuationFnArgs...))
     {
@@ -119,12 +150,12 @@ void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(TValue* layoutBegin, size_t numArgs
     detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallInfo(), layoutBegin, numArgs, continuationFn);
 }
 
-// Same as above, except that the variadic return values from the immediate preceding opcode are appended to the end of the argument list
+// Same as above, except that the variadic results from the immediate preceding opcode are appended to the end of the argument list
 //
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRet(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallPassingVariadicRetInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo(), layoutBegin, numArgs, continuationFn);
 }
 
 // The tail call versions
@@ -136,9 +167,9 @@ void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(TValue* layoutBegin, size_t num
 }
 
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRet(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeTailCallPassingVariadicRetInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), layoutBegin, numArgs, continuationFn);
 }
 
 // Make a call to a guest language function.
@@ -160,9 +191,9 @@ void NO_RETURN ALWAYS_INLINE MakeCall(Args... args)
 // Same as above, except additionally passing varret
 //
 template<typename... Args>
-void NO_RETURN ALWAYS_INLINE MakeCallPassingVariadicRet(Args... args)
+void NO_RETURN ALWAYS_INLINE MakeCallPassingVariadicRes(Args... args)
 {
-    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeCallPassingVariadicRetInfo(), args...);
+    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeCallPassingVariadicResInfo(), args...);
 }
 
 // The tail call versions
@@ -174,9 +205,9 @@ void NO_RETURN ALWAYS_INLINE MakeTailCall(Args... args)
 }
 
 template<typename... Args>
-void NO_RETURN ALWAYS_INLINE MakeTailCallPassingVariadicRet(Args... args)
+void NO_RETURN ALWAYS_INLINE MakeTailCallPassingVariadicRes(Args... args)
 {
-    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeTailCallPassingVariadicRetInfo(), args...);
+    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeTailCallPassingVariadicResInfo(), args...);
 }
 
 namespace detail {

@@ -18,7 +18,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue r
     }
     else
     {
-        MakeCallPassingVariadicRet(MakeCallOption::DontProfileInInterpreter, GetCallee(lhs, rhs), lhs, rhs, lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
+        MakeCallPassingVariadicRes(MakeCallOption::DontProfileInInterpreter, GetCallee(lhs, rhs), lhs, rhs, lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }
@@ -34,7 +34,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue* vbegin, size
     }
     else
     {
-        MakeTailCallPassingVariadicRet(GetCallee(vbegin[0], vbegin[1]), vbegin[2], vbegin, numArgs, vbegin[3], +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
+        MakeTailCallPassingVariadicRes(GetCallee(vbegin[0], vbegin[1]), vbegin[2], vbegin, numArgs, vbegin[3], +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }

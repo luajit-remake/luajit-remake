@@ -19,6 +19,7 @@ std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunction(llvm::Func
                     AstMakeCall item;
                     ReleaseAssert(callee->arg_size() >= x_ord_arg_start);
                     ReleaseAssert(callInst->arg_size() == callee->arg_size());
+                    item.m_origin = callInst;
                     item.m_isInPlaceCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_inplaceCall));
                     item.m_passVariadicRet = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_passVariadicRet));
                     item.m_isMustTailCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_isMustTailCall));
@@ -67,7 +68,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::CreatePlaceholderFunction(llvm::Module*
     while (true)
     {
         decidedName = std::string(x_placeholderPrefix) + std::to_string(suffixOrd);
-        if (module->getFunction(decidedName) == nullptr)
+        if (module->getNamedValue(decidedName) == nullptr)
         {
             break;
         }
@@ -133,7 +134,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = false, .m_passVariadicRet = false, .m_isMustTailCall = false });
                         }
-                        else if (calleeName == "DeegenImpl_StartMakeCallPassingVariadicRetInfo")
+                        else if (calleeName == "DeegenImpl_StartMakeCallPassingVariadicResInfo")
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = false, .m_passVariadicRet = true, .m_isMustTailCall = false });
                         }
@@ -141,7 +142,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = true, .m_passVariadicRet = false, .m_isMustTailCall = false });
                         }
-                        else if (calleeName == "DeegenImpl_StartMakeInPlaceCallPassingVariadicRetInfo")
+                        else if (calleeName == "DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo")
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = true, .m_passVariadicRet = true, .m_isMustTailCall = false });
                         }
@@ -149,7 +150,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = false, .m_passVariadicRet = false, .m_isMustTailCall = true });
                         }
-                        else if (calleeName == "DeegenImpl_StartMakeTailCallPassingVariadicRetInfo")
+                        else if (calleeName == "DeegenImpl_StartMakeTailCallPassingVariadicResInfo")
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = false, .m_passVariadicRet = true, .m_isMustTailCall = true });
                         }
@@ -157,7 +158,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = true, .m_passVariadicRet = false, .m_isMustTailCall = true });
                         }
-                        else if (calleeName == "DeegenImpl_StartMakeInPlaceTailCallPassingVariadicRetInfo")
+                        else if (calleeName == "DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo")
                         {
                             foundList.push_back({ .m_inst = callInst, .m_isInPlaceCall = true, .m_passVariadicRet = true, .m_isMustTailCall = true });
                         }

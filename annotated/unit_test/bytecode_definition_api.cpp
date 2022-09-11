@@ -25,6 +25,7 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode1)
         BytecodeSlotOrConstant("lhs"),
         BytecodeSlotOrConstant("rhs")
     );
+    Result(BytecodeValue);
     Implementation(testfn);
     Variant(
         Op("lhs").IsBytecodeSlot(),
@@ -69,6 +70,7 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode2)
     Operands(
         BytecodeSlotOrConstant("x")
     );
+    Result(BytecodeValue);
     Implementation(testfn2);
     Variant(
         Op("x").IsConstant<tMIV>()

@@ -5,5 +5,8 @@ add_library(deegen_rt
   deegen_desugaring_level.cpp
   tvalue_typecheck_optimization.cpp
   deegen_ast_make_call.cpp
+  deegen_link_in_common_snippet.cpp
+  deegen_bytecode_operand.cpp
+  deegen_interpreter_interface.cpp
 ) 
 

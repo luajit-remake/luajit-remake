@@ -57,6 +57,10 @@ public:
 
     MakeCallOption m_callOption;
 
+    // The origin of this API call in the source IR
+    //
+    llvm::CallInst* m_origin;
+
     llvm::Value* m_target;
     std::vector<Arg> m_args;
     llvm::Function* m_continuation;
@@ -70,6 +74,19 @@ public:
     // Get a vector of each use of MakeCall in the function
     //
     static std::vector<AstMakeCall> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
+
+    // Lower the call to concrete interpreter logic
+    //
+    void DoLoweringForInterpreter();
+
+    static void LowerForInterpreter(llvm::Function* func)
+    {
+        std::vector<AstMakeCall> res = GetAllUseInFunction(func);
+        for (AstMakeCall& item : res)
+        {
+            item.DoLoweringForInterpreter();
+        }
+    }
 
 private:
     static llvm::Function* WARN_UNUSED CreatePlaceholderFunction(llvm::Module* module, const std::vector<bool /*isArgRange*/>& argDesc);

@@ -10,12 +10,17 @@
 
 namespace dast {
 
-llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues)
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues)
+{
+    return ExtractFunctions(module, std::vector<std::string> { functionName }, ignoreLinkageIssues);
+}
+
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleInput, const std::vector<std::string>& functionNameList, bool ignoreLinkageIssues)
 {
     using namespace llvm;
 
-    SMDiagnostic llvmErr;
-    LLVMContext& context = module->getContext();
+    std::unique_ptr<Module> moduleHolder = CloneModule(*moduleInput);
+    Module* module = moduleHolder.get();
 
     // For each global variable, if the global variable is not a constant,
     // the definition (address storing the value of the global variable) resides in the host process!
@@ -142,14 +147,17 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         addUserEdgesOfGlobalValue(&gv);
     }
 
-    Function* functionTarget = module->getFunction(functionName);
-    if (functionTarget == nullptr)
+    for (const std::string& functionName : functionNameList)
     {
-        fprintf(stderr, "[ERROR] Failed to locate function '%s'.\n", functionName.c_str());
-        abort();
-    }
+        Function* functionTarget = module->getFunction(functionName);
+        if (functionTarget == nullptr)
+        {
+            fprintf(stderr, "[ERROR] Failed to locate function '%s'.\n", functionName.c_str());
+            abort();
+        }
 
-    ReleaseAssert(!functionTarget->empty());
+        ReleaseAssert(!functionTarget->empty());
+    }
 
     std::set<GlobalValue*> isNeeded;
     std::set<Function*> callees;
@@ -176,7 +184,12 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         }
     };
 
-    dfs(functionTarget, true /*isRoot*/);
+    for (const std::string& functionName : functionNameList)
+    {
+        Function* functionTarget = module->getFunction(functionName);
+        ReleaseAssert(functionTarget != nullptr);
+        dfs(functionTarget, true /*isRoot*/);
+    }
 
     for (Function* callee : callees)
     {
@@ -191,10 +204,9 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         {
             if (!ignoreLinkageIssues)
             {
-                fprintf(stderr, "[ERROR] Function '%s' called function '%s', which "
+                fprintf(stderr, "[ERROR] One of the function to be extracted called function '%s', which "
                                 "has local linkage type. To include the function in runtime libary, "
                                 "you have to make it have external linkage type (by removing the 'static' keyword etc).",
-                        functionTarget->getName().str().c_str(),
                         callee->getName().str().c_str());
                 abort();
             }
@@ -258,11 +270,18 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         }
     }
 
+    std::unordered_set<std::string> extractedFnNameSet;
+    for (const std::string& functionName : functionNameList)
+    {
+        ReleaseAssert(!extractedFnNameSet.count(functionName));
+        extractedFnNameSet.insert(functionName);
+    }
+
     for (Function& fn : module->functions())
     {
         // We should not need to keep any function body other than our target
         //
-        if (&fn != functionTarget)
+        if (!extractedFnNameSet.count(fn.getName().str()))
         {
             ReleaseAssert(!isNeeded.count(&fn) || callees.count(&fn));
             fn.deleteBody();
@@ -328,47 +347,19 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
 
     // Change the linkage type to External
     //
-    functionTarget = module->getFunction(functionName);
-    ReleaseAssert(functionTarget != nullptr);
-    ReleaseAssert(!functionTarget->empty());
-    functionTarget->setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
-    // We will change the linkage type of our target function to 'available externally'
-    // after the bitfile is linked into the module.
-    // AvailableExternallyLinkage is not allowed to have comdat, so drop the combat now.
-    // It should be fine that we simply drop the comdat, since C++ always follows ODR rule.
-    //
-    functionTarget->setComdat(nullptr);
-
+    for (const std::string& functionName : functionNameList)
     {
-        AnonymousFile file;
-        {
-            raw_fd_ostream fdStream(file.GetUnixFd(), true /*shouldClose*/);
-            WriteBitcodeToFile(*module, fdStream);
-            if (fdStream.has_error())
-            {
-                std::error_code ec = fdStream.error();
-                fprintf(stderr, "Attempt to serialize of LLVM IR failed with errno = %d (%s)\n", ec.value(), ec.message().c_str());
-                abort();
-            }
-            /* fd closed when fdStream is destructed here */
-        }
+        Function* functionTarget = module->getFunction(functionName);
+        ReleaseAssert(functionTarget != nullptr);
+        ReleaseAssert(!functionTarget->empty());
+        functionTarget->setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
 
-        {
-            // Load the extracted bitcode file, replace the current context and module
-            //
-            std::string fileContents = file.GetFileContents();
-            MemoryBufferRef mb(StringRef(fileContents.data(), fileContents.length()), StringRef("extracted_ir"));
-            std::unique_ptr<Module> newModule = parseIR(mb, llvmErr, context);
-
-            if (newModule == nullptr)
-            {
-                fprintf(stderr, "[ERROR] Generated IR file contains error.\n");
-                llvmErr.print("extract_ir", errs());
-                abort();
-            }
-            module = newModule.release();
-        }
+        // It should be fine that we simply drop the comdat, since C++ always follows ODR rule.
+        //
+        functionTarget->setComdat(nullptr);
     }
+
+    ValidateLLVMModule(module);
 
     // Assert that the set of 'needed' symbols that we determined is exactly the set
     // of symbols kept by the dead code elimination pass
@@ -418,10 +409,14 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         }
     }
 
-    auto SanityCheckGlobals = [&module, &functionName, &mustDropDefintion, ignoreLinkageIssues]() {
-        Function* target = module->getFunction(functionName);
-        ReleaseAssert(target != nullptr);
-        ReleaseAssert(!target->empty());
+    {
+        for (const std::string& functionName : functionNameList)
+        {
+            Function* functionTarget = module->getFunction(functionName);
+            ReleaseAssert(functionTarget != nullptr);
+            ReleaseAssert(functionTarget->hasExternalLinkage());
+            ReleaseAssert(!functionTarget->empty());
+        }
 
         // Assert that for each global variable that is not constant, it must have non-local linkage,
         // since it should be resolved to an address in the host process.
@@ -434,13 +429,12 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
                 {
                     if (!ignoreLinkageIssues)
                     {
-                        fprintf(stderr, "[ERROR] Function '%s' referenced global "
+                        fprintf(stderr, "[ERROR] One of the functions to be extracted referenced global "
                                         "variable '%s', which has local linkage type. To include the function in "
                                         "runtime libary, you have to make global variable '%s' have external linkage type "
                                         "(by removing the 'static' keyword etc). If it is a static variable inside a "
                                         "function, try to move the function to a header file and add 'inline', which will "
                                         "give the static variable linkonce_odr linkage.\n",
-                                functionName.c_str(),
                                 gv.getGlobalIdentifier().c_str(),
                                 gv.getGlobalIdentifier().c_str());
                         abort();
@@ -462,21 +456,9 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
         //
         for (Function& fn : module->functions())
         {
-            if (&fn != target)
+            if (!extractedFnNameSet.count(fn.getName().str()))
             {
-                if (x_isDebugBuild)
-                {
-                    // In debug build, if the function needs wrapper (is a symbol pair),
-                    // the implementation is left there with available externally linkage.
-                    // This should not happen in release build because we will run the optimization
-                    // pass to either inline it or drop it.
-                    //
-                    ReleaseAssert(fn.empty() || fn.hasAvailableExternallyLinkage());
-                }
-                else
-                {
-                    ReleaseAssert(fn.empty() && fn.hasExternalLinkage());
-                }
+                ReleaseAssert(fn.empty() && fn.hasExternalLinkage());
             }
             else
             {
@@ -484,11 +466,11 @@ llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string func
                 ReleaseAssert(fn.hasExternalLinkage());
             }
         }
-    };
+    }
 
-    SanityCheckGlobals();
+    module->setModuleIdentifier("extracted_ir");
 
-    return module;
+    return moduleHolder;
 }
 
 }  // namespace dast

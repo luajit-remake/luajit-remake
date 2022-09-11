@@ -5,8 +5,10 @@
 
 #include "lambda_parser.h"
 #include "switch_case.h"
-#include "parse_bytecode_definition.h"
 #include "tvalue_typecheck_optimization.h"
+#include "deegen_interpreter_interface.h"
+#include "deegen_bytecode_operand.h"
+#include "deegen_ast_make_call.h"
 
 using namespace llvm;
 using namespace dast;
@@ -26,59 +28,50 @@ TEST(AnnotationParser, SwitchCaseSanity)
     ReleaseAssert(switchCaseList[0].m_hasDefaultClause);
     ReleaseAssert(lm.size() == 0);
 }
-
 #if 0
 TEST(AnnotationParser, BytecodeDefinitionSanity)
 {
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    std::vector<BytecodeVariantDefinition*> defs = DeegenBytecodeDefinitionParser::ParseList([&]() {
-        std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "bytecode_definition_api");
-        return module.release();
-    });
+    std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "bytecode_definition_api");
 
-    defs[5]->CreateInterpreterFunctionForMaxOperandWidthBytes(4);
+    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
-    DesugarAndSimplifyLLVMModule(defs[5]->m_currentModule, DesugarUpToExcluding(DesugaringLevel::TypeSpecialization));
-    // defs[0]->m_ifunc.RunPostLLVMSimplificationTransforms();
+    auto& target = defs[1][0];
 
-    ValidateLLVMModule(defs[5]->m_currentModule);
+    target->SetMaxOperandWidthBytes(4);
 
-    TValueTypecheckOptimizationPass pass;
-    pass.SetTargetFunction(defs[5]->m_ifunc.GetImplFunction());
-    for (BcOperand* operand : defs[5]->m_ifunc.Operands())
-    {
-        if (operand->GetKind() == BcOperandKind::Constant)
-        {
-            BcOpConstant* bcc = assert_cast<BcOpConstant*>(operand);
-            if (bcc->m_typeMask != x_typeSpeculationMaskFor<tTop>)
-            {
-                pass.AddOperandTypeInfo(static_cast<uint32_t>(bcc->OperandOrdinal()), bcc->m_typeMask);
-            }
-        }
-    }
+    Function* implFunc = module->getFunction(target->m_implFunctionName);
+    InterpreterFunctionInterface ifi(implFunc, false);
+    ifi.EmitWrapperBody(*target.get());
+    ifi.LowerAPIs();
 
-    pass.DoAnalysis();
-    pass.DoOptimization();
+    ifi.GetModule()->dump();
 
-    defs[5]->m_currentModule->dump();
-
-    defs[0]->m_ifunc.GetImplFunction()->addFnAttr(Attribute::AttrKind::AlwaysInline);
-    RunLLVMOptimizePass(defs[0]->m_currentModule);
-
-    ValidateLLVMModule(defs[0]->m_currentModule);
-
-    ExtractFunction(defs[0]->m_currentModule, "deegen_bytecode_impl");
-    ValidateLLVMModule(defs[0]->m_currentModule);
-
-    defs[0]->m_currentModule->dump();
-
-    for (BytecodeVariantDefinition* def : defs)
-    {
-        std::stringstream ss;
-        def->dump(ss);
-        printf("%s\n", ss.str().c_str());
-    }
 }
+
 #endif
+
+TEST(AnnotationParser, BytecodeInterpreterLoweringSanity_1)
+{
+    std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
+    LLVMContext& ctx = *llvmCtxHolder.get();
+
+    std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "bytecode_interpreter_lowering_sanity_1");
+
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
+    AstMakeCall::PreprocessModule(module.get());
+
+    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+
+    auto& target = defs[0][0];
+    target->SetMaxOperandWidthBytes(4);
+
+    Function* implFunc = module->getFunction(target->m_implFunctionName);
+    InterpreterFunctionInterface ifi(target.get(), implFunc, false);
+    ifi.EmitWrapperBody();
+    ifi.LowerAPIs();
+    ifi.GetModule()->dump();
+
+}

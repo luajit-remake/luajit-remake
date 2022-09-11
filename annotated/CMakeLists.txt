@@ -33,4 +33,5 @@ else()
 endif()
 
 add_subdirectory(unit_test)
+add_subdirectory(deegen_common_snippets)
 

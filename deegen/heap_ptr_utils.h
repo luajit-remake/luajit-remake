@@ -11,11 +11,13 @@ using ConstRestrictPtr = RestrictPtr<const T>;
 #define CLANG_GS_ADDRESS_SPACE_IDENTIFIER 256
 #define CLANG_FS_ADDRESS_SPACE_IDENTIFIER 257
 
-template<typename T>
-using HeapPtr = T __attribute__((address_space(CLANG_GS_ADDRESS_SPACE_IDENTIFIER))) *;
+#define CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR CLANG_GS_ADDRESS_SPACE_IDENTIFIER
 
 template<typename T>
-using HeapRef = T __attribute__((address_space(CLANG_GS_ADDRESS_SPACE_IDENTIFIER))) &;
+using HeapPtr = T __attribute__((address_space(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR))) *;
+
+template<typename T>
+using HeapRef = T __attribute__((address_space(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR))) &;
 
 template<typename P, typename T>
 inline constexpr bool IsPtrOrHeapPtr = std::is_same_v<P, T*> || std::is_same_v<P, HeapPtr<T>>;

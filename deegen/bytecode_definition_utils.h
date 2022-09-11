@@ -236,6 +236,60 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         }
     }
 
+    enum BytecodeResultKind
+    {
+        // Returns nothing as output
+        // Note that the bytecode may still write to BytecodeRangeRW (in general,
+        // everything >= the slot specified in BytecodeRangeRW is assumed to be clobbered by us)
+        //
+        NoOutput,
+        // Returns exactly one TValue
+        //
+        BytecodeValue,
+        // Generates variadic results, which must be consumed by the immediate next bytecode
+        //
+        VariadicResults,
+        // This bytecode may use the 'ReturnAndBranch' API to perform a branch
+        //
+        ConditionalBranch
+    };
+
+    consteval void Result(BytecodeResultKind resKind)
+    {
+        ReleaseAssert(!m_resultKindInitialized);
+        m_resultKindInitialized = true;
+        m_hasTValueOutput = (resKind == BytecodeResultKind::BytecodeValue);
+        m_hasVariadicResOutput = (resKind == BytecodeResultKind::VariadicResults);
+        m_canPerformBranch = (resKind == BytecodeResultKind::ConditionalBranch);
+    }
+
+    consteval void Result(BytecodeResultKind resKind1, BytecodeResultKind resKind2)
+    {
+        ReleaseAssert(!m_resultKindInitialized);
+        m_resultKindInitialized = true;
+
+        BytecodeResultKind resKind;
+        if (resKind1 == BytecodeResultKind::ConditionalBranch)
+        {
+            resKind = resKind2;
+        }
+        else if (resKind2 == BytecodeResultKind::ConditionalBranch)
+        {
+            resKind = resKind1;
+        }
+        else
+        {
+            ReleaseAssert(false && "bad result kind combination");
+        }
+
+        ReleaseAssert(resKind != BytecodeResultKind::ConditionalBranch && "bad result kind combination");
+        ReleaseAssert(resKind != BytecodeResultKind::VariadicResults && "VariadicResults + ConditionalBranch is unsupported yet");
+
+        m_canPerformBranch = true;
+        m_hasTValueOutput = (resKind == BytecodeResultKind::BytecodeValue);
+        m_hasVariadicResOutput = (resKind == BytecodeResultKind::VariadicResults);
+    }
+
     template<size_t ord, typename T>
     consteval void ValidateImplementationPrototype()
     {
@@ -321,6 +375,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     consteval DeegenFrontendBytecodeDefinitionDescriptor()
         : m_operandTypeListInitialized(false)
         , m_implementationInitialized(false)
+        , m_resultKindInitialized(false)
+        , m_hasTValueOutput(false)
+        , m_hasVariadicResOutput(false)
+        , m_canPerformBranch(false)
         , m_implementationFn(nullptr)
         , m_numOperands(0)
         , m_numVariants(0)
@@ -330,6 +388,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
     bool m_operandTypeListInitialized;
     bool m_implementationInitialized;
+    bool m_resultKindInitialized;
+    bool m_hasTValueOutput;
+    bool m_hasVariadicResOutput;
+    bool m_canPerformBranch;
     void* m_implementationFn;
     size_t m_numOperands;
     size_t m_numVariants;
@@ -366,6 +428,7 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
     static_assert(std::is_base_of_v<DeegenFrontendBytecodeDefinitionDescriptor, Arg1>);
     static_assert(curv.m_operandTypeListInitialized);
     static_assert(curv.m_implementationInitialized);
+    static_assert(curv.m_resultKindInitialized);
     static_assert(curv.m_numVariants > 0);
 
     static constexpr auto value = constexpr_std_array_concat(std::array<DeegenFrontendBytecodeDefinitionDescriptor, 1> { curv }, deegen_get_bytecode_def_list_impl<std::tuple<Args...>>::value);

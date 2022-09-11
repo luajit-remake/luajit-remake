@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
+#include "heap_ptr_utils.h"
 
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Value.h"
@@ -516,6 +517,16 @@ private:
 inline std::string GetValueFromLLVMConstantCString(llvm::Constant* value)
 {
     using namespace llvm;
+
+    {
+        GlobalVariable* gv = dyn_cast<GlobalVariable>(value);
+        if (gv != nullptr)
+        {
+            ReleaseAssert(gv->isConstant());
+            return GetValueFromLLVMConstantCString(gv->getInitializer());
+        }
+    }
+
     ConstantDataArray* cda = dyn_cast<ConstantDataArray>(value);
     std::string r;
     if (cda != nullptr)
@@ -638,11 +649,12 @@ void DesugarAndSimplifyLLVMModule(llvm::Module* module, DesugaringLevel level);
 // Remove anything unrelated to the specified function:
 // function bodies of all other functions are dropped, then all unreferenced symbols are removed.
 //
-// Note that this creates a new module (which is returned), and invalidates any reference to the old module.
+// Note that this creates a new module (which is returned). The old module is untouched.
 //
 // 'ignoreLinkageIssues = true' should only be used in unit tests.
 //
-llvm::Module* WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues = false);
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues = false);
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* module, const std::vector<std::string>& functionNameList, bool ignoreLinkageIssues = false);
 
 inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* value)
 {
@@ -669,5 +681,15 @@ inline std::string DumpLLVMModuleAsString(llvm::Module* module)
     std::string dump = rso.str();
     return dump;
 }
+
+inline llvm::Type* GetLLVMHeapPtrPointerType(llvm::LLVMContext& ctx)
+{
+    return llvm::Type::getVoidTy(ctx)->getPointerTo(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
+}
+
+// Link the requested snippet into the current module if it hasn't been linked in yet.
+// Return the LLVM Function for the requested snippet.
+//
+llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName);
 
 }   // namespace dast

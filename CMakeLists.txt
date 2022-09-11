@@ -153,6 +153,7 @@ add_executable(main
   test_llvm_constant_parser.cpp
   test_proven_type_specialization.cpp
   test_deegen_make_call_api.cpp
+  test_deegen_common_snippet_getter.cpp
 )
 
 target_link_libraries(main PUBLIC
@@ -162,6 +163,7 @@ target_link_libraries(main PUBLIC
   toylang
   deegen_rt
   deegen_unit_test_ir
+  deegen_common_snippet_ir
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )

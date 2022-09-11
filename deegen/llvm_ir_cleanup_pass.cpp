@@ -160,7 +160,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
     MPM.addPass(Annotation2MetadataPass());
     MPM.addPass(ForceFunctionAttrsPass());
 
-    if (level == DesugaringLevel::AlwaysInline || level == DesugaringLevel::PerFunctionSimplifyOnly)
+    if (level == DesugaringLevel::HandleAlwaysInlineButNoSimplify || level == DesugaringLevel::PerFunctionSimplifyOnly)
     {
         MPM.addPass(AlwaysInlinerPass(true /* InsertLifetimeIntrinsics */));
     }
