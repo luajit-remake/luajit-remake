@@ -15,15 +15,8 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
     , m_isReturnContinuation(isReturnContinuation)
     , m_impl(nullptr)
     , m_wrapper(nullptr)
-    , m_didEmitWrapper(false)
+    , m_valuePreserver()
     , m_didLowerAPIs(false)
-    , m_didGetResult(false)
-    , m_coroutineCtx(nullptr)
-    , m_stackBase(nullptr)
-    , m_curBytecode(nullptr)
-    , m_codeBlock(nullptr)
-    , m_retStart(nullptr)
-    , m_numRet(nullptr)
 {
     using namespace llvm;
     m_module = llvm::CloneModule(*impl->getParent());
@@ -31,29 +24,6 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
     ReleaseAssert(m_impl != nullptr);
 
     LLVMContext& ctx = m_module->getContext();
-
-    // This is not the final interface, we will change this interface
-    // to the final version after we inline 'impl' but before we lower the APIs.
-    //
-    // We are doing this because certain values (e.g., 'bytecode' in the return
-    // continuation) needs to be computed from the arguments.
-    // After inlining in 'impl', we want to run simplifcation phase so everything is cleaned up,
-    // but that also makes it impossible to find where those values are in the simplified function.
-    //
-    // So we put everything we want to track in the arguments, then run the simplifcation phase,
-    // and finally remove the fake arguments and replace them with the concrete computation.
-    //
-    std::vector<Type*> paramTypes {
-        llvm_type_of<void*>(ctx) /*coroutineCtx*/,
-        llvm_type_of<void*>(ctx) /*stackBase*/,
-        llvm_type_of<void*>(ctx) /*bytecode*/,
-        llvm_type_of<void*>(ctx) /*codeblock*/
-    };
-    if (isReturnContinuation)
-    {
-        paramTypes.push_back(llvm_type_of<void*>(ctx) /*retStart*/);
-        paramTypes.push_back(llvm_type_of<uint64_t>(ctx) /*numRet*/);
-    }
 
     // For isReturnContinuation, our caller should have set up the desired function name for us
     // For !isReturnContinuation, we should rename by ourselves.
@@ -69,40 +39,70 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
         ReleaseAssert(m_impl->getName().str().ends_with("_impl"));
     }
 
-    FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, paramTypes, false /*isVarArg*/);
-    std::string wrapperFnName = m_impl->getName().str() + "_wrapper";
-    ReleaseAssert(m_module->getNamedValue(wrapperFnName) == nullptr);
-    m_wrapper = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, wrapperFnName, m_module.get());
-
-    InvalidateContextValues();
-    m_coroutineCtx = m_wrapper->getArg(0);
-    m_stackBase = m_wrapper->getArg(1);
-    m_curBytecode = m_wrapper->getArg(2);
-    m_codeBlock = m_wrapper->getArg(3);
-    if (isReturnContinuation)
     {
-        m_retStart = m_wrapper->getArg(4);
-        m_numRet = m_wrapper->getArg(5);
+        FunctionType* fty = GetInterfaceFunctionType(ctx, m_isReturnContinuation);
+        std::string finalFnName = m_impl->getName().str();
+        ReleaseAssert(finalFnName.ends_with("_impl"));
+        finalFnName = finalFnName.substr(0, finalFnName.length() - strlen("_impl"));
+        ReleaseAssert(m_module->getNamedValue(finalFnName) == nullptr);
+        m_wrapper = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, finalFnName, m_module.get());
     }
 
+    // Set parameter names just to make dumps more readable
+    //
+    ReleaseAssert(m_wrapper->arg_size() == 4);
+    m_wrapper->getArg(0)->setName(x_coroutineCtxIdent);
+    m_wrapper->getArg(1)->setName(x_stackBaseIdent);
+    if (m_isReturnContinuation)
+    {
+        m_wrapper->getArg(2)->setName(x_retStartIdent);
+        m_wrapper->getArg(3)->setName(x_numRetIdent);
+    }
+    else
+    {
+        m_wrapper->getArg(2)->setName(x_curBytecodeIdent);
+        m_wrapper->getArg(3)->setName(x_codeBlockIdent);
+    }
+
+    // Set up the function attributes
+    // TODO: add alias attributes to parameters
+    //
     m_wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
     m_wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
     CopyFunctionAttributes(m_wrapper /*dst*/, m_impl /*src*/);
 
-    // TODO: add alias attributes
-}
-
-void InterpreterFunctionInterface::EmitWrapperBody()
-{
-    using namespace llvm;
-    ReleaseAssert(m_wrapper->empty());
-    ReleaseAssert(!m_didEmitWrapper);
-    m_didEmitWrapper = true;
-
-    LLVMContext& ctx = GetModule()->getContext();
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
-
     BasicBlock* currentBlock = entryBlock;
+
+    if (!m_isReturnContinuation)
+    {
+        m_valuePreserver.Preserve(x_coroutineCtxIdent, m_wrapper->getArg(0));
+        m_valuePreserver.Preserve(x_stackBaseIdent, m_wrapper->getArg(1));
+        m_valuePreserver.Preserve(x_curBytecodeIdent, m_wrapper->getArg(2));
+        m_valuePreserver.Preserve(x_codeBlockIdent, m_wrapper->getArg(3));
+    }
+    else
+    {
+        m_valuePreserver.Preserve(x_coroutineCtxIdent, m_wrapper->getArg(0));
+        m_valuePreserver.Preserve(x_stackBaseIdent, m_wrapper->getArg(1));
+        m_valuePreserver.Preserve(x_retStartIdent, m_wrapper->getArg(2));
+        m_valuePreserver.Preserve(x_numRetIdent, m_wrapper->getArg(3));
+
+        Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackFrameBase");
+        ReleaseAssert(getCbFunc->arg_size() == 1 && llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getParamType(0)));
+        ReleaseAssert(llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getReturnType()));
+        Instruction* codeblock = CallInst::Create(getCbFunc, { GetStackBase() }, "" /*name*/, currentBlock);
+
+        Function* getBytecodePtrFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetBytecodePtrAfterReturnFromCall");
+        ReleaseAssert(getBytecodePtrFunc->arg_size() == 2 &&
+                      llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(0)) &&
+                      llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(1)));
+        ReleaseAssert(llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getReturnType()));
+        Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { GetStackBase(), codeblock }, "" /*name*/, currentBlock);
+
+        m_valuePreserver.Preserve(x_codeBlockIdent, codeblock);
+        m_valuePreserver.Preserve(x_curBytecodeIdent, bytecodePtr);
+    }
 
     std::vector<Value*> opcodeValues;
     for (auto& operand : m_bytecodeDef->m_list)
@@ -130,12 +130,14 @@ void InterpreterFunctionInterface::EmitWrapperBody()
         usageValues.push_back(GetNumRet());
     }
 
-    FunctionType* fty = m_impl->getFunctionType();
-    ReleaseAssert(llvm_type_has_type<void>(fty->getReturnType()));
-    ReleaseAssert(fty->getNumParams() == usageValues.size());
-    for (size_t i = 0; i < usageValues.size(); i++)
     {
-        ReleaseAssert(fty->getParamType(static_cast<uint32_t>(i)) == usageValues[i]->getType());
+        FunctionType* fty = m_impl->getFunctionType();
+        ReleaseAssert(llvm_type_has_type<void>(fty->getReturnType()));
+        ReleaseAssert(fty->getNumParams() == usageValues.size());
+        for (size_t i = 0; i < usageValues.size(); i++)
+        {
+            ReleaseAssert(fty->getParamType(static_cast<uint32_t>(i)) == usageValues[i]->getType());
+        }
     }
 
     CallInst::Create(m_impl, usageValues, "", currentBlock);
@@ -186,7 +188,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionInterface::ProcessR
 {
     ReleaseAssert(!m_isReturnContinuation);
     InterpreterFunctionInterface ifi(m_bytecodeDef, rc, true /*isReturnContinuation*/);
-    ifi.EmitWrapperBody();
     ifi.LowerAPIs();
     return std::move(ifi.m_module);
 }
@@ -208,10 +209,8 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetInterfaceFuncti
 void InterpreterFunctionInterface::LowerAPIs()
 {
     using namespace llvm;
-    ReleaseAssert(m_didEmitWrapper && !m_didLowerAPIs);
+    ReleaseAssert(!m_didLowerAPIs);
     m_didLowerAPIs = true;
-
-    LLVMContext& ctx = m_module->getContext();
 
     std::string finalFnName = m_impl->getName().str();
     ReleaseAssert(finalFnName.ends_with("_impl"));
@@ -232,7 +231,6 @@ void InterpreterFunctionInterface::LowerAPIs()
         // This is necessary for us to later link them together.
         //
         ReturnContinuationFinder rcFinder(m_impl);
-        FunctionType* rcFty = GetInterfaceFunctionType(ctx, true /*forReturnContinuation*/);
         std::vector<Function*> rcList;
         rcList.resize(rcFinder.m_count, nullptr);
         ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
@@ -246,9 +244,7 @@ void InterpreterFunctionInterface::LowerAPIs()
             rc->setName(rcImplName);
             ReleaseAssert(rcList[it.second] == nullptr);
             rcList[it.second] = rc;
-
             ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
-            Function::Create(rcFty, GlobalValue::LinkageTypes::ExternalLinkage, rcFinalName, m_module.get());
         }
 
         // After all the renaming and function declarations, process each of the return continuation
@@ -269,139 +265,18 @@ void InterpreterFunctionInterface::LowerAPIs()
     m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
     m_impl->setLinkage(GlobalVariable::LinkageTypes::InternalLinkage);
 
-    InvalidateContextValues();
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     m_impl = nullptr;
 
-    // Fix up the function prototype of 'm_wrapper' before lowering the APIs
-    //
-    {
-        FunctionType* fty = m_wrapper->getFunctionType();
-        if (m_isReturnContinuation)
-        {
-            ReleaseAssert(fty->getNumParams() == 6);
-        }
-        else
-        {
-            ReleaseAssert(fty->getNumParams() == 4);
-        }
-
-        FunctionType* newFty = GetInterfaceFunctionType(ctx, m_isReturnContinuation);
-        ReleaseAssert(m_module->getNamedValue(finalFnName) == nullptr);
-        Function* newFunc = Function::Create(newFty, GlobalValue::LinkageTypes::ExternalLinkage, finalFnName, m_module.get());
-
-        ValueToValueMapTy vmap;
-        std::vector<Instruction*> preheaderSeq;
-
-        m_coroutineCtx = newFunc->getArg(0);
-        m_stackBase = newFunc->getArg(1);
-
-        vmap[m_wrapper->getArg(0)] = m_coroutineCtx;
-        vmap[m_wrapper->getArg(1)] = m_stackBase;
-
-        if (!m_isReturnContinuation)
-        {
-            m_curBytecode = newFunc->getArg(2);
-            m_codeBlock = newFunc->getArg(3);
-
-            vmap[m_wrapper->getArg(2)] = m_curBytecode;
-            vmap[m_wrapper->getArg(3)] = m_codeBlock;
-        }
-        else
-        {
-            Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackFrameBase");
-            ReleaseAssert(getCbFunc->arg_size() == 1 && llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getParamType(0)));
-            ReleaseAssert(llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getReturnType()));
-            Instruction* codeblock = CallInst::Create(getCbFunc, { m_stackBase }, "" /*name*/);
-
-            Function* getBytecodePtrFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetBytecodePtrAfterReturnFromCall");
-            ReleaseAssert(getBytecodePtrFunc->arg_size() == 2 &&
-                          llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(0)) &&
-                          llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(1)));
-            ReleaseAssert(llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getReturnType()));
-            Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { m_stackBase, codeblock }, "" /*name*/);
-
-            m_curBytecode = bytecodePtr;
-            m_codeBlock = codeblock;
-
-            vmap[m_wrapper->getArg(2)] = m_curBytecode;
-            vmap[m_wrapper->getArg(3)] = m_codeBlock;
-
-            preheaderSeq = {
-                codeblock,
-                bytecodePtr
-            };
-
-            m_retStart = newFunc->getArg(2);
-            m_numRet = newFunc->getArg(3);
-
-            vmap[m_wrapper->getArg(4)] = m_retStart;
-            vmap[m_wrapper->getArg(5)] = m_numRet;
-        }
-
-        for (auto it = vmap.begin(); it != vmap.end(); it++)
-        {
-            ReleaseAssert(it->first->getType() == it->second->getType());
-        }
-
-        for (uint32_t i = 0; i < m_wrapper->arg_size(); i++)
-        {
-            ReleaseAssert(vmap.count(m_wrapper->getArg(i)));
-        }
-
-        SmallVector<ReturnInst*, 8> ignoredReturns;
-        CloneFunctionInto(newFunc /*dst*/, m_wrapper /*src*/, vmap, CloneFunctionChangeType::LocalChangesOnly, ignoredReturns);
-
-        ReleaseAssert(!newFunc->empty());
-
-        // Now, insert the preheader instructions to the first basic block, but after all the allocas
-        //
-        if (!preheaderSeq.empty())
-        {
-            BasicBlock* entryBB = &newFunc->front();
-            ReleaseAssert(entryBB != nullptr);
-
-            Instruction* firstNonAllocaInst = nullptr;
-            for (Instruction& inst : *entryBB)
-            {
-                if (dyn_cast<AllocaInst>(&inst) == nullptr)
-                {
-                    firstNonAllocaInst = &inst;
-                    break;
-                }
-            }
-            ReleaseAssert(firstNonAllocaInst != nullptr);
-
-            for (Instruction* inst : preheaderSeq)
-            {
-                inst->insertBefore(firstNonAllocaInst);
-            }
-        }
-
-        // Set parameter names just to make dumps more readable
-        //
-        ReleaseAssert(newFunc->arg_size() == 4);
-        newFunc->getArg(0)->setName("coroCtx");
-        newFunc->getArg(1)->setName("stackBase");
-        if (m_isReturnContinuation)
-        {
-            newFunc->getArg(2)->setName("retStart");
-            newFunc->getArg(3)->setName("numRets");
-        }
-        else
-        {
-            newFunc->getArg(2)->setName("curBytecode");
-            newFunc->getArg(3)->setName("codeBlock");
-        }
-
-        ValidateLLVMFunction(newFunc);
-
-        m_wrapper->deleteBody();
-        m_wrapper = newFunc;
-    }
+    m_valuePreserver.RefreshAfterTransform();
 
     // Now we can do the lowerings
     //
+
+
+    // After lowering, remove the value preserver annotations so optimizer can work fully
+    //
+    m_valuePreserver.Cleanup();
 
     // Run optimization pass
     //
@@ -445,7 +320,6 @@ void InterpreterFunctionInterface::LowerAPIs()
     //
     m_module = ExtractFunctions(m_module.get(), extractTargets);
     m_wrapper = nullptr;
-    InvalidateContextValues();
 }
 
 }   // namespace dast

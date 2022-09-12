@@ -15,33 +15,17 @@ public:
     //
     InterpreterFunctionInterface(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, bool isReturnContinuation);
 
-    // Create wrapper logic that decodes the bytecode struct, and call 'impl'
-    //
-    void EmitWrapperBody();
-
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
     void LowerAPIs();
 
-    std::unique_ptr<llvm::Module> WARN_UNUSED GetResult();
-
     llvm::Module* GetModule() const { return m_module.get(); }
-    llvm::Value* GetCoroutineCtx() const { ReleaseAssert(m_coroutineCtx != nullptr); return m_coroutineCtx; }
-    llvm::Value* GetStackBase() const { ReleaseAssert(m_stackBase != nullptr); return m_stackBase; }
-    llvm::Value* GetCurBytecode() const { ReleaseAssert(m_curBytecode != nullptr); return m_curBytecode; }
-    llvm::Value* GetCodeBlock() const { ReleaseAssert(m_codeBlock != nullptr); return m_codeBlock; }
-    llvm::Value* GetRetStart() const { ReleaseAssert(m_retStart != nullptr && m_isReturnContinuation); return m_retStart; }
-    llvm::Value* GetNumRet() const { ReleaseAssert(m_numRet != nullptr && m_isReturnContinuation); return m_numRet; }
-
-    void InvalidateContextValues()
-    {
-        m_coroutineCtx = nullptr;
-        m_stackBase = nullptr;
-        m_curBytecode = nullptr;
-        m_codeBlock = nullptr;
-        m_retStart = nullptr;
-        m_numRet = nullptr;
-    }
+    llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtxIdent); }
+    llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBaseIdent); }
+    llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecodeIdent); }
+    llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlockIdent); }
+    llvm::Value* GetRetStart() const { return m_valuePreserver.Get(x_retStartIdent); }
+    llvm::Value* GetNumRet() const { return m_valuePreserver.Get(x_numRetIdent); }
 
     std::unique_ptr<llvm::Module> WARN_UNUSED ProcessReturnContinuation(llvm::Function* rc);
 
@@ -58,16 +42,15 @@ private:
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;
 
-    bool m_didEmitWrapper;
+    LLVMValuePreserver m_valuePreserver;
     bool m_didLowerAPIs;
-    bool m_didGetResult;
 
-    llvm::Value* m_coroutineCtx;
-    llvm::Value* m_stackBase;
-    llvm::Value* m_curBytecode;
-    llvm::Value* m_codeBlock;
-    llvm::Value* m_retStart;
-    llvm::Value* m_numRet;
+    static constexpr const char* x_coroutineCtxIdent = "coroutineCtx";
+    static constexpr const char* x_stackBaseIdent = "stackBase";
+    static constexpr const char* x_curBytecodeIdent = "curBytecode";
+    static constexpr const char* x_codeBlockIdent = "codeBlock";
+    static constexpr const char* x_retStartIdent = "retStart";
+    static constexpr const char* x_numRetIdent = "numRet";
 };
 
 }   // namespace dast

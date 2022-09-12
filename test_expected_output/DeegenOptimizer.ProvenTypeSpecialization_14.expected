@@ -3,17 +3,17 @@ source_filename = "/home/u/project/annotated/unit_test/proven_type_specializatio
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-; Function Attrs: noreturn
-declare void @_Z6Return6TValue(i64) local_unnamed_addr #0
-
 ; Function Attrs: noreturn nounwind uwtable
-define dso_local void @testfn3(i64 %0) #1 {
-  tail call void @_Z6Return6TValue(i64 4642437159633027072) #2
+define dso_local void @testfn3(i64 %0) #0 {
+  tail call void @DeegenImpl_ReturnValue(i64 4642437159633027072) #2
   unreachable
 }
 
-attributes #0 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+; Function Attrs: noreturn
+declare void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #1
+
+attributes #0 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #2 = { noreturn nounwind }
 
 !llvm.linker.options = !{}

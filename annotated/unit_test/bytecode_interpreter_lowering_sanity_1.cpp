@@ -27,7 +27,7 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode1)
     Operands(
         BytecodeSlotOrConstant("lhs"),
         BytecodeSlotOrConstant("rhs")
-        );
+    );
     Result(BytecodeValue);
     Implementation(testfn);
     Variant(

@@ -48,7 +48,7 @@ public:
 
     // The LLVM type that the implementation function expects for this operand
     //
-    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext* ctx) = 0;
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) = 0;
 
     // Get the LLVM value to be passed to the implementation function.
     // 'targetBB' is the basic block where the logic should be appended to.
@@ -109,37 +109,6 @@ private:
     size_t m_sizeInBytecodeStruct;
 };
 
-class BytecodeVariantDefinition
-{
-public:
-    void SetMaxOperandWidthBytes(size_t maxWidthBytes)
-    {
-        size_t currentOffset = 0;
-        for (auto& operand : m_list)
-        {
-            size_t operandMaxWidth = operand->ValueByteLength();
-            if (operandMaxWidth == 0)
-            {
-                continue;
-            }
-            size_t width = std::min(operandMaxWidth, maxWidthBytes);
-            operand->AssignOrChangeBytecodeStructOffsetAndSize(currentOffset, width);
-            currentOffset += width;
-        }
-        m_bytecodeStructLength = currentOffset;
-    }
-
-    static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
-
-    size_t m_bytecodeOrdInTU;
-    size_t m_variantOrd;
-    std::string m_bytecodeName;
-    std::string m_implFunctionName;
-    std::vector<std::string> m_opNames;
-    std::vector<std::unique_ptr<BcOperand>> m_list;
-    size_t m_bytecodeStructLength;
-};
-
 // A bytecode operand that refers to a bytecode slot
 //
 class BcOpSlot final : public BcOperand
@@ -166,11 +135,11 @@ public:
         return false;
     }
 
-    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext* ctx) override
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override
     {
         // TValue, which is i64
         //
-        return llvm_type_of<uint64_t>(*ctx);
+        return llvm_type_of<uint64_t>(ctx);
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -207,11 +176,11 @@ public:
         return true;
     }
 
-    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext* ctx) override
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override
     {
         // TValue, which is i64
         //
-        return llvm_type_of<uint64_t>(*ctx);
+        return llvm_type_of<uint64_t>(ctx);
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -254,13 +223,20 @@ public:
         return m_isSigned;
     }
 
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override final
+    {
+        return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 4));
+    }
+
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
     // The sign and width of this literal
     //
     bool m_isSigned;
     size_t m_numBytes;
 };
 
-class BcOpSpecializedLiteral : public BcOpLiteral
+class BcOpSpecializedLiteral final : public BcOpLiteral
 {
 public:
     BcOpSpecializedLiteral(const std::string& name, bool isSigned, size_t numBytes, uint64_t concreteValue)
@@ -272,7 +248,7 @@ public:
         {
             if (isSigned)
             {
-                ReleaseAssert((1LL << (numBytes * 8 - 1)) <= static_cast<int64_t>(concreteValue));
+                ReleaseAssert(-(1LL << (numBytes * 8 - 1)) <= static_cast<int64_t>(concreteValue));
                 ReleaseAssert(static_cast<int64_t>(concreteValue) < (1LL << (numBytes * 8 - 1)));
             }
             else
@@ -315,7 +291,57 @@ public:
         return m_isSigned;
     }
 
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
     uint64_t m_concreteValue;
+};
+
+class BytecodeVariantDefinition
+{
+public:
+    void SetMaxOperandWidthBytes(size_t maxWidthBytes)
+    {
+        size_t currentOffset = 0;
+        auto update = [&](BcOperand* operand)
+        {
+            size_t operandMaxWidth = operand->ValueByteLength();
+            if (operandMaxWidth == 0)
+            {
+                return;
+            }
+            size_t width = std::min(operandMaxWidth, maxWidthBytes);
+            operand->AssignOrChangeBytecodeStructOffsetAndSize(currentOffset, width);
+            currentOffset += width;
+        };
+        for (auto& operand : m_list)
+        {
+            update(operand.get());
+        }
+        if (m_hasOutputValue)
+        {
+            update(m_outputOperand.get());
+        }
+        if (m_hasConditionalBranchTarget)
+        {
+            update(m_condBrTarget.get());
+        }
+        m_bytecodeStructLength = currentOffset;
+    }
+
+    static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
+
+    size_t m_bytecodeOrdInTU;
+    size_t m_variantOrd;
+    std::string m_bytecodeName;
+    std::string m_implFunctionName;
+    std::vector<std::string> m_opNames;
+    std::vector<std::unique_ptr<BcOperand>> m_list;
+    size_t m_bytecodeStructLength;
+
+    bool m_hasOutputValue;
+    bool m_hasConditionalBranchTarget;
+    std::unique_ptr<BcOpSlot> m_outputOperand;
+    std::unique_ptr<BcOpLiteral> m_condBrTarget;
 };
 
 }  // namespace dast

@@ -70,7 +70,6 @@ TEST(AnnotationParser, BytecodeInterpreterLoweringSanity_1)
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
     InterpreterFunctionInterface ifi(target.get(), implFunc, false);
-    ifi.EmitWrapperBody();
     ifi.LowerAPIs();
     ifi.GetModule()->dump();
 

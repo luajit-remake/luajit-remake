@@ -25,7 +25,7 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(m_sizeInBytecodeStruct * 8));
     LoadInst* storageValue = new LoadInst(storageTypeInBytecodeStruct, gep, "", false /*isVolatile*/, Align(1), targetBB);
 
-    Type* dstType = Type::getIntNTy(ctx, static_cast<uint32_t>(ValueByteLength() * 8));
+    Type* dstType = GetUsageType(ctx);
     Value* result;
     if (IsSignedValue())
     {
@@ -61,6 +61,20 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(Interpret
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
     bv->setAlignment(Align(8));
     return bv;
+}
+
+llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+{
+    ReleaseAssert(&bytecodeValue->getContext() == &targetBB->getContext());
+    return bytecodeValue;
+}
+
+llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+{
+    using namespace llvm;
+    ReleaseAssert(bytecodeValue == nullptr);
+    LLVMContext& ctx = targetBB->getContext();
+    return ConstantInt::get(ctx, APInt(static_cast<uint32_t>(m_numBytes * 8) /*bitWidth*/, m_concreteValue, m_isSigned));
 }
 
 std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED BytecodeVariantDefinition::ParseAllFromModule(llvm::Module* module)
@@ -117,10 +131,13 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         LLVMConstantStructReader curDefReader(module, defListReader.Get<Desc>(curBytecodeOrd));
         ReleaseAssert(curDefReader.GetValue<&Desc::m_operandTypeListInitialized>() == true);
         ReleaseAssert(curDefReader.GetValue<&Desc::m_implementationInitialized>() == true);
+        ReleaseAssert(curDefReader.GetValue<&Desc::m_resultKindInitialized>() == true);
         size_t numVariants = curDefReader.GetValue<&Desc::m_numVariants>();
         size_t numOperands = curDefReader.GetValue<&Desc::m_numOperands>();
         LLVMConstantArrayReader operandListReader(module, curDefReader.Get<&Desc::m_operandTypes>());
         ReleaseAssert(operandListReader.GetNumElements<Desc::Operand>() == Desc::x_maxOperands);
+        bool hasTValueOutput = curDefReader.GetValue<&Desc::m_hasTValueOutput>();
+        bool canPerformBranch = curDefReader.GetValue<&Desc::m_canPerformBranch>();
 
         std::vector<std::string> operandNames;
         std::vector<DeegenBytecodeOperandType> operandTypes;
@@ -151,6 +168,16 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_opNames = operandNames;
             def->m_bytecodeStructLength = static_cast<size_t>(-1);
             def->m_implFunctionName = implFuncName;
+            def->m_hasOutputValue = hasTValueOutput;
+            def->m_hasConditionalBranchTarget = canPerformBranch;
+            if (hasTValueOutput)
+            {
+                def->m_outputOperand = std::make_unique<BcOpSlot>("output");
+            }
+            if (canPerformBranch)
+            {
+                def->m_condBrTarget = std::make_unique<BcOpLiteral>("condBrTarget", true /*isSigned*/, 4 /*numBytes*/);
+            }
 
             LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
             LLVMConstantArrayReader baseReader(module, variantReader.Get<&Desc::SpecializedVariant::m_base>());

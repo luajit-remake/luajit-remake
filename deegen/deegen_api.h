@@ -24,13 +24,6 @@ struct DeegenEnv
     static CodeBlock* WARN_UNUSED GetCodeBlock();
 };
 
-// Return zero or one value as the result of the operation
-//
-void NO_RETURN Return(TValue value);
-void NO_RETURN Return();
-
-void NO_RETURN Error(const char* msg);
-
 enum MakeCallOption
 {
     NoOption,
@@ -39,6 +32,10 @@ enum MakeCallOption
 
 // These names are hardcoded for our LLVM IR processor to locate
 //
+extern "C" void NO_RETURN DeegenImpl_ReturnValue(TValue value);
+extern "C" void NO_RETURN DeegenImpl_ReturnNone();
+extern "C" void NO_RETURN DeegenImpl_ReturnValueAndBranch(TValue value);
+extern "C" void NO_RETURN DeegenImpl_ReturnNoneAndBranch();
 extern "C" void NO_RETURN DeegenImpl_MakeCall_ReportContinuationAfterCall(void* handler, void* func);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParam(void* handler, TValue arg);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParamList(void* handler, const TValue* argBegin, size_t numArgs);
@@ -52,6 +49,33 @@ extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallPassingVariadicResInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo();
+
+// Return zero or one value as the result of the operation
+//
+inline void ALWAYS_INLINE NO_RETURN Return(TValue value)
+{
+    DeegenImpl_ReturnValue(value);
+}
+
+inline void ALWAYS_INLINE NO_RETURN Return()
+{
+    DeegenImpl_ReturnNone();
+}
+
+// Return the result of the current bytecode, and additionally informs that control flow should not fallthrough to
+// the next bytecode, but redirected to the conditional branch target of this bytecode
+//
+inline void ALWAYS_INLINE NO_RETURN ReturnAndBranch(TValue value)
+{
+    DeegenImpl_ReturnValueAndBranch(value);
+}
+
+inline void ALWAYS_INLINE NO_RETURN ReturnAndBranch()
+{
+    DeegenImpl_ReturnNoneAndBranch();
+}
+
+void NO_RETURN Error(const char* msg);
 
 namespace detail {
 

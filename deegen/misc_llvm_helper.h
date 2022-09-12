@@ -692,4 +692,242 @@ inline llvm::Type* GetLLVMHeapPtrPointerType(llvm::LLVMContext& ctx)
 //
 llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName);
 
+// This helper struct preserves certain values (must be LLVM instruction) from being optimized away even if they are not immediately used,
+// and allows us to locate these values after optimization passes are run
+//
+class LLVMInstructionPreserver
+{
+    MAKE_NONCOPYABLE(LLVMInstructionPreserver);
+    MAKE_NONMOVABLE(LLVMInstructionPreserver);
+
+public:
+    LLVMInstructionPreserver() : m_func(nullptr) { }
+    ~LLVMInstructionPreserver()
+    {
+        // Assert that 'Cleanup' has been called
+        //
+        ReleaseAssert(m_func == nullptr);
+        ReleaseAssert(m_nameToInstMap.size() == 0);
+        ReleaseAssert(m_ordToNameMap.size() == 0);
+    }
+
+    void Preserve(const std::string& name, llvm::Instruction* inst)
+    {
+        using namespace llvm;
+        ReleaseAssert(!llvm_type_has_type<void>(inst->getType()));
+        ReleaseAssert(inst->getParent() != nullptr);
+        ReleaseAssert(m_func == nullptr || inst->getParent()->getParent() == m_func);
+        m_func = inst->getParent()->getParent();
+        ReleaseAssert(m_func != nullptr);
+
+        ReleaseAssert(!m_nameToInstMap.count(name));
+
+        Module* module = inst->getParent()->getModule();
+        LLVMContext& ctx = module->getContext();
+
+        size_t dummyFnOrd = 0;
+        std::string dummyFnName;
+        while (true)
+        {
+            dummyFnName = std::string(x_createdFnPrefix) + std::to_string(dummyFnOrd);
+            if (module->getNamedValue(dummyFnName) == nullptr)
+            {
+                break;
+            }
+            dummyFnOrd++;
+        }
+        ReleaseAssert(!m_ordToNameMap.count(dummyFnOrd));
+        m_ordToNameMap[dummyFnOrd] = name;
+
+        FunctionType* fty = FunctionType::get(Type::getVoidTy(ctx) /*ret*/, { inst->getType() } /*arg*/, false /*isVarArg*/);
+        Function* dummyFunc = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, dummyFnName, module);
+        ReleaseAssert(dummyFunc->getName() == dummyFnName);
+        dummyFunc->addFnAttr(Attribute::AttrKind::WillReturn);
+        dummyFunc->addFnAttr(Attribute::AttrKind::NoUnwind);
+
+        CallInst* callInst = CallInst::Create(dummyFunc, { inst });
+        callInst->insertAfter(inst);
+        m_nameToInstMap[name] = callInst;
+    }
+
+    // If the LLVM function had undergone some transform, this must be called before 'Get' can be used
+    // I think this might be unnecessary since probably LLVM won't do strange things to replace the CallInst,
+    // but it doesn't hurt to be paranoid.. and it also validates that LLVM didn't do anything unexpected by us
+    //
+    void RefreshAfterTransform()
+    {
+        using namespace llvm;
+        ReleaseAssert(m_nameToInstMap.size() == m_ordToNameMap.size());
+        if (m_func == nullptr)
+        {
+            ReleaseAssert(m_nameToInstMap.size() == 0);
+            return;
+        }
+
+        std::unordered_map<std::string, CallInst*> newMap;
+        for (BasicBlock& bb : *m_func)
+        {
+            for (Instruction& inst : bb)
+            {
+                CallInst* callInst = dyn_cast<CallInst>(&inst);
+                if (callInst != nullptr)
+                {
+                    Function* callee = callInst->getCalledFunction();
+                    if (callee != nullptr)
+                    {
+                        std::string calleeName = callee->getName().str();
+                        if (calleeName.starts_with(x_createdFnPrefix))
+                        {
+                            calleeName = calleeName.substr(strlen(x_createdFnPrefix));
+                            size_t ord = 0;
+                            for (size_t k = 0; k < calleeName.length(); k++)
+                            {
+                                ReleaseAssert('0' <= calleeName[k] && calleeName[k] <= '9');
+                                ReleaseAssert(ord < 100000000);
+                                ord = ord * 10 + static_cast<size_t>(calleeName[k] - '0');
+                            }
+                            ReleaseAssert(m_ordToNameMap.count(ord));
+                            std::string name = m_ordToNameMap[ord];
+                            ReleaseAssert(m_nameToInstMap.count(name));
+                            ReleaseAssert(!newMap.count(name));
+                            newMap[name] = callInst;
+                        }
+                    }
+                }
+            }
+        }
+        ReleaseAssert(newMap.size() == m_nameToInstMap.size());
+        m_nameToInstMap = newMap;
+
+        // Just sanity check we didn't screw anything
+        //
+        {
+            std::unordered_set<std::string> showedUp;
+            for (auto& it : m_ordToNameMap)
+            {
+                ReleaseAssert(m_nameToInstMap.count(it.second));
+                ReleaseAssert(!showedUp.count(it.second));
+                showedUp.insert(it.second);
+            }
+            ReleaseAssert(showedUp.size() == m_ordToNameMap.size());
+            ReleaseAssert(m_ordToNameMap.size() == m_nameToInstMap.size());
+        }
+    }
+
+    llvm::Value* WARN_UNUSED Get(const std::string& name) const
+    {
+        using namespace llvm;
+        ReleaseAssert(m_nameToInstMap.count(name));
+        CallInst* inst = m_nameToInstMap.find(name)->second;
+        ReleaseAssert(inst->arg_size() == 1);
+        ReleaseAssert(inst->getCalledFunction() != nullptr);
+        ReleaseAssert(inst->getCalledFunction()->getName().str().starts_with(x_createdFnPrefix));
+        return inst->getArgOperand(0);
+    }
+
+    void Cleanup()
+    {
+        using namespace llvm;
+        RefreshAfterTransform();
+        for (auto& it : m_nameToInstMap)
+        {
+            CallInst* inst = it.second;
+            Function* func = inst->getCalledFunction();
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(func->getName().str().starts_with(x_createdFnPrefix));
+            inst->eraseFromParent();
+            ReleaseAssert(func->use_begin() == func->use_end());
+            func->eraseFromParent();
+        }
+        m_nameToInstMap.clear();
+        m_ordToNameMap.clear();
+        m_func = nullptr;
+    }
+
+    friend class LLVMValuePreserver;
+
+private:
+    static constexpr const char* x_createdFnPrefix = "__DeegenImpl_LLVMInstructionPreserver_DummyFunc_";
+
+    llvm::Function* m_func;
+    std::unordered_map<std::string, llvm::CallInst*> m_nameToInstMap;
+    std::unordered_map<size_t, std::string> m_ordToNameMap;
+};
+
+// A wrapper around LLVMInstructionPreserver to additionally provide the facility of preserving Argument and Constant
+//
+class LLVMValuePreserver
+{
+public:
+    LLVMValuePreserver() : m_func(nullptr) { }
+    ~LLVMValuePreserver()
+    {
+        ReleaseAssert(m_func == nullptr);
+        ReleaseAssert(m_nonInstMap.size() == 0);
+    }
+
+    void Preserve(const std::string& name, llvm::Value* val)
+    {
+        using namespace llvm;
+        ReleaseAssert(!m_nonInstMap.count(name));
+        ReleaseAssert(!m_instPreserver.m_nameToInstMap.count(name));
+        if (isa<Instruction>(val))
+        {
+            if (m_func != nullptr)
+            {
+                ReleaseAssert(m_func == cast<Instruction>(val)->getFunction());
+            }
+            m_instPreserver.Preserve(name, cast<Instruction>(val));
+            return;
+        }
+        if (isa<Argument>(val))
+        {
+            Function* func = cast<Argument>(val)->getParent();
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(m_func == nullptr || m_func == func);
+            ReleaseAssert(m_instPreserver.m_func == nullptr || m_instPreserver.m_func == func);
+            m_func = func;
+            m_nonInstMap[name] = val;
+            return;
+        }
+        if (isa<Constant>(val))
+        {
+            m_nonInstMap[name] = val;
+            return;
+        }
+        ReleaseAssert(false && "unexpected type of value");
+    }
+
+    void RefreshAfterTransform()
+    {
+        m_instPreserver.RefreshAfterTransform();
+    }
+
+    llvm::Value* WARN_UNUSED Get(const std::string& name) const
+    {
+        using namespace llvm;
+        if (m_nonInstMap.count(name))
+        {
+            ReleaseAssert(!m_instPreserver.m_nameToInstMap.count(name));
+            return m_nonInstMap.find(name)->second;
+        }
+        else
+        {
+            return m_instPreserver.Get(name);
+        }
+    }
+
+    void Cleanup()
+    {
+        m_instPreserver.Cleanup();
+        m_nonInstMap.clear();
+        m_func = nullptr;
+    }
+
+private:
+    llvm::Function* m_func;
+    LLVMInstructionPreserver m_instPreserver;
+    std::unordered_map<std::string, llvm::Value*> m_nonInstMap;
+};
+
 }   // namespace dast

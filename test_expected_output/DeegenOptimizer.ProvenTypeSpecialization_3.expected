@@ -17,7 +17,7 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   br i1 %3, label %4, label %5
 
 4:                                                ; preds = %2
-  tail call void @_Z6Return6TValue(i64 %0) #3
+  tail call void @DeegenImpl_ReturnValue(i64 %0) #3
   unreachable
 
 5:                                                ; preds = %2
@@ -27,10 +27,10 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
 }
 
 ; Function Attrs: noreturn
-declare void @_Z6Return6TValue(i64) local_unnamed_addr #2
+declare void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #2
 
 ; Function Attrs: noreturn
-declare void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #2
+declare void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #2
 
 attributes #0 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { mustprogress noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }

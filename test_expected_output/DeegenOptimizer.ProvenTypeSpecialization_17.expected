@@ -12,9 +12,6 @@ declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_i
 declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_impl_holderI6tTable11tHeapEntityE4implE6TValue(i64) #0 align 2
 
 ; Function Attrs: noreturn
-declare void @_Z6Return6TValue(i64) local_unnamed_addr #1
-
-; Function Attrs: noreturn
 declare void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #1
 
 ; Function Attrs: noreturn nounwind uwtable
@@ -23,7 +20,7 @@ define dso_local void @testfn4(i64 %0) #2 {
   br i1 %2, label %3, label %4
 
 3:                                                ; preds = %1
-  tail call void @_Z6Return6TValue(i64 4644776920376934400) #3
+  tail call void @DeegenImpl_ReturnValue(i64 4644776920376934400) #3
   unreachable
 
 4:                                                ; preds = %1
@@ -31,13 +28,16 @@ define dso_local void @testfn4(i64 %0) #2 {
   br i1 %5, label %6, label %7
 
 6:                                                ; preds = %4
-  tail call void @_Z6Return6TValue(i64 %0) #3
+  tail call void @DeegenImpl_ReturnValue(i64 %0) #3
   unreachable
 
 7:                                                ; preds = %4
   tail call void @_Z5ErrorPKc(ptr noundef nonnull @.str) #3
   unreachable
 }
+
+; Function Attrs: noreturn
+declare void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #1
 
 attributes #0 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
