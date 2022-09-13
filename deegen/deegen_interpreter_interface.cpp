@@ -35,7 +35,7 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
     ReleaseAssert(llvm_value_has_type<void*>(codeBlock));
 
     CallInst* callInst = CallInst::Create(
-        InterpreterFunctionInterface::GetInterfaceFunctionType(ctx),
+        GetInterfaceFunctionType(ctx),
         target,
         {
             coroutineCtx, stackbase, bytecodePtr, codeBlock
@@ -73,7 +73,7 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
 }
 
-InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, bool isReturnContinuation)
+InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
     , m_isReturnContinuation(isReturnContinuation)
@@ -83,8 +83,8 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
     , m_didLowerAPIs(false)
 {
     using namespace llvm;
-    m_module = llvm::CloneModule(*impl->getParent());
-    m_impl = m_module->getFunction(impl->getName());
+    m_module = llvm::CloneModule(*implTmp->getParent());
+    m_impl = m_module->getFunction(implTmp->getName());
     ReleaseAssert(m_impl != nullptr);
 
     LLVMContext& ctx = m_module->getContext();
@@ -319,6 +319,7 @@ void InterpreterFunctionInterface::LowerAPIs()
         //
         for (Function* targetRc : rcList)
         {
+            ReleaseAssert(targetRc != nullptr);
             allRetConts.push_back(ProcessReturnContinuation(targetRc));
         }
     }
@@ -350,6 +351,8 @@ void InterpreterFunctionInterface::LowerAPIs()
     // Remove the value preserver annotations so optimizer can work fully
     //
     m_valuePreserver.Cleanup();
+
+    ValidateLLVMModule(m_module.get());
 
     // Run optimization pass
     //

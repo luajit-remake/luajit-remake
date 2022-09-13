@@ -470,6 +470,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleI
 
     module->setModuleIdentifier("extracted_ir");
 
+    ValidateLLVMModule(module);
+
     return moduleHolder;
 }
 
