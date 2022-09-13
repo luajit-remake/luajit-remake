@@ -19,17 +19,23 @@ public:
     //
     void LowerAPIs();
 
+    BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
     llvm::Module* GetModule() const { return m_module.get(); }
-    llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtxIdent); }
-    llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBaseIdent); }
-    llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecodeIdent); }
-    llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlockIdent); }
-    llvm::Value* GetRetStart() const { return m_valuePreserver.Get(x_retStartIdent); }
-    llvm::Value* GetNumRet() const { return m_valuePreserver.Get(x_numRetIdent); }
+    llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtx); }
+    llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBase); }
+    llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecode); }
+    llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlock); }
+    llvm::Value* GetRetStart() const { return m_valuePreserver.Get(x_retStart); }
+    llvm::Value* GetNumRet() const { return m_valuePreserver.Get(x_numRet); }
+    llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
+    llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
+
+    static llvm::FunctionType* WARN_UNUSED GetInterfaceFunctionType(llvm::LLVMContext& ctx);
+
+    void CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore);
+    void CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore);
 
     std::unique_ptr<llvm::Module> WARN_UNUSED ProcessReturnContinuation(llvm::Function* rc);
-
-    static llvm::FunctionType* WARN_UNUSED GetInterfaceFunctionType(llvm::LLVMContext& ctx, bool forReturnContinuation);
 
 private:
     BytecodeVariantDefinition* m_bytecodeDef;
@@ -45,12 +51,14 @@ private:
     LLVMValuePreserver m_valuePreserver;
     bool m_didLowerAPIs;
 
-    static constexpr const char* x_coroutineCtxIdent = "coroutineCtx";
-    static constexpr const char* x_stackBaseIdent = "stackBase";
-    static constexpr const char* x_curBytecodeIdent = "curBytecode";
-    static constexpr const char* x_codeBlockIdent = "codeBlock";
-    static constexpr const char* x_retStartIdent = "retStart";
-    static constexpr const char* x_numRetIdent = "numRet";
+    static constexpr const char* x_coroutineCtx = "coroutineCtx";
+    static constexpr const char* x_stackBase = "stackBase";
+    static constexpr const char* x_curBytecode = "curBytecode";
+    static constexpr const char* x_codeBlock = "codeBlock";
+    static constexpr const char* x_retStart = "retStart";
+    static constexpr const char* x_numRet = "numRet";
+    static constexpr const char* x_outputSlot = "outputSlot";
+    static constexpr const char* x_condBrDest = "condBrDest";
 };
 
 }   // namespace dast

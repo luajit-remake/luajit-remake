@@ -1,6 +1,7 @@
 #include "deegen_interpreter_interface.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_make_call.h"
+#include "deegen_ast_return.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -8,6 +9,69 @@
 #include "bytecode.h"
 
 namespace dast {
+
+llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetInterfaceFunctionType(llvm::LLVMContext& ctx)
+{
+    using namespace llvm;
+    return FunctionType::get(
+        llvm_type_of<void>(ctx) /*result*/,
+        {
+            llvm_type_of<void*>(ctx) /*coroutineCtx*/,
+            llvm_type_of<void*>(ctx) /*stackBase*/,
+            llvm_type_of<void*>(ctx) /*bytecodeOrRetStart*/,
+            llvm_type_of<void*>(ctx) /*codeblockOrnumRets*/
+        } /*params*/,
+        false /*isVarArg*/);
+}
+
+void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = target->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(target));
+    ReleaseAssert(llvm_value_has_type<void*>(coroutineCtx));
+    ReleaseAssert(llvm_value_has_type<void*>(stackbase));
+    ReleaseAssert(llvm_value_has_type<void*>(bytecodePtr));
+    ReleaseAssert(llvm_value_has_type<void*>(codeBlock));
+
+    CallInst* callInst = CallInst::Create(
+        InterpreterFunctionInterface::GetInterfaceFunctionType(ctx),
+        target,
+        {
+            coroutineCtx, stackbase, bytecodePtr, codeBlock
+        },
+        "" /*name*/,
+        insertBefore);
+    callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    ReleaseAssert(llvm_value_has_type<void>(callInst));
+
+    std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+}
+
+void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = target->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(target));
+    ReleaseAssert(llvm_value_has_type<void*>(coroutineCtx));
+    ReleaseAssert(llvm_value_has_type<void*>(stackbase));
+    ReleaseAssert(llvm_value_has_type<void*>(retStart));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(numRets));
+
+    IntToPtrInst* numRetAsPtr = new IntToPtrInst(numRets, llvm_type_of<void*>(ctx), "", insertBefore);
+    CallInst* callInst = CallInst::Create(
+        InterpreterFunctionInterface::GetInterfaceFunctionType(ctx),
+        target,
+        {
+            coroutineCtx, stackbase, retStart, numRetAsPtr
+        },
+        "" /*name*/,
+        insertBefore);
+    callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    ReleaseAssert(llvm_value_has_type<void>(callInst));
+
+    std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+}
 
 InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, bool isReturnContinuation)
     : m_bytecodeDef(bytecodeDef)
@@ -40,7 +104,7 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
     }
 
     {
-        FunctionType* fty = GetInterfaceFunctionType(ctx, m_isReturnContinuation);
+        FunctionType* fty = GetInterfaceFunctionType(ctx);
         std::string finalFnName = m_impl->getName().str();
         ReleaseAssert(finalFnName.ends_with("_impl"));
         finalFnName = finalFnName.substr(0, finalFnName.length() - strlen("_impl"));
@@ -51,17 +115,17 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
     // Set parameter names just to make dumps more readable
     //
     ReleaseAssert(m_wrapper->arg_size() == 4);
-    m_wrapper->getArg(0)->setName(x_coroutineCtxIdent);
-    m_wrapper->getArg(1)->setName(x_stackBaseIdent);
+    m_wrapper->getArg(0)->setName(x_coroutineCtx);
+    m_wrapper->getArg(1)->setName(x_stackBase);
     if (m_isReturnContinuation)
     {
-        m_wrapper->getArg(2)->setName(x_retStartIdent);
-        m_wrapper->getArg(3)->setName(x_numRetIdent);
+        m_wrapper->getArg(2)->setName(x_retStart);
+        m_wrapper->getArg(3)->setName(x_numRet);
     }
     else
     {
-        m_wrapper->getArg(2)->setName(x_curBytecodeIdent);
-        m_wrapper->getArg(3)->setName(x_codeBlockIdent);
+        m_wrapper->getArg(2)->setName(x_curBytecode);
+        m_wrapper->getArg(3)->setName(x_codeBlock);
     }
 
     // Set up the function attributes
@@ -76,17 +140,19 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
 
     if (!m_isReturnContinuation)
     {
-        m_valuePreserver.Preserve(x_coroutineCtxIdent, m_wrapper->getArg(0));
-        m_valuePreserver.Preserve(x_stackBaseIdent, m_wrapper->getArg(1));
-        m_valuePreserver.Preserve(x_curBytecodeIdent, m_wrapper->getArg(2));
-        m_valuePreserver.Preserve(x_codeBlockIdent, m_wrapper->getArg(3));
+        m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
+        m_valuePreserver.Preserve(x_stackBase, m_wrapper->getArg(1));
+        m_valuePreserver.Preserve(x_curBytecode, m_wrapper->getArg(2));
+        m_valuePreserver.Preserve(x_codeBlock, m_wrapper->getArg(3));
     }
     else
     {
-        m_valuePreserver.Preserve(x_coroutineCtxIdent, m_wrapper->getArg(0));
-        m_valuePreserver.Preserve(x_stackBaseIdent, m_wrapper->getArg(1));
-        m_valuePreserver.Preserve(x_retStartIdent, m_wrapper->getArg(2));
-        m_valuePreserver.Preserve(x_numRetIdent, m_wrapper->getArg(3));
+        m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
+        m_valuePreserver.Preserve(x_stackBase, m_wrapper->getArg(1));
+        m_valuePreserver.Preserve(x_retStart, m_wrapper->getArg(2));
+
+        PtrToIntInst* numRet = new PtrToIntInst(m_wrapper->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, currentBlock);
+        m_valuePreserver.Preserve(x_numRet, numRet);
 
         Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackFrameBase");
         ReleaseAssert(getCbFunc->arg_size() == 1 && llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getParamType(0)));
@@ -100,14 +166,30 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
         ReleaseAssert(llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getReturnType()));
         Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { GetStackBase(), codeblock }, "" /*name*/, currentBlock);
 
-        m_valuePreserver.Preserve(x_codeBlockIdent, codeblock);
-        m_valuePreserver.Preserve(x_curBytecodeIdent, bytecodePtr);
+        m_valuePreserver.Preserve(x_codeBlock, codeblock);
+        m_valuePreserver.Preserve(x_curBytecode, bytecodePtr);
     }
 
     std::vector<Value*> opcodeValues;
     for (auto& operand : m_bytecodeDef->m_list)
     {
         opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
+    }
+
+    if (m_bytecodeDef->m_hasOutputValue)
+    {
+        Value* outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBytecodeStruct(this, currentBlock);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
+        m_valuePreserver.Preserve(x_outputSlot, outputSlot);
+        outputSlot->setName(x_outputSlot);
+    }
+
+    if (m_bytecodeDef->m_hasConditionalBranchTarget)
+    {
+        Value* condBrTarget = m_bytecodeDef->m_condBrTarget->GetOperandValueFromBytecodeStruct(this, currentBlock);
+        ReleaseAssert(llvm_value_has_type<int32_t>(condBrTarget));
+        m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
+        condBrTarget->setName(x_condBrDest);
     }
 
     std::vector<Value*> usageValues;
@@ -192,20 +274,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionInterface::ProcessR
     return std::move(ifi.m_module);
 }
 
-llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetInterfaceFunctionType(llvm::LLVMContext& ctx, bool forReturnContinuation)
-{
-    using namespace llvm;
-    return FunctionType::get(
-        llvm_type_of<void>(ctx) /*result*/,
-        {
-            llvm_type_of<void*>(ctx) /*coroutineCtx*/,
-            llvm_type_of<void*>(ctx) /*stackBase*/,
-            llvm_type_of<void*>(ctx) /*bytecodeOrRetStart*/,
-            forReturnContinuation ? llvm_type_of<uint64_t>(ctx) /*numRets*/ : llvm_type_of<void*>(ctx) /*codeblock*/
-        } /*params*/,
-        false /*isVarArg*/);
-}
-
 void InterpreterFunctionInterface::LowerAPIs()
 {
     using namespace llvm;
@@ -272,9 +340,14 @@ void InterpreterFunctionInterface::LowerAPIs()
 
     // Now we can do the lowerings
     //
+    AstBytecodeReturn::LowerForInterpreter(this, m_wrapper);
 
+    // All lowerings are complete.
+    // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
+    //
+    m_wrapper->removeFnAttr(Attribute::AttrKind::NoReturn);
 
-    // After lowering, remove the value preserver annotations so optimizer can work fully
+    // Remove the value preserver annotations so optimizer can work fully
     //
     m_valuePreserver.Cleanup();
 

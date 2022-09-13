@@ -930,4 +930,68 @@ private:
     std::unordered_map<std::string, llvm::Value*> m_nonInstMap;
 };
 
+inline llvm::BinaryOperator* WARN_UNUSED CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps opcode, llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap, bool mustHaveNoSignedWrap)
+{
+    using namespace llvm;
+    ReleaseAssert(lhs->getType() == rhs->getType());
+    BinaryOperator* bo = BinaryOperator::Create(opcode, lhs, rhs);
+    if (mustHaveNoUnsignedWrap) bo->setHasNoUnsignedWrap();
+    if (mustHaveNoSignedWrap) bo->setHasNoSignedWrap();
+    return bo;
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateAdd(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
+{
+    return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Add, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateSignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateAdd(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateAdd(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+}
+
+inline llvm::Instruction* CreateSub(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
+{
+    return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Sub, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateSignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateSub(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateSub(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+}
+
+inline llvm::Instruction* CreateMul(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
+{
+    return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Mul, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateSignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateMul(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+{
+    return CreateMul(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+}
+
+inline void AssertInstructionIsFollowedByUnreachable(llvm::Instruction* inst)
+{
+    using namespace llvm;
+    Instruction* nextInst = inst->getNextNode();
+    ReleaseAssert(nextInst != nullptr);
+    ReleaseAssert(dyn_cast<UnreachableInst>(nextInst) != nullptr);
+    ReleaseAssert(nextInst->getNextNode() == nullptr);
+}
+
 }   // namespace dast

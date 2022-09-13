@@ -301,7 +301,7 @@ class BytecodeVariantDefinition
 public:
     void SetMaxOperandWidthBytes(size_t maxWidthBytes)
     {
-        size_t currentOffset = 0;
+        size_t currentOffset = x_opcodeSizeBytes;
         auto update = [&](BcOperand* operand)
         {
             size_t operandMaxWidth = operand->ValueByteLength();
@@ -329,6 +329,13 @@ public:
     }
 
     static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
+
+    static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
+
+    // For now we have a fixed 2-byte opcode header for simplicity
+    // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
+    //
+    static constexpr size_t x_opcodeSizeBytes = 2;
 
     size_t m_bytecodeOrdInTU;
     size_t m_variantOrd;

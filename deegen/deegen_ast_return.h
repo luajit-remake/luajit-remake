@@ -12,12 +12,22 @@ class InterpreterFunctionInterface;
 class AstBytecodeReturn
 {
 public:
-    bool HasValue() const { return m_valueOperand != nullptr; }
-    llvm::Value* ValueOperand() const { ReleaseAssert(HasValue()); return m_valueOperand; }
+    bool DoesBranch() const { return m_doesBranch; }
+    bool HasValueOutput() const { return m_valueOperand != nullptr; }
+    llvm::Value* ValueOperand() const { ReleaseAssert(HasValueOutput()); return m_valueOperand; }
 
     static std::vector<AstBytecodeReturn> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
     void DoLoweringForInterpreter(InterpreterFunctionInterface* ifi);
+
+    static void LowerForInterpreter(InterpreterFunctionInterface* ifi, llvm::Function* func)
+    {
+        std::vector<AstBytecodeReturn> res = GetAllUseInFunction(func);
+        for (AstBytecodeReturn& item : res)
+        {
+            item.DoLoweringForInterpreter(ifi);
+        }
+    }
 
     llvm::CallInst* m_origin;
     // Whether this is a ReturnAndBranch API call
