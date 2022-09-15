@@ -1,7 +1,9 @@
+#include "force_release_build.h"
+
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-void* DeegenSnippet_GetCodeBlockFromStackFrameBase(void* stackframeBase)
+static void* DeegenSnippet_GetCodeBlockFromStackFrameBase(void* stackframeBase)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframeBase);
     HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();

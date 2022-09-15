@@ -60,7 +60,7 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
 
     IntToPtrInst* numRetAsPtr = new IntToPtrInst(numRets, llvm_type_of<void*>(ctx), "", insertBefore);
     CallInst* callInst = CallInst::Create(
-        InterpreterFunctionInterface::GetInterfaceFunctionType(ctx),
+        GetInterfaceFunctionType(ctx),
         target,
         {
             coroutineCtx, stackbase, retStart, numRetAsPtr
@@ -71,6 +71,50 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+}
+
+void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* numArgs, llvm::Value* isMustTail, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = target->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(target));
+    ReleaseAssert(llvm_value_has_type<void*>(coroutineCtx));
+    ReleaseAssert(llvm_value_has_type<void*>(preFixupStackBase));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
+    ReleaseAssert(llvm_value_has_type<bool>(isMustTail));
+
+    IntToPtrInst* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", insertBefore);
+    ZExtInst* isMustTail64 = new ZExtInst(isMustTail, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+    IntToPtrInst* isMustTailAsPtr = new IntToPtrInst(isMustTail64, llvm_type_of<void*>(ctx), "", insertBefore);
+
+    CallInst* callInst = CallInst::Create(
+        GetInterfaceFunctionType(ctx),
+        target,
+        {
+            coroutineCtx, preFixupStackBase, numArgsAsPtr, isMustTailAsPtr
+        },
+        "" /*name*/,
+        insertBefore);
+    callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    ReleaseAssert(llvm_value_has_type<void>(callInst));
+
+    std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+}
+
+llvm::CallInst* InterpreterFunctionInterface::CallDeegenCommonSnippet(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    Function* callee = LinkInDeegenCommonSnippet(GetModule(), dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertBefore);
+}
+
+llvm::CallInst* InterpreterFunctionInterface::CallDeegenRuntimeFunction(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    Function* callee = DeegenImportRuntimeFunctionDeclaration(GetModule(), dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertBefore);
 }
 
 InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
@@ -342,6 +386,7 @@ void InterpreterFunctionInterface::LowerAPIs()
     // Now we can do the lowerings
     //
     AstBytecodeReturn::LowerForInterpreter(this, m_wrapper);
+    AstMakeCall::LowerForInterpreter(this, m_wrapper);
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls

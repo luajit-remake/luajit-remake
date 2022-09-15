@@ -567,6 +567,7 @@ inline llvm::Constant* GetConstexprGlobalValue(llvm::Module* module, std::string
     GlobalVariable* gv = module->getGlobalVariable(name);
     ReleaseAssert(gv != nullptr);
     ReleaseAssert(gv->isConstant());
+    ReleaseAssert(gv->getInitializer() != nullptr);
     return gv->getInitializer();
 }
 
@@ -655,6 +656,7 @@ void DesugarAndSimplifyLLVMModule(llvm::Module* module, DesugaringLevel level);
 //
 std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunction(llvm::Module* module, std::string functionName, bool ignoreLinkageIssues = false);
 std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* module, const std::vector<std::string>& functionNameList, bool ignoreLinkageIssues = false);
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctionDeclaration(llvm::Module* module, const std::string& functionName);
 
 inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* value)
 {
@@ -684,13 +686,21 @@ inline std::string DumpLLVMModuleAsString(llvm::Module* module)
 
 inline llvm::Type* GetLLVMHeapPtrPointerType(llvm::LLVMContext& ctx)
 {
-    return llvm::Type::getVoidTy(ctx)->getPointerTo(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
+    return llvm::Type::getInt8Ty(ctx)->getPointerTo(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
 }
 
 // Link the requested snippet into the current module if it hasn't been linked in yet.
 // Return the LLVM Function for the requested snippet.
 //
-llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName);
+llvm::Function* WARN_UNUSED LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName);
+
+// Import a runtime function declaration snippet if the declaration hasn't been imported yet.
+//
+llvm::Function* WARN_UNUSED DeegenImportRuntimeFunctionDeclaration(llvm::Module* module /*inout*/, const std::string& snippetName);
+
+// Create a function declaration with the specified name, which prototype is defined by declaration snippet.
+//
+llvm::Function* WARN_UNUSED DeegenCreateFunctionDeclarationBasedOnSnippet(llvm::Module* module /*inout*/, const std::string& snippetName, const std::string& desiredFunctionName);
 
 // This helper struct preserves certain values (must be LLVM instruction) from being optimized away even if they are not immediately used,
 // and allows us to locate these values after optimization passes are run
@@ -945,44 +955,56 @@ inline llvm::Instruction* WARN_UNUSED CreateAdd(llvm::Value* lhs, llvm::Value* r
     return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Add, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateSignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateSignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateAdd(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateAdd(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateUnsignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateAdd(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateAdd(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
-inline llvm::Instruction* CreateSub(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
+inline llvm::Instruction* WARN_UNUSED CreateSub(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
 {
     return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Sub, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateSignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateSignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateSub(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateSub(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateUnsignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateSub(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateSub(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
-inline llvm::Instruction* CreateMul(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
+inline llvm::Instruction* WARN_UNUSED CreateMul(llvm::Value* lhs, llvm::Value* rhs, bool mustHaveNoUnsignedWrap = false, bool mustHaveNoSignedWrap = false)
 {
     return CreateArithmeticBinaryOp(llvm::BinaryOperator::BinaryOps::Mul, lhs, rhs, mustHaveNoUnsignedWrap, mustHaveNoSignedWrap);
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateSignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateSignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateMul(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateMul(lhs, rhs, false /*mustHaveNoUnsignedWrap*/, true /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
-inline llvm::Instruction* WARN_UNUSED CreateUnsignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs)
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedMulNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
-    return CreateMul(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    llvm::Instruction* res = CreateMul(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
+    if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
 }
 
 inline void AssertInstructionIsFollowedByUnreachable(llvm::Instruction* inst)

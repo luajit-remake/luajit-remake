@@ -1,18 +1,12 @@
-# always compile with RELEASE in this directory, otherwise it's going to cause 
-# a lot of problems to our unit tests due to different IR in different builds
-#
-# This is really ugly, but let's not bother too much for now
-#
-string(REPLACE " -DBUILD_FLAVOR=DEBUG " " " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-string(REPLACE " -DBUILD_FLAVOR=TESTREL " " " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-string(REPLACE " -DBUILD_FLAVOR=RELEASE " " " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-string(REPLACE " -DTESTBUILD " " " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-string(REPLACE " -DNDEBUG " " " CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_FLAVOR=RELEASE -DNDEBUG ")
-
 SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_codeblock_from_stack_header.cpp
   get_bytecode_ptr_after_return_from_call.cpp
+  copy_variadic_results_to_arguments_forward.cpp
+  copy_variadic_results_to_arguments.cpp
+  get_num_variadic_results.cpp
+  get_end_of_call_frame.cpp
+  populate_new_call_frame_header.cpp
+  get_callee_entry_point.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

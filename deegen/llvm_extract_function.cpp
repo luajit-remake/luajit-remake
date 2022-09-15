@@ -475,4 +475,113 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleI
     return moduleHolder;
 }
 
+std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctionDeclaration(llvm::Module* moduleInput, const std::string& functionName)
+{
+    using namespace llvm;
+
+    std::unique_ptr<Module> moduleHolder = CloneModule(*moduleInput);
+    Module* module = moduleHolder.get();
+
+    Function* func = module->getFunction(functionName);
+    ReleaseAssert(func != nullptr);
+    ReleaseAssert(func->empty());
+    ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+
+    // The logic below basically duplicates 'ExtractFunction' above..
+    // Let's not worry about refactoring for now since there's little reason to make changes to these logic in the future..
+    //
+
+    module->setModuleInlineAsm("");
+
+    // Delete all global vars
+    //
+    for (GlobalVariable& gv : module->globals())
+    {
+        bool isLocalLinkage = gv.hasLocalLinkage();
+        gv.setLinkage(GlobalValue::ExternalLinkage);
+        if (isLocalLinkage)
+        {
+            gv.setVisibility(GlobalValue::HiddenVisibility);
+        }
+
+        gv.setInitializer(nullptr);
+        gv.setComdat(nullptr);
+    }
+
+    // Delete the body of all functions except our target
+    //
+    for (Function& fn : module->functions())
+    {
+        if (&fn != func)
+        {
+            fn.deleteBody();
+            fn.setComdat(nullptr);
+        }
+    }
+
+    // Add a fake definition to our target declaration to prevent it from being stripped
+    //
+    {
+        ReleaseAssert(func->empty());
+        BasicBlock* bb = BasicBlock::Create(module->getContext(), "", func);
+        std::ignore = new UnreachableInst(module->getContext(), bb);
+        ReleaseAssert(!func->empty());
+    }
+
+    // Delete all alias
+    //
+    for (Module::alias_iterator I = module->alias_begin(), E = module->alias_end(); I != E;)
+    {
+        Module::alias_iterator CurI = I;
+        ++I;
+
+        Type* Ty = CurI->getValueType();
+
+        CurI->removeFromParent();
+        Value* Declaration;
+        if (FunctionType* FTy = dyn_cast<FunctionType>(Ty))
+        {
+            Declaration = Function::Create(FTy, GlobalValue::ExternalLinkage,
+                                           CurI->getAddressSpace(),
+                                           CurI->getName(), module);
+        }
+        else
+        {
+            Declaration = new GlobalVariable(*module, Ty, false, GlobalValue::ExternalLinkage,
+                                             nullptr, CurI->getName());
+        }
+        CurI->replaceAllUsesWith(Declaration);
+        delete &*CurI;
+    }
+
+    // Strip the module
+    //
+    {
+        legacy::PassManager Passes;
+        Passes.add(createGlobalDCEPass());
+        Passes.add(createStripDeadDebugInfoPass());
+        Passes.add(createStripDeadPrototypesPass());
+        Passes.run(*module);
+    }
+
+    // Delete the fake body of our target function
+    //
+    func = module->getFunction(functionName);
+    ReleaseAssert(func != nullptr);
+    ReleaseAssert(!func->empty());
+    ReleaseAssert(func->getLinkage() == GlobalValue::LinkageTypes::ExternalLinkage);
+    func->deleteBody();
+    func->setComdat(nullptr);
+
+    // Our target function should be the only function in the module
+    //
+    ReleaseAssert(++module->functions().begin() == module->functions().end());
+    ReleaseAssert(&(*module->functions().begin()) == func);
+
+    ValidateLLVMModule(module);
+
+    module->setModuleIdentifier("extracted_ir");
+    return moduleHolder;
+}
+
 }  // namespace dast

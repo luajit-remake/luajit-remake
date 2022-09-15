@@ -6,7 +6,7 @@
 
 namespace dast {
 
-llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName)
+llvm::Function* WARN_UNUSED LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName)
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
@@ -23,7 +23,7 @@ llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const 
 
     // Now we need to link in the function
     //
-    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetLLVMIR(ctx, snippetName);
+    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetLLVMIR(ctx, snippetName, 0 /*expectedKind = snippet*/);
 
     {
         Linker linker(*module);
@@ -46,6 +46,105 @@ llvm::Function* LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const 
     func->addFnAttr(Attribute::AttrKind::AlwaysInline);
 
     return func;
+}
+
+llvm::Function* WARN_UNUSED DeegenImportRuntimeFunctionDeclaration(llvm::Module* module /*inout*/, const std::string& snippetName)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetLLVMIR(ctx, snippetName, 1 /*expectedKind = importableDecl*/);
+    ReleaseAssert(snippetModule->functions().begin() != snippetModule->functions().end());
+    ReleaseAssert(++snippetModule->functions().begin() == snippetModule->functions().end());
+    Function* func = &(*snippetModule->functions().begin());
+    std::string funcName = func->getName().str();
+    ReleaseAssert(funcName != "");
+
+    Function* found = module->getFunction(funcName);
+    if (found != nullptr)
+    {
+        return found;
+    }
+    else
+    {
+        ReleaseAssert(module->getNamedValue(funcName) == nullptr);
+
+        // If the function is a declaration, create a fake body so the function can be linked into the module
+        //
+        bool shouldDeleteBody = false;
+        if (func->empty())
+        {
+            shouldDeleteBody = true;
+            BasicBlock* bb = BasicBlock::Create(module->getContext(), "", func);
+            std::ignore = new UnreachableInst(module->getContext(), bb);
+            ReleaseAssert(!func->empty());
+        }
+
+        {
+            Linker linker(*module);
+            // linkInModule returns true on error
+            //
+            ReleaseAssert(linker.linkInModule(std::move(snippetModule)) == false);
+        }
+
+        Function* linkedInFn = module->getFunction(funcName);
+        ReleaseAssert(linkedInFn != nullptr);
+        ReleaseAssert(linkedInFn->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(linkedInFn->getName() == funcName);
+        ReleaseAssert(!linkedInFn->empty());
+
+        if (shouldDeleteBody)
+        {
+            linkedInFn->deleteBody();
+        }
+
+        return linkedInFn;
+    }
+}
+
+llvm::Function* WARN_UNUSED DeegenCreateFunctionDeclarationBasedOnSnippet(llvm::Module* module /*inout*/, const std::string& snippetName, const std::string& desiredFunctionName)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetLLVMIR(ctx, snippetName, 2 /*expectedKind = declTemplate*/);
+    ReleaseAssert(snippetModule->functions().begin() != snippetModule->functions().end());
+    ReleaseAssert(++snippetModule->functions().begin() == snippetModule->functions().end());
+    Function* func = &(*snippetModule->functions().begin());
+    std::string funcName = func->getName().str();
+    ReleaseAssert(funcName != "");
+
+    ReleaseAssert(funcName != desiredFunctionName);
+    ReleaseAssert(module->getNamedValue(desiredFunctionName) == nullptr);
+    ReleaseAssert(module->getNamedValue(funcName) == nullptr);
+
+    // Create a fake body so the function can be linked into the module
+    //
+    {
+        ReleaseAssert(func->empty());
+        BasicBlock* bb = BasicBlock::Create(module->getContext(), "", func);
+        std::ignore = new UnreachableInst(module->getContext(), bb);
+        ReleaseAssert(!func->empty());
+    }
+
+    {
+        Linker linker(*module);
+        // linkInModule returns true on error
+        //
+        ReleaseAssert(linker.linkInModule(std::move(snippetModule)) == false);
+    }
+
+    Function* linkedInFn = module->getFunction(funcName);
+    ReleaseAssert(linkedInFn != nullptr);
+    ReleaseAssert(linkedInFn->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+    ReleaseAssert(linkedInFn->getName() == funcName);
+    ReleaseAssert(!linkedInFn->empty());
+    linkedInFn->deleteBody();
+
+    ReleaseAssert(module->getNamedValue(desiredFunctionName) == nullptr);
+    linkedInFn->setName(desiredFunctionName);
+    ReleaseAssert(linkedInFn->getName() == desiredFunctionName);
+    return linkedInFn;
 }
 
 }   // namespace dast

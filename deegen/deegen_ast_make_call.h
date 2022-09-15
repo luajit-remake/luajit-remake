@@ -7,6 +7,8 @@
 
 namespace dast {
 
+class InterpreterFunctionInterface;
+
 class AstMakeCall
 {
 public:
@@ -48,9 +50,9 @@ public:
     // When this is true, the args are guaranteed to contain only a TValue range
     //
     bool m_isInPlaceCall;
-    // Whether variadic ret values of the previous bytecode is passed as additional arguments to the call
+    // Whether variadic results of the previous bytecode is passed as additional arguments to the call
     //
-    bool m_passVariadicRet;
+    bool m_passVariadicRes;
     // Whether this is required to be a tail call
     //
     bool m_isMustTailCall;
@@ -63,6 +65,8 @@ public:
 
     llvm::Value* m_target;
     std::vector<Arg> m_args;
+    // This is the continuation implementation function, not the wrapped function. To get the wrapped function, use 'GetContinuationDispatchTarget()'
+    //
     llvm::Function* m_continuation;
 
     // Preprocess the module to pre-parse all use of the MakeCall family APIs
@@ -77,24 +81,26 @@ public:
 
     // Lower the call to concrete interpreter logic
     //
-    void DoLoweringForInterpreter();
+    void DoLoweringForInterpreter(InterpreterFunctionInterface* ifi);
 
-    static void LowerForInterpreter(llvm::Function* func)
+    static void LowerForInterpreter(InterpreterFunctionInterface* ifi, llvm::Function* func)
     {
         std::vector<AstMakeCall> res = GetAllUseInFunction(func);
         for (AstMakeCall& item : res)
         {
-            item.DoLoweringForInterpreter();
+            item.DoLoweringForInterpreter(ifi);
         }
     }
 
 private:
     static llvm::Function* WARN_UNUSED CreatePlaceholderFunction(llvm::Module* module, const std::vector<bool /*isArgRange*/>& argDesc);
 
+    llvm::Function* WARN_UNUSED GetContinuationDispatchTarget();
+
     static constexpr const char* x_placeholderPrefix = "__DeegenInternal_AstMakeCallIdentificationFunc_";
 
     static constexpr uint32_t x_ord_inplaceCall = 0;
-    static constexpr uint32_t x_ord_passVariadicRet = 1;
+    static constexpr uint32_t x_ord_passVariadicRes = 1;
     static constexpr uint32_t x_ord_isMustTailCall = 2;
     static constexpr uint32_t x_ord_target = 3;
     static constexpr uint32_t x_ord_continuation = 4;

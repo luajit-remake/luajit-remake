@@ -57,7 +57,7 @@ TEST(DeegenAst, MakeCallAPIParser_1)
     bool found1 = false, found2 = false, found3 = false;
     for (AstMakeCall& amc : res)
     {
-        if (!amc.m_isInPlaceCall && !amc.m_passVariadicRet && !amc.m_isMustTailCall)
+        if (!amc.m_isInPlaceCall && !amc.m_passVariadicRes && !amc.m_isMustTailCall)
         {
             ReleaseAssert(!found1);
             found1 = true;
@@ -70,7 +70,7 @@ TEST(DeegenAst, MakeCallAPIParser_1)
             ReleaseAssert(amc.m_args[1].GetArg() == targetFunction->getArg(1));
 
         }
-        else if (!amc.m_isInPlaceCall && !amc.m_passVariadicRet && amc.m_isMustTailCall)
+        else if (!amc.m_isInPlaceCall && !amc.m_passVariadicRes && amc.m_isMustTailCall)
         {
             ReleaseAssert(!found2);
             found2 = true;
@@ -82,7 +82,7 @@ TEST(DeegenAst, MakeCallAPIParser_1)
             ReleaseAssert(!amc.m_args[1].IsArgRange());
             ReleaseAssert(amc.m_args[1].GetArg() == targetFunction->getArg(0));
         }
-        else if (!amc.m_isInPlaceCall && amc.m_passVariadicRet && !amc.m_isMustTailCall)
+        else if (!amc.m_isInPlaceCall && amc.m_passVariadicRes && !amc.m_isMustTailCall)
         {
             ReleaseAssert(!found3);
             found3 = true;
@@ -126,7 +126,7 @@ TEST(DeegenAst, MakeCallAPIParser_2)
     bool found1 = false, found2 = false;
     for (AstMakeCall& amc : res)
     {
-        if (amc.m_isInPlaceCall && !amc.m_passVariadicRet && !amc.m_isMustTailCall)
+        if (amc.m_isInPlaceCall && !amc.m_passVariadicRes && !amc.m_isMustTailCall)
         {
             ReleaseAssert(!found1);
             found1 = true;
@@ -137,7 +137,7 @@ TEST(DeegenAst, MakeCallAPIParser_2)
             ReleaseAssert(amc.m_args[0].GetArgNum() == targetFunction->getArg(1));
 
         }
-        else if (!amc.m_isInPlaceCall && amc.m_passVariadicRet && amc.m_isMustTailCall)
+        else if (!amc.m_isInPlaceCall && amc.m_passVariadicRes && amc.m_isMustTailCall)
         {
             ReleaseAssert(!found2);
             found2 = true;

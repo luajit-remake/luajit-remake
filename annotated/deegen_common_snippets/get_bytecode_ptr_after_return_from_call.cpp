@@ -1,7 +1,9 @@
+#include "force_release_build.h"
+
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* stackframeBase, CodeBlock* cb)
+static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* stackframeBase, CodeBlock* cb)
 {
     StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframeBase);
     uint32_t bytecodeOffset = hdr->m_callerBytecodeOffset;
