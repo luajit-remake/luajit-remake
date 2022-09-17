@@ -12,9 +12,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue r
     }
     else if (rhs.Is<tFunction>())
     {
-        MakeTailCall(rhs.As<tFunction>(), rhs, lhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
-            Return(*res);
-        });
+        MakeTailCall(rhs.As<tFunction>(), rhs, lhs);
     }
     else
     {
@@ -34,8 +32,6 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue* vbegin, size
     }
     else
     {
-        MakeTailCallPassingVariadicRes(GetCallee(vbegin[0], vbegin[1]), vbegin[2], vbegin, numArgs, vbegin[3], +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
-            Return(*res);
-        });
+        MakeTailCallPassingVariadicRes(GetCallee(vbegin[0], vbegin[1]), vbegin[2], vbegin, numArgs, vbegin[3]);
     }
 }

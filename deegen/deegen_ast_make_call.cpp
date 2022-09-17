@@ -29,8 +29,16 @@ std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunction(llvm::Func
                     item.m_target = callInst->getArgOperand(x_ord_target);
                     ReleaseAssert(llvm_value_has_type<uint64_t>(item.m_target));
                     item.m_callOption = static_cast<MakeCallOption>(GetValueOfLLVMConstantInt<size_t>(callInst->getArgOperand(x_ord_callOption)));
-                    item.m_continuation = dyn_cast<Function>(callInst->getArgOperand(x_ord_continuation));
-                    ReleaseAssert(item.m_continuation != nullptr);
+                    if (item.m_isMustTailCall)
+                    {
+                        ReleaseAssert(dyn_cast<ConstantPointerNull>(callInst->getArgOperand(x_ord_continuation)) != nullptr);
+                        item.m_continuation = nullptr;
+                    }
+                    else
+                    {
+                        item.m_continuation = dyn_cast<Function>(callInst->getArgOperand(x_ord_continuation));
+                        ReleaseAssert(item.m_continuation != nullptr);
+                    }
 
                     uint32_t curOrd = x_ord_arg_start;
                     while (curOrd < callee->arg_size())
@@ -241,7 +249,14 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
         ReleaseAssert(llvm_value_has_type<uint64_t>(md[x_ord_target]));
 
         ReleaseAssert(md[x_ord_continuation] != nullptr);
-        ReleaseAssert(dyn_cast<Function>(md[x_ord_continuation]) != nullptr);
+        if (item.m_isMustTailCall)
+        {
+            ReleaseAssert(dyn_cast<ConstantPointerNull>(md[x_ord_continuation]) != nullptr);
+        }
+        else
+        {
+            ReleaseAssert(dyn_cast<Function>(md[x_ord_continuation]) != nullptr);
+        }
 
         if (md[x_ord_callOption] == nullptr)
         {
@@ -311,6 +326,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
 {
     using namespace llvm;
 
+    ReleaseAssert(m_continuation != nullptr);
     std::string rcImplName = m_continuation->getName().str();
     ReleaseAssert(rcImplName.ends_with("_impl"));
     std::string rcFinalName = rcImplName.substr(0, rcImplName.length() - strlen("_impl"));
@@ -394,13 +410,20 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                 totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes64, m_origin /*insertBefore*/);
 
                 // Set up the call frame by copying variadic results to the right position.
-                // In this case, using CopyVariadicResultsToArgumentsForward is fine:
+                // In this case, using CopyVariadicResultsToArgumentsForwardMayOvercopy is fine:
                 //     1. If the variadic result is in the varargs region, then it doesn't overlap with the dest region
                 //     2. If the variadic result comes from a function return, then its address is > dest region
                 // In both cases it is correct to do a forward copy.
                 //
                 Value* copyDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, argStart, { argNum }, "", m_origin /*insertBefore*/);
-                std::ignore = ifi->CallDeegenCommonSnippet("CopyVariadicResultsToArgumentsForward", { copyDst, ifi->GetStackBase(), ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
+                ifi->CallDeegenCommonSnippet(
+                    "CopyVariadicResultsToArgumentsForwardMayOvercopy",
+                    {
+                        copyDst,
+                        ifi->GetStackBase(),
+                        ifi->GetCoroutineCtx()
+                    },
+                    m_origin /*insertBefore*/);
             }
 
             std::ignore = ifi->CallDeegenCommonSnippet(
@@ -447,7 +470,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
             // If the call shall pass variadic results, copy it now.
             // A forward copy can be incorrect here since the fixed arg part may have make copyDest > copySrc,
             // so for now, we unconditionally use memmove. We might be able to do better, but the important case right now
-            // for !inPlaceCall does not pass variadic results
+            // for !inPlaceCall is those which does not pass variadic results
             //
             if (m_passVariadicRes)
             {
@@ -472,7 +495,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                 Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newSfBase, { curOffset }, "", m_origin);
                 if (arg.IsArgRange())
                 {
-                    Function* memcpyFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memcpy, { llvm_type_of<uint64_t>(ctx) });
+                    Function* memcpyFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memcpy, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
                     Value* bytesToCpy = CreateUnsignedMulNoOverflow(arg.GetArgNum(), CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
                     CallInst::Create(memcpyFunc, { dstStart, arg.GetArgStart(), bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
                     curOffset = CreateUnsignedAddNoOverflow(curOffset, arg.GetArgNum(), m_origin);
@@ -502,16 +525,293 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
     }
     else
     {
-        ReleaseAssert(false && "unimplemented");
+        // This is a tail call.
+        // Basically we need to replace the current call frame by the new call frame.
+        // Note that if the current call frame has var args, we must put the new frame at the beginning of the var arg region,
+        // so that unbounded tail call will not cause unbounded stack growth.
+        //
+        // As in the non-tail case, the callee side is responsible for shuffling the call frame to set up the varargs region
+        // (and to pay special attention not to change the call frame pointer, so that the no-unbounded-stack-growth guarantee is maintained).
+        //
+        if (!m_passVariadicRes)
+        {
+            // The call does not pass variadic results.
+            // This is the good case, since we don't need to worry about the possibility of clobbering the variadic results.
+            //
+            // 1. If the current frame has variadic args (unlikely), move the frame header to the true frame beginning
+            // 2. Populate 'm_func' in call frame header and fill 'numVarArgs' field to 0.
+            //
+            Value* newStackFrameBase = ifi->CallDeegenCommonSnippet(
+                "MoveCallFrameHeaderForTailCall",
+                {
+                    ifi->GetStackBase(),
+                    m_target
+                },
+                m_origin /*insertBefore*/);
+            ReleaseAssert(llvm_value_has_type<void*>(newStackFrameBase));
+
+            // 3. Set up the arguments
+            //
+            if (m_isInPlaceCall)
+            {
+                ReleaseAssert(m_args.size() == 1 && m_args[0].IsArgRange());
+                Value* argStart = m_args[0].GetArgStart();
+                Value* argNum = m_args[0].GetArgNum();
+
+                // In-place call has only one argument range, just move it to the right place
+                // Note that simply moving left-to-right is always correct in this case
+                //
+                ifi->CallDeegenCommonSnippet(
+                    "SimpleLeftToRightCopyMayOvercopy",
+                    {
+                        newStackFrameBase,
+                        argStart,
+                        argNum
+                    },
+                    m_origin /*insertBefore*/);
+
+                newSfBase = newStackFrameBase;
+                totalNumArgs = argNum;
+            }
+            else
+            {
+                // For not-in-place call, since currently we only support one argument range,
+                // we can move the argument range first (a memmove is required), then set up the remaining arguments
+                //
+                bool foundArgRange = false;
+                {
+                    size_t argRangeOffset = 0;
+                    Value* argStart = nullptr;
+                    Value* argNum = nullptr;
+                    for (Arg& arg : m_args)
+                    {
+                        if (arg.IsArgRange())
+                        {
+                            foundArgRange = true;
+                            argStart = arg.GetArgStart();
+                            argNum = arg.GetArgNum();
+                            break;
+                        }
+                        else
+                        {
+                            argRangeOffset++;
+                        }
+                    }
+
+                    if (foundArgRange)
+                    {
+                        Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newStackFrameBase, { CreateLLVMConstantInt<uint64_t>(ctx, argRangeOffset) }, "", m_origin);
+                        Function* memmoveFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memmove, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
+                        Value* bytesToCpy = CreateUnsignedMulNoOverflow(argNum, CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
+                        CallInst::Create(memmoveFunc, { dstStart, argStart, bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
+                    }
+                }
+
+                // Now, fill in every singleton argument
+                //
+                bool expectFoundArgRange = false;
+                Value* curOffset = CreateLLVMConstantInt<uint64_t>(ctx, 0);
+                for (Arg& arg : m_args)
+                {
+                    if (arg.IsArgRange())
+                    {
+                        ReleaseAssert(foundArgRange);
+                        ReleaseAssert(!expectFoundArgRange);
+                        expectFoundArgRange = true;
+                        curOffset = CreateUnsignedAddNoOverflow(curOffset, arg.GetArgNum(), m_origin);
+                    }
+                    else
+                    {
+                        Value* dst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newStackFrameBase, { curOffset }, "", m_origin);
+                        Value* argValue = arg.GetArg();
+                        ReleaseAssert(llvm_value_has_type<uint64_t>(argValue));
+                        std::ignore = new StoreInst(argValue, dst, false /*isVolatile*/, Align(8), m_origin);
+                        curOffset = CreateUnsignedAddNoOverflow(curOffset, CreateLLVMConstantInt<uint64_t>(ctx, 1), m_origin);
+                    }
+                }
+                ReleaseAssertIff(foundArgRange, expectFoundArgRange);
+
+                newSfBase = newStackFrameBase;
+                totalNumArgs = curOffset;
+            }
+        }
+        else
+        {
+            if (m_isInPlaceCall)
+            {
+                // This is still a relatively good case. We can set up the frame by the following:
+                //
+                // 1. Move argument part to the start of the current call frame, a left-to-right copy is fine
+                // 2. Move variadic results part after the arguments (note that this must happen after the first step,
+                //    as otherwise the argument part could be clobbered), a left-to-right copy is fine
+                // 3. If the the current frame has variadic args (unlikely), move everything to the true frame beginning, a left-to-right copy is fine
+                // 4. Populate 'm_func' in call frame header and fill 'numVarArgs' field to 0.
+                //
+                // We could have done better for the 'current frame has variadic args' case if we are willing to add more branches..
+                // But for now let's stay simple.. Variadic function tail call is really corner case any way.
+                //
+                ReleaseAssert(m_args.size() == 1 && m_args[0].IsArgRange());
+                Value* argStart = m_args[0].GetArgStart();
+                Value* argNum = m_args[0].GetArgNum();
+
+                ifi->CallDeegenCommonSnippet(
+                    "SimpleLeftToRightCopyMayOvercopy",
+                    {
+                        ifi->GetStackBase(),
+                        argStart,
+                        argNum
+                    },
+                    m_origin /*insertBefore*/);
+
+                Value* numVRes = ifi->CallDeegenCommonSnippet("GetNumVariadicResults", { ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<uint32_t>(numVRes));
+                Value* numVRes64 = new ZExtInst(numVRes, llvm_type_of<uint64_t>(ctx), "", m_origin /*insertBefore*/);
+                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes64, m_origin /*insertBefore*/);
+
+                Value* vaDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, ifi->GetStackBase(), { argNum }, "", m_origin);
+                ifi->CallDeegenCommonSnippet(
+                    "CopyVariadicResultsToArgumentsForwardMayOvercopy",
+                    {
+                        vaDst,
+                        ifi->GetStackBase(),
+                        ifi->GetCoroutineCtx()
+                    },
+                    m_origin /*insertBefore*/);
+
+                newSfBase = ifi->CallDeegenCommonSnippet(
+                    "MoveCallFrameForTailCall",
+                    {
+                        ifi->GetStackBase(),
+                        m_target,
+                        totalNumArgs
+                    },
+                    m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
+            }
+            else
+            {
+                // This is an annoying case, but also a very rare case (in LJR it only happens for a variadic tail call that invokes a call metatable)
+                // There is no fixed order which guarantees that nothing is clobbered.
+                // Currently we just try to stay simple by doing the following (there's a lot we can improve
+                // to do better, but as mentioned above this case is rare so not worth optimizing for now):
+                //    1. Compute the place the variadic res is supposed to be. If the current variadic res is not pointing to the vararg region
+                //       and is to the left of its expected location, we need to move it. (if the varres is pointing at vararg region,
+                //       we should not move it as it can clobber the existing arg range..)
+                //    2. Move the arguments to their expected place.
+                //    3. Move the vararg to the expected place, if it hasn't been moved in step 1.
+                //    4. If the the current frame has variadic args (unlikely), move everything to the true frame beginning, a left-to-right copy is fine
+                //    5. Populate 'm_func' in call frame header and fill 'numVarArgs' field to 0.
+                //
+
+                bool foundArgRange = false;
+                uint64_t numSingletonArgs = 0;
+                size_t argRangeStartOffset = 0;
+                Arg* argRange = nullptr;
+                for (Arg& arg : m_args)
+                {
+                    if (!arg.IsArgRange())
+                    {
+                        numSingletonArgs++;
+                    }
+                    else
+                    {
+                        ReleaseAssert(!foundArgRange);
+                        foundArgRange = true;
+                        argRangeStartOffset = numSingletonArgs;
+                        argRange = &arg;
+                    }
+                }
+                totalNumArgs = CreateLLVMConstantInt<uint64_t>(ctx, numSingletonArgs);
+                for (Arg& arg : m_args)
+                {
+                    if (arg.IsArgRange())
+                    {
+                        totalNumArgs = CreateUnsignedAddNoOverflow(totalNumArgs, arg.GetArgNum(), m_origin /*insertBefore*/);
+                    }
+                }
+
+                Value* varResMoved = ifi->CallDeegenCommonSnippet(
+                    "MoveVariadicResultsForVariadicNotInPlaceTailCall",
+                    {
+                        ifi->GetStackBase(),
+                        ifi->GetCoroutineCtx(),
+                        totalNumArgs
+                    },
+                    m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<bool>(varResMoved));
+
+                // Since currently we only support one argument range,
+                // we can move the argument range first (a memmove is required), then set up the remaining arguments
+                //
+                if (foundArgRange)
+                {
+                    Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, ifi->GetStackBase(), { CreateLLVMConstantInt<uint64_t>(ctx, argRangeStartOffset) }, "", m_origin);
+                    Function* memmoveFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memmove, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
+                    Value* bytesToCpy = CreateUnsignedMulNoOverflow(argRange->GetArgNum(), CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
+                    CallInst::Create(memmoveFunc, { dstStart, argRange->GetArgStart(), bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
+                }
+
+                // Now, fill in every singleton argument
+                //
+                bool expectFoundArgRange = false;
+                Value* curOffset = CreateLLVMConstantInt<uint64_t>(ctx, 0);
+                for (Arg& arg : m_args)
+                {
+                    if (arg.IsArgRange())
+                    {
+                        ReleaseAssert(foundArgRange);
+                        ReleaseAssert(!expectFoundArgRange);
+                        expectFoundArgRange = true;
+                        curOffset = CreateUnsignedAddNoOverflow(curOffset, arg.GetArgNum(), m_origin);
+                    }
+                    else
+                    {
+                        Value* dst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, ifi->GetStackBase(), { curOffset }, "", m_origin);
+                        Value* argValue = arg.GetArg();
+                        ReleaseAssert(llvm_value_has_type<uint64_t>(argValue));
+                        std::ignore = new StoreInst(argValue, dst, false /*isVolatile*/, Align(8), m_origin);
+                        curOffset = CreateUnsignedAddNoOverflow(curOffset, CreateLLVMConstantInt<uint64_t>(ctx, 1), m_origin);
+                    }
+                }
+                ReleaseAssertIff(foundArgRange, expectFoundArgRange);
+
+                totalNumArgs = ifi->CallDeegenCommonSnippet(
+                    "CopyVariadicResultsToArgumentsForVariadicNotInPlaceTailCall",
+                    {
+                        varResMoved,
+                        totalNumArgs,
+                        ifi->GetStackBase(),
+                        ifi->GetCoroutineCtx()
+                    },
+                    m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+
+                newSfBase = ifi->CallDeegenCommonSnippet(
+                    "MoveCallFrameForTailCall",
+                    {
+                        ifi->GetStackBase(),
+                        m_target,
+                        totalNumArgs
+                    },
+                    m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
+            }
+        }
     }
 
     ReleaseAssert(newSfBase != nullptr);
+    ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(totalNumArgs != nullptr);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
 
-    Value* entryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { m_target }, m_origin /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<void*>(entryPoint));
+    Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { m_target }, m_origin /*insertBefore*/);
+    ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 
-    ifi->CreateDispatchToCallee(entryPoint, ifi->GetCoroutineCtx(), newSfBase, totalNumArgs, CreateLLVMConstantInt<bool>(ctx, m_isMustTailCall), m_origin /*insertBefore*/);
+    Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", m_origin /*insertBefore*/);
+    Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", m_origin /*insertBefore*/);
+    ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+    ifi->CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<bool>(ctx, m_isMustTailCall), m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();

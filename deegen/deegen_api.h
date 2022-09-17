@@ -82,6 +82,15 @@ namespace detail {
 template<typename... Args>
 struct MakeCallArgHandlerImpl;
 
+template<>
+struct MakeCallArgHandlerImpl<std::nullptr_t>
+{
+    static void NO_RETURN ALWAYS_INLINE handle(void* handler, std::nullptr_t /*nullptr*/)
+    {
+        DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
+    }
+};
+
 template<typename... ContinuationFnArgs>
 struct MakeCallArgHandlerImpl<void(*)(ContinuationFnArgs...)>
 {
@@ -162,6 +171,13 @@ void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* lay
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
 }
 
+inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, TValue* layoutBegin, size_t numArgs)
+{
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, layoutBegin[0].m_value);
+    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin + x_stackFrameHeaderSlots, numArgs);
+    DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
+}
+
 }   // namespace detail
 
 // Make a call to a guest language function, with pre-layouted frame holding the target function and the arguments.
@@ -184,16 +200,14 @@ void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(TValue* layoutBeg
 
 // The tail call versions
 //
-template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(TValue* layoutBegin, size_t numArgs)
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceTailCallInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallInfo(), layoutBegin, numArgs);
 }
 
-template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs)
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), layoutBegin, numArgs);
 }
 
 // Make a call to a guest language function.
@@ -225,13 +239,13 @@ void NO_RETURN ALWAYS_INLINE MakeCallPassingVariadicRes(Args... args)
 template<typename... Args>
 void NO_RETURN ALWAYS_INLINE MakeTailCall(Args... args)
 {
-    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeTailCallInfo(), args...);
+    detail::MakeCallHandlerImpl<Args..., std::nullptr_t>::handle(DeegenImpl_StartMakeTailCallInfo(), args..., nullptr);
 }
 
 template<typename... Args>
 void NO_RETURN ALWAYS_INLINE MakeTailCallPassingVariadicRes(Args... args)
 {
-    detail::MakeCallHandlerImpl<Args...>::handle(DeegenImpl_StartMakeTailCallPassingVariadicResInfo(), args...);
+    detail::MakeCallHandlerImpl<Args..., std::nullptr_t>::handle(DeegenImpl_StartMakeTailCallPassingVariadicResInfo(), args..., nullptr);
 }
 
 namespace detail {

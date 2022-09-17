@@ -3,7 +3,7 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static void DeegenSnippet_CopyVariadicResultsToArgumentsForward(uint64_t* dst, uint64_t* stackFrameBase, CoroutineRuntimeContext* coroCtx)
+static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint64_t* dst, uint64_t* stackFrameBase, CoroutineRuntimeContext* coroCtx)
 {
     int32_t srcOffset = coroCtx->m_variadicRetSlotBegin;
     uint32_t num = coroCtx->m_numVariadicRets;
@@ -34,5 +34,5 @@ static void DeegenSnippet_CopyVariadicResultsToArgumentsForward(uint64_t* dst, u
     while (i < num);
 }
 
-DEFINE_DEEGEN_COMMON_SNIPPET("CopyVariadicResultsToArgumentsForward", DeegenSnippet_CopyVariadicResultsToArgumentsForward)
+DEFINE_DEEGEN_COMMON_SNIPPET("CopyVariadicResultsToArgumentsForwardMayOvercopy", DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy)
 

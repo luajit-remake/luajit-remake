@@ -52,6 +52,7 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
     constexpr const char* snippetNameVarName = PP_STRINGIFY(DEEGEN_COMMON_SNIPPET_NAME_VARNAME);
     constexpr const char* snippetTargetVarName = PP_STRINGIFY(DEEGEN_COMMON_SNIPPET_TARGET_VARNAME);
     constexpr const char* snippetKindVarName = PP_STRINGIFY(DEEGEN_COMMON_SNIPPET_KIND_VARNAME);
+    constexpr const char* snippetNoOptOptionVarName = PP_STRINGIFY(DEEGEN_COMMON_SNIPPET_NOOPT_VARNAME);
 
     GlobalVariable* gvName = module->getGlobalVariable(snippetNameVarName);
     ReleaseAssert(gvName != nullptr);
@@ -65,6 +66,15 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
     Constant* snippetKindCst = dast::GetConstexprGlobalValue(module.get(), snippetKindVarName);
     int snippetKind = dast::GetValueOfLLVMConstantInt<int>(snippetKindCst);
     ReleaseAssert(snippetKind == 0 || snippetKind == 1 || snippetKind == 2);
+
+    GlobalVariable* isNoOptGv = module->getGlobalVariable(snippetNoOptOptionVarName);
+    bool isNoOptBeforeExtract = false;
+    if (isNoOptGv != nullptr)
+    {
+        ReleaseAssert(snippetKind != 2);
+        ReleaseAssert(dast::GetValueOfLLVMConstantInt<bool>(dast::GetConstexprGlobalValue(module.get(), snippetNoOptOptionVarName)) == true);
+        isNoOptBeforeExtract = true;
+    }
 
     std::string snippetName = dast::GetValueFromLLVMConstantCString(dast::GetConstexprGlobalValue(module.get(), snippetNameVarName));
 
@@ -86,7 +96,10 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
                       func->getLinkage() == GlobalVariable::LinkageTypes::LinkOnceODRLinkage);
         if (!func->empty())
         {
-            dast::RunLLVMOptimizePass(module.get());
+            if (!isNoOptBeforeExtract)
+            {
+                dast::RunLLVMOptimizePass(module.get());
+            }
             extractedModule = dast::ExtractFunction(module.get(), targetFuncName);
         }
         else
@@ -99,7 +112,10 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
         ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::InternalLinkage && "The snippet must be declared as 'static'.");
         func->setLinkage(GlobalVariable::LinkageTypes::ExternalLinkage);
         ReleaseAssert(!func->empty());
-        dast::RunLLVMOptimizePass(module.get());
+        if (!isNoOptBeforeExtract)
+        {
+            dast::RunLLVMOptimizePass(module.get());
+        }
         extractedModule = dast::ExtractFunction(module.get(), targetFuncName);
     }
 

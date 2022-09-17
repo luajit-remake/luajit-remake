@@ -61,7 +61,14 @@ inline llvm::Type* WARN_UNUSED llvm_type_of(llvm::LLVMContext& ctx)
     else
     {
         static_assert(std::is_pointer_v<T>, "unhandled type");
-        return PointerType::getUnqual(ctx);
+        if constexpr(IsHeapPtrType<T>::value)
+        {
+            return PointerType::get(ctx, CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
+        }
+        else
+        {
+            return PointerType::getUnqual(ctx);
+        }
     }
 }
 
@@ -682,11 +689,6 @@ inline std::string DumpLLVMModuleAsString(llvm::Module* module)
     module->print(rso, nullptr);
     std::string dump = rso.str();
     return dump;
-}
-
-inline llvm::Type* GetLLVMHeapPtrPointerType(llvm::LLVMContext& ctx)
-{
-    return llvm::Type::getInt8Ty(ctx)->getPointerTo(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
 }
 
 // Link the requested snippet into the current module if it hasn't been linked in yet.

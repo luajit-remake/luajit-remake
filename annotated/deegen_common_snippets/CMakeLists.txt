@@ -7,6 +7,11 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_end_of_call_frame.cpp
   populate_new_call_frame_header.cpp
   get_callee_entry_point.cpp
+  move_call_frame_header_for_tail_call.cpp
+  simple_left_to_right_copy_may_overcopy.cpp
+  move_call_frame_for_tail_call.cpp
+  move_variadic_results_for_variadic_notinplace_tailcall.cpp
+  copy_variadic_results_to_arguments_for_variadic_notinplace_tailcall.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

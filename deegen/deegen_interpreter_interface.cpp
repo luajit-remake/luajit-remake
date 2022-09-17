@@ -13,13 +13,22 @@ namespace dast {
 llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetInterfaceFunctionType(llvm::LLVMContext& ctx)
 {
     using namespace llvm;
+    // TODO: we should make it use GHC calling convension so we can pass more info
+    // and allow less-overhead C runtime call.
+    // Speficially, all 6 callee-saved registers (under default cc calling convention)
+    // are available as parameters in GHC. We should use them as a register pinning
+    // mechanism to pin the important states (coroutineCtx, stackBase, etc) into these registers
+    // so that they are not clobbered by C calls.
+    //
     return FunctionType::get(
         llvm_type_of<void>(ctx) /*result*/,
         {
             llvm_type_of<void*>(ctx) /*coroutineCtx*/,
             llvm_type_of<void*>(ctx) /*stackBase*/,
-            llvm_type_of<void*>(ctx) /*bytecodeOrRetStart*/,
-            llvm_type_of<void*>(ctx) /*codeblockOrnumRets*/
+            /* Arg meaning if the function is:  bytecodeImpl    return cont     func entry        */
+            llvm_type_of<void*>(ctx)         /* bytecode        RetStart        numArgs           */,
+            llvm_type_of<void*>(ctx)         /* codeblock       numRets         codeblockHeapPtr  */,
+            llvm_type_of<uint64_t>(ctx),     /* unused          unused          isMustTail        */
         } /*params*/,
         false /*isVarArg*/);
 }
@@ -38,7 +47,7 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
         GetInterfaceFunctionType(ctx),
         target,
         {
-            coroutineCtx, stackbase, bytecodePtr, codeBlock
+            coroutineCtx, stackbase, bytecodePtr, codeBlock, UndefValue::get(llvm_type_of<uint64_t>(ctx))
         },
         "" /*name*/,
         insertBefore);
@@ -63,7 +72,7 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
         GetInterfaceFunctionType(ctx),
         target,
         {
-            coroutineCtx, stackbase, retStart, numRetAsPtr
+            coroutineCtx, stackbase, retStart, numRetAsPtr, UndefValue::get(llvm_type_of<uint64_t>(ctx))
         },
         "" /*name*/,
         insertBefore);
@@ -73,25 +82,29 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
 }
 
-void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* numArgs, llvm::Value* isMustTail, llvm::Instruction* insertBefore)
+void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    LLVMContext& ctx = target->getContext();
-    ReleaseAssert(llvm_value_has_type<void*>(target));
+    LLVMContext& ctx = codePointer->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(codePointer));
     ReleaseAssert(llvm_value_has_type<void*>(coroutineCtx));
     ReleaseAssert(llvm_value_has_type<void*>(preFixupStackBase));
+    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCodeBlockHeapPtr));
     ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
     ReleaseAssert(llvm_value_has_type<bool>(isMustTail));
 
     IntToPtrInst* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", insertBefore);
     ZExtInst* isMustTail64 = new ZExtInst(isMustTail, llvm_type_of<uint64_t>(ctx), "", insertBefore);
-    IntToPtrInst* isMustTailAsPtr = new IntToPtrInst(isMustTail64, llvm_type_of<void*>(ctx), "", insertBefore);
+    // We need this cast only because LLVM's rule of musttail which requires identical prototype..
+    // Callee will cast it back to HeapPtr
+    //
+    Value* fakeCodeBlockPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtr, llvm_type_of<void*>(ctx), "", insertBefore);
 
     CallInst* callInst = CallInst::Create(
         GetInterfaceFunctionType(ctx),
-        target,
+        codePointer,
         {
-            coroutineCtx, preFixupStackBase, numArgsAsPtr, isMustTailAsPtr
+            coroutineCtx, preFixupStackBase, numArgsAsPtr, fakeCodeBlockPtr, isMustTail64
         },
         "" /*name*/,
         insertBefore);
@@ -158,7 +171,7 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
 
     // Set parameter names just to make dumps more readable
     //
-    ReleaseAssert(m_wrapper->arg_size() == 4);
+    ReleaseAssert(m_wrapper->arg_size() == 5);
     m_wrapper->getArg(0)->setName(x_coroutineCtx);
     m_wrapper->getArg(1)->setName(x_stackBase);
     if (m_isReturnContinuation)
