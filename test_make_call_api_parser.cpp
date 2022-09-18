@@ -41,7 +41,7 @@ struct TestHelper
 
 TEST(DeegenAst, MakeCallAPIParser_1)
 {
-    TestHelper helper("deegen_make_call_api_parser" /*fileName*/);
+    TestHelper helper("make_call_api_parser" /*fileName*/);
     std::string functionName = "testfn1";
 
     Module* module = helper.moduleHolder.get();
@@ -110,7 +110,7 @@ TEST(DeegenAst, MakeCallAPIParser_1)
 
 TEST(DeegenAst, MakeCallAPIParser_2)
 {
-    TestHelper helper("deegen_make_call_api_parser" /*fileName*/);
+    TestHelper helper("make_call_api_parser" /*fileName*/);
     std::string functionName = "testfn2";
 
     Module* module = helper.moduleHolder.get();

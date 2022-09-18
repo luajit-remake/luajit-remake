@@ -263,11 +263,13 @@ InterpreterFunctionInterface::InterpreterFunctionInterface(BytecodeVariantDefini
         ReleaseAssert(ord == opcodeValues.size() && ord == usageValues.size());
     }
 
+    /*
     if (m_isReturnContinuation)
     {
         usageValues.push_back(GetRetStart());
         usageValues.push_back(GetNumRet());
     }
+    */
 
     {
         FunctionType* fty = m_impl->getFunctionType();
@@ -295,9 +297,8 @@ struct ReturnContinuationFinder
         {
             dfs(amc.m_continuation);
         }
-        // It is impossible for the entry function itself to also be a continuation,
-        // since they have different function prototypes.
-        // Our frontend should have rejected this, but doesn't hurt to assert.
+        // We disallow the entry function itself to also be a continuation,
+        // since the entry function cannot access return values while the continuation function can.
         //
         ReleaseAssert(!m_labelMap.count(from));
     }
@@ -327,11 +328,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionInterface::ProcessR
 {
     ReleaseAssert(!m_isReturnContinuation);
     InterpreterFunctionInterface ifi(m_bytecodeDef, rc, true /*isReturnContinuation*/);
-    ifi.LowerAPIs();
-    return std::move(ifi.m_module);
+    return ifi.LowerAPIs();
 }
 
-void InterpreterFunctionInterface::LowerAPIs()
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionInterface::LowerAPIs()
 {
     using namespace llvm;
     ReleaseAssert(!m_didLowerAPIs);
@@ -452,8 +452,10 @@ void InterpreterFunctionInterface::LowerAPIs()
 
     // Finally, extract out the target functions
     //
-    m_module = ExtractFunctions(m_module.get(), extractTargets);
+    std::unique_ptr<Module> result = ExtractFunctions(m_module.get(), extractTargets);
     m_wrapper = nullptr;
+    m_module.reset();
+    return result;
 }
 
 }   // namespace dast

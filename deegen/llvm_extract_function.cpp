@@ -162,7 +162,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleI
     std::set<GlobalValue*> isNeeded;
     std::set<Function*> callees;
     std::function<void(GlobalValue*, bool)> dfs = [&dfs, &isNeeded, &callees, &usageGraph](GlobalValue* cur, bool isRoot) {
-        if (isNeeded.count(cur))
+        if (!isRoot && isNeeded.count(cur))
         {
             return;
         }

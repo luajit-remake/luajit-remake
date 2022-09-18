@@ -17,7 +17,7 @@ public:
 
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
-    void LowerAPIs();
+    std::unique_ptr<llvm::Module> WARN_UNUSED LowerAPIs();
 
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
     llvm::Module* GetModule() const { return m_module.get(); }

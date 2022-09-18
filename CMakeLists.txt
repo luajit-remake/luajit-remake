@@ -152,8 +152,16 @@ add_executable(main
   test_dump_type_speculation.cpp
   test_llvm_constant_parser.cpp
   test_proven_type_specialization.cpp
-  test_deegen_make_call_api.cpp
+  test_make_call_api_parser.cpp
   test_deegen_common_snippet_getter.cpp
+  test_make_call_api_lowering.cpp
+)
+
+# Our unit test needs LLVM JIT
+# add -rdynamic so that symbols are exposed to generated code
+# 
+target_link_options(main PUBLIC
+   -rdynamic 
 )
 
 target_link_libraries(main PUBLIC

@@ -51,7 +51,7 @@ TEST(AnnotationParser, BytecodeDefinitionSanity)
 
 }
 
-#endif
+
 
 TEST(AnnotationParser, BytecodeInterpreterLoweringSanity_1)
 {
@@ -73,4 +73,24 @@ TEST(AnnotationParser, BytecodeInterpreterLoweringSanity_1)
     ifi.LowerAPIs();
     ifi.GetModule()->dump();
 
+}
+#endif
+TEST(AnnotationParser, MakeCallLowering_1)
+{
+    std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
+    LLVMContext& ctx = *llvmCtxHolder.get();
+
+    std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "make_call_api_lowering");
+
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
+    AstMakeCall::PreprocessModule(module.get());
+
+    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+
+    auto& target = defs[0][0];
+    target->SetMaxOperandWidthBytes(4);
+
+    Function* implFunc = module->getFunction(target->m_implFunctionName);
+    InterpreterFunctionInterface ifi(target.get(), implFunc, false);
+    ifi.LowerAPIs()->dump();
 }
