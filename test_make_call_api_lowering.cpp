@@ -224,6 +224,8 @@ void TestModuleOneCase(Module* moduleIn,
     // Now, set up the environment, the stack and the expected results
     //
     CoroutineRuntimeContext* coroCtx = CoroutineRuntimeContext::Create(vm, UserHeapPointer<TableObject> {} /*globalObject*/);
+    coroCtx->m_numVariadicRets = static_cast<uint32_t>(numVarRes);
+    coroCtx->m_variadicRetSlotBegin = SafeIntegerCast<int32_t>(varResStartOffset);
 
     uint64_t* stack = reinterpret_cast<uint64_t*>(coroCtx->m_stackBegin);
 
@@ -310,7 +312,7 @@ void TestModuleOneCase(Module* moduleIn,
     {
         if (kind == 0)
         {
-            ReleaseAssert(argRangeBegin < numLocals);
+            ReleaseAssert(argRangeBegin <= numLocals);
             ReleaseAssert(argRangeBegin + argRangeLen <= numLocals);
             for (size_t i = 0; i < argRangeLen; i++)
             {
@@ -375,25 +377,329 @@ void TestModuleOneCase(Module* moduleIn,
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
 
-}   // anonymous namespace
-
-TEST(DeegenAst, MakeCallApiLowering_1)
+void TestModule(size_t testcaseNum,
+                bool isMustTail,
+                bool passVarRes,
+                bool isInPlace,
+                // 0 = arg range, otherwise it is the value ordinal
+                const std::vector<int>& expectedArgComposition,
+                size_t numCycles = 1)
 {
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    std::unique_ptr<Module> module = GetTestCase(ctx, 1);
+    std::unique_ptr<Module> moduleHolder = GetTestCase(ctx, testcaseNum);
 
-    TestModuleOneCase(module.get(),
-                      1 /*testCaseNum*/,
-                      0 /*numVarArgs*/,
-                      10 /*numLocals*/,
-                      5 /*rangeArgBegin*/,
-                      3 /*numRangeArgs*/,
-                      0 /*varResLoc*/,
-                      static_cast<size_t>(-1) /*numVarRes*/,
-                      false /*isMustTail*/,
-                      false /*passVarRes*/,
-                      false /*isInPlace*/,
-                      { 1, 2, 3 });
+    enum class ArgRangeKind
+    {
+        None,
+        ForInPlaceCall,
+        Normal
+    };
+
+    ArgRangeKind argRangeKind;
+    if (isInPlace)
+    {
+        argRangeKind = ArgRangeKind::ForInPlaceCall;
+        ReleaseAssert(expectedArgComposition.size() == 1 && expectedArgComposition[0] == 0);
+    }
+    else
+    {
+        argRangeKind = ArgRangeKind::None;
+        for (int kind : expectedArgComposition)
+        {
+            if (kind == 0)
+            {
+                ReleaseAssert(argRangeKind == ArgRangeKind::None);
+                argRangeKind = ArgRangeKind::Normal;
+            }
+        }
+    }
+
+    for (size_t currentCycle = 0; currentCycle < numCycles; currentCycle++)
+    {
+        std::vector<size_t> numLocalChoices { 0, 5, 10, 20 };
+        std::vector<size_t> numVarArgChoices { 0, 5, 10 };
+
+        if (currentCycle > 0)
+        {
+            for (size_t i = 0; i < numLocalChoices.size(); i++)
+            {
+                numLocalChoices[i] += static_cast<size_t>(rand()) % 4;
+            }
+            for (size_t i = 0; i < numVarArgChoices.size(); i++)
+            {
+                numVarArgChoices[i] += static_cast<size_t>(rand()) % 4;
+            }
+        }
+
+        for (size_t numVarArgs : numVarArgChoices)
+        {
+            for (size_t numLocals : numLocalChoices)
+            {
+                if (argRangeKind == ArgRangeKind::ForInPlaceCall && numLocals < x_numSlotsForStackFrameHeader)
+                {
+                    continue;
+                }
+                std::vector<std::pair<size_t, size_t>> argRangeChoices;
+                if (argRangeKind == ArgRangeKind::None)
+                {
+                    argRangeChoices.push_back({0, 0});
+                }
+                else if (argRangeKind == ArgRangeKind::ForInPlaceCall)
+                {
+                    for (size_t i = 0; i < 3; i++)
+                    {
+                        size_t start = static_cast<size_t>(rand()) % (numLocals - x_numSlotsForStackFrameHeader + 1) + x_numSlotsForStackFrameHeader;
+                        size_t len = static_cast<size_t>(rand()) % (numLocals - start + 1);
+                        argRangeChoices.push_back({ start, len });
+                    }
+                }
+                else
+                {
+                    for (size_t i = 0; i < 3; i++)
+                    {
+                        size_t start = static_cast<size_t>(rand()) % (numLocals + 1);
+                        size_t len = static_cast<size_t>(rand()) % (numLocals - start + 1);
+                        argRangeChoices.push_back({ start, len });
+                    }
+                }
+                for (auto& argRangeChoiceIt : argRangeChoices)
+                {
+                    size_t argRangeStart = argRangeChoiceIt.first;
+                    size_t argRangeLen = argRangeChoiceIt.second;
+
+                    std::vector<std::pair<ssize_t, size_t>> varResChoices;
+                    if (!passVarRes)
+                    {
+                        varResChoices.push_back({ 0, static_cast<size_t>(-1) });
+                    }
+                    else
+                    {
+                        {
+                            size_t varArgRegionOffset = static_cast<size_t>(rand()) % (numVarArgs + 1);
+                            size_t len = static_cast<size_t>(rand()) % (numVarArgs - varArgRegionOffset + 1);
+                            ssize_t varResOffset = static_cast<ssize_t>(varArgRegionOffset - numVarArgs - x_numSlotsForStackFrameHeader);
+                            varResChoices.push_back({ varResOffset, len });
+                        }
+
+                        {
+                            size_t lengthChoiceLimit = 10;
+                            if (currentCycle > 0)
+                            {
+                                int dice = rand() % 3;
+                                if (dice == 0) { lengthChoiceLimit += 5; }
+                                if (dice == 1) { lengthChoiceLimit -= 5; }
+                            }
+                            size_t offsetChoice = 0;
+                            if (currentCycle > 0)
+                            {
+                                offsetChoice = static_cast<size_t>(rand()) % 3;
+                            }
+                            size_t lengthChoice = static_cast<size_t>(rand()) % lengthChoiceLimit;
+                            varResChoices.push_back({ static_cast<ssize_t>(numLocals + offsetChoice), lengthChoice });
+                        }
+
+                        {
+                            size_t offsetChoice = 10;
+                            if (currentCycle > 0)
+                            {
+                                offsetChoice = offsetChoice + static_cast<size_t>(rand()) % 7 - 3;
+                            }
+                            size_t lengthChoiceLimit = 10;
+                            if (currentCycle > 0)
+                            {
+                                int dice = rand() % 3;
+                                if (dice == 0) { lengthChoiceLimit += 5; }
+                                if (dice == 1) { lengthChoiceLimit -= 5; }
+                            }
+                            size_t lengthChoice = static_cast<size_t>(rand()) % lengthChoiceLimit;
+                            varResChoices.push_back({ static_cast<ssize_t>(numLocals + offsetChoice), lengthChoice });
+                        }
+                    }
+
+                    for (auto& varResChoicesIt : varResChoices)
+                    {
+                        ssize_t varResOffset = varResChoicesIt.first;
+                        size_t varResLen = varResChoicesIt.second;
+
+                        TestModuleOneCase(moduleHolder.get(),
+                                          testcaseNum,
+                                          numVarArgs,
+                                          numLocals,
+                                          argRangeStart,
+                                          argRangeLen,
+                                          varResOffset,
+                                          varResLen,
+                                          isMustTail,
+                                          passVarRes,
+                                          isInPlace,
+                                          expectedArgComposition);
+                    }
+                }
+            }
+        }
+    }
+}
+
+}   // anonymous namespace
+
+TEST(DeegenAst, MakeCallApiLowering_1)
+{
+    TestModule(1 /*testCaseNum*/,
+               false /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_2)
+{
+    TestModule(2 /*testCaseNum*/,
+               false /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_3)
+{
+    TestModule(3 /*testCaseNum*/,
+               false /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3, 4, 0, 5, 6, 7, 8 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_4)
+{
+    TestModule(4 /*testCaseNum*/,
+               false /*isMustTail*/,
+               false /*passVarRes*/,
+               true /*isInPlace*/,
+               { 0 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_5)
+{
+    TestModule(5 /*testCaseNum*/,
+               false /*isMustTail*/,
+               true /*passVarRes*/,
+               true /*isInPlace*/,
+               { 0 } /*expectedArgComposition*/,
+               2 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_6)
+{
+    TestModule(6 /*testCaseNum*/,
+               false /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_7)
+{
+    TestModule(7 /*testCaseNum*/,
+               false /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_8)
+{
+    TestModule(8 /*testCaseNum*/,
+               false /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3, 4, 0, 5, 6, 7, 8 } /*expectedArgComposition*/,
+               2 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_9)
+{
+    TestModule(9 /*testCaseNum*/,
+               true /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_10)
+{
+    TestModule(10 /*testCaseNum*/,
+               true /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_11)
+{
+    TestModule(11 /*testCaseNum*/,
+               true /*isMustTail*/,
+               false /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3, 4, 0, 5, 6, 7, 8 } /*expectedArgComposition*/,
+               2 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_12)
+{
+    TestModule(12 /*testCaseNum*/,
+               true /*isMustTail*/,
+               false /*passVarRes*/,
+               true /*isInPlace*/,
+               { 0 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_13)
+{
+    TestModule(13 /*testCaseNum*/,
+               true /*isMustTail*/,
+               true /*passVarRes*/,
+               true /*isInPlace*/,
+               { 0 } /*expectedArgComposition*/,
+               2 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_14)
+{
+    TestModule(14 /*testCaseNum*/,
+               true /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3 } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_15)
+{
+    TestModule(15 /*testCaseNum*/,
+               true /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { } /*expectedArgComposition*/,
+               3 /*numCycles*/);
+}
+
+TEST(DeegenAst, MakeCallApiLowering_16)
+{
+    TestModule(16 /*testCaseNum*/,
+               true /*isMustTail*/,
+               true /*passVarRes*/,
+               false /*isInPlace*/,
+               { 1, 2, 3, 4, 0, 5, 6, 7, 8 } /*expectedArgComposition*/,
+               2 /*numCycles*/);
 }

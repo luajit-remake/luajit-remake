@@ -309,7 +309,7 @@ struct ReturnContinuationFinder
 private:
     void dfs(llvm::Function* cur)
     {
-        if (m_labelMap.count(cur))
+        if (cur == nullptr || m_labelMap.count(cur))
         {
             return;
         }

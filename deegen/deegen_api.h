@@ -166,15 +166,21 @@ constexpr size_t x_stackFrameHeaderSlots = 4;
 template<typename... ContinuationFnArgs>
 void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, layoutBegin[0].m_value);
-    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin + x_stackFrameHeaderSlots, numArgs);
+    // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
+    //       We should fix up the header file and let this file have access to the StackFrameHeader struct
+    //
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, (layoutBegin - x_stackFrameHeaderSlots)->m_value);
+    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
 }
 
 inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, TValue* layoutBegin, size_t numArgs)
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, layoutBegin[0].m_value);
-    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin + x_stackFrameHeaderSlots, numArgs);
+    // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
+    //       We should fix up the header file and let this file have access to the StackFrameHeader struct
+    //
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, (layoutBegin - x_stackFrameHeaderSlots)->m_value);
+    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
 }
 
@@ -185,29 +191,29 @@ inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, 
 // Note that this also implies that everything >= layoutBegin are invalidated after the call
 //
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallInfo(), argsBegin, numArgs, continuationFn);
 }
 
 // Same as above, except that the variadic results from the immediate preceding opcode are appended to the end of the argument list
 //
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo(), layoutBegin, numArgs, continuationFn);
+    detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo(), argsBegin, numArgs, continuationFn);
 }
 
 // The tail call versions
 //
-inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(TValue* layoutBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(TValue* argsBegin, size_t numArgs)
 {
-    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallInfo(), layoutBegin, numArgs);
+    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallInfo(), argsBegin, numArgs);
 }
 
-inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(TValue* layoutBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(TValue* argsBegin, size_t numArgs)
 {
-    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), layoutBegin, numArgs);
+    detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), argsBegin, numArgs);
 }
 
 // Make a call to a guest language function.

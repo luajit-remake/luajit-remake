@@ -495,9 +495,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                 Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newSfBase, { curOffset }, "", m_origin);
                 if (arg.IsArgRange())
                 {
-                    Function* memcpyFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memcpy, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
                     Value* bytesToCpy = CreateUnsignedMulNoOverflow(arg.GetArgNum(), CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
-                    CallInst::Create(memcpyFunc, { dstStart, arg.GetArgStart(), bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
+                    EmitLLVMIntrinsicMemcpy(ifi->GetModule(), dstStart, arg.GetArgStart(), bytesToCpy, m_origin);
                     curOffset = CreateUnsignedAddNoOverflow(curOffset, arg.GetArgNum(), m_origin);
                 }
                 else
@@ -509,6 +508,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                 }
             }
 
+            ValidateLLVMModule(ifi->GetModule());
             std::ignore = ifi->CallDeegenCommonSnippet(
                 "PopulateNewCallFrameHeader",
                 {
@@ -601,9 +601,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                     if (foundArgRange)
                     {
                         Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newStackFrameBase, { CreateLLVMConstantInt<uint64_t>(ctx, argRangeOffset) }, "", m_origin);
-                        Function* memmoveFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memmove, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
                         Value* bytesToCpy = CreateUnsignedMulNoOverflow(argNum, CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
-                        CallInst::Create(memmoveFunc, { dstStart, argStart, bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
+                        EmitLLVMIntrinsicMemmove(ifi->GetModule(), dstStart, argStart, bytesToCpy, m_origin);
                     }
                 }
 
@@ -746,9 +745,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
                 if (foundArgRange)
                 {
                     Value* dstStart = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, ifi->GetStackBase(), { CreateLLVMConstantInt<uint64_t>(ctx, argRangeStartOffset) }, "", m_origin);
-                    Function* memmoveFunc = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::memmove, { llvm_type_of<uint64_t>(ctx) /*sizeType*/ });
                     Value* bytesToCpy = CreateUnsignedMulNoOverflow(argRange->GetArgNum(), CreateLLVMConstantInt<uint64_t>(ctx, sizeof(uint64_t)), m_origin);
-                    CallInst::Create(memmoveFunc, { dstStart, argRange->GetArgStart(), bytesToCpy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", m_origin);
+                    EmitLLVMIntrinsicMemmove(ifi->GetModule(), dstStart, argRange->GetArgStart(), bytesToCpy, m_origin);
                 }
 
                 // Now, fill in every singleton argument
