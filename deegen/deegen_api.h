@@ -164,31 +164,32 @@ struct MakeCallHandlerImpl<MakeCallOption, HeapPtr<FunctionObject>, Args...>
 constexpr size_t x_stackFrameHeaderSlots = 4;
 
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* layoutBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
     // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
     //       We should fix up the header file and let this file have access to the StackFrameHeader struct
     //
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, (layoutBegin - x_stackFrameHeaderSlots)->m_value);
-    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin, numArgs);
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, (argsBegin - x_stackFrameHeaderSlots)->m_value);
+    handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
 }
 
-inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, TValue* layoutBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, TValue* argsBegin, size_t numArgs)
 {
     // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
     //       We should fix up the header file and let this file have access to the StackFrameHeader struct
     //
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, (layoutBegin - x_stackFrameHeaderSlots)->m_value);
-    handler = DeegenImpl_MakeCall_ReportParamList(handler, layoutBegin, numArgs);
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, (argsBegin - x_stackFrameHeaderSlots)->m_value);
+    handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
 }
 
 }   // namespace detail
 
 // Make a call to a guest language function, with pre-layouted frame holding the target function and the arguments.
-// Specifically, layoutBegin[0] must hold a HeapPtr<FunctionObject>, and layoutBegin[stackFrameHdrSize, stackFrameHdrSize + numArgs) must hold all the arguments.
-// Note that this also implies that everything >= layoutBegin are invalidated after the call
+// Specifically, a StackFrameHeader must sit right before argsBegin (i.e., in memory region argsBegin[-stackFrameHdrSize, 0) )
+// with the target HeapPtr<FunctionObject> already filled, and argsBegin[0, numArgs) must hold all the arguments.
+// Note that this also implies that everything >= argsBegin - stackFrameHdrSize are invalidated after the call
 //
 template<typename... ContinuationFnArgs>
 void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
