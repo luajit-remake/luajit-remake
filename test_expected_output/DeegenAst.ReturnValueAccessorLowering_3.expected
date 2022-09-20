@@ -1,0 +1,80 @@
+; ModuleID = 'extracted_ir'
+source_filename = "/home/u/project/annotated/unit_test/return_value_accessor_api_lowering.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
+%0 = type { ptr addrspace(256), ptr, ptr, i32, i32 }
+%1 = type { %2, i8, i8, i32, ptr, ptr }
+%2 = type { i8, i8 }
+
+@__deegen_interpreter_dispatch_table = external local_unnamed_addr constant [0 x ptr], align 8
+
+; Function Attrs: nounwind
+define void @__deegen_interpreter_op_test3_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
+  %2 = getelementptr inbounds %0, ptr %stackBase, i64 -1
+  %3 = load ptr addrspace(256), ptr %2, align 8, !tbaa !5
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %3, align 4, !tbaa !11
+  %4 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
+  %5 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !12
+  %6 = ptrtoint ptr %5 to i64
+  %7 = add i64 %6, %4
+  %8 = inttoptr i64 %7 to ptr
+  %9 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
+  %10 = load i32, ptr %9, align 8, !tbaa !13
+  %11 = getelementptr inbounds %1, ptr %8, i64 0, i32 4
+  %12 = load ptr, ptr %11, align 8, !tbaa !14
+  %13 = zext i32 %10 to i64
+  %14 = getelementptr inbounds i8, ptr %12, i64 %13
+  %15 = getelementptr inbounds i8, ptr %14, i64 2
+  %16 = load i32, ptr %15, align 1
+  %17 = icmp ugt ptr %numRet, inttoptr (i64 10 to ptr)
+  br i1 %17, label %18, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+
+18:                                               ; preds = %1
+  %19 = getelementptr inbounds i64, ptr %retStart, i64 10
+  %20 = load i64, ptr %19, align 8, !tbaa !20
+  br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+
+__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %18, %1
+  %.0.i = phi i64 [ %20, %18 ], [ -844429225099137, %1 ]
+  %outputSlot = zext i32 %16 to i64
+  %21 = getelementptr inbounds i64, ptr %stackBase, i64 %outputSlot
+  store i64 %.0.i, ptr %21, align 8
+  %22 = getelementptr inbounds i8, ptr %14, i64 6
+  %23 = load i16, ptr %22, align 1
+  %24 = zext i16 %23 to i64
+  %25 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %24
+  %26 = load ptr, ptr %25, align 8
+  musttail call void %26(ptr %coroutineCtx, ptr nonnull %stackBase, ptr nonnull %22, ptr nonnull %8, i64 undef) #1
+  ret void
+}
+
+attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { nounwind }
+
+!llvm.linker.options = !{}
+!llvm.module.flags = !{!0, !1, !2, !3}
+!llvm.ident = !{!4, !4, !4, !4, !4, !4, !4, !4}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"PIC Level", i32 2}
+!2 = !{i32 7, !"PIE Level", i32 2}
+!3 = !{i32 7, !"uwtable", i32 2}
+!4 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
+!5 = !{!6, !7, i64 0}
+!6 = !{!"_ZTS16StackFrameHeader", !7, i64 0, !7, i64 8, !7, i64 16, !10, i64 24, !10, i64 28}
+!7 = !{!"any pointer", !8, i64 0}
+!8 = !{!"omnipotent char", !9, i64 0}
+!9 = !{!"Simple C++ TBAA"}
+!10 = !{!"int", !8, i64 0}
+!11 = !{!8, !8, i64 0}
+!12 = !{!7, !7, i64 0}
+!13 = !{!6, !10, i64 24}
+!14 = !{!15, !7, i64 8}
+!15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !8, i64 2, !19, i64 3, !10, i64 4, !7, i64 8, !7, i64 16}
+!16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}
+!17 = !{!"_ZTS14HeapEntityType", !8, i64 0}
+!18 = !{!"_ZTS11GcCellState", !8, i64 0}
+!19 = !{!"bool", !8, i64 0}
+!20 = !{!21, !21, i64 0}
+!21 = !{!"long", !8, i64 0}

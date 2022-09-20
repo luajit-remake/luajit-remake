@@ -255,6 +255,37 @@ void NO_RETURN ALWAYS_INLINE MakeTailCallPassingVariadicRes(Args... args)
     detail::MakeCallHandlerImpl<Args..., std::nullptr_t>::handle(DeegenImpl_StartMakeTailCallPassingVariadicResInfo(), args..., nullptr);
 }
 
+// These names are hardcoded for our LLVM IR processor to locate
+//
+TValue DeegenImpl_GetReturnValueAtOrd(size_t ord);
+size_t DeegenImpl_GetNumReturnValues();
+void DeegenImpl_StoreReturnValuesTo(TValue* dst, size_t numToStore);
+void DeegenImpl_StoreReturnValuesAsVariadicResults();
+
+// APIs for accessing return values
+//
+inline TValue WARN_UNUSED ALWAYS_INLINE GetReturnValue(size_t ord)
+{
+    return DeegenImpl_GetReturnValueAtOrd(ord);
+}
+
+inline size_t WARN_UNUSED ALWAYS_INLINE GetNumReturnValues()
+{
+    return DeegenImpl_GetNumReturnValues();
+}
+
+// Store the first 'numToStore' return values to the destination address, padding nil as needed
+//
+inline void ALWAYS_INLINE StoreReturnValuesTo(TValue* dst, size_t numToStore)
+{
+    DeegenImpl_StoreReturnValuesTo(dst, numToStore);
+}
+
+inline void ALWAYS_INLINE StoreReturnValuesAsVariadicResults()
+{
+    DeegenImpl_StoreReturnValuesAsVariadicResults();
+}
+
 namespace detail {
 
 template<typename Lambda>

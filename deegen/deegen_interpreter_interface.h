@@ -19,14 +19,15 @@ public:
     //
     std::unique_ptr<llvm::Module> WARN_UNUSED LowerAPIs();
 
+    bool IsReturnContinuation() const { return m_isReturnContinuation; }
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
     llvm::Module* GetModule() const { return m_module.get(); }
     llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtx); }
     llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBase); }
     llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecode); }
     llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlock); }
-    llvm::Value* GetRetStart() const { return m_valuePreserver.Get(x_retStart); }
-    llvm::Value* GetNumRet() const { return m_valuePreserver.Get(x_numRet); }
+    llvm::Value* GetRetStart() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_retStart); }
+    llvm::Value* GetNumRet() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_numRet); }
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
 

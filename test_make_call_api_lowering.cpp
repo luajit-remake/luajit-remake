@@ -163,7 +163,7 @@ void TestModuleOneCase(Module* moduleIn,
                         {
                             Argument* sb = func->getArg(1);
                             ReleaseAssert(sb->getName().str() == "stackBase");
-                            Instruction* gep = GetElementPtrInst::Create(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, sb, { CreateLLVMConstantInt<uint64_t>(ctx, reinterpret_cast<uint64_t>(argRangeBegin)) });
+                            Instruction* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, sb, { CreateLLVMConstantInt<uint64_t>(ctx, reinterpret_cast<uint64_t>(argRangeBegin)) });
                             ReleaseAssert(inst.getType() == gep->getType());
                             ReleaseAssert(!replaceInstByValueMap.count(&inst));
                             ReleaseAssert(!replaceInstByInstMap.count(&inst));

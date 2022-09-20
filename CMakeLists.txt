@@ -155,6 +155,7 @@ add_executable(main
   test_make_call_api_parser.cpp
   test_deegen_common_snippet_getter.cpp
   test_make_call_api_lowering.cpp
+  test_return_value_accessor_api_lowering.cpp
 )
 
 # Our unit test needs LLVM JIT

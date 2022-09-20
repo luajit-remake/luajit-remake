@@ -9,5 +9,6 @@ add_library(deegen_rt
   deegen_bytecode_operand.cpp
   deegen_interpreter_interface.cpp
   deegen_ast_return.cpp
+  deegen_ast_return_value_accessor.cpp
 ) 
 

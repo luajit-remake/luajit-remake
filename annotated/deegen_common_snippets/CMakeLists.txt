@@ -12,6 +12,9 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   move_call_frame_for_tail_call.cpp
   move_variadic_results_for_variadic_notinplace_tailcall.cpp
   copy_variadic_results_to_arguments_for_variadic_notinplace_tailcall.cpp
+  get_return_value_at_specified_ordinal.cpp
+  store_first_k_return_values_padding_nil.cpp
+  store_return_values_as_variadic_results.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT
