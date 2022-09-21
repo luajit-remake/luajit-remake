@@ -2,12 +2,21 @@ cmake_minimum_required(VERSION 3.12)
 
 # set the project name
 #
-project(toylang)
+project(toylang LANGUAGES C CXX ASM)
 
 # specify the C++ compiler
 #
 SET(CMAKE_C_COMPILER clang)
 SET(CMAKE_CXX_COMPILER clang++)
+
+set(CMAKE_ASM_COMPILER clang)
+# Unfortunately CMake automatically appends uesless flags such as the include directories and the 
+# -MD -MT -MF flags to the compile command for .S files, which triggers clang warning. Suppress this warning.
+#
+# We also add "-O3" to the command. It probably doesn't matter for assembly file, but adding it doesn't hurt 
+# anything either, and Clang seems to recognize it as a valid option.
+# 
+set(CMAKE_ASM_FLAGS " -O3 -Weverything -Wno-unused-command-line-argument ")
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)

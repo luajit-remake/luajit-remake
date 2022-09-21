@@ -43,7 +43,10 @@ RUN update-alternatives                                                         
         --slave   /usr/bin/llvm-size         llvm-size        /usr/bin/llvm-size-$LLVM_VERSION         \
         --slave   /usr/bin/llvm-stress       llvm-stress      /usr/bin/llvm-stress-$LLVM_VERSION       \
         --slave   /usr/bin/llvm-symbolizer   llvm-symbolizer  /usr/bin/llvm-symbolizer-$LLVM_VERSION   \
-        --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-$LLVM_VERSION
+        --slave   /usr/bin/llvm-tblgen       llvm-tblgen      /usr/bin/llvm-tblgen-$LLVM_VERSION       \
+        --slave   /usr/bin/opt               opt              /usr/bin/opt-$LLVM_VERSION               \
+        --slave   /usr/bin/llc               llc              /usr/bin/llc-$LLVM_VERSION               \
+        --slave   /usr/bin/lli               lli              /usr/bin/lli-$LLVM_VERSION
 
 RUN update-alternatives                                                                                             \
         --install /usr/bin/clang                 clang                 /usr/bin/clang-$LLVM_VERSION 100             \
