@@ -7,7 +7,7 @@
 
 namespace dast {
 
-class InterpreterFunctionInterface;
+class InterpreterBytecodeImplCreator;
 
 class AstBytecodeReturn
 {
@@ -18,9 +18,9 @@ public:
 
     static std::vector<AstBytecodeReturn> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
-    void DoLoweringForInterpreter(InterpreterFunctionInterface* ifi);
+    void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi);
 
-    static void LowerForInterpreter(InterpreterFunctionInterface* ifi, llvm::Function* func)
+    static void LowerForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
     {
         std::vector<AstBytecodeReturn> res = GetAllUseInFunction(func);
         for (AstBytecodeReturn& item : res)

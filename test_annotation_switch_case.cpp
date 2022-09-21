@@ -6,7 +6,7 @@
 #include "lambda_parser.h"
 #include "switch_case.h"
 #include "tvalue_typecheck_optimization.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_make_call.h"
 
@@ -43,7 +43,7 @@ TEST(AnnotationParser, BytecodeDefinitionSanity)
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterFunctionInterface ifi(implFunc, false);
+    InterpreterBytecodeImplCreator ifi(implFunc, false);
     ifi.EmitWrapperBody(*target.get());
     ifi.LowerAPIs();
 
@@ -69,7 +69,7 @@ TEST(AnnotationParser, BytecodeInterpreterLoweringSanity_1)
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterFunctionInterface ifi(target.get(), implFunc, false);
+    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
     ifi.LowerAPIs();
     ifi.GetModule()->dump();
 

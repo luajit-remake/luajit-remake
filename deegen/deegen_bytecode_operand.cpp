@@ -1,13 +1,13 @@
 #include "misc_llvm_helper.h"
 
 #include "deegen_bytecode_operand.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "bytecode_definition_utils.h"
 #include "bytecode.h"
 
 namespace dast {
 
-llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB)
+llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -39,7 +39,7 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     return result;
 }
 
-llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -51,7 +51,7 @@ llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterFu
     return bv;
 }
 
-llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -63,13 +63,13 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(Interpret
     return bv;
 }
 
-llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     ReleaseAssert(&bytecodeValue->getContext() == &targetBB->getContext());
     return bytecodeValue;
 }
 
-llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     using namespace llvm;
     ReleaseAssert(bytecodeValue == nullptr);

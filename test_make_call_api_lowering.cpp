@@ -6,7 +6,7 @@
 #include "lambda_parser.h"
 #include "switch_case.h"
 #include "tvalue_typecheck_optimization.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_make_call.h"
 
@@ -32,7 +32,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterFunctionInterface ifi(target.get(), implFunc, false);
+    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
     return ifi.LowerAPIs();
 }
 

@@ -1,5 +1,6 @@
 #include "deegen_ast_make_call.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_interpreter_function_interface.h"
 
 #include "bytecode.h"
 
@@ -335,7 +336,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     ReleaseAssert(module != nullptr);
 
     LLVMContext& ctx = module->getContext();
-    FunctionType* fty = InterpreterFunctionInterface::GetInterfaceFunctionType(ctx);
+    FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
 
     Function* func = module->getFunction(rcFinalName);
     if (func != nullptr)
@@ -352,7 +353,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     }
 }
 
-void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
+void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
 {
     // Currently our call scheme is as follows:
     // Caller side:
@@ -809,7 +810,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
     Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-    ifi->CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<bool>(ctx, m_isMustTailCall), m_origin /*insertBefore*/);
+    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<bool>(ctx, m_isMustTailCall), m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();

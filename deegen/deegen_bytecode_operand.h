@@ -17,7 +17,7 @@ enum class BcOperandKind
     SpecializedLiteral
 };
 
-class InterpreterFunctionInterface;
+class InterpreterBytecodeImplCreator;
 
 // The base class for a bytecode operand
 //
@@ -54,7 +54,7 @@ public:
     // 'targetBB' is the basic block where the logic should be appended to.
     // 'bytecodeValue' is an i64 denoting the value of the operand in the bytecode struct (or void if it is eliminated from bytecode struct).
     //
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
 
     // Do custom transformation to the implementation function
     //
@@ -95,7 +95,7 @@ public:
     // Otherwise emit decoding logic into 'targetBB', and return the decoded operand value in the bytecode struct
     // 'bytecodeStruct' must have type i8*
     //
-    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB);
+    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB);
 
 private:
     std::string m_name;
@@ -142,7 +142,7 @@ public:
         return llvm_type_of<uint64_t>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 };
 
 // A bytecode operand that refers to a constant in the constant table
@@ -183,7 +183,7 @@ public:
         return llvm_type_of<uint64_t>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     // The statically-known type mask of this constant
     //
@@ -228,7 +228,7 @@ public:
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 4));
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     // The sign and width of this literal
     //
@@ -291,7 +291,7 @@ public:
         return m_isSigned;
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterFunctionInterface* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     uint64_t m_concreteValue;
 };

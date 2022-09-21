@@ -3,7 +3,7 @@
 #include "deegen_api.h"
 #include "annotated/unit_test/unit_test_ir_accessor.h"
 
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_make_call.h"
 
@@ -29,7 +29,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterFunctionInterface ifi(target.get(), implFunc, false);
+    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
     std::unique_ptr<llvm::Module> res = ifi.LowerAPIs();
 
     std::string rcName = "__deegen_interpreter_op_test" + std::to_string(testcaseNum) + "_0_retcont_0";

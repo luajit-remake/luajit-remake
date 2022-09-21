@@ -1,5 +1,5 @@
 #include "deegen_ast_return_value_accessor.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "bytecode.h"
 
 namespace dast {
@@ -77,7 +77,7 @@ std::vector<AstReturnValueAccessor> WARN_UNUSED AstReturnValueAccessor::GetAllUs
     return result;
 }
 
-void AstReturnValueAccessor::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
+void AstReturnValueAccessor::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
 {
     using namespace llvm;
     ReleaseAssert(ifi->IsReturnContinuation());

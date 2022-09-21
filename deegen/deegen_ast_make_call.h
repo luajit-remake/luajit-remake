@@ -7,7 +7,7 @@
 
 namespace dast {
 
-class InterpreterFunctionInterface;
+class InterpreterBytecodeImplCreator;
 
 class AstMakeCall
 {
@@ -81,9 +81,9 @@ public:
 
     // Lower the call to concrete interpreter logic
     //
-    void DoLoweringForInterpreter(InterpreterFunctionInterface* ifi);
+    void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi);
 
-    static void LowerForInterpreter(InterpreterFunctionInterface* ifi, llvm::Function* func)
+    static void LowerForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
     {
         std::vector<AstMakeCall> res = GetAllUseInFunction(func);
         for (AstMakeCall& item : res)

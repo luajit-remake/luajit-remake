@@ -1,5 +1,6 @@
 #include "deegen_ast_return.h"
-#include "deegen_interpreter_interface.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_interpreter_function_interface.h"
 #include "deegen_bytecode_operand.h"
 
 namespace dast {
@@ -80,7 +81,7 @@ static llvm::Value* GetInterpreterFunctionFromOpcode(llvm::Module* module, llvm:
     return result;
 }
 
-void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterFunctionInterface* ifi)
+void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -121,7 +122,7 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterFunctionInterface* i
     Value* targetFunction = GetInterpreterFunctionFromOpcode(ifi->GetModule(), opcode, m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
 
-    ifi->CreateDispatchToBytecode(
+    InterpreterFunctionInterface::CreateDispatchToBytecode(
         targetFunction,
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
