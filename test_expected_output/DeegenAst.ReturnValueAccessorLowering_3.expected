@@ -12,17 +12,17 @@ target triple = "x86_64-pc-linux-gnu"
 ; Function Attrs: nounwind
 define void @__deegen_interpreter_op_test3_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
   %2 = getelementptr inbounds %0, ptr %stackBase, i64 -1
-  %3 = load ptr addrspace(256), ptr %2, align 8, !tbaa !5
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %3, align 4, !tbaa !11
+  %3 = load ptr addrspace(256), ptr %2, align 8, !tbaa !3
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %3, align 4, !tbaa !9
   %4 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %5 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !12
+  %5 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
   %6 = ptrtoint ptr %5 to i64
   %7 = add i64 %6, %4
   %8 = inttoptr i64 %7 to ptr
   %9 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
-  %10 = load i32, ptr %9, align 8, !tbaa !13
+  %10 = load i32, ptr %9, align 8, !tbaa !11
   %11 = getelementptr inbounds %1, ptr %8, i64 0, i32 4
-  %12 = load ptr, ptr %11, align 8, !tbaa !14
+  %12 = load ptr, ptr %11, align 8, !tbaa !12
   %13 = zext i32 %10 to i64
   %14 = getelementptr inbounds i8, ptr %12, i64 %13
   %15 = getelementptr inbounds i8, ptr %14, i64 2
@@ -32,7 +32,7 @@ define void @__deegen_interpreter_op_test3_0_retcont_0(ptr %coroutineCtx, ptr %s
 
 18:                                               ; preds = %1
   %19 = getelementptr inbounds i64, ptr %retStart, i64 10
-  %20 = load i64, ptr %19, align 8, !tbaa !20
+  %20 = load i64, ptr %19, align 8, !tbaa !18
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
 __DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %18, %1
@@ -53,28 +53,26 @@ attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "
 attributes #1 = { nounwind }
 
 !llvm.linker.options = !{}
-!llvm.module.flags = !{!0, !1, !2, !3}
-!llvm.ident = !{!4, !4, !4, !4, !4, !4, !4, !4}
+!llvm.module.flags = !{!0, !1}
+!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2, !2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{i32 7, !"uwtable", i32 2}
-!4 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!5 = !{!6, !7, i64 0}
-!6 = !{!"_ZTS16StackFrameHeader", !7, i64 0, !7, i64 8, !7, i64 16, !10, i64 24, !10, i64 28}
-!7 = !{!"any pointer", !8, i64 0}
-!8 = !{!"omnipotent char", !9, i64 0}
-!9 = !{!"Simple C++ TBAA"}
-!10 = !{!"int", !8, i64 0}
-!11 = !{!8, !8, i64 0}
-!12 = !{!7, !7, i64 0}
-!13 = !{!6, !10, i64 24}
-!14 = !{!15, !7, i64 8}
-!15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !8, i64 2, !19, i64 3, !10, i64 4, !7, i64 8, !7, i64 16}
-!16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}
-!17 = !{!"_ZTS14HeapEntityType", !8, i64 0}
-!18 = !{!"_ZTS11GcCellState", !8, i64 0}
-!19 = !{!"bool", !8, i64 0}
-!20 = !{!21, !21, i64 0}
-!21 = !{!"long", !8, i64 0}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
+!3 = !{!4, !5, i64 0}
+!4 = !{!"_ZTS16StackFrameHeader", !5, i64 0, !5, i64 8, !5, i64 16, !8, i64 24, !8, i64 28}
+!5 = !{!"any pointer", !6, i64 0}
+!6 = !{!"omnipotent char", !7, i64 0}
+!7 = !{!"Simple C++ TBAA"}
+!8 = !{!"int", !6, i64 0}
+!9 = !{!6, !6, i64 0}
+!10 = !{!5, !5, i64 0}
+!11 = !{!4, !8, i64 24}
+!12 = !{!13, !5, i64 8}
+!13 = !{!"_ZTS14ExecutableCode", !14, i64 0, !6, i64 2, !17, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
+!14 = !{!"_ZTS24SystemHeapGcObjectHeader", !15, i64 0, !16, i64 1}
+!15 = !{!"_ZTS14HeapEntityType", !6, i64 0}
+!16 = !{!"_ZTS11GcCellState", !6, i64 0}
+!17 = !{!"bool", !6, i64 0}
+!18 = !{!19, !19, i64 0}
+!19 = !{!"long", !6, i64 0}

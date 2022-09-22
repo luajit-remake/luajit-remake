@@ -8,15 +8,7 @@ project(toylang LANGUAGES C CXX ASM)
 #
 SET(CMAKE_C_COMPILER clang)
 SET(CMAKE_CXX_COMPILER clang++)
-
 set(CMAKE_ASM_COMPILER clang)
-# Unfortunately CMake automatically appends uesless flags such as the include directories and the 
-# -MD -MT -MF flags to the compile command for .S files, which triggers clang warning. Suppress this warning.
-#
-# We also add "-O3" to the command. It probably doesn't matter for assembly file, but adding it doesn't hurt 
-# anything either, and Clang seems to recognize it as a valid option.
-# 
-set(CMAKE_ASM_FLAGS " -O3 -Weverything -Wno-unused-command-line-argument ")
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -58,6 +50,30 @@ elseif(BUILD_FLAVOR STREQUAL "RELEASE")
 else()
   message( FATAL_ERROR "Unknown build flavor!" )
 endif()
+
+# Unfortunately CMake automatically appends uesless flags such as the include directories and the 
+# -MD -MT -MF flags to the compile command for .S files, which triggers clang warning. Suppress this warning.
+#
+# We also add "-O3" to the command. It probably doesn't matter for assembly file, but adding it doesn't hurt 
+# anything either, and Clang seems to recognize it as a valid option.
+# 
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -O3 -Weverything -Wno-unused-command-line-argument ")
+
+# For now we compile everything with PIC and PIE disabled. 
+# Our copy-and-patch stencil generation logic will likely need it, 
+# and it also makes the final code more efficient (e.g., interpreter dispatches can have one less memory load to load the GOT entry)
+# 
+# This is not strictly required: it's possible to enable PIE in our final executable 
+# without sacrificing too much performance:
+# 1. We can selectively disable PIE/PIC for the stencils (which doesn't get linked into the binary anyway)
+# 2. We can remove unnecessary reference to the Global Offset Table by properly amalgamating the code. 
+#    (The 'lea rip' overhead of PIE isn't a big problem. The GOT table overhead is since it's a memory load.)
+#
+# But doing so would require some more CMake work, so let's go without it for now.
+#
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -fno-pic -fno-pie ")
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -fno-pic -fno-pie ")
+SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -no-pie ")
 
 # add -pthread
 # 

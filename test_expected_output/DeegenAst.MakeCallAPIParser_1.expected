@@ -49,7 +49,7 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) #2
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #3 align 2
 
-declare noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64, i64) local_unnamed_addr #4
+declare dso_local noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64, i64) local_unnamed_addr #4
 
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #3 align 2
@@ -82,11 +82,9 @@ attributes #6 = { noreturn nounwind }
 attributes #7 = { nounwind }
 
 !llvm.linker.options = !{}
-!llvm.module.flags = !{!0, !1, !2, !3}
-!llvm.ident = !{!4}
+!llvm.module.flags = !{!0, !1}
+!llvm.ident = !{!2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{i32 7, !"uwtable", i32 2}
-!4 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}

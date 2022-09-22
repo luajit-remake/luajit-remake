@@ -9,23 +9,23 @@ target triple = "x86_64-pc-linux-gnu"
 
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
-declare noundef i64 @_Z2a1v() local_unnamed_addr #0
+declare dso_local noundef i64 @_Z2a1v() local_unnamed_addr #0
 
 ; Function Attrs: nounwind
 define void @__deegen_interpreter_op_test4_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #1 {
   %2 = ptrtoint ptr %numRet to i64
   %3 = getelementptr inbounds %0, ptr %stackBase, i64 -1
-  %4 = load ptr addrspace(256), ptr %3, align 8, !tbaa !5
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %4, align 4, !tbaa !11
+  %4 = load ptr addrspace(256), ptr %3, align 8, !tbaa !3
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %4, align 4, !tbaa !9
   %5 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %6 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !12
+  %6 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
   %7 = ptrtoint ptr %6 to i64
   %8 = add i64 %7, %5
   %9 = inttoptr i64 %8 to ptr
   %10 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
-  %11 = load i32, ptr %10, align 8, !tbaa !13
+  %11 = load i32, ptr %10, align 8, !tbaa !11
   %12 = getelementptr inbounds %1, ptr %9, i64 0, i32 4
-  %13 = load ptr, ptr %12, align 8, !tbaa !14
+  %13 = load ptr, ptr %12, align 8, !tbaa !12
   %14 = zext i32 %11 to i64
   %15 = getelementptr inbounds i8, ptr %13, i64 %14
   %16 = getelementptr inbounds i8, ptr %15, i64 2
@@ -36,7 +36,7 @@ define void @__deegen_interpreter_op_test4_0_retcont_0(ptr %coroutineCtx, ptr %s
 
 20:                                               ; preds = %1
   %21 = getelementptr inbounds i64, ptr %retStart, i64 %18
-  %22 = load i64, ptr %21, align 8, !tbaa !20
+  %22 = load i64, ptr %21, align 8, !tbaa !18
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
 __DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %20, %1
@@ -58,28 +58,26 @@ attributes #1 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "
 attributes #2 = { nounwind }
 
 !llvm.linker.options = !{}
-!llvm.module.flags = !{!0, !1, !2, !3}
-!llvm.ident = !{!4, !4, !4, !4, !4, !4, !4, !4}
+!llvm.module.flags = !{!0, !1}
+!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2, !2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{i32 7, !"PIE Level", i32 2}
-!3 = !{i32 7, !"uwtable", i32 2}
-!4 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!5 = !{!6, !7, i64 0}
-!6 = !{!"_ZTS16StackFrameHeader", !7, i64 0, !7, i64 8, !7, i64 16, !10, i64 24, !10, i64 28}
-!7 = !{!"any pointer", !8, i64 0}
-!8 = !{!"omnipotent char", !9, i64 0}
-!9 = !{!"Simple C++ TBAA"}
-!10 = !{!"int", !8, i64 0}
-!11 = !{!8, !8, i64 0}
-!12 = !{!7, !7, i64 0}
-!13 = !{!6, !10, i64 24}
-!14 = !{!15, !7, i64 8}
-!15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !8, i64 2, !19, i64 3, !10, i64 4, !7, i64 8, !7, i64 16}
-!16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}
-!17 = !{!"_ZTS14HeapEntityType", !8, i64 0}
-!18 = !{!"_ZTS11GcCellState", !8, i64 0}
-!19 = !{!"bool", !8, i64 0}
-!20 = !{!21, !21, i64 0}
-!21 = !{!"long", !8, i64 0}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
+!3 = !{!4, !5, i64 0}
+!4 = !{!"_ZTS16StackFrameHeader", !5, i64 0, !5, i64 8, !5, i64 16, !8, i64 24, !8, i64 28}
+!5 = !{!"any pointer", !6, i64 0}
+!6 = !{!"omnipotent char", !7, i64 0}
+!7 = !{!"Simple C++ TBAA"}
+!8 = !{!"int", !6, i64 0}
+!9 = !{!6, !6, i64 0}
+!10 = !{!5, !5, i64 0}
+!11 = !{!4, !8, i64 24}
+!12 = !{!13, !5, i64 8}
+!13 = !{!"_ZTS14ExecutableCode", !14, i64 0, !6, i64 2, !17, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
+!14 = !{!"_ZTS24SystemHeapGcObjectHeader", !15, i64 0, !16, i64 1}
+!15 = !{!"_ZTS14HeapEntityType", !6, i64 0}
+!16 = !{!"_ZTS11GcCellState", !6, i64 0}
+!17 = !{!"bool", !6, i64 0}
+!18 = !{!19, !19, i64 0}
+!19 = !{!"long", !6, i64 0}
