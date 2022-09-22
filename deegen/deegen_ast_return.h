@@ -38,4 +38,8 @@ public:
     llvm::Value* m_valueOperand;
 };
 
+constexpr const char* x_deegen_interpreter_dispatch_table_symbol_name = "__deegen_interpreter_dispatch_table";
+
+llvm::Value* GetInterpreterFunctionFromInterpreterOpcode(llvm::Module* module, llvm::Value* opcode, llvm::Instruction* insertBefore);
+
 }   // namespace dast

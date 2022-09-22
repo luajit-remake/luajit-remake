@@ -33,7 +33,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
     InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
-    return ifi.LowerAPIs();
+    return ifi.Get();
 }
 
 struct ExpectedResult

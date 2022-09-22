@@ -704,6 +704,38 @@ llvm::Function* WARN_UNUSED DeegenImportRuntimeFunctionDeclaration(llvm::Module*
 //
 llvm::Function* WARN_UNUSED DeegenCreateFunctionDeclarationBasedOnSnippet(llvm::Module* module /*inout*/, const std::string& snippetName, const std::string& desiredFunctionName);
 
+inline llvm::CallInst* CreateCallToDeegenCommonSnippet(llvm::Module* module, const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    Function* callee = LinkInDeegenCommonSnippet(module, dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertBefore);
+}
+
+inline llvm::CallInst* CreateCallToDeegenCommonSnippet(llvm::Module* module, const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    Function* callee = LinkInDeegenCommonSnippet(module, dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertAtEnd);
+}
+
+inline llvm::CallInst* CreateCallToDeegenRuntimeFunction(llvm::Module* module, const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    Function* callee = DeegenImportRuntimeFunctionDeclaration(module, dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertBefore);
+}
+
+inline llvm::CallInst* CreateCallToDeegenRuntimeFunction(llvm::Module* module, const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    Function* callee = DeegenImportRuntimeFunctionDeclaration(module, dcsName);
+    ReleaseAssert(callee != nullptr);
+    return CallInst::Create(callee, args, "", insertAtEnd);
+}
+
 // This helper struct preserves certain values (must be LLVM instruction) from being optimized away even if they are not immediately used,
 // and allows us to locate these values after optimization passes are run
 //

@@ -12,22 +12,6 @@
 
 namespace dast {
 
-llvm::CallInst* InterpreterBytecodeImplCreator::CallDeegenCommonSnippet(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
-{
-    using namespace llvm;
-    Function* callee = LinkInDeegenCommonSnippet(GetModule(), dcsName);
-    ReleaseAssert(callee != nullptr);
-    return CallInst::Create(callee, args, "", insertBefore);
-}
-
-llvm::CallInst* InterpreterBytecodeImplCreator::CallDeegenRuntimeFunction(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
-{
-    using namespace llvm;
-    Function* callee = DeegenImportRuntimeFunctionDeclaration(GetModule(), dcsName);
-    ReleaseAssert(callee != nullptr);
-    return CallInst::Create(callee, args, "", insertBefore);
-}
-
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
@@ -35,7 +19,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     , m_impl(nullptr)
     , m_wrapper(nullptr)
     , m_valuePreserver()
-    , m_didLowerAPIs(false)
+    , m_generated(false)
 {
     using namespace llvm;
     m_module = llvm::CloneModule(*implTmp->getParent());
@@ -218,14 +202,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Proces
 {
     ReleaseAssert(!m_isReturnContinuation);
     InterpreterBytecodeImplCreator ifi(m_bytecodeDef, rc, true /*isReturnContinuation*/);
-    return ifi.LowerAPIs();
+    return ifi.Get();
 }
 
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::LowerAPIs()
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
 {
     using namespace llvm;
-    ReleaseAssert(!m_didLowerAPIs);
-    m_didLowerAPIs = true;
+    ReleaseAssert(!m_generated);
+    m_generated = true;
 
     std::string finalFnName = m_impl->getName().str();
     ReleaseAssert(finalFnName.ends_with("_impl"));

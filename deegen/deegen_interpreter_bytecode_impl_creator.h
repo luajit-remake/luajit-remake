@@ -17,7 +17,7 @@ public:
 
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
-    std::unique_ptr<llvm::Module> WARN_UNUSED LowerAPIs();
+    std::unique_ptr<llvm::Module> WARN_UNUSED Get();
 
     bool IsReturnContinuation() const { return m_isReturnContinuation; }
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
@@ -31,8 +31,15 @@ public:
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
 
-    llvm::CallInst* CallDeegenCommonSnippet(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore);
-    llvm::CallInst* CallDeegenRuntimeFunction(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore);
+    llvm::CallInst* CallDeegenCommonSnippet(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+    {
+        return CreateCallToDeegenCommonSnippet(GetModule(), dcsName, args, insertBefore);
+    }
+
+    llvm::CallInst* CallDeegenRuntimeFunction(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
+    {
+        return CreateCallToDeegenRuntimeFunction(GetModule(), dcsName, args, insertBefore);
+    }
 
     std::unique_ptr<llvm::Module> WARN_UNUSED ProcessReturnContinuation(llvm::Function* rc);
 
@@ -48,7 +55,7 @@ private:
     llvm::Function* m_wrapper;
 
     LLVMValuePreserver m_valuePreserver;
-    bool m_didLowerAPIs;
+    bool m_generated;
 
     static constexpr const char* x_coroutineCtx = "coroutineCtx";
     static constexpr const char* x_stackBase = "stackBase";

@@ -47,26 +47,26 @@ std::vector<AstBytecodeReturn> WARN_UNUSED AstBytecodeReturn::GetAllUseInFunctio
     return result;
 }
 
-static llvm::Value* GetInterpreterFunctionFromOpcode(llvm::Module* module, llvm::Value* opcode, llvm::Instruction* insertBefore)
+llvm::Value* GetInterpreterFunctionFromInterpreterOpcode(llvm::Module* module, llvm::Value* opcode, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    constexpr const char* x_interpreter_dispatch_table_name = "__deegen_interpreter_dispatch_table";
+    std::string dispatchTableSymbolName = x_deegen_interpreter_dispatch_table_symbol_name;
 
     LLVMContext& ctx = module->getContext();
     llvm::ArrayType* dispatchTableTy = llvm::ArrayType::get(llvm_type_of<void*>(ctx), 0 /*numElements*/);
-    if (module->getNamedValue(x_interpreter_dispatch_table_name) == nullptr)
+    if (module->getNamedValue(dispatchTableSymbolName) == nullptr)
     {
         GlobalVariable* tmp = new GlobalVariable(*module,
                                                  dispatchTableTy /*valueType*/,
                                                  true /*isConstant*/,
                                                  GlobalVariable::LinkageTypes::ExternalLinkage,
                                                  nullptr /*initializer*/,
-                                                 x_interpreter_dispatch_table_name /*name*/);
-        ReleaseAssert(tmp->getName().str() == x_interpreter_dispatch_table_name);
+                                                 dispatchTableSymbolName /*name*/);
+        ReleaseAssert(tmp->getName().str() == dispatchTableSymbolName);
         tmp->setAlignment(MaybeAlign(8));
     }
 
-    GlobalVariable* gv = module->getGlobalVariable(x_interpreter_dispatch_table_name);
+    GlobalVariable* gv = module->getGlobalVariable(dispatchTableSymbolName);
     ReleaseAssert(gv != nullptr);
     ReleaseAssert(gv->isConstant());
     ReleaseAssert(!gv->hasInitializer());
@@ -119,7 +119,7 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
     Value* opcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(bytecodeTarget, m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<uint64_t>(opcode));
 
-    Value* targetFunction = GetInterpreterFunctionFromOpcode(ifi->GetModule(), opcode, m_origin /*insertBefore*/);
+    Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(ifi->GetModule(), opcode, m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
 
     InterpreterFunctionInterface::CreateDispatchToBytecode(

@@ -11,6 +11,7 @@ add_library(deegen_rt
   deegen_ast_return.cpp
   deegen_ast_return_value_accessor.cpp
   deegen_interpreter_bytecode_impl_creator.cpp
+  deegen_interpreter_function_entry.cpp
 ) 
 
 # Build the main Futamura projection stage binary
