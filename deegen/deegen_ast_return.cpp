@@ -64,6 +64,7 @@ llvm::Value* GetInterpreterFunctionFromInterpreterOpcode(llvm::Module* module, l
                                                  dispatchTableSymbolName /*name*/);
         ReleaseAssert(tmp->getName().str() == dispatchTableSymbolName);
         tmp->setAlignment(MaybeAlign(8));
+        tmp->setDSOLocal(true);
     }
 
     GlobalVariable* gv = module->getGlobalVariable(dispatchTableSymbolName);

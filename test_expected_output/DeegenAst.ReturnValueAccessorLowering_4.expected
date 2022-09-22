@@ -7,7 +7,7 @@ target triple = "x86_64-pc-linux-gnu"
 %1 = type { %2, i8, i8, i32, ptr, ptr }
 %2 = type { i8, i8 }
 
-@__deegen_interpreter_dispatch_table = external local_unnamed_addr constant [0 x ptr], align 8
+@__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 declare noundef i64 @_Z2a1v() local_unnamed_addr #0
 

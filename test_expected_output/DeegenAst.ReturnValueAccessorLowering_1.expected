@@ -7,7 +7,7 @@ target triple = "x86_64-pc-linux-gnu"
 %1 = type { %2, i8, i8, i32, ptr, ptr }
 %2 = type { i8, i8 }
 
-@__deegen_interpreter_dispatch_table = external local_unnamed_addr constant [0 x ptr], align 8
+@__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
 define void @__deegen_interpreter_op_test1_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr nocapture readnone %numRet, i64 %0) #0 {
