@@ -4,6 +4,8 @@
 
 #include "test_util_helper.h"
 
+#include "init_llvm_helper.h"
+
 bool g_is_update_expected_mode = false;
 
 namespace {
@@ -29,8 +31,7 @@ int main(int argc, char **argv)
     PrintInformation();
 
     llvm::InitLLVM X(argc, argv);
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
+    LLVMInitializeEverything();
 
     ::testing::InitGoogleTest(&argc, argv);
 

@@ -1,15 +1,15 @@
 #include "fps_main.h"
 
+#include "init_llvm_helper.h"
+
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
 
 int main(int argc, char** argv)
 {
     llvm::InitLLVM X(argc, argv);
-    llvm::InitializeAllTargets();
-    llvm::InitializeAllTargetMCs();
-    llvm::InitializeAllAsmPrinters();
-    llvm::InitializeAllAsmParsers();
+    LLVMInitializeEverything();
+
     cl::HideUnrelatedOptions(FPSOptions);
     cl::ParseCommandLineOptions(argc, argv, "The Futamura projection stage of Deegen that generates the various components of the compiler.\n");
 
