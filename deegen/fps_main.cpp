@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     }
     case FpsCommand_GenerateInterpreterFunctionEntryLogic:
     {
-
+        FPS_GenerateInterpreterFunctionEntryLogic();
         break;
     }
     }   /* switch cl_mainCommand */

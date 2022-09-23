@@ -603,11 +603,11 @@ inline void RunLLVMOptimizePass(llvm::Module* module)
 
 // Compile an LLVM module to assembly (.S) file
 //
-std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
 
 // Compile an LLVM module to ELF object (.o) file
 //
-std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
+std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
 
 // In LLVM, a function A may be inlined into a function B only if B's target-features
 // is a superset of that of A. (This is because B may be calling into A only after checking

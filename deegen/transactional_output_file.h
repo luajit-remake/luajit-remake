@@ -10,6 +10,7 @@ class TransactionalOutputFile
 public:
     TransactionalOutputFile(const std::string& filename)
     {
+        ReleaseAssert(filename != "");
         m_closed = false;
         m_fileName = filename;
         m_tmpName = filename + ".tmp";
@@ -28,6 +29,11 @@ public:
     }
 
     FILE* fp() { return m_fp; }
+
+    void write(const std::string& s)
+    {
+        ReleaseAssert(fwrite(s.data(), 1, s.length(), fp()) == s.length());
+    }
 
     // Commit the transaction, the output file is overwritten with the new contents
     //

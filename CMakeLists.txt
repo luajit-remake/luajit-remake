@@ -197,6 +197,7 @@ target_link_libraries(main PUBLIC
   common_utils
   toylang
   deegen_rt
+  deegen_generated
   deegen_unit_test_ir
   deegen_common_snippet_ir
   -Wl,--end-group

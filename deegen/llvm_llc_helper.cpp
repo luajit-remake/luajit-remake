@@ -7,7 +7,7 @@
 
 namespace dast {
 
-static std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module, llvm::CodeGenFileType outFileType, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module, llvm::CodeGenFileType outFileType, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
     using namespace llvm;
     std::string tripleStr = module->getTargetTriple();
@@ -120,18 +120,15 @@ static std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* modu
     }
 
     std::string s = outFile.GetFileContents();
-    std::vector<uint8_t> result;
-    result.resize(s.length());
-    memcpy(result.data(), s.data(), s.length());
-    return result;
+    return s;
 }
 
-std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
     return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel);
 }
 
-std::vector<uint8_t> WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
     return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel);
 }

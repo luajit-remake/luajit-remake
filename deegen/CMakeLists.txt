@@ -18,7 +18,9 @@ add_library(deegen_rt
 # Build the main Futamura projection stage binary
 #
 add_executable(fps
-  fps_main.cpp        
+  fps_main.cpp
+  fps_utils.cpp
+  fps_generate_interpreter_function_entry_logic.cpp
 )
 
 target_link_libraries(fps PUBLIC
@@ -31,4 +33,31 @@ target_link_libraries(fps PUBLIC
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
+
+set(deegen_generated_sources "")
+
+# generate the interpreter function entry logic
+#
+set(hdr_name "${GENERATED_FILES_DIR}/get_guest_language_function_interpreter_entry_point.h")
+set_source_files_properties(${hdr_name} PROPERTIES GENERATED true)
+
+set(asm_name "${GENERATED_FILES_DIR}/guest_language_function_interpreter_entry_point_asm.s")
+set_source_files_properties(${asm_name} PROPERTIES GENERATED true)
+list(APPEND deegen_generated_sources ${asm_name})
+
+set(cpp_name "${GENERATED_FILES_DIR}/guest_language_function_interpreter_entry_point_cpp.cpp")
+set_source_files_properties(${cpp_name} PROPERTIES GENERATED true)
+list(APPEND deegen_generated_sources ${cpp_name})
+
+add_custom_command(
+  OUTPUT ${hdr_name}
+  OUTPUT ${asm_name}
+  OUTPUT ${cpp_name}
+  COMMAND ${fps_exec} --generate-interp-fn-entry-logic --hdr-output=${hdr_name} --asm-output=${asm_name} --cpp-output=${cpp_name}
+  DEPENDS fps
+)
+
+add_library(deegen_generated 
+	${deegen_generated_sources}
+)
 
