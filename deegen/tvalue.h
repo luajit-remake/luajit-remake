@@ -995,3 +995,87 @@ TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> 
     static_assert(IsValidTypeSpecialization<T>);
     return T::encode(val);
 }
+
+class FunctionObject;
+
+// TODO: we should remove this class
+//
+class BytecodeSlot
+{
+public:
+    constexpr BytecodeSlot() : m_value(x_invalidValue) { }
+
+    static constexpr BytecodeSlot WARN_UNUSED Local(int ord)
+    {
+        assert(ord >= 0);
+        return BytecodeSlot(ord);
+    }
+    static constexpr BytecodeSlot WARN_UNUSED Constant(int ord)
+    {
+        assert(ord < 0);
+        return BytecodeSlot(ord);
+    }
+
+    bool IsInvalid() const { return m_value == x_invalidValue; }
+    bool IsLocal() const { assert(!IsInvalid()); return m_value >= 0; }
+    bool IsConstant() const { assert(!IsInvalid()); return m_value < 0; }
+
+    int WARN_UNUSED LocalOrd() const { assert(IsLocal()); return m_value; }
+    int WARN_UNUSED ConstantOrd() const { assert(IsConstant()); return m_value; }
+
+    TValue WARN_UNUSED Get(CoroutineRuntimeContext* rc, void* sfp) const;
+
+    explicit operator int() const { return m_value; }
+
+private:
+    constexpr BytecodeSlot(int value) : m_value(value) { }
+
+    static constexpr int x_invalidValue = 0x7fffffff;
+    int m_value;
+} __attribute__((__packed__));
+
+// stack frame format:
+//     [... VarArgs ...] [Header] [... Locals ...]
+//                                ^
+//                                stack frame pointer (sfp)
+//
+class alignas(8) StackFrameHeader
+{
+public:
+    // The function corresponding to this stack frame
+    // Must be first element: this is expected by call opcode
+    //
+    HeapPtr<FunctionObject> m_func;
+    // The address of the caller stack frame (points to the END of the stack frame header)
+    //
+    void* m_caller;
+    // The return address
+    //
+    void* m_retAddr;
+    // If the function is calling (i.e. not topmost frame), denotes the offset of the bytecode that performed the call
+    //
+    uint32_t m_callerBytecodeOffset;
+    // Total number of variadic arguments passed to the function
+    //
+    uint32_t m_numVariadicArguments;
+
+    static StackFrameHeader* GetStackFrameHeader(void* sfp)
+    {
+        return reinterpret_cast<StackFrameHeader*>(sfp) - 1;
+    }
+
+    static TValue* GetLocalAddr(void* sfp, BytecodeSlot slot)
+    {
+        assert(slot.IsLocal());
+        int ord = slot.LocalOrd();
+        return reinterpret_cast<TValue*>(sfp) + ord;
+    }
+
+    static TValue GetLocal(void* sfp, BytecodeSlot slot)
+    {
+        return *GetLocalAddr(sfp, slot);
+    }
+};
+
+static_assert(sizeof(StackFrameHeader) % sizeof(TValue) == 0);
+static constexpr size_t x_numSlotsForStackFrameHeader = sizeof(StackFrameHeader) / sizeof(TValue);

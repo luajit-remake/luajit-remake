@@ -13,6 +13,7 @@ add_library(deegen_rt
   deegen_interpreter_bytecode_impl_creator.cpp
   deegen_interpreter_function_entry.cpp
   llvm_llc_helper.cpp
+  deegen_process_lib_func.cpp
 ) 
 
 # Build the main Futamura projection stage binary
@@ -21,6 +22,7 @@ add_executable(fps
   fps_main.cpp
   fps_utils.cpp
   fps_generate_interpreter_function_entry_logic.cpp
+  fps_process_user_builtin_lib.cpp
 )
 
 target_link_libraries(fps PUBLIC

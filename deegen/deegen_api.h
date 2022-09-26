@@ -1,28 +1,9 @@
 #pragma once
 
 #include "tvalue.h"
+#include "deegen_def_lib_func_api.h"
 
 class CodeBlock;
-
-// APIs for accessing some environment state
-//
-struct DeegenEnv
-{
-    // Only available for use inside a return continuation
-    // Get the return value for the specified ordinal
-    //
-    template<size_t ord>
-    static TValue WARN_UNUSED GetRetVal();
-
-    // Only available for use inside a return continuation
-    // Store the whole return values as variadic ret
-    //
-    static void StoreReturnValuesAsVariadicRet();
-
-    // Access the current CodeBlock
-    //
-    static CodeBlock* WARN_UNUSED GetCodeBlock();
-};
 
 enum MakeCallOption
 {

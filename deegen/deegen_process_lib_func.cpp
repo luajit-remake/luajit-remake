@@ -1,0 +1,475 @@
+#include "deegen_process_lib_func.h"
+#include "deegen_interpreter_function_interface.h"
+#include "deegen_def_lib_func_api.h"
+#include "bytecode.h"
+
+namespace dast {
+
+namespace {
+
+class UserLibReturnAPI
+{
+public:
+    UserLibReturnAPI()
+        : m_origin(nullptr)
+        , m_isFixedNum(false)
+        , m_isLongJump(false)
+        , m_retRangeBegin(nullptr)
+        , m_retRangeNum(nullptr)
+        , m_longJumpFromHeader(nullptr)
+    { }
+
+    static void LowerAllForFunction(DeegenLibFuncInstance* ifi, llvm::Function* func)
+    {
+        std::vector<UserLibReturnAPI> allUses = FindAllUseInFunction(func);
+        for (auto& it : allUses)
+        {
+            it.DoLowering(ifi);
+        }
+    }
+
+    static std::vector<UserLibReturnAPI> WARN_UNUSED FindAllUseInFunction(llvm::Function* func);
+    void DoLowering(DeegenLibFuncInstance* ifi);
+
+    llvm::CallInst* m_origin;
+    bool m_isFixedNum;
+    bool m_isLongJump;
+    // Holds the return values for fixed-num return
+    //
+    std::vector<llvm::Value*> m_returnValues;
+    // Hold the return value range/num for range return
+    //
+    llvm::Value* m_retRangeBegin;
+    llvm::Value* m_retRangeNum;
+    llvm::Value* m_longJumpFromHeader;
+};
+
+std::vector<UserLibReturnAPI> WARN_UNUSED UserLibReturnAPI::FindAllUseInFunction(llvm::Function* func)
+{
+    using namespace llvm;
+    std::vector<UserLibReturnAPI> result;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                Function* callee = callInst->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    std::string demangledName = DemangleCXXSymbol(callee->getName().str());
+                    if (demangledName.starts_with("DeegenLibFuncCommonAPIs::Return("))
+                    {
+                        UserLibReturnAPI r;
+                        r.m_origin = callInst;
+                        r.m_isFixedNum = true;
+                        for (uint32_t i = 1; i < callInst->arg_size(); i++)
+                        {
+                            Value* val = callInst->getArgOperand(i);
+                            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
+                            r.m_returnValues.push_back(val);
+                        }
+                        result.push_back(r);
+                    }
+                    else if (demangledName.starts_with("DeegenLibFuncCommonAPIs::ReturnValueRange("))
+                    {
+                        UserLibReturnAPI r;
+                        r.m_origin = callInst;
+                        r.m_isFixedNum = false;
+                        ReleaseAssert(callInst->arg_size() == 3);
+                        r.m_retRangeBegin = callInst->getArgOperand(1);
+                        ReleaseAssert(llvm_value_has_type<void*>(r.m_retRangeBegin));
+                        r.m_retRangeNum = callInst->getArgOperand(2);
+                        ReleaseAssert(llvm_value_has_type<uint64_t>(r.m_retRangeNum));
+                        result.push_back(r);
+                    }
+                    else if (demangledName.starts_with("DeegenLibFuncCommonAPIs::LongJump("))
+                    {
+                        UserLibReturnAPI r;
+                        r.m_origin = callInst;
+                        r.m_isFixedNum = false;
+                        r.m_isLongJump = true;
+                        ReleaseAssert(callInst->arg_size() == 4);
+                        r.m_longJumpFromHeader = callInst->getArgOperand(1);
+                        ReleaseAssert(llvm_value_has_type<void*>(r.m_longJumpFromHeader));
+                        r.m_retRangeBegin = callInst->getArgOperand(2);
+                        ReleaseAssert(llvm_value_has_type<void*>(r.m_retRangeBegin));
+                        r.m_retRangeNum = callInst->getArgOperand(3);
+                        ReleaseAssert(llvm_value_has_type<uint64_t>(r.m_retRangeNum));
+                        result.push_back(r);
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
+void UserLibReturnAPI::DoLowering(DeegenLibFuncInstance* ifi)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_origin->getContext();
+
+    if (m_isFixedNum)
+    {
+        Constant* numReturns = CreateLLVMConstantInt<uint64_t>(ctx, m_returnValues.size());
+        Value* stackbase = ifi->GetStackBase();
+
+        if (m_returnValues.size() < x_minNilFillReturnValues)
+        {
+            uint64_t val = TValue::Nil().m_value;
+            while (m_returnValues.size() < x_minNilFillReturnValues)
+            {
+                m_returnValues.push_back(CreateLLVMConstantInt<uint64_t>(ctx, val));
+            }
+        }
+
+        for (size_t i = 0; i < m_returnValues.size(); i++)
+        {
+            ReleaseAssert(llvm_value_has_type<uint64_t>(m_returnValues[i]));
+            GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), stackbase, { CreateLLVMConstantInt<uint64_t>(ctx, i) }, "", m_origin);
+            std::ignore = new StoreInst(m_returnValues[i], gep, m_origin);
+        }
+
+        m_retRangeBegin = stackbase;
+        m_retRangeNum = numReturns;
+    }
+    else
+    {
+        CreateCallToDeegenCommonSnippet(ifi->GetModule(), "PopulateNilForReturnValues", { m_retRangeBegin, m_retRangeNum }, m_origin);
+    }
+
+    Value* stackFrameHeader;
+    if (m_isLongJump)
+    {
+        stackFrameHeader = m_longJumpFromHeader;
+    }
+    else
+    {
+        stackFrameHeader = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", m_origin);
+    }
+
+    Value* returnStackBase = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetCallerStackBaseFromStackFrameHeader", { stackFrameHeader }, m_origin);
+    Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackFrameHeader", { stackFrameHeader }, m_origin);
+
+    InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), returnStackBase, m_retRangeBegin, m_retRangeNum, m_origin);
+
+    AssertInstructionIsFollowedByUnreachable(m_origin);
+    Instruction* unreachableInst = m_origin->getNextNode();
+    m_origin->eraseFromParent();
+    unreachableInst->eraseFromParent();
+    m_origin = nullptr;
+}
+
+void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    LLVMContext& ctx = func->getContext();
+    std::vector<CallInst*> listOfUses;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                Function* callee = callInst->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    std::string demangledName = DemangleCXXSymbol(callee->getName().str());
+                    if (demangledName.starts_with("DeegenLibFuncCommonAPIs::ThrowError("))
+                    {
+                        listOfUses.push_back(callInst);
+                    }
+                }
+            }
+        }
+    }
+
+    for (CallInst* callInst : listOfUses)
+    {
+        ReleaseAssert(callInst->arg_size() == 2);
+        Value* errorObject = callInst->getArgOperand(1);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(errorObject));
+
+        std::string errorHandlerFnName = "DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowErrorImpl";
+        Module* module = ifi->GetModule();
+        Function* errorHandlerFn = module->getFunction(errorHandlerFnName);
+        if (errorHandlerFn == nullptr)
+        {
+            ReleaseAssert(module->getNamedValue(errorHandlerFnName) == nullptr);
+            FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
+            errorHandlerFn = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, errorHandlerFnName, module);
+            ReleaseAssert(errorHandlerFn->getName() == errorHandlerFnName);
+        }
+        else
+        {
+            ReleaseAssert(errorHandlerFn->getFunctionType() == InterpreterFunctionInterface::GetType(ctx));
+        }
+
+        if (!errorHandlerFn->empty())
+        {
+            errorHandlerFn->addFnAttr(Attribute::AttrKind::NoInline);
+        }
+
+        InterpreterFunctionInterface::CreateDispatchToCallee(
+            errorHandlerFn,
+            ifi->GetCoroutineCtx(),
+            ifi->GetStackBase(),
+            UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
+            errorObject /*numArgs repurposed as errorObj*/,
+            UndefValue::get(llvm_type_of<bool>(ctx)),
+            callInst /*insertBefore*/);
+
+        AssertInstructionIsFollowedByUnreachable(callInst);
+        Instruction* unreachableInst = callInst->getNextNode();
+        callInst->eraseFromParent();
+        unreachableInst->eraseFromParent();
+    }
+}
+
+void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    LLVMContext& ctx = func->getContext();
+    std::vector<CallInst*> listOfUses;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                Function* callee = callInst->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    std::string demangledName = DemangleCXXSymbol(callee->getName().str());
+                    if (demangledName.starts_with("DeegenLibFuncCommonAPIs::MakeInPlaceCall("))
+                    {
+                        listOfUses.push_back(callInst);
+                    }
+                }
+            }
+        }
+    }
+
+    for (CallInst* callInst : listOfUses)
+    {
+        ReleaseAssert(callInst->arg_size() == 4);
+        Value* argsBegin = callInst->getArgOperand(1);
+        ReleaseAssert(llvm_value_has_type<void*>(argsBegin));
+        Value* numArgs = callInst->getArgOperand(2);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
+        Value* rc = callInst->getArgOperand(3);
+        ReleaseAssert(llvm_value_has_type<void*>(rc));
+
+        CreateCallToDeegenCommonSnippet(
+            ifi->GetModule(),
+            "PopulateNewCallFrameHeaderForCallFromCFunc",
+            {
+                argsBegin /*newStackBase*/,
+                ifi->GetStackBase() /*oldStackBase*/,
+                rc /*returnContinuation*/
+            },
+            callInst /*insertBefore*/);
+
+        Value* calleeSlot = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), argsBegin, { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", callInst /*insertBefore*/);
+        Value* calleeValue = new LoadInst(llvm_type_of<uint64_t>(ctx), calleeSlot, "", false /*isVolatile*/, Align(8), callInst /*insertBefore*/);
+
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(func->getParent(), "GetCalleeEntryPoint", { calleeValue }, callInst /*insertBefore*/);
+        ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
+
+        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", callInst /*insertBefore*/);
+        Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", callInst /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        InterpreterFunctionInterface::CreateDispatchToCallee(
+            codePointer,
+            ifi->GetCoroutineCtx(),
+            argsBegin,
+            calleeCbHeapPtr,
+            numArgs,
+            CreateLLVMConstantInt<bool>(ctx, false) /*isTailCall*/,
+            callInst /*insertBefore*/);
+
+        AssertInstructionIsFollowedByUnreachable(callInst);
+        Instruction* unreachableInst = callInst->getNextNode();
+        callInst->eraseFromParent();
+        unreachableInst->eraseFromParent();
+    }
+}
+
+}   // anonymous namespace
+
+DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Function* target, bool isRc)
+    : m_module(impl->getParent()), m_impl(impl), m_target(target), m_isReturnContinuation(isRc)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_target->getContext();
+    ReleaseAssert(m_target->empty());
+    ReleaseAssert(m_target->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+    ReleaseAssert(!m_impl->empty());
+    ReleaseAssert(m_impl->getLinkage() == GlobalVariable::LinkageTypes::InternalLinkage);
+    ReleaseAssert(m_impl->hasFnAttribute(Attribute::AttrKind::NoReturn));
+
+    ReleaseAssert(!m_impl->hasFnAttribute(Attribute::AttrKind::NoInline));
+    m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
+
+    {
+        std::string funName = m_target->getName().str();
+        // It's fine even if this setName cause a auto-renaming due to conflict:
+        // we just need to make the current name avaiable
+        //
+        m_target->setName(funName + "_tmp");
+
+        FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
+        Function* wrapper = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, funName, m_module);
+        ReleaseAssert(wrapper->getName() == funName);
+
+        CopyFunctionAttributes(wrapper, m_impl);
+        wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
+        wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
+
+        {
+            // Just sanity check that the fake function is never being called
+            //
+            for (auto usr : m_target->users())
+            {
+                CallInst* callInst = dyn_cast<CallInst>(usr);
+                if (callInst != nullptr)
+                {
+                    ReleaseAssert(callInst->getCalledFunction() != m_target);
+                }
+            }
+        }
+
+        // Replace the fake function with the true definition
+        //
+        m_target->replaceAllUsesWith(wrapper);
+        m_target->eraseFromParent();
+        m_target = wrapper;
+    }
+
+    BasicBlock* bb = BasicBlock::Create(ctx, "", m_target);
+    m_valuePreserver.Preserve(x_coroutineCtx, m_target->getArg(0));
+    m_valuePreserver.Preserve(x_stackBase, m_target->getArg(1));
+    if (m_isReturnContinuation)
+    {
+        m_valuePreserver.Preserve(x_retStart, m_target->getArg(2));
+        PtrToIntInst* numRet = new PtrToIntInst(m_target->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
+        m_valuePreserver.Preserve(x_numRet, numRet);
+
+        ReleaseAssert(m_impl->arg_size() == 4);
+        CallInst::Create(m_impl, { GetCoroutineCtx(), GetStackBase(), GetRetStart(), GetNumRet() }, "", bb);
+    }
+    else
+    {
+        PtrToIntInst* numArgs = new PtrToIntInst(m_target->getArg(2), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
+        m_valuePreserver.Preserve(x_numArgs, numArgs);
+
+        ReleaseAssert(m_impl->arg_size() == 3);
+        CallInst::Create(m_impl, { GetCoroutineCtx(), GetStackBase(), GetNumArgs() }, "", bb);
+    }
+    std::ignore = new UnreachableInst(ctx, bb);
+
+    ValidateLLVMFunction(m_target);
+}
+
+void DeegenLibFuncInstance::DoLowering()
+{
+    using namespace llvm;
+
+    m_valuePreserver.RefreshAfterTransform();
+    m_impl = nullptr;
+
+    UserLibReturnAPI::LowerAllForFunction(this, m_target);
+    DeegenLibLowerThrowErrorAPIs(this, m_target);
+    DeegenLibLowerInPlaceCallAPIs(this, m_target);
+
+    m_target->removeFnAttr(Attribute::AttrKind::NoReturn);
+    m_valuePreserver.Cleanup();
+}
+
+void DeegenProcessAndLowerLibFunctionDefinitionIRFile(llvm::Module* module)
+{
+    using namespace llvm;
+
+    ReleaseAssert(module != nullptr);
+
+    struct Item
+    {
+        std::string m_implName;
+        std::string m_wrapperName;
+        bool m_isRc;
+    };
+
+    std::vector<Item> allDesc;
+
+    {
+        constexpr const char* symbolName = "x_deegen_impl_all_lib_func_defs_in_this_tu";
+        ReleaseAssert(module->getGlobalVariable(symbolName) != nullptr);
+
+        Constant* defList;
+        {
+            Constant* wrappedDefList = GetConstexprGlobalValue(module, symbolName);
+            LLVMConstantStructReader reader(module, wrappedDefList);
+            defList = reader.Dewrap();
+        }
+
+        using Desc = ::detail::deegen_lib_func_definition_info_descriptor;
+
+        LLVMConstantArrayReader defListReader(module, defList);
+        uint64_t numDefsInThisTU = defListReader.GetNumElements<Desc>();
+
+        for (size_t i = 0; i < numDefsInThisTU; i++)
+        {
+            Constant* descCst = defListReader.Get<Desc>(i);
+            LLVMConstantStructReader reader(module, descCst);
+
+            Constant* implCst = reader.Get<&Desc::impl>();
+            ReleaseAssert(isa<Function>(implCst));
+            Function* implFunc = cast<Function>(implCst);
+            std::string implFuncName = implFunc->getName().str();
+            ReleaseAssert(implFuncName != "");
+
+            Constant* wrapperCst = reader.Get<&Desc::wrapper>();
+            ReleaseAssert(isa<Function>(wrapperCst));
+            Function* wrapperFunc = cast<Function>(wrapperCst);
+            std::string wrapperFuncName = wrapperFunc->getName().str();
+            ReleaseAssert(wrapperFuncName != "");
+
+            bool isRc = reader.GetValue<&Desc::isRc>();
+
+            allDesc.push_back({
+                .m_implName = implFuncName,
+                .m_wrapperName = wrapperFuncName,
+                .m_isRc = isRc
+            });
+        }
+    }
+
+    std::vector<std::unique_ptr<DeegenLibFuncInstance>> allInstances;
+    for (Item& item : allDesc)
+    {
+        Function* implFunc = module->getFunction(item.m_implName);
+        ReleaseAssert(implFunc != nullptr);
+
+        Function* wrapperFunc = module->getFunction(item.m_wrapperName);
+        ReleaseAssert(wrapperFunc != nullptr);
+
+        allInstances.push_back(std::make_unique<DeegenLibFuncInstance>(implFunc, wrapperFunc, item.m_isRc));
+    }
+
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+
+    for (auto& instance : allInstances)
+    {
+        instance->DoLowering();
+    }
+
+    // TODO: delete symbol 'x_deegen_impl_all_lib_func_defs_in_this_tu'
+
+}
+
+}   // namespace dast

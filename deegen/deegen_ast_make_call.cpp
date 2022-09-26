@@ -509,7 +509,6 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
                 }
             }
 
-            ValidateLLVMModule(ifi->GetModule());
             std::ignore = ifi->CallDeegenCommonSnippet(
                 "PopulateNewCallFrameHeader",
                 {

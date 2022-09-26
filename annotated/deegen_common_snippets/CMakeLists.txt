@@ -20,12 +20,16 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_num_fixed_params_from_code_block.cpp
   fixup_stack_frame_for_variadic_arg_function.cpp
   get_bytecode_ptr_from_codeblock.cpp
+  populate_nil_for_return_values.cpp
+  get_caller_stackbase_from_stack_frame_header.cpp
+  get_ret_addr_from_stack_frame_header.cpp
+  populate_new_call_frame_header_for_c_func.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT
   ${DEEGEN_COMMON_SNIPPET_IR_SOURCES}
 )
-set_target_properties(deegen_common_snippet_ir_sources PROPERTIES COMPILE_FLAGS ${EXTRA_CXX_FLAGS_FOR_LLVM_IR})
+set_target_properties(deegen_common_snippet_ir_sources PROPERTIES COMPILE_FLAGS " ${EXTRA_CXX_FLAGS_FOR_LLVM_IR} ")
 
 add_executable(package_deegen_common_snippet_ir
   package_deegen_common_snippets_library.cpp

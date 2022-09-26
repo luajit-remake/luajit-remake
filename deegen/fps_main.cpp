@@ -25,6 +25,11 @@ int main(int argc, char** argv)
         FPS_GenerateInterpreterFunctionEntryLogic();
         break;
     }
+    case FpsCommand_ProcessUserBuiltinLib:
+    {
+        FPS_ProcessUserBuiltinLib();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

@@ -973,6 +973,18 @@ public:
         return m_ljrLibBaseDotNextFunctionObject;
     }
 
+    void InitLibBaseDotErrorFunctionObject(TValue val)
+    {
+        assert(val.IsPointer());
+        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function);
+        m_ljrLibBaseDotErrorFunctionObject = val;
+    }
+
+    TValue GetLibBaseDotErrorFunctionObject()
+    {
+        return m_ljrLibBaseDotErrorFunctionObject;
+    }
+
     UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetamethodKind kind)
     {
         return m_stringNameForMetatableKind[static_cast<size_t>(kind)];
@@ -1013,6 +1025,11 @@ private:
     // Even if the global variable 'next' is overwritten, this will not be changed
     //
     TValue m_ljrLibBaseDotNextFunctionObject;
+
+    // The true Lua base library's 'error' function object ('error' is the name of the that function...)
+    // Even if the global variable 'error' is overwritten, this will not be changed
+    //
+    TValue m_ljrLibBaseDotErrorFunctionObject;
 
     // Allow unit test to hook stdout and stderr to a custom temporary file
     //

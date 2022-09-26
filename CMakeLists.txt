@@ -157,9 +157,9 @@ add_subdirectory(common_utils)
 
 add_subdirectory(toylang)
 
-add_subdirectory(annotated)
-
 add_subdirectory(deegen)
+
+add_subdirectory(annotated)
 
 # add the executable
 #
@@ -200,6 +200,7 @@ target_link_libraries(main PUBLIC
   deegen_generated
   deegen_unit_test_ir
   deegen_common_snippet_ir
+  deegen_user_builtin_lib
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )
