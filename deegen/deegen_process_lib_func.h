@@ -41,7 +41,20 @@ private:
     bool m_isReturnContinuation;
 };
 
-void DeegenProcessAndLowerLibFunctionDefinitionIRFile(llvm::Module* module);
+struct DeegenLibFuncInstanceInfo
+{
+    std::string m_implName;
+    std::string m_wrapperName;
+    bool m_isRc;
+};
+
+struct DeegenLibFuncProcessor
+{
+    static std::vector<DeegenLibFuncInstanceInfo> WARN_UNUSED ParseInfo(llvm::Module* module);
+    static void DoLowering(llvm::Module* module);
+
+    static constexpr const char* x_allDefsHolderSymbolName = "x_deegen_impl_all_lib_func_defs_in_this_tu";
+};
 
 }   // namespace dast
 

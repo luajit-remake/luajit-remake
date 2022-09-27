@@ -391,66 +391,62 @@ void DeegenLibFuncInstance::DoLowering()
     m_valuePreserver.Cleanup();
 }
 
-void DeegenProcessAndLowerLibFunctionDefinitionIRFile(llvm::Module* module)
+std::vector<DeegenLibFuncInstanceInfo> WARN_UNUSED DeegenLibFuncProcessor::ParseInfo(llvm::Module* module)
 {
     using namespace llvm;
-
     ReleaseAssert(module != nullptr);
+    std::vector<DeegenLibFuncInstanceInfo> result;
+    ReleaseAssert(module->getGlobalVariable(x_allDefsHolderSymbolName) != nullptr);
 
-    struct Item
+    Constant* defList;
     {
-        std::string m_implName;
-        std::string m_wrapperName;
-        bool m_isRc;
-    };
-
-    std::vector<Item> allDesc;
-
-    {
-        constexpr const char* symbolName = "x_deegen_impl_all_lib_func_defs_in_this_tu";
-        ReleaseAssert(module->getGlobalVariable(symbolName) != nullptr);
-
-        Constant* defList;
-        {
-            Constant* wrappedDefList = GetConstexprGlobalValue(module, symbolName);
-            LLVMConstantStructReader reader(module, wrappedDefList);
-            defList = reader.Dewrap();
-        }
-
-        using Desc = ::detail::deegen_lib_func_definition_info_descriptor;
-
-        LLVMConstantArrayReader defListReader(module, defList);
-        uint64_t numDefsInThisTU = defListReader.GetNumElements<Desc>();
-
-        for (size_t i = 0; i < numDefsInThisTU; i++)
-        {
-            Constant* descCst = defListReader.Get<Desc>(i);
-            LLVMConstantStructReader reader(module, descCst);
-
-            Constant* implCst = reader.Get<&Desc::impl>();
-            ReleaseAssert(isa<Function>(implCst));
-            Function* implFunc = cast<Function>(implCst);
-            std::string implFuncName = implFunc->getName().str();
-            ReleaseAssert(implFuncName != "");
-
-            Constant* wrapperCst = reader.Get<&Desc::wrapper>();
-            ReleaseAssert(isa<Function>(wrapperCst));
-            Function* wrapperFunc = cast<Function>(wrapperCst);
-            std::string wrapperFuncName = wrapperFunc->getName().str();
-            ReleaseAssert(wrapperFuncName != "");
-
-            bool isRc = reader.GetValue<&Desc::isRc>();
-
-            allDesc.push_back({
-                .m_implName = implFuncName,
-                .m_wrapperName = wrapperFuncName,
-                .m_isRc = isRc
-            });
-        }
+        Constant* wrappedDefList = GetConstexprGlobalValue(module, x_allDefsHolderSymbolName);
+        LLVMConstantStructReader reader(module, wrappedDefList);
+        defList = reader.Dewrap();
     }
 
+    using Desc = ::detail::deegen_lib_func_definition_info_descriptor;
+
+    LLVMConstantArrayReader defListReader(module, defList);
+    uint64_t numDefsInThisTU = defListReader.GetNumElements<Desc>();
+
+    for (size_t i = 0; i < numDefsInThisTU; i++)
+    {
+        Constant* descCst = defListReader.Get<Desc>(i);
+        LLVMConstantStructReader reader(module, descCst);
+
+        Constant* implCst = reader.Get<&Desc::impl>();
+        ReleaseAssert(isa<Function>(implCst));
+        Function* implFunc = cast<Function>(implCst);
+        std::string implFuncName = implFunc->getName().str();
+        ReleaseAssert(implFuncName != "");
+
+        Constant* wrapperCst = reader.Get<&Desc::wrapper>();
+        ReleaseAssert(isa<Function>(wrapperCst));
+        Function* wrapperFunc = cast<Function>(wrapperCst);
+        std::string wrapperFuncName = wrapperFunc->getName().str();
+        ReleaseAssert(wrapperFuncName != "");
+
+        bool isRc = reader.GetValue<&Desc::isRc>();
+
+        result.push_back({
+            .m_implName = implFuncName,
+            .m_wrapperName = wrapperFuncName,
+            .m_isRc = isRc
+        });
+    }
+    return result;
+}
+
+void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
+{
+    using namespace llvm;
+    std::vector<DeegenLibFuncInstanceInfo> allInfo = ParseInfo(module);
+
+    // Lower the definitions
+    //
     std::vector<std::unique_ptr<DeegenLibFuncInstance>> allInstances;
-    for (Item& item : allDesc)
+    for (DeegenLibFuncInstanceInfo& item : allInfo)
     {
         Function* implFunc = module->getFunction(item.m_implName);
         ReleaseAssert(implFunc != nullptr);
@@ -468,8 +464,31 @@ void DeegenProcessAndLowerLibFunctionDefinitionIRFile(llvm::Module* module)
         instance->DoLowering();
     }
 
-    // TODO: delete symbol 'x_deegen_impl_all_lib_func_defs_in_this_tu'
+    // Delete the symbol that holds all the definitions from 'llvm.compiler.used', as it is no longer needed
+    // This would allow all the implementation functions (which are no longer useful) to be deleted
+    //
+    {
+        GlobalVariable* gv = module->getGlobalVariable(x_allDefsHolderSymbolName);
+        ReleaseAssert(gv != nullptr);
+        RemoveGlobalVariableUsedAttributeAnnotation(gv);
+    }
 
+    // This should delete all the symbols made dead by the above change
+    //
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+
+    // Assert that the functions and globals that ought to be dead at this point have been deleted
+    //
+    ReleaseAssert(module->getNamedValue(x_allDefsHolderSymbolName) == nullptr);
+    for (DeegenLibFuncInstanceInfo& item : allInfo)
+    {
+        ReleaseAssert(module->getNamedValue(item.m_implName) == nullptr);
+        Function* func = module->getFunction(item.m_wrapperName);
+        ReleaseAssert(func != nullptr);
+        ReleaseAssert(!func->empty());
+        ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
+    }
 }
 
 }   // namespace dast

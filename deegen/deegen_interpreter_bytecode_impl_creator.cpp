@@ -285,8 +285,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
     //
     m_valuePreserver.Cleanup();
 
-    ValidateLLVMModule(m_module.get());
-
     // Run optimization pass
     //
     RunLLVMOptimizePass(m_module.get());

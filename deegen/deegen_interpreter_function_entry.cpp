@@ -151,9 +151,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
 
     dummyInst->eraseFromParent();
 
-    ValidateLLVMModule(module.get());
     RunLLVMOptimizePass(module.get());
-    ValidateLLVMModule(module.get());
 
     return module;
 }

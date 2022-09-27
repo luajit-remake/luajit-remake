@@ -578,9 +578,25 @@ inline llvm::Constant* GetConstexprGlobalValue(llvm::Module* module, std::string
     return gv->getInitializer();
 }
 
+inline void ValidateLLVMFunction(llvm::Function* func)
+{
+    using namespace llvm;
+    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
+    ReleaseAssert(verifyFunction(*func, &tmp) == false);
+}
+
+inline void ValidateLLVMModule(llvm::Module* module)
+{
+    using namespace llvm;
+    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
+    ReleaseAssert(verifyModule(*module, &tmp) == false);
+}
+
 inline void RunLLVMOptimizePass(llvm::Module* module)
 {
     using namespace llvm;
+
+    ValidateLLVMModule(module);
 
     PassBuilder passBuilder;
     LoopAnalysisManager LAM;
@@ -599,6 +615,35 @@ inline void RunLLVMOptimizePass(llvm::Module* module)
 
     ReleaseAssert(module != nullptr);
     MPM.run(*module, MAM);
+
+    ValidateLLVMModule(module);
+}
+
+inline void RunLLVMModuleSimplificationAndInliningPipeline(llvm::Module* module)
+{
+    using namespace llvm;
+
+    ValidateLLVMModule(module);
+
+    PassBuilder passBuilder;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+    ModulePassManager MPM;
+
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    MPM = passBuilder.buildModuleSimplificationPipeline(OptimizationLevel::O3, ThinOrFullLTOPhase::None);
+
+    ReleaseAssert(module != nullptr);
+    MPM.run(*module, MAM);
+
+    ValidateLLVMModule(module);
 }
 
 // Compile an LLVM module to assembly (.S) file
@@ -642,20 +687,6 @@ inline void CopyFunctionAttributes(llvm::Function* dstFunc, llvm::Function* srcF
         dstFunc->addFnAttr(attr);
         ReleaseAssert(dstFunc->hasFnAttribute(feature));
     }
-}
-
-inline void ValidateLLVMFunction(llvm::Function* func)
-{
-    using namespace llvm;
-    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
-    ReleaseAssert(verifyFunction(*func, &tmp) == false);
-}
-
-inline void ValidateLLVMModule(llvm::Module* module)
-{
-    using namespace llvm;
-    raw_fd_ostream tmp(STDERR_FILENO, false /*shouldClose*/, true /*unbuffered*/);
-    ReleaseAssert(verifyModule(*module, &tmp) == false);
 }
 
 // Each call on the same module may only increase DesugaringLevel
@@ -1080,6 +1111,88 @@ inline llvm::CallInst* EmitLLVMIntrinsicMemmove(llvm::Module* module, llvm::Valu
     Function* memmoveFunc = Intrinsic::getDeclaration(module, Intrinsic::memmove, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), bytesToCopy->getType() /*sizeType*/ });
     CallInst* result = CallInst::Create(memmoveFunc, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertBefore);
     return result;
+}
+
+// Undo the effect of '__attribute__((__used__))' for a global variable
+// That is, after this function call, 'gv' is no longer protected from being removed even if unused
+//
+inline void RemoveGlobalVariableUsedAttributeAnnotation(llvm::GlobalVariable* gv)
+{
+    using namespace llvm;
+    // Return true if 'gvToRemove' is found and removed from the specified 'used' intrinsic name
+    //
+    auto removeFromUseIntrinsicName = [](GlobalVariable* gvToRemove, const std::string& intrinName) -> bool
+    {
+        Module* module = gvToRemove->getParent();
+        GlobalVariable* intrinVar = module->getGlobalVariable(intrinName);
+        if (intrinVar == nullptr)
+        {
+            ReleaseAssert(module->getNamedValue(intrinName) == nullptr);
+            return false;
+        }
+
+        ReleaseAssert(intrinVar->hasInitializer());
+        Constant* initv = intrinVar->getInitializer();
+        ReleaseAssert(isa<ConstantArray>(initv));
+        ConstantArray* initializer = cast<ConstantArray>(initv);
+        uint32_t numElements = initializer->getNumOperands();
+        bool found = false;
+        std::vector<Constant*> newValueList;
+        for (uint32_t i = 0; i < numElements; i++)
+        {
+            Constant* value = initializer->getOperand(i);
+            if (value == gvToRemove)
+            {
+                found = true;
+            }
+            else
+            {
+                newValueList.push_back(value);
+            }
+        }
+        if (!found)
+        {
+            return false;
+        }
+
+        ReleaseAssert(intrinVar->use_empty());
+
+        if (newValueList.size() == 0)
+        {
+            intrinVar->eraseFromParent();
+        }
+        else
+        {
+            Constant* newInitializer = ConstantArray::get(llvm::ArrayType::get(initializer->getType()->getElementType(), newValueList.size()), newValueList);
+            intrinVar->setName(std::string("tmp_") + intrinName);
+
+            GlobalVariable* replacedVar = new GlobalVariable(
+                *module,
+                newInitializer->getType(),
+                intrinVar->isConstant(),
+                intrinVar->getLinkage(),
+                newInitializer,
+                intrinName,
+                intrinVar /*insertBefore*/,
+                intrinVar->getThreadLocalMode(),
+                intrinVar->getType()->getAddressSpace(),
+                intrinVar->isExternallyInitialized());
+            replacedVar->copyAttributesFrom(intrinVar);
+
+            intrinVar->eraseFromParent();
+            ReleaseAssert(replacedVar->getName() == intrinName);
+        }
+        return true;
+    };
+
+    bool success = false;
+    success |= removeFromUseIntrinsicName(gv, "llvm.used");
+    success |= removeFromUseIntrinsicName(gv, "llvm.compiler.used");
+
+    // If success == false here, it means 'gvToRemove' is not inside the globals marked '__used__' at all.
+    // This should be treated as a bug.
+    //
+    ReleaseAssert(success);
 }
 
 }   // namespace dast

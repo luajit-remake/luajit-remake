@@ -1,0 +1,42 @@
+; ModuleID = 'extracted_ir'
+source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
+; Function Attrs: nounwind
+define void @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1(ptr %0, ptr %1, ptr %2, ptr %3, i64 %4) #0 {
+  %6 = ptrtoint ptr %3 to i64
+  %.sroa.0.0.copyload = load i64, ptr %2, align 8, !tbaa.struct !3
+  store i64 %6, ptr %1, align 8
+  %7 = getelementptr inbounds i64, ptr %1, i64 1
+  store i64 %.sroa.0.0.copyload, ptr %7, align 8
+  %8 = getelementptr inbounds i64, ptr %1, i64 2
+  store i64 -844429225099137, ptr %8, align 8
+  %9 = getelementptr inbounds i64, ptr %1, i64 -3
+  %10 = load ptr, ptr %9, align 8, !tbaa !8
+  %11 = getelementptr inbounds i64, ptr %1, i64 -2
+  %12 = load ptr, ptr %11, align 8, !tbaa !12
+  musttail call void %12(ptr %0, ptr %10, ptr nonnull %1, ptr nonnull inttoptr (i64 2 to ptr), i64 undef) #1
+  ret void
+}
+
+attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { nounwind }
+
+!llvm.linker.options = !{}
+!llvm.module.flags = !{!0, !1}
+!llvm.ident = !{!2, !2, !2, !2, !2, !2}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
+!3 = !{i64 0, i64 8, !4}
+!4 = !{!5, !5, i64 0}
+!5 = !{!"long", !6, i64 0}
+!6 = !{!"omnipotent char", !7, i64 0}
+!7 = !{!"Simple C++ TBAA"}
+!8 = !{!9, !10, i64 8}
+!9 = !{!"_ZTS16StackFrameHeader", !10, i64 0, !10, i64 8, !10, i64 16, !11, i64 24, !11, i64 28}
+!10 = !{!"any pointer", !6, i64 0}
+!11 = !{!"int", !6, i64 0}
+!12 = !{!9, !10, i64 16}

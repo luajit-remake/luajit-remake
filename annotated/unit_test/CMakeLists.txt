@@ -12,12 +12,13 @@ SET(DEEGEN_UNIT_TEST_IR_SOURCES
   bytecode_interpreter_lowering_sanity_1.cpp
   make_call_api_lowering.cpp
   return_value_accessor_api_lowering.cpp
+  user_lib_func_api.cpp
 )
 
 add_library(deegen_unit_test_ir_sources OBJECT
   ${DEEGEN_UNIT_TEST_IR_SOURCES}
 )
-set_target_properties(deegen_unit_test_ir_sources PROPERTIES COMPILE_FLAGS " ${EXTRA_CXX_FLAGS_FOR_LLVM_IR} ")
+set_target_properties(deegen_unit_test_ir_sources PROPERTIES COMPILE_FLAGS " ${EXTRA_CXX_FLAGS_FOR_LLVM_IR} -DDEEGEN_ANNOTATED_SOURCE_FOR_USER_BUILTIN_LIBRARY -DDEEGEN_ANNOTATED_SOURCE_FOR_BYTECODE_DEFINITION")
 
 # This is the logic that packages the IR into the resource library to be linked to the unit test executable
 # This is a really simple file but it needs to process a lot of data, so always compile with -O3 for speed

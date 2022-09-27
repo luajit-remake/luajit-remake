@@ -25,7 +25,7 @@ void FPS_ProcessUserBuiltinLib()
         abort();
     }
 
-    DeegenProcessAndLowerLibFunctionDefinitionIRFile(module.get());
+    DeegenLibFuncProcessor::DoLowering(module.get());
     RunLLVMOptimizePass(module.get());
 
     std::string contents = CompileLLVMModuleToAssemblyFile(module.get(), llvm::Reloc::Static, llvm::CodeModel::Small);

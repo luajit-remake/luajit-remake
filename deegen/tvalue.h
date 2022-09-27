@@ -960,8 +960,11 @@ consteval auto std_array_to_llvm_friendly_array(T v)
                 tvalue_typecheck_strength_reduction_def_helper<__COUNTER__>::value,                         \
                 detail::get_basic_tvalue_typecheck_impls<TypeSpecializationList>::value));
 
-// Define the additional strength reduction rules
+
+// If we are included by a bytecode definition source file, emit information of the strength reduction rules
 //
+#ifdef DEEGEN_ANNOTATED_SOURCE_FOR_BYTECODE_DEFINITION
+
 // For now, we only need the rules that remove the IsPointer() check
 //
 #define macro(hoi)                                                                                                  \
@@ -974,6 +977,8 @@ PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)
 #undef macro
 
 END_OF_TVALUE_TYPECHECK_STRENGTH_REDUCTION_DEFINITIONS
+
+#endif  // defined(DEEGEN_ANNOTATED_SOURCE_FOR_BYTECODE_DEFINITION)
 
 template<typename T>
 bool WARN_UNUSED ALWAYS_INLINE TValue::Is()

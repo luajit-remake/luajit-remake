@@ -14,3 +14,5 @@ static void DeegenSnippet_PopulateNilForReturnValues(uint64_t* retStart, uint64_
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("PopulateNilForReturnValues", DeegenSnippet_PopulateNilForReturnValues)
+
+DEEGEN_COMMON_SNIPPET_OPTION_DO_NOT_OPTIMIZE_BEFORE_EXTRACT

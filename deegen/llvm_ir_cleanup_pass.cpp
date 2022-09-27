@@ -144,6 +144,8 @@ namespace dast {
 //
 void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
 {
+    ValidateLLVMModule(module);
+
     PassBuilder passBuilder;
     LoopAnalysisManager LAM;
     FunctionAnalysisManager FAM;
@@ -228,6 +230,8 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         }
         ReleaseAssert(found.size() == originalNoInlineFunctions.size());
     }
+
+    ValidateLLVMModule(module);
 }
 
 }   // namespace dast
