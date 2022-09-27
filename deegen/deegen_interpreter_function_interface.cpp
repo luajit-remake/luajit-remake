@@ -74,7 +74,7 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
 }
 
-void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail, llvm::Instruction* insertBefore)
+void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = codePointer->getContext();
@@ -83,10 +83,9 @@ void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePoint
     ReleaseAssert(llvm_value_has_type<void*>(preFixupStackBase));
     ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCodeBlockHeapPtr));
     ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
-    ReleaseAssert(llvm_value_has_type<bool>(isMustTail));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(isMustTail64));
 
     IntToPtrInst* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", insertBefore);
-    ZExtInst* isMustTail64 = new ZExtInst(isMustTail, llvm_type_of<uint64_t>(ctx), "", insertBefore);
     // We need this cast only because LLVM's rule of musttail which requires identical prototype..
     // Callee will cast it back to HeapPtr
     //

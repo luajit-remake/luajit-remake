@@ -11,11 +11,8 @@ declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_i
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_impl_holderI6tTable11tHeapEntityE4implE6TValue(i64) #0 align 2
 
-; Function Attrs: noreturn
-declare dso_local void @_Z5ErrorPKc(ptr noundef) local_unnamed_addr #1
-
 ; Function Attrs: noreturn nounwind uwtable
-define dso_local void @testfn4(i64 %0) #2 {
+define dso_local void @testfn4(i64 %0) #1 {
   %2 = tail call noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_impl_holderI6tTable11tHeapEntityE4implE6TValue(i64 %0)
   br i1 %2, label %3, label %4
 
@@ -32,16 +29,19 @@ define dso_local void @testfn4(i64 %0) #2 {
   unreachable
 
 7:                                                ; preds = %4
-  tail call void @_Z5ErrorPKc(ptr noundef nonnull @.str) #3
+  tail call void @DeegenImpl_ThrowErrorCString(ptr noundef nonnull @.str) #3
   unreachable
 }
 
 ; Function Attrs: noreturn
-declare dso_local void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #1
+declare dso_local void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #2
+
+; Function Attrs: noreturn
+declare dso_local void @DeegenImpl_ThrowErrorCString(ptr noundef) local_unnamed_addr #2
 
 attributes #0 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #2 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #2 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #3 = { noreturn nounwind }
 
 !llvm.linker.options = !{}

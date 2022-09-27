@@ -13,6 +13,7 @@ SET(DEEGEN_UNIT_TEST_IR_SOURCES
   make_call_api_lowering.cpp
   return_value_accessor_api_lowering.cpp
   user_lib_func_api.cpp
+  throw_error_api_lowering.cpp
 )
 
 add_library(deegen_unit_test_ir_sources OBJECT

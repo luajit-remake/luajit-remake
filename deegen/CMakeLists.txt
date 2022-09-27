@@ -14,6 +14,7 @@ add_library(deegen_rt
   deegen_interpreter_function_entry.cpp
   llvm_llc_helper.cpp
   deegen_process_lib_func.cpp
+  deegen_ast_throw_error.cpp
 ) 
 
 # Build the main Futamura projection stage binary

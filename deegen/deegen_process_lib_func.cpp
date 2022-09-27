@@ -1,6 +1,7 @@
 #include "deegen_process_lib_func.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_def_lib_func_api.h"
+#include "deegen_ast_throw_error.h"
 #include "bytecode.h"
 
 namespace dast {
@@ -190,36 +191,30 @@ void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* fu
     for (CallInst* callInst : listOfUses)
     {
         ReleaseAssert(callInst->arg_size() == 2);
+        std::string demangledName = DemangleCXXSymbol(callInst->getCalledFunction()->getName().str());
         Value* errorObject = callInst->getArgOperand(1);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(errorObject));
 
-        std::string errorHandlerFnName = "DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowErrorImpl";
-        Module* module = ifi->GetModule();
-        Function* errorHandlerFn = module->getFunction(errorHandlerFnName);
-        if (errorHandlerFn == nullptr)
+        Function* target;
+        if (demangledName.starts_with("DeegenLibFuncCommonAPIs::ThrowError(TValue"))
         {
-            ReleaseAssert(module->getNamedValue(errorHandlerFnName) == nullptr);
-            FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-            errorHandlerFn = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, errorHandlerFnName, module);
-            ReleaseAssert(errorHandlerFn->getName() == errorHandlerFnName);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(errorObject));
+            target = GetThrowTValueErrorDispatchTargetFunction(ifi->GetModule());
         }
         else
         {
-            ReleaseAssert(errorHandlerFn->getFunctionType() == InterpreterFunctionInterface::GetType(ctx));
-        }
-
-        if (!errorHandlerFn->empty())
-        {
-            errorHandlerFn->addFnAttr(Attribute::AttrKind::NoInline);
+            ReleaseAssert(demangledName.starts_with("DeegenLibFuncCommonAPIs::ThrowError(char const*"));
+            ReleaseAssert(llvm_value_has_type<void*>(errorObject));
+            target = GetThrowCStringErrorDispatchTargetFunction(ifi->GetModule());
+            errorObject = new PtrToIntInst(errorObject, llvm_type_of<uint64_t>(ctx), "", callInst /*insertBefore*/);
         }
 
         InterpreterFunctionInterface::CreateDispatchToCallee(
-            errorHandlerFn,
+            target,
             ifi->GetCoroutineCtx(),
             ifi->GetStackBase(),
             UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
             errorObject /*numArgs repurposed as errorObj*/,
-            UndefValue::get(llvm_type_of<bool>(ctx)),
+            UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             callInst /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(callInst);
@@ -290,7 +285,7 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
             argsBegin,
             calleeCbHeapPtr,
             numArgs,
-            CreateLLVMConstantInt<bool>(ctx, false) /*isTailCall*/,
+            CreateLLVMConstantInt<uint64_t>(ctx, 0) /*isTailCall*/,
             callInst /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(callInst);

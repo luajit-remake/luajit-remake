@@ -809,7 +809,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<bool>(ctx, m_isMustTailCall), m_origin /*insertBefore*/);
+    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();

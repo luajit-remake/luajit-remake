@@ -92,7 +92,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(OnProtectedCallErrorReturn)
 // This is a fake library function that is used internally in deegen to implement the ThrowError API
 // This is never directly called from outside, and the name is hardcoded
 //
-DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowErrorImpl)
+DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
 {
     // We repurpose 'numArgs' to be the TValue storing the error object
     //
@@ -214,6 +214,18 @@ handle_pcall:
     }
 }
 
+// This is a fake library function that is used internally in deegen to implement the ThrowError API (C-string case)
+// It is a simple wrapper of DeegenInternal_ThrowTValueErrorImpl
+// This is never directly called from outside, and the name is hardcoded
+//
+DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowCStringErrorImpl)
+{
+    // We repurpose 'numArgs' to be the TValue storing the C string
+    //
+    const char* errorMsg = reinterpret_cast<const char*>(GetNumArgs());
+    ThrowError(MakeErrorMessage(errorMsg));
+}
+
 // Lua standard library base.xpcall
 //
 DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
@@ -222,7 +234,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
     {
         // Lua always complains about argument #2 even if numArgs == 0, and this error is NOT protected by this xpcall itself
         //
-        ThrowError(MakeErrorMessage("bad argument #2 to 'xpcall' (value expected)"));
+        ThrowError("bad argument #2 to 'xpcall' (value expected)");
     }
 
     // Any error below should be protected by the xpcall
@@ -302,7 +314,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     {
         // This error is NOT protected by this pcall itself
         //
-        ThrowError(MakeErrorMessage("bad argument #1 to 'pcall' (value expected)"));
+        ThrowError("bad argument #1 to 'pcall' (value expected)");
     }
 
     // Any error below should be protected by the pcall

@@ -183,6 +183,7 @@ add_executable(main
   test_return_value_accessor_api_lowering.cpp
   test_interp_function_entry_generator.cpp
   test_user_lib_func_lowering.cpp
+  test_throw_error_api_lowering.cpp
 )
 
 # Our unit test needs LLVM JIT

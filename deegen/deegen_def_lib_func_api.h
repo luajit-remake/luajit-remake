@@ -29,6 +29,7 @@ public:
     void NO_RETURN LongJump(StackFrameHeader* hdr, TValue* retBegin, size_t numRets);
 
     void NO_RETURN ThrowError(TValue msg);
+    void NO_RETURN ThrowError(const char* msg);
     void NO_RETURN MakeInPlaceCall(TValue* argsBegin, size_t numArgs, void* returnContinuation);
 };
 

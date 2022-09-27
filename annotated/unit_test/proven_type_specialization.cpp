@@ -13,7 +13,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue r
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 
@@ -29,7 +29,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue x)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 
@@ -45,7 +45,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn3(TValue x)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 
@@ -65,6 +65,6 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn4(TValue x)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }

@@ -20,7 +20,7 @@ inline void NO_RETURN testfn(TValue lhs, TValue rhs)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 

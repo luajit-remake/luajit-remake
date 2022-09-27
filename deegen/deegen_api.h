@@ -30,6 +30,8 @@ extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeTailCallPassingVariadicResInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo();
+extern "C" void NO_RETURN DeegenImpl_ThrowErrorTValue(TValue value);
+extern "C" void NO_RETURN DeegenImpl_ThrowErrorCString(const char* value);
 
 // Return zero or one value as the result of the operation
 //
@@ -56,7 +58,15 @@ inline void ALWAYS_INLINE NO_RETURN ReturnAndBranch()
     DeegenImpl_ReturnNoneAndBranch();
 }
 
-void NO_RETURN Error(const char* msg);
+inline void ALWAYS_INLINE NO_RETURN ThrowError(TValue value)
+{
+    DeegenImpl_ThrowErrorTValue(value);
+}
+
+inline void ALWAYS_INLINE NO_RETURN ThrowError(const char* value)
+{
+    DeegenImpl_ThrowErrorCString(value);
+}
 
 namespace detail {
 

@@ -15,7 +15,7 @@ inline void NO_RETURN testfn(TValue lhs, TValue rhs)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 
@@ -61,7 +61,7 @@ inline void NO_RETURN testfn2(TValue x)
     }
     else
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
 }
 
@@ -81,7 +81,7 @@ inline void NO_RETURN testfn3(TValue lhs, TValue rhs)
 {
     if (!lhs.Is<tDouble>() || !rhs.Is<tDouble>())
     {
-        Error("cannot handle");
+        ThrowError("cannot handle");
     }
     else
     {
