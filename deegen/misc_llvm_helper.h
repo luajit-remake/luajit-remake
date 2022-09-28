@@ -21,6 +21,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 
 #include "cxx_symbol_demangler.h"
 #include "deegen_desugaring_level.h"
@@ -1116,12 +1117,12 @@ inline llvm::CallInst* EmitLLVMIntrinsicMemmove(llvm::Module* module, llvm::Valu
 // Undo the effect of '__attribute__((__used__))' for a global variable
 // That is, after this function call, 'gv' is no longer protected from being removed even if unused
 //
-inline void RemoveGlobalVariableUsedAttributeAnnotation(llvm::GlobalVariable* gv)
+inline void RemoveGlobalValueUsedAttributeAnnotation(llvm::GlobalValue* gv)
 {
     using namespace llvm;
     // Return true if 'gvToRemove' is found and removed from the specified 'used' intrinsic name
     //
-    auto removeFromUseIntrinsicName = [](GlobalVariable* gvToRemove, const std::string& intrinName) -> bool
+    auto removeFromUseIntrinsicName = [](GlobalValue* gvToRemove, const std::string& intrinName) -> bool
     {
         Module* module = gvToRemove->getParent();
         GlobalVariable* intrinVar = module->getGlobalVariable(intrinName);
@@ -1193,6 +1194,40 @@ inline void RemoveGlobalVariableUsedAttributeAnnotation(llvm::GlobalVariable* gv
     // This should be treated as a bug.
     //
     ReleaseAssert(success);
+}
+
+// Return 'true' if the global was not already in 'llvm.used' or 'llvm.compiler.used', in which case the global is added to 'llvm.used'
+// Return 'false' otherwise, in which case no changes are made.
+//
+inline bool AddUsedAttributeToGlobalValue(llvm::GlobalValue* globalVal)
+{
+    using namespace llvm;
+    // If 'compilerUsed' is true, it checks 'llvm.compiler.used'. Otherwise it checks 'llvm.used'
+    //
+    auto isGlobalInUsedIntrinsic = [](GlobalValue* gv, bool compilerUsed) WARN_UNUSED -> bool
+    {
+        Module* module = gv->getParent();
+        SmallVector<GlobalValue*, 8> res;
+        collectUsedGlobalVariables(*module, res, compilerUsed);
+        for (GlobalValue* value : res)
+        {
+            if (value == gv)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (isGlobalInUsedIntrinsic(globalVal, true) || isGlobalInUsedIntrinsic(globalVal, false))
+    {
+        // The global is already marked 'used', don't do anything
+        //
+        return false;
+    }
+
+    appendToUsed(*globalVal->getParent(), { globalVal });
+    return true;
 }
 
 }   // namespace dast

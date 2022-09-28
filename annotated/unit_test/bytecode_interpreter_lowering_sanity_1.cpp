@@ -3,12 +3,12 @@
 #include "bytecode_definition_utils.h"
 #include "deegen_api.h"
 
-inline void NO_RETURN testfncont(TValue lhs, TValue /*rhs*/, TValue* /*retStart*/, size_t /*numRets*/)
+static void NO_RETURN testfncont(TValue lhs, TValue /*rhs*/, TValue* /*retStart*/, size_t /*numRets*/)
 {
     Return(lhs);
 }
 
-inline void NO_RETURN testfn(TValue lhs, TValue rhs)
+static void NO_RETURN testfn(TValue lhs, TValue rhs)
 {
     if (lhs.Is<tDouble>())
     {

@@ -27,6 +27,15 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     m_impl = m_module->getFunction(implTmp->getName());
     ReleaseAssert(m_impl != nullptr);
 
+    if (m_impl->getLinkage() != GlobalValue::InternalLinkage)
+    {
+        // We require the implementation function to be marked 'static', so they can be automatically dropped
+        // after we finished the transformation and made them dead
+        //
+        fprintf(stderr, "The implementation function of the bytecode (or any of its return continuation) must be marked 'static'!\n");
+        abort();
+    }
+
     LLVMContext& ctx = m_module->getContext();
 
     // For isReturnContinuation, our caller should have set up the desired function name for us
@@ -35,7 +44,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     if (!isReturnContinuation)
     {
         std::string desiredFnName = std::string("__deegen_interpreter_op_") + m_bytecodeDef->m_bytecodeName + "_" + std::to_string(m_bytecodeDef->m_variantOrd) + "_impl";
-        ReleaseAssert(m_module->getGlobalVariable(desiredFnName) == nullptr);
+        ReleaseAssert(m_module->getNamedValue(desiredFnName) == nullptr);
         m_impl->setName(desiredFnName);
     }
     else
@@ -291,12 +300,34 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
     //
     RunLLVMOptimizePass(m_module.get());
 
-    std::vector<std::string> extractTargets;
-    // Just sanity check that the function we just created is there
+    // After the optimization pass, change the linkage of everything to 'external' before extraction
+    // This is fine: our caller will fix up the linkage for us.
+    //
+    for (Function& func : *m_module.get())
+    {
+        func.setLinkage(GlobalVariable::LinkageTypes::ExternalLinkage);
+        func.setComdat(nullptr);
+    }
+    for (GlobalVariable& gv : m_module->globals())
+    {
+        if (gv.hasLocalLinkage())
+        {
+            if (gv.isConstant() && gv.hasInitializer())
+            {
+                gv.setLinkage(GlobalValue::LinkOnceODRLinkage);
+            }
+            else
+            {
+                gv.setLinkage(GlobalValue::ExternalLinkage);
+            }
+        }
+    }
+
+    // Sanity check that the function we just created is there, and extract it
     //
     ReleaseAssert(m_module->getFunction(finalFnName) != nullptr);
     ReleaseAssert(!m_module->getFunction(finalFnName)->empty());
-    extractTargets.push_back(finalFnName);
+    m_module = ExtractFunction(m_module.get(), finalFnName);
 
     // If we are the main function, we also need to link in all the return continuations
     //
@@ -322,15 +353,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
 
         ReleaseAssert(m_module->getFunction(expectedRcName) != nullptr);
         ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
-        extractTargets.push_back(expectedRcName);
     }
 
-    // Finally, extract out the target functions
-    //
-    std::unique_ptr<Module> result = ExtractFunctions(m_module.get(), extractTargets);
     m_wrapper = nullptr;
-    m_module.reset();
-    return result;
+    return std::move(m_module);
 }
 
 }   // namespace dast

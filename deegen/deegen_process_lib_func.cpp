@@ -465,7 +465,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
     {
         GlobalVariable* gv = module->getGlobalVariable(x_allDefsHolderSymbolName);
         ReleaseAssert(gv != nullptr);
-        RemoveGlobalVariableUsedAttributeAnnotation(gv);
+        RemoveGlobalValueUsedAttributeAnnotation(gv);
     }
 
     // This should delete all the symbols made dead by the above change

@@ -3,7 +3,7 @@
 #include "bytecode_definition_utils.h"
 #include "deegen_api.h"
 
-inline void NO_RETURN fn1()
+static void NO_RETURN fn1()
 {
     ThrowError("test error");
 }
@@ -16,7 +16,7 @@ DEEGEN_DEFINE_BYTECODE(test1)
     Variant();
 }
 
-inline void NO_RETURN fn2(TValue x)
+static void NO_RETURN fn2(TValue x)
 {
     ThrowError(x);
 }

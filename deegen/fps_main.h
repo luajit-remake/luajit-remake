@@ -8,7 +8,8 @@ enum FpsCommand
 {
     BadFpsCommand,
     FpsCommand_GenerateInterpreterFunctionEntryLogic,
-    FpsCommand_ProcessUserBuiltinLib
+    FpsCommand_ProcessUserBuiltinLib,
+    FpsCommand_ProcessBytecodeDefinitionForInterpreter
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -22,6 +23,9 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_ProcessUserBuiltinLib,
                    "process-user-builtin-lib",
                    "Process a user builtin library source file to lower the Deegen API constructs.")
+      , clEnumValN(FpsCommand_ProcessBytecodeDefinitionForInterpreter,
+                   "process-bytecode-definition-for-interpreter",
+                   "Process a bytecode definition source file for interpreter lowering.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
@@ -46,3 +50,8 @@ void FPS_GenerateInterpreterFunctionEntryLogic();
 // Takes a IR file as input, outputs the '.s' file as if the file were compiled normally by Clang
 //
 void FPS_ProcessUserBuiltinLib();
+
+// Process a bytecode definition source file for interpreter lowering
+// Takes a IR file as input, outputs the '.s' file as if the file were compiled normally by Clang
+//
+void FPS_ProcessBytecodeDefinitionForInterpreter();

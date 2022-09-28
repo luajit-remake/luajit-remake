@@ -18,12 +18,12 @@ TValue a9();
 TValue* r1();
 size_t s1();
 
-inline void NO_RETURN rc()
+static void NO_RETURN rc()
 {
     Return();
 }
 
-inline void NO_RETURN fn1()
+static void NO_RETURN fn1()
 {
     MakeCall(callee(), a1(), a2(), a3(), rc);
 }
@@ -36,7 +36,7 @@ DEEGEN_DEFINE_BYTECODE(test1)
     Variant();
 }
 
-inline void NO_RETURN fn2()
+static void NO_RETURN fn2()
 {
     MakeCall(callee(), rc);
 }
@@ -49,7 +49,7 @@ DEEGEN_DEFINE_BYTECODE(test2)
     Variant();
 }
 
-inline void NO_RETURN fn3()
+static void NO_RETURN fn3()
 {
     MakeCall(callee(), a1(), a2(), a3(), a4(), r1(), s1(), a5(), a6(), a7(), a8(), rc);
 }
@@ -62,7 +62,7 @@ DEEGEN_DEFINE_BYTECODE(test3)
     Variant();
 }
 
-inline void NO_RETURN fn4()
+static void NO_RETURN fn4()
 {
     MakeInPlaceCall(r1(), s1(), rc);
 }
@@ -75,7 +75,7 @@ DEEGEN_DEFINE_BYTECODE(test4)
     Variant();
 }
 
-inline void NO_RETURN fn5()
+static void NO_RETURN fn5()
 {
     MakeInPlaceCallPassingVariadicRes(r1(), s1(), rc);
 }
@@ -88,7 +88,7 @@ DEEGEN_DEFINE_BYTECODE(test5)
     Variant();
 }
 
-inline void NO_RETURN fn6()
+static void NO_RETURN fn6()
 {
     MakeCallPassingVariadicRes(callee(), a1(), a2(), a3(), rc);
 }
@@ -101,7 +101,7 @@ DEEGEN_DEFINE_BYTECODE(test6)
     Variant();
 }
 
-inline void NO_RETURN fn7()
+static void NO_RETURN fn7()
 {
     MakeCallPassingVariadicRes(callee(), rc);
 }
@@ -114,7 +114,7 @@ DEEGEN_DEFINE_BYTECODE(test7)
     Variant();
 }
 
-inline void NO_RETURN fn8()
+static void NO_RETURN fn8()
 {
     MakeCallPassingVariadicRes(callee(), a1(), a2(), a3(), a4(), r1(), s1(), a5(), a6(), a7(), a8(), rc);
 }
@@ -127,7 +127,7 @@ DEEGEN_DEFINE_BYTECODE(test8)
     Variant();
 }
 
-inline void NO_RETURN fn9()
+static void NO_RETURN fn9()
 {
     MakeTailCall(callee(), a1(), a2(), a3());
 }
@@ -140,7 +140,7 @@ DEEGEN_DEFINE_BYTECODE(test9)
     Variant();
 }
 
-inline void NO_RETURN fn10()
+static void NO_RETURN fn10()
 {
     MakeTailCall(callee());
 }
@@ -153,7 +153,7 @@ DEEGEN_DEFINE_BYTECODE(test10)
     Variant();
 }
 
-inline void NO_RETURN fn11()
+static void NO_RETURN fn11()
 {
     MakeTailCall(callee(), a1(), a2(), a3(), a4(), r1(), s1(), a5(), a6(), a7(), a8());
 }
@@ -166,7 +166,7 @@ DEEGEN_DEFINE_BYTECODE(test11)
     Variant();
 }
 
-inline void NO_RETURN fn12()
+static void NO_RETURN fn12()
 {
     MakeInPlaceTailCall(r1(), s1());
 }
@@ -179,7 +179,7 @@ DEEGEN_DEFINE_BYTECODE(test12)
     Variant();
 }
 
-inline void NO_RETURN fn13()
+static void NO_RETURN fn13()
 {
     MakeInPlaceTailCallPassingVariadicRes(r1(), s1());
 }
@@ -192,7 +192,7 @@ DEEGEN_DEFINE_BYTECODE(test13)
     Variant();
 }
 
-inline void NO_RETURN fn14()
+static void NO_RETURN fn14()
 {
     MakeTailCallPassingVariadicRes(callee(), a1(), a2(), a3());
 }
@@ -205,7 +205,7 @@ DEEGEN_DEFINE_BYTECODE(test14)
     Variant();
 }
 
-inline void NO_RETURN fn15()
+static void NO_RETURN fn15()
 {
     MakeTailCallPassingVariadicRes(callee());
 }
@@ -218,7 +218,7 @@ DEEGEN_DEFINE_BYTECODE(test15)
     Variant();
 }
 
-inline void NO_RETURN fn16()
+static void NO_RETURN fn16()
 {
     MakeTailCallPassingVariadicRes(callee(), a1(), a2(), a3(), a4(), r1(), s1(), a5(), a6(), a7(), a8());
 }

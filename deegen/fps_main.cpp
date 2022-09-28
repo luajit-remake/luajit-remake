@@ -30,6 +30,11 @@ int main(int argc, char** argv)
         FPS_ProcessUserBuiltinLib();
         break;
     }
+    case FpsCommand_ProcessBytecodeDefinitionForInterpreter:
+    {
+        FPS_ProcessBytecodeDefinitionForInterpreter();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

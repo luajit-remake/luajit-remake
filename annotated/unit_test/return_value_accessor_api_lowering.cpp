@@ -9,12 +9,12 @@ size_t a1();
 
 TValue* d1();
 
-inline void NO_RETURN rc1()
+static void NO_RETURN rc1()
 {
     Return(GetReturnValue(0));
 }
 
-inline void NO_RETURN fn1()
+static void NO_RETURN fn1()
 {
     MakeCall(callee(), rc1);
 }
@@ -27,12 +27,12 @@ DEEGEN_DEFINE_BYTECODE(test1)
     Variant();
 }
 
-inline void NO_RETURN rc2()
+static void NO_RETURN rc2()
 {
     Return(GetReturnValue(1));
 }
 
-inline void NO_RETURN fn2()
+static void NO_RETURN fn2()
 {
     MakeCall(callee(), rc2);
 }
@@ -45,12 +45,12 @@ DEEGEN_DEFINE_BYTECODE(test2)
     Variant();
 }
 
-inline void NO_RETURN rc3()
+static void NO_RETURN rc3()
 {
     Return(GetReturnValue(10));
 }
 
-inline void NO_RETURN fn3()
+static void NO_RETURN fn3()
 {
     MakeCall(callee(), rc3);
 }
@@ -63,12 +63,12 @@ DEEGEN_DEFINE_BYTECODE(test3)
     Variant();
 }
 
-inline void NO_RETURN rc4()
+static void NO_RETURN rc4()
 {
     Return(GetReturnValue(a1()));
 }
 
-inline void NO_RETURN fn4()
+static void NO_RETURN fn4()
 {
     MakeCall(callee(), rc4);
 }
@@ -81,13 +81,13 @@ DEEGEN_DEFINE_BYTECODE(test4)
     Variant();
 }
 
-inline void NO_RETURN rc5()
+static void NO_RETURN rc5()
 {
     StoreReturnValuesTo(d1(), a1());
     Return();
 }
 
-inline void NO_RETURN fn5()
+static void NO_RETURN fn5()
 {
     MakeCall(callee(), rc5);
 }
@@ -100,13 +100,13 @@ DEEGEN_DEFINE_BYTECODE(test5)
     Variant();
 }
 
-inline void NO_RETURN rc6()
+static void NO_RETURN rc6()
 {
     StoreReturnValuesTo(d1(), 1);
     Return();
 }
 
-inline void NO_RETURN fn6()
+static void NO_RETURN fn6()
 {
     MakeCall(callee(), rc6);
 }
@@ -119,13 +119,13 @@ DEEGEN_DEFINE_BYTECODE(test6)
     Variant();
 }
 
-inline void NO_RETURN rc7()
+static void NO_RETURN rc7()
 {
     StoreReturnValuesTo(d1(), 2);
     Return();
 }
 
-inline void NO_RETURN fn7()
+static void NO_RETURN fn7()
 {
     MakeCall(callee(), rc7);
 }

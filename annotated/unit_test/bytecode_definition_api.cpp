@@ -1,7 +1,7 @@
 #include "bytecode_definition_utils.h"
 #include "deegen_api.h"
 
-inline void NO_RETURN testfn(TValue lhs, TValue rhs)
+static void NO_RETURN testfn(TValue lhs, TValue rhs)
 {
     if (lhs.Is<tDouble>() && rhs.Is<tDouble>())
     {
@@ -49,7 +49,7 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode1)
     );
 }
 
-inline void NO_RETURN testfn2(TValue x)
+static void NO_RETURN testfn2(TValue x)
 {
     if (x.Is<tBool>())
     {
@@ -76,18 +76,5 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode2)
         Op("x").IsConstant<tMIV>()
     );
 }
-
-inline void NO_RETURN testfn3(TValue lhs, TValue rhs)
-{
-    if (!lhs.Is<tDouble>() || !rhs.Is<tDouble>())
-    {
-        ThrowError("cannot handle");
-    }
-    else
-    {
-        Return(lhs);
-    }
-}
-
 
 DEEGEN_END_BYTECODE_DEFINITIONS

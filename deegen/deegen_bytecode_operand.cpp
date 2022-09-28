@@ -93,17 +93,12 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
     using Desc = DeegenFrontendBytecodeDefinitionDescriptor;
     using SpecializedOperand = DeegenFrontendBytecodeDefinitionDescriptor::SpecializedOperand;
 
-    constexpr const char* defListSymbolName = "x_deegen_impl_all_bytecode_defs_in_this_tu";
-    constexpr const char* nameListSymbolName = "x_deegen_impl_all_bytecode_names_in_this_tu";
-    if (module->getGlobalVariable(defListSymbolName) == nullptr)
-    {
-        ReleaseAssert(module->getGlobalVariable(nameListSymbolName) == nullptr);
-        return {};
-    }
+    ReleaseAssert(module->getGlobalVariable(x_defListSymbolName) != nullptr);
+    ReleaseAssert(module->getGlobalVariable(x_nameListSymbolName) != nullptr);
 
     Constant* defList;
     {
-        Constant* wrappedDefList = GetConstexprGlobalValue(module, defListSymbolName);
+        Constant* wrappedDefList = GetConstexprGlobalValue(module, x_defListSymbolName);
         LLVMConstantStructReader reader(module, wrappedDefList);
         defList = reader.Dewrap();
     }
@@ -113,7 +108,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
 
     std::vector<std::string> bytecodeNamesInThisTU;
     {
-        Constant* wrappedNameList = GetConstexprGlobalValue(module, nameListSymbolName);
+        Constant* wrappedNameList = GetConstexprGlobalValue(module, x_nameListSymbolName);
         LLVMConstantStructReader readerTmp(module, wrappedNameList);
         Constant* nameList = readerTmp.Dewrap();
         LLVMConstantArrayReader reader(module, nameList);
@@ -166,6 +161,14 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             Function* fnc = dyn_cast<Function>(cst);
             ReleaseAssert(fnc != nullptr);
             implFuncName = fnc->getName().str();
+            if (fnc->getLinkage() != GlobalValue::InternalLinkage)
+            {
+                // We require the implementation function to be marked 'static', so they can be automatically dropped
+                // after we finished the transformation and made them dead
+                //
+                fprintf(stderr, "The implementation function of the bytecode must be marked 'static'!\n");
+                abort();
+            }
         }
 
         LLVMConstantArrayReader variantListReader(module, curDefReader.Get<&Desc::m_variants>());
@@ -241,6 +244,18 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         }
     }
     return result;
+}
+
+void BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(llvm::Module* module)
+{
+    using namespace llvm;
+    GlobalVariable* gv = module->getGlobalVariable(x_defListSymbolName);
+    ReleaseAssert(gv != nullptr);
+    RemoveGlobalValueUsedAttributeAnnotation(gv);
+
+    gv = module->getGlobalVariable(x_nameListSymbolName);
+    ReleaseAssert(gv != nullptr);
+    RemoveGlobalValueUsedAttributeAnnotation(gv);
 }
 
 }   // namespace dast

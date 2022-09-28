@@ -203,6 +203,7 @@ target_link_libraries(main PUBLIC
   deegen_unit_test_ir
   deegen_common_snippet_ir
   deegen_user_builtin_lib
+  deegen_generated_interpreter_impl
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )

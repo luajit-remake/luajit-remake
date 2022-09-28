@@ -329,6 +329,7 @@ public:
     }
 
     static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
+    static void RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(llvm::Module* module);
 
     static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
 
@@ -336,6 +337,9 @@ public:
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
     //
     static constexpr size_t x_opcodeSizeBytes = 2;
+
+    static constexpr const char* x_defListSymbolName = "x_deegen_impl_all_bytecode_defs_in_this_tu";
+    static constexpr const char* x_nameListSymbolName = "x_deegen_impl_all_bytecode_names_in_this_tu";
 
     size_t m_bytecodeOrdInTU;
     size_t m_variantOrd;
