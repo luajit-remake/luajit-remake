@@ -824,7 +824,7 @@ public:
         m_ordToNameMap[dummyFnOrd] = name;
 
         FunctionType* fty = FunctionType::get(Type::getVoidTy(ctx) /*ret*/, { inst->getType() } /*arg*/, false /*isVarArg*/);
-        Function* dummyFunc = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, dummyFnName, module);
+        Function* dummyFunc = Function::Create(fty, GlobalValue::ExternalLinkage, dummyFnName, module);
         ReleaseAssert(dummyFunc->getName() == dummyFnName);
         dummyFunc->addFnAttr(Attribute::AttrKind::WillReturn);
         dummyFunc->addFnAttr(Attribute::AttrKind::NoUnwind);

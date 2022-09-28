@@ -86,14 +86,14 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
     std::unique_ptr<Module> extractedModule;
     if (snippetKind == 2 /*declaration template*/)
     {
-        ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
         ReleaseAssert(func->empty());
         extractedModule = dast::ExtractFunctionDeclaration(module.get(), targetFuncName);
     }
     else if (snippetKind == 1 /*importable declaration*/)
     {
-        ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage ||
-                      func->getLinkage() == GlobalVariable::LinkageTypes::LinkOnceODRLinkage);
+        ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage ||
+                      func->getLinkage() == GlobalValue::LinkOnceODRLinkage);
         if (!func->empty())
         {
             if (!isNoOptBeforeExtract)
@@ -109,8 +109,8 @@ std::pair<std::string /*name*/, std::pair<std::string /*IR*/, int /*kind*/>> WAR
     }
     else
     {
-        ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::InternalLinkage && "The snippet must be declared as 'static'.");
-        func->setLinkage(GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(func->getLinkage() == GlobalValue::InternalLinkage && "The snippet must be declared as 'static'.");
+        func->setLinkage(GlobalValue::ExternalLinkage);
         ReleaseAssert(!func->empty());
         if (!isNoOptBeforeExtract)
         {

@@ -186,7 +186,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
     GlobalVariable* fakeDispatchTable = new GlobalVariable(*module,
                                              dispatchTableTy /*valueType*/,
                                              true /*isConstant*/,
-                                             GlobalVariable::LinkageTypes::InternalLinkage,
+                                             GlobalValue::InternalLinkage,
                                              nullptr /*initializer*/,
                                              "__fake_dispatch_table" /*name*/);
     fakeDispatchTable->setAlignment(MaybeAlign(8));

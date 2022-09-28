@@ -16,7 +16,7 @@ llvm::Function* WARN_UNUSED GetThrowErrorDispatchTargetFunctionImpl(llvm::Module
     {
         ReleaseAssert(module->getNamedValue(errorHandlerFnName) == nullptr);
         FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-        errorHandlerFn = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, errorHandlerFnName, module);
+        errorHandlerFn = Function::Create(fty, GlobalValue::ExternalLinkage, errorHandlerFnName, module);
         ReleaseAssert(errorHandlerFn->getName() == errorHandlerFnName);
         errorHandlerFn->addFnAttr(Attribute::AttrKind::NoUnwind);
     }

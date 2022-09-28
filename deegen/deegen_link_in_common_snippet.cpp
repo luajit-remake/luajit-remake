@@ -89,7 +89,7 @@ llvm::Function* WARN_UNUSED DeegenImportRuntimeFunctionDeclaration(llvm::Module*
 
         Function* linkedInFn = module->getFunction(funcName);
         ReleaseAssert(linkedInFn != nullptr);
-        ReleaseAssert(linkedInFn->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(linkedInFn->getLinkage() == GlobalValue::ExternalLinkage);
         ReleaseAssert(linkedInFn->getName() == funcName);
         ReleaseAssert(!linkedInFn->empty());
 
@@ -136,7 +136,7 @@ llvm::Function* WARN_UNUSED DeegenCreateFunctionDeclarationBasedOnSnippet(llvm::
 
     Function* linkedInFn = module->getFunction(funcName);
     ReleaseAssert(linkedInFn != nullptr);
-    ReleaseAssert(linkedInFn->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+    ReleaseAssert(linkedInFn->getLinkage() == GlobalValue::ExternalLinkage);
     ReleaseAssert(linkedInFn->getName() == funcName);
     ReleaseAssert(!linkedInFn->empty());
     linkedInFn->deleteBody();

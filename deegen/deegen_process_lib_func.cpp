@@ -303,9 +303,9 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
     using namespace llvm;
     LLVMContext& ctx = m_target->getContext();
     ReleaseAssert(m_target->empty());
-    ReleaseAssert(m_target->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+    ReleaseAssert(m_target->getLinkage() == GlobalValue::ExternalLinkage);
     ReleaseAssert(!m_impl->empty());
-    ReleaseAssert(m_impl->getLinkage() == GlobalVariable::LinkageTypes::InternalLinkage);
+    ReleaseAssert(m_impl->getLinkage() == GlobalValue::InternalLinkage);
     ReleaseAssert(m_impl->hasFnAttribute(Attribute::AttrKind::NoReturn));
 
     ReleaseAssert(!m_impl->hasFnAttribute(Attribute::AttrKind::NoInline));
@@ -319,7 +319,7 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
         m_target->setName(funName + "_tmp");
 
         FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-        Function* wrapper = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, funName, m_module);
+        Function* wrapper = Function::Create(fty, GlobalValue::ExternalLinkage, funName, m_module);
         ReleaseAssert(wrapper->getName() == funName);
 
         CopyFunctionAttributes(wrapper, m_impl);
@@ -481,7 +481,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         Function* func = module->getFunction(item.m_wrapperName);
         ReleaseAssert(func != nullptr);
         ReleaseAssert(!func->empty());
-        ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+        ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
         ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
     }
 }

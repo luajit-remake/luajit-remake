@@ -59,7 +59,7 @@ llvm::Value* GetInterpreterFunctionFromInterpreterOpcode(llvm::Module* module, l
         GlobalVariable* tmp = new GlobalVariable(*module,
                                                  dispatchTableTy /*valueType*/,
                                                  true /*isConstant*/,
-                                                 GlobalVariable::LinkageTypes::ExternalLinkage,
+                                                 GlobalValue::ExternalLinkage,
                                                  nullptr /*initializer*/,
                                                  dispatchTableSymbolName /*name*/);
         ReleaseAssert(tmp->getName().str() == dispatchTableSymbolName);

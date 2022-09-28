@@ -273,7 +273,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
         m_impl->removeFnAttr(Attribute::AttrKind::NoInline);
     }
     m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
-    m_impl->setLinkage(GlobalVariable::LinkageTypes::InternalLinkage);
+    m_impl->setLinkage(GlobalValue::InternalLinkage);
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     m_impl = nullptr;
@@ -305,7 +305,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
     //
     for (Function& func : *m_module.get())
     {
-        func.setLinkage(GlobalVariable::LinkageTypes::ExternalLinkage);
+        func.setLinkage(GlobalValue::ExternalLinkage);
         func.setComdat(nullptr);
     }
     for (GlobalVariable& gv : m_module->globals())

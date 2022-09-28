@@ -347,7 +347,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     else
     {
         ReleaseAssert(module->getNamedValue(rcFinalName) == nullptr);
-        func = Function::Create(fty, GlobalVariable::LinkageTypes::ExternalLinkage, rcFinalName, module);
+        func = Function::Create(fty, GlobalValue::ExternalLinkage, rcFinalName, module);
         ReleaseAssert(func != nullptr && func->getName() == rcFinalName);
         return func;
     }

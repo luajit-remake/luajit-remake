@@ -485,7 +485,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctionDeclaration(llvm::Modul
     Function* func = module->getFunction(functionName);
     ReleaseAssert(func != nullptr);
     ReleaseAssert(func->empty());
-    ReleaseAssert(func->getLinkage() == GlobalVariable::LinkageTypes::ExternalLinkage);
+    ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
 
     // The logic below basically duplicates 'ExtractFunction' above..
     // Let's not worry about refactoring for now since there's little reason to make changes to these logic in the future..
