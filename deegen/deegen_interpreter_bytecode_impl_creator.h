@@ -9,6 +9,10 @@ class BytecodeVariantDefinition;
 class InterpreterBytecodeImplCreator
 {
 public:
+    // The end-to-end API that does everything
+    //
+    static std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl);
+
     // Prepare to create the interpreter function for 'impl'.
     // This function clones the module, so the original module is untouched.
     // The cloned module is owned by this class.
@@ -17,7 +21,11 @@ public:
 
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
-    std::unique_ptr<llvm::Module> WARN_UNUSED Get();
+    std::unique_ptr<llvm::Module> WARN_UNUSED DoLowering();
+
+    // Run the deegen-level optimization passes
+    //
+    void DoOptimization();
 
     bool IsReturnContinuation() const { return m_isReturnContinuation; }
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
@@ -42,6 +50,12 @@ public:
     }
 
     std::unique_ptr<llvm::Module> WARN_UNUSED ProcessReturnContinuation(llvm::Function* rc);
+
+    std::unique_ptr<llvm::Module> WARN_UNUSED DoOptimizationAndLowering()
+    {
+        DoOptimization();
+        return DoLowering();
+    }
 
 private:
     BytecodeVariantDefinition* m_bytecodeDef;

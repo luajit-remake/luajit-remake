@@ -4,6 +4,8 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/ValueLattice.h"
 
+#include "deegen_bytecode_operand.h"
+
 namespace dast {
 
 bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
@@ -1007,6 +1009,66 @@ void TValueTypecheckOptimizationPass::DoOptimization()
     // Make sure we didn't screw up anything
     //
     ValidateLLVMFunction(m_targetFunction);
+}
+
+
+void TValueTypecheckOptimizationPass::DoOptimizationForBytecode(BytecodeVariantDefinition* bvd, llvm::Function* implFunction)
+{
+    using namespace llvm;
+    TValueTypecheckOptimizationPass pass;
+    pass.SetTargetFunction(implFunction);
+
+    // Even adding a constraint for 'tTop' can be helpful if the user code already contains redundant type checks
+    // But that could further blow up the total combinations, so we only do it if there are few operands
+    //
+    bool addConstraintForTop = false;
+    {
+        size_t totalTValueOperands = 0;
+        for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
+        {
+            if (operand->GetKind() == BcOperandKind::Constant || operand->GetKind() == BcOperandKind::Slot)
+            {
+                totalTValueOperands++;
+            }
+        }
+        addConstraintForTop = (totalTValueOperands <= 3);
+    }
+
+    {
+        std::vector<uint32_t> operandList;
+        std::unique_ptr<AndConstraint> constraint = std::make_unique<AndConstraint>();
+        for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
+        {
+            if (operand->GetKind() != BcOperandKind::Constant && operand->GetKind() != BcOperandKind::Slot)
+            {
+                continue;
+            }
+
+            if (operand->GetKind() == BcOperandKind::Constant)
+            {
+                BcOpConstant* op = assert_cast<BcOpConstant*>(operand.get());
+                TypeSpeculationMask mask = op->m_typeMask;
+                if (addConstraintForTop || mask != x_typeSpeculationMaskFor<tTop>)
+                {
+                    constraint->AddClause(std::make_unique<LeafConstraint>(op->OperandOrdinal(), mask /*allowedMask*/));
+                    operandList.push_back(static_cast<uint32_t>(op->OperandOrdinal()));
+                }
+            }
+            else
+            {
+                ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
+                if (addConstraintForTop)
+                {
+                    constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), x_typeSpeculationMaskFor<tTop> /*allowedMask*/));
+                    operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
+                }
+            }
+        }
+        pass.SetOperandList(operandList);
+        pass.SetConstraint(std::move(constraint));
+    }
+
+    pass.Run();
 }
 
 }   // namespace dast

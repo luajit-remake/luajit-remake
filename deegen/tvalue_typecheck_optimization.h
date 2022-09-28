@@ -5,6 +5,8 @@
 
 namespace dast {
 
+class BytecodeVariantDefinition;
+
 // The purpose of this pass is to optimize the function based on the *proven* type information of the operands.
 // It does two optimizations:
 // 1. Strength reduction on TValue::Is<XXX>() type checks through an accurate type precondition analysis.
@@ -172,6 +174,8 @@ public:
 
     void DoAnalysis();
     void DoOptimization();
+
+    static void DoOptimizationForBytecode(BytecodeVariantDefinition* bvd, llvm::Function* implFunction);
 
 private:
     llvm::Function* m_targetFunction;

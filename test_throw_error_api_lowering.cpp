@@ -28,7 +28,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
     InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false /*isReturnContinuation*/);
-    return ifi.Get();
+    return ifi.DoLowering();
 }
 
 }   // anonymous namespace

@@ -240,6 +240,11 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             }
             ReleaseAssert(def->m_list.size() == def->m_opNames.size());
 
+            for (size_t i = 0; i < def->m_list.size(); i++)
+            {
+                def->m_list[i]->SetOperandOrdinal(i);
+            }
+
             listForCurrentBytecode.push_back(std::move(def));
         }
     }

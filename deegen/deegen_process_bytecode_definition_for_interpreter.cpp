@@ -31,8 +31,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecodeDefinitionForInterprete
             bytecodeVariantDef->SetMaxOperandWidthBytes(2);
             Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
             ReleaseAssert(implFunc != nullptr);
-            InterpreterBytecodeImplCreator ifi(bytecodeVariantDef.get(), implFunc, false);
-            allBytecodeFunctions.push_back(ifi.Get());
+            std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
+            allBytecodeFunctions.push_back(std::move(bytecodeImpl));
         }
     }
 

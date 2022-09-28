@@ -5,6 +5,7 @@
 #include "deegen_ast_return_value_accessor.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_ast_throw_error.h"
+#include "tvalue_typecheck_optimization.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -212,10 +213,24 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Proces
 {
     ReleaseAssert(!m_isReturnContinuation);
     InterpreterBytecodeImplCreator ifi(m_bytecodeDef, rc, true /*isReturnContinuation*/);
-    return ifi.Get();
+    return ifi.DoOptimizationAndLowering();
 }
 
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::Get()
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
+{
+    InterpreterBytecodeImplCreator ifi(bytecodeDef, impl, false /*isReturnContinuation*/);
+    return ifi.DoOptimizationAndLowering();
+}
+
+void InterpreterBytecodeImplCreator::DoOptimization()
+{
+    using namespace llvm;
+    ReleaseAssert(!m_generated);
+    ReleaseAssert(m_impl != nullptr);
+    TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
+}
+
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
 {
     using namespace llvm;
     ReleaseAssert(!m_generated);
