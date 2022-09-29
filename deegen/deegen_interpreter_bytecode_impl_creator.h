@@ -57,6 +57,8 @@ public:
         return DoLowering();
     }
 
+    static std::string WARN_UNUSED GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef);
+
 private:
     BytecodeVariantDefinition* m_bytecodeDef;
 

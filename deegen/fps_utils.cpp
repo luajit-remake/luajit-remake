@@ -18,3 +18,28 @@ void FPS_EmitCPPFileCommonHeader(FILE* fp)
     fprintf(fp, "// Generated, do not edit!\n//\n\n");
     fprintf(fp, "#include \"common_utils.h\"\n\n");
 }
+
+std::vector<std::string> WARN_UNUSED ParseSemicolonSeparatedFileList(const std::string& semicolonSeparatedFiles)
+{
+    if (semicolonSeparatedFiles == "")
+    {
+        return {};
+    }
+    std::vector<std::string> out;
+    size_t curPos = 0;
+    while (true)
+    {
+        size_t nextPos = semicolonSeparatedFiles.find(";", curPos);
+        if (nextPos == std::string::npos)
+        {
+            ReleaseAssert(curPos < semicolonSeparatedFiles.length());
+            out.push_back(semicolonSeparatedFiles.substr(curPos));
+            break;
+        }
+        ReleaseAssert(curPos < nextPos);
+        out.push_back(semicolonSeparatedFiles.substr(curPos, nextPos - curPos));
+        curPos = nextPos + 1;
+    }
+    return out;
+}
+

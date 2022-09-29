@@ -14,6 +14,11 @@
 
 namespace dast {
 
+std::string WARN_UNUSED InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef)
+{
+    return std::string("__deegen_interpreter_op_") + bytecodeDef->m_bytecodeName + "_" + std::to_string(bytecodeDef->m_variantOrd);
+}
+
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
@@ -44,7 +49,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     //
     if (!isReturnContinuation)
     {
-        std::string desiredFnName = std::string("__deegen_interpreter_op_") + m_bytecodeDef->m_bytecodeName + "_" + std::to_string(m_bytecodeDef->m_variantOrd) + "_impl";
+        std::string desiredFnName = GetInterpreterBytecodeFunctionCName(m_bytecodeDef) + "_impl";
         ReleaseAssert(m_module->getNamedValue(desiredFnName) == nullptr);
         m_impl->setName(desiredFnName);
     }

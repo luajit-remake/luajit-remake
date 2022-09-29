@@ -35,6 +35,11 @@ int main(int argc, char** argv)
         FPS_ProcessBytecodeDefinitionForInterpreter();
         break;
     }
+    case FpsCommand_GenerateBytecodeBuilderApiHeader:
+    {
+        FPS_GenerateBytecodeBuilderAPIHeader();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

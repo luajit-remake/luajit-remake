@@ -1,6 +1,7 @@
 #pragma once
 
 #include "llvm/Support/CommandLine.h"
+#include "common_utils.h"
 
 namespace cl = llvm::cl;
 
@@ -9,7 +10,8 @@ enum FpsCommand
     BadFpsCommand,
     FpsCommand_GenerateInterpreterFunctionEntryLogic,
     FpsCommand_ProcessUserBuiltinLib,
-    FpsCommand_ProcessBytecodeDefinitionForInterpreter
+    FpsCommand_ProcessBytecodeDefinitionForInterpreter,
+    FpsCommand_GenerateBytecodeBuilderApiHeader
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -26,14 +28,21 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_ProcessBytecodeDefinitionForInterpreter,
                    "process-bytecode-definition-for-interpreter",
                    "Process a bytecode definition source file for interpreter lowering.")
+      , clEnumValN(FpsCommand_GenerateBytecodeBuilderApiHeader,
+                   "generate-bytecode-builder-api-header",
+                   "Generate the bytecode builder API heade file.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
 
 inline cl::opt<std::string> cl_irInputFilename("ir-input", cl::desc("The input LLVM IR file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A semicolon-separated list of input files"), cl::value_desc("filenames"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_headerOutputFilename("hdr-output", cl::desc("The output file name for the generated C++ header"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename("cpp-output", cl::desc("The output file name for the generated CPP file"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_assemblyOutputFilename("asm-output", cl::desc("The output file name for the generated assembly"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_jsonOutputFilename("json-output", cl::desc("The output file name for the generated JSON"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+
+std::vector<std::string> WARN_UNUSED ParseSemicolonSeparatedFileList(const std::string& semicolonSeparatedFiles);
 
 void FPS_EmitHeaderFileCommonHeader(FILE* fp);
 void FPS_EmitCPPFileCommonHeader(FILE* fp);
@@ -55,3 +64,9 @@ void FPS_ProcessUserBuiltinLib();
 // Takes a IR file as input, outputs the '.s' file as if the file were compiled normally by Clang
 //
 void FPS_ProcessBytecodeDefinitionForInterpreter();
+
+// Generate the bytecode builder API heade file
+//
+void FPS_GenerateBytecodeBuilderAPIHeader();
+
+

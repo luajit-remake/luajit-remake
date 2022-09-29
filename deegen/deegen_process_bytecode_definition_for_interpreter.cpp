@@ -1,5 +1,6 @@
 #include "deegen_process_bytecode_definition_for_interpreter.h"
 
+#include "anonymous_file.h"
 #include "misc_llvm_helper.h"
 #include "deegen_ast_make_call.h"
 #include "deegen_bytecode_operand.h"
@@ -10,9 +11,165 @@
 
 namespace dast {
 
-std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module)
+namespace {
+
+std::string GetGeneratedBuilderClassNameFromBytecodeName(const std::string& bytecodeName)
+{
+    return std::string("DeegenGenerated_BytecodeBuilder_" + bytecodeName);
+}
+
+std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType ty)
+{
+    switch (ty)
+    {
+    case DeegenBytecodeOperandType::INVALID_TYPE:
+    {
+        ReleaseAssert(false);
+    }
+    case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
+    {
+        return "LocalOrCsTab";
+    }
+    case DeegenBytecodeOperandType::BytecodeSlot:
+    {
+        return "Local";
+    }
+    case DeegenBytecodeOperandType::Constant:
+    {
+        return "CsTab";
+    }
+    case DeegenBytecodeOperandType::Int8:
+    {
+        return "int8_t";
+    }
+    case DeegenBytecodeOperandType::UInt8:
+    {
+        return "uint8_t";
+    }
+    case DeegenBytecodeOperandType::Int16:
+    {
+        return "int16_t";
+    }
+    case DeegenBytecodeOperandType::UInt16:
+    {
+        return "uint16_t";
+    }
+    case DeegenBytecodeOperandType::Int32:
+    {
+        return "int32_t";
+    }
+    case DeegenBytecodeOperandType::UInt32:
+    {
+        return "uint32_t";
+    }
+    }   /* switch ty */
+    ReleaseAssert(false);
+}
+
+void GenerateVariantSelectorImpl(FILE* fp,
+                                 const std::vector<DeegenBytecodeOperandType>& opTypes,
+                                 const std::vector<std::string>& opNames,
+                                 const std::function<bool(const std::vector<DeegenBytecodeOperandType>&)>& selectionOk,
+                                 std::vector<DeegenBytecodeOperandType>& selectedType,
+                                 bool hasOutputOperand,
+                                 size_t extraIndent)
+{
+    ReleaseAssert(selectedType.size() <= opTypes.size());
+    std::string extraIndentStr = std::string(extraIndent, ' ');
+    if (selectedType.size() == opTypes.size())
+    {
+        if (selectionOk(selectedType))
+        {
+            fprintf(fp, "%sreturn DeegenCreateImpl(", extraIndentStr.c_str());
+            for (size_t i = 0; i < selectedType.size(); i++)
+            {
+                if (i > 0)
+                {
+                    fprintf(fp, ", ");
+                }
+                if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                {
+                    if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
+                    {
+                        fprintf(fp, "Local(inputDesc.%s.m_ord)", opNames[i].c_str());
+                    }
+                    else
+                    {
+                        ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
+                        fprintf(fp, "CsTab(inputDesc.%s.m_ord)", opNames[i].c_str());
+                    }
+                }
+                else
+                {
+                    fprintf(fp, "inputDesc.%s", opNames[i].c_str());
+                }
+            }
+            if (hasOutputOperand)
+            {
+                if (selectedType.size() > 0)
+                {
+                    fprintf(fp, ", ");
+                }
+                fprintf(fp, "inputDesc.output");
+            }
+            fprintf(fp, ");\n");
+        }
+        else
+        {
+            std::string errMsg = "Combination";
+            for (size_t i = 0; i < selectedType.size(); i++)
+            {
+                if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                {
+                    if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
+                    {
+                        errMsg += " " + opNames[i] + "=Local";
+                    }
+                    else
+                    {
+                        ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
+                        errMsg += " " + opNames[i] + "=CsTab";
+                    }
+                }
+            }
+            errMsg += " is not instantiated as a valid variant!";
+            fprintf(fp, "%sassert(!\"%s\");\n", extraIndentStr.c_str(), errMsg.c_str());
+            fprintf(fp, "%s__builtin_unreachable();\n", extraIndentStr.c_str());
+        }
+        return;
+    }
+
+    size_t curOrd = selectedType.size();
+    if (opTypes[curOrd] != DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+    {
+        selectedType.push_back(opTypes[curOrd]);
+        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent);
+        selectedType.pop_back();
+    }
+    else
+    {
+        fprintf(fp, "%sif (inputDesc.%s.m_isLocal) {\n", extraIndentStr.c_str(), opNames[curOrd].c_str());
+        selectedType.push_back(DeegenBytecodeOperandType::BytecodeSlot);
+        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
+        selectedType.pop_back();
+        fprintf(fp, "%s} else {\n", extraIndentStr.c_str());
+        selectedType.push_back(DeegenBytecodeOperandType::Constant);
+        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
+        selectedType.pop_back();
+        fprintf(fp, "%s}\n", extraIndentStr.c_str());
+    }
+}
+
+}   // anonymous namespace
+
+ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module)
 {
     using namespace llvm;
+
+    ProcessBytecodeDefinitionForInterpreterResult finalRes;
+
+    AnonymousFile hdrOut;
+    FILE* fp = hdrOut.GetFStream("w");
 
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     AstMakeCall::PreprocessModule(module.get());
@@ -23,6 +180,90 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecodeDefinitionForInterprete
 
     for (auto& bytecodeDef : defs)
     {
+        std::string bytecodeBuilderFunctionReturnType;
+        std::string generatedClassName;
+
+        finalRes.m_allExternCDeclarations.push_back({});
+        std::vector<std::string>& cdeclNameForVariants = finalRes.m_allExternCDeclarations.back();
+
+        {
+            ReleaseAssert(bytecodeDef.size() > 0);
+            std::unique_ptr<BytecodeVariantDefinition>& def = bytecodeDef[0];
+            generatedClassName = GetGeneratedBuilderClassNameFromBytecodeName(def->m_bytecodeName);
+            finalRes.m_generatedClassNames.push_back(generatedClassName);
+            fprintf(fp, "template<typename CRTP>\nclass %s {\n", generatedClassName.c_str());
+            fprintf(fp, "public:\n");
+            fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(bytecodeDef.size()));
+            fprintf(fp, "    struct RobustInputDesc {\n");
+            size_t numOperands = def->m_opNames.size();
+            ReleaseAssert(numOperands == def->m_originalOperandTypes.size());
+            for (size_t i = 0; i < numOperands; i++)
+            {
+                fprintf(fp, "        %s %s;\n", GetCppTypeNameForDeegenBytecodeOperandType(def->m_originalOperandTypes[i]).c_str(), def->m_opNames[i].c_str());
+            }
+            if (def->m_hasOutputValue)
+            {
+                fprintf(fp, "        Local output;\n");
+            }
+            fprintf(fp, "    };\n");
+
+            if (def->m_hasConditionalBranchTarget)
+            {
+                bytecodeBuilderFunctionReturnType = "BranchTargetPopulator WARN_UNUSED";
+            }
+            else
+            {
+                bytecodeBuilderFunctionReturnType = "void";
+            }
+            fprintf(fp, "    %s ALWAYS_INLINE Create%s(RobustInputDesc inputDesc) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str());
+
+            {
+                std::vector<DeegenBytecodeOperandType> selectedTypes;
+                auto selectionValidChecker = [&](const std::vector<DeegenBytecodeOperandType>& selection) -> bool {
+                    ReleaseAssert(selection.size() == def->m_originalOperandTypes.size());
+                    for (auto& bytecodeVariantDef : bytecodeDef)
+                    {
+                        bool ok = true;
+                        for (size_t i = 0; i < def->m_originalOperandTypes.size(); i++)
+                        {
+                            if (def->m_originalOperandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                            {
+                                if (selection[i] == DeegenBytecodeOperandType::BytecodeSlot)
+                                {
+                                    if (bytecodeVariantDef->m_list[i]->GetKind() != BcOperandKind::Slot)
+                                    {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                                else
+                                {
+                                    ReleaseAssert(selection[i] == DeegenBytecodeOperandType::Constant);
+                                    if (bytecodeVariantDef->m_list[i]->GetKind() != BcOperandKind::Constant)
+                                    {
+                                        ok = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (ok)
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                GenerateVariantSelectorImpl(fp, def->m_originalOperandTypes, def->m_opNames, selectionValidChecker, selectedTypes, def->m_hasOutputValue, 8 /*indent*/);
+                ReleaseAssert(selectedTypes.size() == 0);
+            }
+
+            fprintf(fp, "    }\n\n");
+
+            fprintf(fp, "private:\n");
+        }
+
+        int currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
             // For now we just stay simple and unconditionally let all operands have 2 bytes, which is already stronger than LuaJIT's assumption
@@ -33,7 +274,109 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecodeDefinitionForInterprete
             ReleaseAssert(implFunc != nullptr);
             std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
+            cdeclNameForVariants.push_back(InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
+
+            fprintf(fp, "    %s DeegenCreateImpl(", bytecodeBuilderFunctionReturnType.c_str());
+            for (size_t i = 0; i < bytecodeVariantDef->m_originalOperandTypes.size(); i++)
+            {
+                if (i > 0)
+                {
+                    fprintf(fp, ", ");
+                }
+                if (bytecodeVariantDef->m_originalOperandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                {
+                    if (bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::Slot)
+                    {
+                        fprintf(fp, "Local param%d", static_cast<int>(i));
+                    }
+                    else
+                    {
+                        ReleaseAssert(bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::Constant);
+                        fprintf(fp, "CsTab param%d", static_cast<int>(i));
+                    }
+                }
+                else
+                {
+                    fprintf(fp, "%s param%d", GetCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
+                }
+            }
+            if (bytecodeVariantDef->m_hasOutputValue)
+            {
+                if (bytecodeVariantDef->m_originalOperandTypes.size() > 0)
+                {
+                    fprintf(fp, ", ");
+                }
+                fprintf(fp, "Local paramOut");
+            }
+            fprintf(fp, ") {\n");
+            // I believe this is not strictly required, but if this assumption doesn't hold,
+            // the 'variantOrd' part in the symbol name won't match the order here, which is going to be terrible for debugging
+            //
+            ReleaseAssert(static_cast<size_t>(currentBytecodeVariantOrdinal) == bytecodeVariantDef->m_variantOrd);
+            fprintf(fp, "        static constexpr size_t x_opcode = CRTP::template GetBytecodeOpcodeBase<%s>() + %d;\n", generatedClassName.c_str(), currentBytecodeVariantOrdinal);
+            fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
+            fprintf(fp, "        uint8_t* base = crtp->Reserve(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+
+            int numBitsInOpcodeField = static_cast<int>(BytecodeVariantDefinition::x_opcodeSizeBytes) * 8;
+            if (BytecodeVariantDefinition::x_opcodeSizeBytes < 8) {
+                fprintf(fp, "        static_assert(x_opcode <= (1ULL << %d) - 1);\n", numBitsInOpcodeField);
+            }
+            fprintf(fp, "        UnalignedStore<uint%d_t>(base, static_cast<uint%d_t>(x_opcode));\n", numBitsInOpcodeField, numBitsInOpcodeField);
+
+            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            {
+                std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
+                if (operand->ValueByteLength() == 0)
+                {
+                    continue;
+                }
+                size_t offset = operand->GetOffsetInBytecodeStruct();
+                int numBitsInBytecodeStruct = static_cast<int>(operand->GetSizeInBytecodeStruct()) * 8;
+                fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, BitwiseTruncateTo<uint%d_t>(", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
+                if (operand->GetKind() == BcOperandKind::Slot)
+                {
+                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
+                }
+                else if (operand->GetKind() == BcOperandKind::Constant)
+                {
+                    fprintf(fp, "param%d.m_csTableOrd", static_cast<int>(i));
+                }
+                else
+                {
+                    ReleaseAssert(operand->GetKind() == BcOperandKind::Literal);
+                    fprintf(fp, "param%d", static_cast<int>(i));
+                }
+                fprintf(fp, "));\n");
+            }
+
+            if (bytecodeVariantDef->m_hasOutputValue)
+            {
+                size_t offset = bytecodeVariantDef->m_outputOperand->GetOffsetInBytecodeStruct();
+                ReleaseAssert(bytecodeVariantDef->m_outputOperand->GetKind() == BcOperandKind::Slot);
+                int numBitsInBytecodeStruct = static_cast<int>(bytecodeVariantDef->m_outputOperand->GetSizeInBytecodeStruct()) * 8;
+                fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, BitwiseTruncateTo<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
+            }
+
+            if (bytecodeVariantDef->m_hasConditionalBranchTarget)
+            {
+                size_t offset = bytecodeVariantDef->m_condBrTarget->GetOffsetInBytecodeStruct();
+                fprintf(fp, "        size_t curBytecodeOffset = crtp->GetCurBytecodeLength();\n");
+                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+                fprintf(fp, "        return BranchTargetPopulator(curBytecodeOffset + %u /*fillOffset*/, curBytecodeOffset /*bytecodeBaseOffset*/);\n", SafeIntegerCast<unsigned int>(offset));
+            }
+            else
+            {
+                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+                fprintf(fp, "        return;\n");
+            }
+
+            fprintf(fp, "    }\n\n");
+
+            currentBytecodeVariantOrdinal++;
         }
+        fprintf(fp, "};\n\n");
+
+        ReleaseAssert(currentBytecodeVariantOrdinal == static_cast<int>(bytecodeDef.size()));
     }
 
     // We need to take care when putting everything together, so that we do not introduce linkage problems
@@ -234,7 +577,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecodeDefinitionForInterprete
     }
 
     ValidateLLVMModule(module.get());
-    return module;
+    finalRes.m_processedModule = std::move(module);
+
+    fclose(fp);
+    finalRes.m_generatedHeaderFile = hdrOut.GetFileContents();
+    return finalRes;
 }
 
 }   // namespace dast

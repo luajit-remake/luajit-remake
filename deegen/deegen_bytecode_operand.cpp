@@ -179,6 +179,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_variantOrd = variantOrd;
             def->m_bytecodeName = bytecodeNamesInThisTU[curBytecodeOrd];
             def->m_opNames = operandNames;
+            def->m_originalOperandTypes = operandTypes;
             def->m_bytecodeStructLength = static_cast<size_t>(-1);
             def->m_implFunctionName = implFuncName;
             def->m_hasOutputValue = hasTValueOutput;

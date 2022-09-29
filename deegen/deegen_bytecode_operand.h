@@ -75,6 +75,18 @@ public:
 
     std::string OperandName() { return m_name; }
 
+    size_t GetOffsetInBytecodeStruct()
+    {
+        ReleaseAssert(m_offsetInBytecodeStruct != static_cast<size_t>(-1));
+        return m_offsetInBytecodeStruct;
+    }
+
+    size_t GetSizeInBytecodeStruct()
+    {
+        ReleaseAssert(m_offsetInBytecodeStruct != static_cast<size_t>(-1));
+        return m_sizeInBytecodeStruct;
+    }
+
     void InvalidateBytecodeStructOffsetAndSize()
     {
         m_offsetInBytecodeStruct = static_cast<size_t>(-1);
@@ -346,6 +358,7 @@ public:
     std::string m_bytecodeName;
     std::string m_implFunctionName;
     std::vector<std::string> m_opNames;
+    std::vector<DeegenBytecodeOperandType> m_originalOperandTypes;
     std::vector<std::unique_ptr<BcOperand>> m_list;
     size_t m_bytecodeStructLength;
 
