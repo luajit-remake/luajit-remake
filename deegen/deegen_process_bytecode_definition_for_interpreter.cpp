@@ -523,8 +523,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
     // Assert that the bytecode definition symbols, and all the implementation functions are gone
     //
-    ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_defListSymbolName) == nullptr);
-    ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_nameListSymbolName) == nullptr);
+    BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(module.get());
     for (auto& bytecodeDef : defs)
     {
         for (auto& bytecodeVariantDef : bytecodeDef)
@@ -577,6 +576,19 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     }
 
     ValidateLLVMModule(module.get());
+
+    // Just for sanity, assert again after linkage, that the linkage didn't add back
+    // any of the bytecode definition symbols or the implementation functions
+    //
+    BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(module.get());
+    for (auto& bytecodeDef : defs)
+    {
+        for (auto& bytecodeVariantDef : bytecodeDef)
+        {
+            ReleaseAssert(module->getNamedValue(bytecodeVariantDef->m_implFunctionName) == nullptr);
+        }
+    }
+
     finalRes.m_processedModule = std::move(module);
 
     fclose(fp);

@@ -14,9 +14,51 @@
 
 namespace dast {
 
+struct ReturnContinuationFinder
+{
+    ReturnContinuationFinder(llvm::Function* from)
+    {
+        m_count = 0;
+        std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(from);
+        for (AstMakeCall& amc : list)
+        {
+            dfs(amc.m_continuation);
+        }
+        // We disallow the entry function itself to also be a continuation,
+        // since the entry function cannot access return values while the continuation function can.
+        //
+        ReleaseAssert(!m_labelMap.count(from));
+    }
+
+    std::unordered_map<llvm::Function*, size_t> m_labelMap;
+    size_t m_count;
+
+private:
+    void dfs(llvm::Function* cur)
+    {
+        if (cur == nullptr || m_labelMap.count(cur))
+        {
+            return;
+        }
+        m_labelMap[cur] = m_count;
+        m_count++;
+
+        std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(cur);
+        for (AstMakeCall& amc : list)
+        {
+            dfs(amc.m_continuation);
+        }
+    }
+};
+
 std::string WARN_UNUSED InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef)
 {
     return std::string("__deegen_interpreter_op_") + bytecodeDef->m_bytecodeName + "_" + std::to_string(bytecodeDef->m_variantOrd);
+}
+
+std::string WARN_UNUSED InterpreterBytecodeImplCreator::GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd)
+{
+    return GetInterpreterBytecodeFunctionCName(bytecodeDef) + "_retcont_" + std::to_string(rcOrd);
 }
 
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
@@ -49,22 +91,61 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     //
     if (!isReturnContinuation)
     {
-        std::string desiredFnName = GetInterpreterBytecodeFunctionCName(m_bytecodeDef) + "_impl";
-        ReleaseAssert(m_module->getNamedValue(desiredFnName) == nullptr);
-        m_impl->setName(desiredFnName);
+        m_resultFuncName = GetInterpreterBytecodeFunctionCName(m_bytecodeDef);
+        std::string implFuncName = m_resultFuncName + "_impl";
+        ReleaseAssert(m_module->getNamedValue(implFuncName) == nullptr);
+        m_impl->setName(implFuncName);
     }
     else
     {
-        ReleaseAssert(m_impl->getName().str().ends_with("_impl"));
+        std::string implFuncName = m_impl->getName().str();
+        ReleaseAssert(implFuncName.ends_with("_impl"));
+        m_resultFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl"));
     }
 
+    // First step: if we are the main function (i.e., not return continuation), we shall parse out all the needed return
+    // continuations, in preparation of processing each of them later
+    //
+    if (!m_isReturnContinuation)
+    {
+        // Find all the return continuations, give each of them a unique name, and create the declarations.
+        // This is necessary for us to later link them together.
+        //
+        ReturnContinuationFinder rcFinder(m_impl);
+        std::vector<Function*> rcList;
+        rcList.resize(rcFinder.m_count, nullptr);
+        ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
+        for (auto& it : rcFinder.m_labelMap)
+        {
+            ReleaseAssert(it.second < rcList.size());
+            Function* rc = it.first;
+            std::string rcFinalName = GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, it.second);
+            std::string rcImplName = rcFinalName + "_impl";
+            ReleaseAssert(m_module->getNamedValue(rcImplName) == nullptr);
+            rc->setName(rcImplName);
+            ReleaseAssert(rcList[it.second] == nullptr);
+            rcList[it.second] = rc;
+            ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
+        }
+
+        // After all the renaming and function declarations, create the InterpreterBytecodeImplCreator class so we can process each of the return continuation later
+        // Note that creating the InterpreterBytecodeImplCreator also clones the module, so we want to do it after all the renaming but before our own processing begins
+        //
+        for (Function* targetRc : rcList)
+        {
+            ReleaseAssert(targetRc != nullptr);
+            m_allRetConts.push_back(std::make_unique<InterpreterBytecodeImplCreator>(m_bytecodeDef, targetRc, true /*isReturnContinuation*/));
+        }
+    }
+
+    // Now, we can start processing our own module
+    //
     {
         FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-        std::string finalFnName = m_impl->getName().str();
-        ReleaseAssert(finalFnName.ends_with("_impl"));
-        finalFnName = finalFnName.substr(0, finalFnName.length() - strlen("_impl"));
-        ReleaseAssert(m_module->getNamedValue(finalFnName) == nullptr);
-        m_wrapper = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, finalFnName, m_module.get());
+        ReleaseAssert(m_module->getNamedValue(m_resultFuncName) == nullptr);
+        m_wrapper = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, m_resultFuncName, m_module.get());
+        ReleaseAssert(m_wrapper->getName() == m_resultFuncName);
+        m_wrapper->setDSOLocal(true);
     }
 
     // Set parameter names just to make dumps more readable
@@ -175,54 +256,25 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     new UnreachableInst(ctx, currentBlock);
 
     ValidateLLVMFunction(m_wrapper);
-}
 
-struct ReturnContinuationFinder
-{
-    ReturnContinuationFinder(llvm::Function* from)
-    {
-        m_count = 0;
-        std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(from);
-        for (AstMakeCall& amc : list)
-        {
-            dfs(amc.m_continuation);
-        }
-        // We disallow the entry function itself to also be a continuation,
-        // since the entry function cannot access return values while the continuation function can.
-        //
-        ReleaseAssert(!m_labelMap.count(from));
-    }
+    // At this stage, we can drop the bytecode definition global symbol, which will render all bytecode definitions except ourselves dead.
+    // We then run DCE to strip the dead symbols, so that later processing is faster
+    //
+    std::string implNameBak = m_impl->getName().str();
+    std::string wrapperNameBak = m_wrapper->getName().str();
+    BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(m_module.get());
+    RunLLVMDeadGlobalElimination(m_module.get());
 
-    std::unordered_map<llvm::Function*, size_t> m_labelMap;
-    size_t m_count;
-
-private:
-    void dfs(llvm::Function* cur)
-    {
-        if (cur == nullptr || m_labelMap.count(cur))
-        {
-            return;
-        }
-        m_labelMap[cur] = m_count;
-        m_count++;
-
-        std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(cur);
-        for (AstMakeCall& amc : list)
-        {
-            dfs(amc.m_continuation);
-        }
-    }
-};
-
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::ProcessReturnContinuation(llvm::Function* rc)
-{
-    ReleaseAssert(!m_isReturnContinuation);
-    InterpreterBytecodeImplCreator ifi(m_bytecodeDef, rc, true /*isReturnContinuation*/);
-    return ifi.DoOptimizationAndLowering();
+    // Sanity check the functions we are processing are still there
+    //
+    ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
+    ReleaseAssert(m_module->getFunction(wrapperNameBak) == m_wrapper);
 }
 
 std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
 {
+    // DEVNOTE: if you change this function, you likely need to correspondingly change how we process return continuations in DoLowering()
+    //
     InterpreterBytecodeImplCreator ifi(bytecodeDef, impl, false /*isReturnContinuation*/);
     return ifi.DoOptimizationAndLowering();
 }
@@ -241,51 +293,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     ReleaseAssert(!m_generated);
     m_generated = true;
 
-    std::string finalFnName = m_impl->getName().str();
-    ReleaseAssert(finalFnName.ends_with("_impl"));
-    finalFnName = finalFnName.substr(0, finalFnName.length() - strlen("_impl"));
-    auto getRetContFinalNameForOrdinal = [this, finalFnName](size_t ord) -> std::string
-    {
-        ReleaseAssert(!m_isReturnContinuation);
-        return finalFnName + "_retcont_" + std::to_string(ord);
-    };
-
-    // First step: if we are the main function (i.e., not return continuation), we shall parse out all the needed return
-    // continuations, and process each of them
-    //
-    std::vector<std::unique_ptr<llvm::Module>> allRetConts;
-    if (!m_isReturnContinuation)
-    {
-        // Find all the return continuations, give each of them a unique name, and create the declarations.
-        // This is necessary for us to later link them together.
-        //
-        ReturnContinuationFinder rcFinder(m_impl);
-        std::vector<Function*> rcList;
-        rcList.resize(rcFinder.m_count, nullptr);
-        ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
-        for (auto& it : rcFinder.m_labelMap)
-        {
-            ReleaseAssert(it.second < rcList.size());
-            Function* rc = it.first;
-            std::string rcFinalName = getRetContFinalNameForOrdinal(it.second);
-            std::string rcImplName = rcFinalName + "_impl";
-            ReleaseAssert(m_module->getNamedValue(rcImplName) == nullptr);
-            rc->setName(rcImplName);
-            ReleaseAssert(rcList[it.second] == nullptr);
-            rcList[it.second] = rc;
-            ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
-        }
-
-        // After all the renaming and function declarations, process each of the return continuation
-        //
-        for (Function* targetRc : rcList)
-        {
-            ReleaseAssert(targetRc != nullptr);
-            allRetConts.push_back(ProcessReturnContinuation(targetRc));
-        }
-    }
-
-    // Now we can process our own function
     // Inline 'm_impl' into 'm_wrapper'
     //
     if (m_impl->hasFnAttribute(Attribute::AttrKind::NoInline))
@@ -343,38 +350,86 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         }
     }
 
-    // Sanity check that the function we just created is there, and extract it
+    // Sanity check that 'm_wrapper' is there, and extract it
     //
-    ReleaseAssert(m_module->getFunction(finalFnName) != nullptr);
-    ReleaseAssert(!m_module->getFunction(finalFnName)->empty());
-    m_module = ExtractFunction(m_module.get(), finalFnName);
+    ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
+    ReleaseAssert(!m_wrapper->empty());
+    m_module = ExtractFunction(m_module.get(), m_resultFuncName);
+    // After the extract, 'm_wrapper' is invalidated since a new module is returned. Refresh its value.
+    //
+    m_wrapper = m_module->getFunction(m_resultFuncName);
+    ReleaseAssert(m_wrapper != nullptr);
 
-    // If we are the main function, we also need to link in all the return continuations
-    //
-    ReleaseAssertImp(m_isReturnContinuation, allRetConts.size() == 0);
-    for (size_t rcOrdinal = 0; rcOrdinal < allRetConts.size(); rcOrdinal++)
+    if (!m_isReturnContinuation)
     {
-        std::unique_ptr<Module> rcModule = std::move(allRetConts[rcOrdinal]);
-        std::string expectedRcName = getRetContFinalNameForOrdinal(rcOrdinal);
-        ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
-        ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
-        // Optimization pass may have stripped the return continuation function if it's not directly used by the main function
-        // But if it exists, it should always be a declaration at this point
+        // If we are the main function, we also need to link in all the return continuations
+        // Note that some of the return continuations could be dead (due to optimizations), however, since return continuations
+        // may arbitrarily call each other, we cannot know a return continuation is dead until we have linked in all the return continuations.
+        // So first we need to link in all return continuations.
         //
-        if (m_module->getFunction(expectedRcName) != nullptr)
+        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
         {
-            ReleaseAssert(m_module->getFunction(expectedRcName)->empty());
+            std::unique_ptr<Module> rcModule = m_allRetConts[rcOrdinal]->DoOptimizationAndLowering();
+            std::string expectedRcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
+            ReleaseAssert(expectedRcName == GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, rcOrdinal));
+            ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
+            ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
+            // Optimization pass may have stripped the return continuation function if it's not directly used by the main function
+            // But if it exists, it should always be a declaration at this point
+            //
+            if (m_module->getFunction(expectedRcName) != nullptr)
+            {
+                ReleaseAssert(m_module->getFunction(expectedRcName)->empty());
+            }
+
+            Linker linker(*m_module.get());
+            // linkInModule returns true on error
+            //
+            ReleaseAssert(linker.linkInModule(std::move(rcModule)) == false);
+
+            ReleaseAssert(m_module->getFunction(expectedRcName) != nullptr);
+            ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
         }
 
-        Linker linker(*m_module.get());
-        // linkInModule returns true on error
+        // Now, having linked in all return continuations, we can strip dead return continuations by
+        // changing the linkage of all return continuations to internal and run the DCE pass.
         //
-        ReleaseAssert(linker.linkInModule(std::move(rcModule)) == false);
+        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
+        {
+            std::string rcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
+            Function* func = m_module->getFunction(rcName);
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(!func->empty());
+            ReleaseAssert(func->hasExternalLinkage());
+            func->setLinkage(GlobalValue::InternalLinkage);
+        }
+        RunLLVMDeadGlobalElimination(m_module.get());
 
-        ReleaseAssert(m_module->getFunction(expectedRcName) != nullptr);
-        ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
+        // In theory it's fine to leave them with internal linkage now, since they are exclusively
+        // used by our bytecode, but some of our callers expects them to have external linkage.
+        // So we will change the surviving functions back to external linkage after DCE.
+        //
+        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
+        {
+            std::string rcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
+            Function* func = m_module->getFunction(rcName);
+            if (func != nullptr)
+            {
+                ReleaseAssert(func->hasInternalLinkage());
+                func->setLinkage(GlobalValue::ExternalLinkage);
+            }
+            else
+            {
+                ReleaseAssert(m_module->getNamedValue(rcName) == nullptr);
+            }
+        }
+    }
+    else
+    {
+        ReleaseAssert(m_allRetConts.size() == 0);
     }
 
+    ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
     m_wrapper = nullptr;
     return std::move(m_module);
 }

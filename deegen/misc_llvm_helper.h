@@ -15,6 +15,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -593,11 +594,21 @@ inline void ValidateLLVMModule(llvm::Module* module)
     ReleaseAssert(verifyModule(*module, &tmp) == false);
 }
 
+inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
+{
+    using namespace llvm;
+    ValidateLLVMModule(module);
+    legacy::PassManager Passes;
+    Passes.add(createGlobalDCEPass());
+    Passes.add(createStripDeadDebugInfoPass());
+    Passes.add(createStripDeadPrototypesPass());
+    Passes.run(*module);
+}
+
 inline void RunLLVMOptimizePass(llvm::Module* module)
 {
     using namespace llvm;
 
-    // AutoTimer timer;
     ValidateLLVMModule(module);
 
     PassBuilder passBuilder;

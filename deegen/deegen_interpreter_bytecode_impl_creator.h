@@ -49,8 +49,6 @@ public:
         return CreateCallToDeegenRuntimeFunction(GetModule(), dcsName, args, insertBefore);
     }
 
-    std::unique_ptr<llvm::Module> WARN_UNUSED ProcessReturnContinuation(llvm::Function* rc);
-
     std::unique_ptr<llvm::Module> WARN_UNUSED DoOptimizationAndLowering()
     {
         DoOptimization();
@@ -58,6 +56,7 @@ public:
     }
 
     static std::string WARN_UNUSED GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef);
+    static std::string WARN_UNUSED GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd);
 
 private:
     BytecodeVariantDefinition* m_bytecodeDef;
@@ -67,8 +66,16 @@ private:
     //
     bool m_isReturnContinuation;
 
+    // If 'm_isReturnContinuation' is false, this vector holds the InterpreterBytecodeImplCreator for all the return continuations
+    //
+    std::vector<std::unique_ptr<InterpreterBytecodeImplCreator>> m_allRetConts;
+
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;
+
+    // The name of the wrapper function (i.e., the final product)
+    //
+    std::string m_resultFuncName;
 
     LLVMValuePreserver m_valuePreserver;
     bool m_generated;

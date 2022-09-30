@@ -4,7 +4,7 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 target triple = "x86_64-pc-linux-gnu"
 
 ; Function Attrs: nounwind
-define void @__deegen_interpreter_op_test2_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %curBytecode, ptr nocapture readnone %codeBlock, i64 %0) local_unnamed_addr #0 {
+define dso_local void @__deegen_interpreter_op_test2_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %curBytecode, ptr nocapture readnone %codeBlock, i64 %0) local_unnamed_addr #0 {
   %2 = getelementptr inbounds i8, ptr %curBytecode, i64 2
   %3 = load i32, ptr %2, align 1
   %4 = zext i32 %3 to i64

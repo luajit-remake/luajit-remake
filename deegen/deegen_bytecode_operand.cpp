@@ -264,4 +264,10 @@ void BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSym
     RemoveGlobalValueUsedAttributeAnnotation(gv);
 }
 
+void BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module)
+{
+    ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_defListSymbolName) == nullptr);
+    ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_nameListSymbolName) == nullptr);
+}
+
 }   // namespace dast

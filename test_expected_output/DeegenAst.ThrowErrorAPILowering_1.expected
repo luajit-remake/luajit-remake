@@ -6,7 +6,7 @@ target triple = "x86_64-pc-linux-gnu"
 @.str.3 = linkonce_odr dso_local unnamed_addr constant [11 x i8] c"test error\00", align 1
 
 ; Function Attrs: nounwind
-define void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readnone %curBytecode, ptr nocapture readnone %codeBlock, i64 %0) local_unnamed_addr #0 {
+define dso_local void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readnone %curBytecode, ptr nocapture readnone %codeBlock, i64 %0) local_unnamed_addr #0 {
   musttail call void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr %coroutineCtx, ptr %stackBase, ptr nonnull @.str.3, ptr undef, i64 undef)
   ret void
 }

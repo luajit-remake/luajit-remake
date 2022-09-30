@@ -342,6 +342,7 @@ public:
 
     static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
     static void RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(llvm::Module* module);
+    static void AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module);
 
     static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
 

@@ -10,7 +10,7 @@ target triple = "x86_64-pc-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define void @__deegen_interpreter_op_test3_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
+define dso_local void @__deegen_interpreter_op_test3_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
   %2 = getelementptr inbounds %0, ptr %stackBase, i64 -1
   %3 = load ptr addrspace(256), ptr %2, align 8, !tbaa !3
   %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %3, align 4, !tbaa !9

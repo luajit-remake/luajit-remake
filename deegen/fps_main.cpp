@@ -13,7 +13,6 @@ int main(int argc, char** argv)
     cl::HideUnrelatedOptions(FPSOptions);
     cl::ParseCommandLineOptions(argc, argv, "The Futamura projection stage of Deegen that generates the various components of the compiler.\n");
 
-    // AutoTimer t;
     switch (cl_mainCommand)
     {
     case BadFpsCommand:
