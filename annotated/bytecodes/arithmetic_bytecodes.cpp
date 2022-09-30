@@ -13,7 +13,34 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 {
     if (likely(lhs.Is<tDouble>() && rhs.Is<tDouble>()))
     {
-        double res =lhs.As<tDouble>() + rhs.As<tDouble>();
+        double ld = lhs.As<tDouble>();
+        double rd = rhs.As<tDouble>();
+        double res;
+        if constexpr(opKind == LuaMetamethodKind::Add)
+        {
+            res = ld + rd;
+        }
+        else if constexpr(opKind == LuaMetamethodKind::Sub)
+        {
+            res = ld - rd;
+        }
+        else if constexpr(opKind == LuaMetamethodKind::Mul)
+        {
+            res = ld * rd;
+        }
+        else if constexpr(opKind == LuaMetamethodKind::Div)
+        {
+            res = ld / rd;
+        }
+        else if constexpr(opKind == LuaMetamethodKind::Mod)
+        {
+            res = ModulusWithLuaSemantics(ld, rd);
+        }
+        else
+        {
+            static_assert(opKind == LuaMetamethodKind::Pow, "unexpected opKind");
+            res = pow(ld, rd);
+        }
         Return(TValue::Create<tDouble>(res));
     }
     else
