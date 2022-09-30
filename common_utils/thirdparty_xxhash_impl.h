@@ -1,5 +1,8 @@
 #pragma once
 
+// NOTE: we made some hacky changes to this file to make it use C++ 'inline' instead of
+// C 'static' so it doesn't cause too much code bloat due to multiple copies in different translational units
+//
 #define XXH_INLINE_ALL
 
 #pragma clang diagnostic push
@@ -182,149 +185,9 @@
  * xxHash prototypes and implementation
  */
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
+#define XXH_PUBLIC_API inline
+#define XXH_STATIC_LINKING_ONLY
 
-/* ****************************
- *  INLINE mode
- ******************************/
-/*!
- * @defgroup public Public API
- * Contains details on the public xxHash functions.
- * @{
- */
-#ifdef XXH_DOXYGEN
-/*!
- * @brief Exposes the implementation and marks all functions as `inline`.
- *
- * Use these build macros to inline xxhash into the target unit.
- * Inlining improves performance on small inputs, especially when the length is
- * expressed as a compile-time constant:
- *
- *  https://fastcompression.blogspot.com/2018/03/xxhash-for-small-keys-impressive-power.html
- *
- * It also keeps xxHash symbols private to the unit, so they are not exported.
- *
- * Usage:
- * @code{.c}
- *     #define XXH_INLINE_ALL
- *     #include "xxhash.h"
- * @endcode
- * Do not compile and link xxhash.o as a separate object, as it is not useful.
- */
-#  define XXH_INLINE_ALL
-#  undef XXH_INLINE_ALL
-/*!
- * @brief Exposes the implementation without marking functions as inline.
- */
-#  define XXH_PRIVATE_API
-#  undef XXH_PRIVATE_API
-/*!
- * @brief Emulate a namespace by transparently prefixing all symbols.
- *
- * If you want to include _and expose_ xxHash functions from within your own
- * library, but also want to avoid symbol collisions with other libraries which
- * may also include xxHash, you can use @ref XXH_NAMESPACE to automatically prefix
- * any public symbol from xxhash library with the value of @ref XXH_NAMESPACE
- * (therefore, avoid empty or numeric values).
- *
- * Note that no change is required within the calling program as long as it
- * includes `xxhash.h`: Regular symbol names will be automatically translated
- * by this header.
- */
-#  define XXH_NAMESPACE /* YOUR NAME HERE */
-#  undef XXH_NAMESPACE
-#endif
-
-#if (defined(XXH_INLINE_ALL) || defined(XXH_PRIVATE_API)) \
-    && !defined(XXH_INLINE_ALL_31684351384)
-   /* this section should be traversed only once */
-#  define XXH_INLINE_ALL_31684351384
-   /* give access to the advanced API, required to compile implementations */
-#  undef XXH_STATIC_LINKING_ONLY   /* avoid macro redef */
-#  define XXH_STATIC_LINKING_ONLY
-   /* make all functions private */
-#  undef XXH_PUBLIC_API
-#  if defined(__GNUC__)
-#    define XXH_PUBLIC_API static __inline __attribute__((unused))
-#  elif defined (__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */)
-#    define XXH_PUBLIC_API static inline
-#  elif defined(_MSC_VER)
-#    define XXH_PUBLIC_API static __inline
-#  else
-     /* note: this version may generate warnings for unused static functions */
-#    define XXH_PUBLIC_API static
-#  endif
-
-   /*
-    * This part deals with the special case where a unit wants to inline xxHash,
-    * but "xxhash.h" has previously been included without XXH_INLINE_ALL,
-    * such as part of some previously included *.h header file.
-    * Without further action, the new include would just be ignored,
-    * and functions would effectively _not_ be inlined (silent failure).
-    * The following macros solve this situation by prefixing all inlined names,
-    * avoiding naming collision with previous inclusions.
-    */
-   /* Before that, we unconditionally #undef all symbols,
-    * in case they were already defined with XXH_NAMESPACE.
-    * They will then be redefined for XXH_INLINE_ALL
-    */
-#  undef XXH_versionNumber
-    /* XXH32 */
-#  undef XXH32
-#  undef XXH32_createState
-#  undef XXH32_freeState
-#  undef XXH32_reset
-#  undef XXH32_update
-#  undef XXH32_digest
-#  undef XXH32_copyState
-#  undef XXH32_canonicalFromHash
-#  undef XXH32_hashFromCanonical
-    /* XXH64 */
-#  undef XXH64
-#  undef XXH64_createState
-#  undef XXH64_freeState
-#  undef XXH64_reset
-#  undef XXH64_update
-#  undef XXH64_digest
-#  undef XXH64_copyState
-#  undef XXH64_canonicalFromHash
-#  undef XXH64_hashFromCanonical
-    /* XXH3_64bits */
-#  undef XXH3_64bits
-#  undef XXH3_64bits_withSecret
-#  undef XXH3_64bits_withSeed
-#  undef XXH3_64bits_withSecretandSeed
-#  undef XXH3_createState
-#  undef XXH3_freeState
-#  undef XXH3_copyState
-#  undef XXH3_64bits_reset
-#  undef XXH3_64bits_reset_withSeed
-#  undef XXH3_64bits_reset_withSecret
-#  undef XXH3_64bits_update
-#  undef XXH3_64bits_digest
-#  undef XXH3_generateSecret
-    /* XXH3_128bits */
-#  undef XXH128
-#  undef XXH3_128bits
-#  undef XXH3_128bits_withSeed
-#  undef XXH3_128bits_withSecret
-#  undef XXH3_128bits_reset
-#  undef XXH3_128bits_reset_withSeed
-#  undef XXH3_128bits_reset_withSecret
-#  undef XXH3_128bits_reset_withSecretandSeed
-#  undef XXH3_128bits_update
-#  undef XXH3_128bits_digest
-#  undef XXH128_isEqual
-#  undef XXH128_cmp
-#  undef XXH128_canonicalFromHash
-#  undef XXH128_hashFromCanonical
-    /* Finally, free the namespace itself */
-#  undef XXH_NAMESPACE
-
-    /* employ the namespace for XXH_INLINE_ALL */
-#  define XXH_NAMESPACE XXH_INLINE_
    /*
     * Some identifiers (enums, type names) are not symbols,
     * but they must nonetheless be renamed to avoid redeclaration.
@@ -349,7 +212,6 @@ extern "C" {
    /* Ensure the header is parsed again, even if it was previously included */
 #  undef XXHASH_H_5627135585666179
 #  undef XXHASH_H_STATIC_13879238742
-#endif /* XXH_INLINE_ALL || XXH_PRIVATE_API */
 
 /* ****************************************************************
  *  Stable API
@@ -1737,13 +1599,13 @@ static void XXH_free(void* p) { (void)p; }
  * @internal
  * @brief Modify this function to use a different routine than malloc().
  */
-static XXH_MALLOCF void* XXH_malloc(size_t s) { return malloc(s); }
+inline XXH_MALLOCF void* XXH_malloc(size_t s) { return malloc(s); }
 
 /*!
  * @internal
  * @brief Modify this function to use a different routine than free().
  */
-static void XXH_free(void* p) { free(p); }
+inline void XXH_free(void* p) { free(p); }
 
 #endif  /* XXH_NO_STDLIB */
 
@@ -1753,7 +1615,7 @@ static void XXH_free(void* p) { free(p); }
  * @internal
  * @brief Modify this function to use a different routine than memcpy().
  */
-static void* XXH_memcpy(void* dest, const void* src, size_t size)
+inline void* XXH_memcpy(void* dest, const void* src, size_t size)
 {
     return memcpy(dest,src,size);
 }
@@ -1768,29 +1630,8 @@ static void* XXH_memcpy(void* dest, const void* src, size_t size)
 #  pragma warning(disable : 4127) /* disable: C4127: conditional expression is constant */
 #endif
 
-#if XXH_NO_INLINE_HINTS  /* disable inlining hints */
-#  if defined(__GNUC__) || defined(__clang__)
-#    define XXH_FORCE_INLINE static __attribute__((unused))
-#  else
-#    define XXH_FORCE_INLINE static
-#  endif
-#  define XXH_NO_INLINE static
-/* enable inlining hints */
-#elif defined(__GNUC__) || defined(__clang__)
-#  define XXH_FORCE_INLINE static __inline__ __attribute__((always_inline, unused))
-#  define XXH_NO_INLINE static __attribute__((noinline))
-#elif defined(_MSC_VER)  /* Visual Studio */
-#  define XXH_FORCE_INLINE static __forceinline
-#  define XXH_NO_INLINE static __declspec(noinline)
-#elif defined (__cplusplus) \
-  || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L))   /* C99 */
-#  define XXH_FORCE_INLINE static inline
-#  define XXH_NO_INLINE static
-#else
-#  define XXH_FORCE_INLINE static
-#  define XXH_NO_INLINE static
-#endif
-
+#  define XXH_FORCE_INLINE inline __attribute__((always_inline))
+#  define XXH_NO_INLINE inline __attribute__((noinline))
 
 
 /* *************************************
@@ -1924,51 +1765,17 @@ typedef XXH32_hash_t xxh_u32;
  * @return The 32-bit little endian integer from the bytes at @p ptr.
  */
 
-#if (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==3))
-/*
- * Manual byteshift. Best for old compilers which don't inline memcpy.
- * We actually directly use XXH_readLE32 and XXH_readBE32.
- */
-#elif (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==2))
-
-/*
- * Force direct memory access. Only works on CPU which support unaligned memory
- * access in hardware.
- */
-static xxh_u32 XXH_read32(const void* memPtr) { return *(const xxh_u32*) memPtr; }
-
-#elif (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==1))
-
-/*
- * __attribute__((aligned(1))) is supported by gcc and clang. Originally the
- * documentation claimed that it only increased the alignment, but actually it
- * can decrease it on gcc, clang, and icc:
- * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69502,
- * https://gcc.godbolt.org/z/xYez1j67Y.
- */
-#ifdef XXH_OLD_NAMES
-typedef union { xxh_u32 u32; } __attribute__((packed)) unalign;
-#endif
-static xxh_u32 XXH_read32(const void* ptr)
-{
-    typedef __attribute__((aligned(1))) xxh_u32 xxh_unalign32;
-    return *((const xxh_unalign32*)ptr);
-}
-
-#else
-
 /*
  * Portable and safe solution. Generally efficient.
  * see: http://fastcompression.blogspot.com/2015/08/accessing-unaligned-memory.html
  */
-static xxh_u32 XXH_read32(const void* memPtr)
+XXH_FORCE_INLINE xxh_u32 XXH_read32(const void* memPtr)
 {
     xxh_u32 val;
     XXH_memcpy(&val, memPtr, sizeof(val));
     return val;
 }
 
-#endif   /* XXH_FORCE_DIRECT_MEMORY_ACCESS */
 
 
 /* ***   Endianness   *** */
@@ -2069,19 +1876,7 @@ static int XXH_isLittleEndian(void)
  * @param x The 32-bit integer to byteswap.
  * @return @p x, byteswapped.
  */
-#if defined(_MSC_VER)     /* Visual Studio */
-#  define XXH_swap32 _byteswap_ulong
-#elif XXH_GCC_VERSION >= 403
 #  define XXH_swap32 __builtin_bswap32
-#else
-static xxh_u32 XXH_swap32 (xxh_u32 x)
-{
-    return  ((x << 24) & 0xff000000 ) |
-            ((x <<  8) & 0x00ff0000 ) |
-            ((x >>  8) & 0x0000ff00 ) |
-            ((x >> 24) & 0x000000ff );
-}
-#endif
 
 
 /* ***************************
@@ -2128,7 +1923,7 @@ XXH_FORCE_INLINE xxh_u32 XXH_readLE32(const void* ptr)
     return XXH_CPU_LITTLE_ENDIAN ? XXH_read32(ptr) : XXH_swap32(XXH_read32(ptr));
 }
 
-static xxh_u32 XXH_readBE32(const void* ptr)
+XXH_FORCE_INLINE xxh_u32 XXH_readBE32(const void* ptr)
 {
     return XXH_CPU_LITTLE_ENDIAN ? XXH_swap32(XXH_read32(ptr)) : XXH_read32(ptr);
 }
@@ -2189,7 +1984,7 @@ XXH_PUBLIC_API unsigned XXH_versionNumber (void) { return XXH_VERSION_NUMBER; }
  * @param input The stripe of input to mix.
  * @return The mixed accumulator lane.
  */
-static xxh_u32 XXH32_round(xxh_u32 acc, xxh_u32 input)
+inline xxh_u32 XXH32_round(xxh_u32 acc, xxh_u32 input)
 {
     acc += input * XXH_PRIME32_2;
     acc  = XXH_rotl32(acc, 13);
@@ -2243,7 +2038,7 @@ static xxh_u32 XXH32_round(xxh_u32 acc, xxh_u32 input)
  * @param hash The hash to avalanche.
  * @return The avalanched hash.
  */
-static xxh_u32 XXH32_avalanche(xxh_u32 hash)
+inline xxh_u32 XXH32_avalanche(xxh_u32 hash)
 {
     hash ^= hash >> 15;
     hash *= XXH_PRIME32_2;
@@ -2270,7 +2065,7 @@ static xxh_u32 XXH32_avalanche(xxh_u32 hash)
  * @return The finalized hash.
  * @see XXH64_finalize().
  */
-static XXH_PUREF xxh_u32
+inline XXH_PUREF xxh_u32
 XXH32_finalize(xxh_u32 hash, const xxh_u8* ptr, size_t len, XXH_alignment align)
 {
 #define XXH_PROCESS1 do {                             \
@@ -2568,111 +2363,30 @@ typedef XXH64_hash_t xxh_u64;
 #  define U64 xxh_u64
 #endif
 
-#if (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==3))
-/*
- * Manual byteshift. Best for old compilers which don't inline memcpy.
- * We actually directly use XXH_readLE64 and XXH_readBE64.
- */
-#elif (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==2))
-
-/* Force direct memory access. Only works on CPU which support unaligned memory access in hardware */
-static xxh_u64 XXH_read64(const void* memPtr)
-{
-    return *(const xxh_u64*) memPtr;
-}
-
-#elif (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==1))
-
-/*
- * __attribute__((aligned(1))) is supported by gcc and clang. Originally the
- * documentation claimed that it only increased the alignment, but actually it
- * can decrease it on gcc, clang, and icc:
- * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=69502,
- * https://gcc.godbolt.org/z/xYez1j67Y.
- */
-#ifdef XXH_OLD_NAMES
-typedef union { xxh_u32 u32; xxh_u64 u64; } __attribute__((packed)) unalign64;
-#endif
-static xxh_u64 XXH_read64(const void* ptr)
-{
-    typedef __attribute__((aligned(1))) xxh_u64 xxh_unalign64;
-    return *((const xxh_unalign64*)ptr);
-}
-
-#else
 
 /*
  * Portable and safe solution. Generally efficient.
  * see: http://fastcompression.blogspot.com/2015/08/accessing-unaligned-memory.html
  */
-static xxh_u64 XXH_read64(const void* memPtr)
+XXH_FORCE_INLINE xxh_u64 XXH_read64(const void* memPtr)
 {
     xxh_u64 val;
     XXH_memcpy(&val, memPtr, sizeof(val));
     return val;
 }
 
-#endif   /* XXH_FORCE_DIRECT_MEMORY_ACCESS */
 
-#if defined(_MSC_VER)     /* Visual Studio */
-#  define XXH_swap64 _byteswap_uint64
-#elif XXH_GCC_VERSION >= 403
 #  define XXH_swap64 __builtin_bswap64
-#else
-static xxh_u64 XXH_swap64(xxh_u64 x)
-{
-    return  ((x << 56) & 0xff00000000000000ULL) |
-            ((x << 40) & 0x00ff000000000000ULL) |
-            ((x << 24) & 0x0000ff0000000000ULL) |
-            ((x << 8)  & 0x000000ff00000000ULL) |
-            ((x >> 8)  & 0x00000000ff000000ULL) |
-            ((x >> 24) & 0x0000000000ff0000ULL) |
-            ((x >> 40) & 0x000000000000ff00ULL) |
-            ((x >> 56) & 0x00000000000000ffULL);
-}
-#endif
 
-
-/* XXH_FORCE_MEMORY_ACCESS==3 is an endian-independent byteshift load. */
-#if (defined(XXH_FORCE_MEMORY_ACCESS) && (XXH_FORCE_MEMORY_ACCESS==3))
-
-XXH_FORCE_INLINE xxh_u64 XXH_readLE64(const void* memPtr)
-{
-    const xxh_u8* bytePtr = (const xxh_u8 *)memPtr;
-    return bytePtr[0]
-         | ((xxh_u64)bytePtr[1] << 8)
-         | ((xxh_u64)bytePtr[2] << 16)
-         | ((xxh_u64)bytePtr[3] << 24)
-         | ((xxh_u64)bytePtr[4] << 32)
-         | ((xxh_u64)bytePtr[5] << 40)
-         | ((xxh_u64)bytePtr[6] << 48)
-         | ((xxh_u64)bytePtr[7] << 56);
-}
-
-XXH_FORCE_INLINE xxh_u64 XXH_readBE64(const void* memPtr)
-{
-    const xxh_u8* bytePtr = (const xxh_u8 *)memPtr;
-    return bytePtr[7]
-         | ((xxh_u64)bytePtr[6] << 8)
-         | ((xxh_u64)bytePtr[5] << 16)
-         | ((xxh_u64)bytePtr[4] << 24)
-         | ((xxh_u64)bytePtr[3] << 32)
-         | ((xxh_u64)bytePtr[2] << 40)
-         | ((xxh_u64)bytePtr[1] << 48)
-         | ((xxh_u64)bytePtr[0] << 56);
-}
-
-#else
 XXH_FORCE_INLINE xxh_u64 XXH_readLE64(const void* ptr)
 {
     return XXH_CPU_LITTLE_ENDIAN ? XXH_read64(ptr) : XXH_swap64(XXH_read64(ptr));
 }
 
-static xxh_u64 XXH_readBE64(const void* ptr)
+XXH_FORCE_INLINE xxh_u64 XXH_readBE64(const void* ptr)
 {
     return XXH_CPU_LITTLE_ENDIAN ? XXH_swap64(XXH_read64(ptr)) : XXH_read64(ptr);
 }
-#endif
 
 XXH_FORCE_INLINE xxh_u64
 XXH_readLE64_align(const void* ptr, XXH_alignment align)
@@ -2709,7 +2423,7 @@ XXH_readLE64_align(const void* ptr, XXH_alignment align)
 #endif
 
 /*! @copydoc XXH32_round */
-static xxh_u64 XXH64_round(xxh_u64 acc, xxh_u64 input)
+inline xxh_u64 XXH64_round(xxh_u64 acc, xxh_u64 input)
 {
     acc += input * XXH_PRIME64_2;
     acc  = XXH_rotl64(acc, 31);
@@ -2717,7 +2431,7 @@ static xxh_u64 XXH64_round(xxh_u64 acc, xxh_u64 input)
     return acc;
 }
 
-static xxh_u64 XXH64_mergeRound(xxh_u64 acc, xxh_u64 val)
+inline xxh_u64 XXH64_mergeRound(xxh_u64 acc, xxh_u64 val)
 {
     val  = XXH64_round(0, val);
     acc ^= val;
@@ -2726,7 +2440,7 @@ static xxh_u64 XXH64_mergeRound(xxh_u64 acc, xxh_u64 val)
 }
 
 /*! @copydoc XXH32_avalanche */
-static xxh_u64 XXH64_avalanche(xxh_u64 hash)
+inline xxh_u64 XXH64_avalanche(xxh_u64 hash)
 {
     hash ^= hash >> 33;
     hash *= XXH_PRIME64_2;
@@ -2754,7 +2468,7 @@ static xxh_u64 XXH64_avalanche(xxh_u64 hash)
  * @return The finalized hash
  * @see XXH32_finalize().
  */
-static XXH_PUREF xxh_u64
+inline XXH_PUREF xxh_u64
 XXH64_finalize(xxh_u64 hash, const xxh_u8* ptr, size_t len, XXH_alignment align)
 {
     if (ptr==NULL) XXH_ASSERT(len == 0);
@@ -2991,14 +2705,7 @@ XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src
 
 /* ===   Compiler specifics   === */
 
-#if ((defined(sun) || defined(__sun)) && __cplusplus) /* Solaris includes __STDC_VERSION__ with C++. Tested with GCC 5.5 */
-#  define XXH_RESTRICT /* disable */
-#elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* >= C99 */
-#  define XXH_RESTRICT   restrict
-#else
-/* Note: it might be useful to define __restrict or __restrict__ for some C++ compilers */
-#  define XXH_RESTRICT   /* disable */
-#endif
+#  define XXH_RESTRICT   __restrict
 
 #if (defined(__GNUC__) && (__GNUC__ >= 3))  \
   || (defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 800)) \
@@ -3558,7 +3265,7 @@ XXH_FORCE_INLINE xxh_u64x2 XXH_vec_mule(xxh_u32x4 a, xxh_u32x4 b)
 #endif
 
 /*! Pseudorandom secret taken directly from FARSH. */
-XXH_ALIGN(64) static const xxh_u8 XXH3_kSecret[XXH_SECRET_DEFAULT_SIZE] = {
+XXH_ALIGN(64) inline const xxh_u8 XXH3_kSecret[XXH_SECRET_DEFAULT_SIZE] = {
     0xb8, 0xfe, 0x6c, 0x39, 0x23, 0xa4, 0x4b, 0xbe, 0x7c, 0x01, 0x81, 0x2c, 0xf7, 0x21, 0xad, 0x1c,
     0xde, 0xd4, 0x6d, 0xe9, 0x83, 0x90, 0x97, 0xdb, 0x72, 0x40, 0xa4, 0xa4, 0xb7, 0xb3, 0x67, 0x1f,
     0xcb, 0x79, 0xe6, 0x4e, 0xcc, 0xc0, 0xe5, 0x78, 0x82, 0x5a, 0xd0, 0x7d, 0xcc, 0xff, 0x72, 0x21,
@@ -3622,7 +3329,7 @@ XXH_mult32to64(xxh_u64 x, xxh_u64 y)
  * @param lhs , rhs The 64-bit integers to be multiplied
  * @return The 128-bit result represented in an @ref XXH128_hash_t.
  */
-static XXH128_hash_t
+inline XXH128_hash_t
 XXH_mult64to128(xxh_u64 lhs, xxh_u64 rhs)
 {
     /*
@@ -3756,7 +3463,7 @@ XXH_mult64to128(xxh_u64 lhs, xxh_u64 rhs)
  * @return The low 64 bits of the product XOR'd by the high 64 bits.
  * @see XXH_mult64to128()
  */
-static xxh_u64
+inline xxh_u64
 XXH3_mul128_fold64(xxh_u64 lhs, xxh_u64 rhs)
 {
     XXH128_hash_t product = XXH_mult64to128(lhs, rhs);
@@ -3774,7 +3481,7 @@ XXH_FORCE_INLINE XXH_CONSTF xxh_u64 XXH_xorshift64(xxh_u64 v64, int shift)
  * This is a fast avalanche stage,
  * suitable when input bits are already partially mixed
  */
-static XXH64_hash_t XXH3_avalanche(xxh_u64 h64)
+inline XXH64_hash_t XXH3_avalanche(xxh_u64 h64)
 {
     h64 = XXH_xorshift64(h64, 37);
     h64 *= 0x165667919E3779F9ULL;
@@ -3787,7 +3494,7 @@ static XXH64_hash_t XXH3_avalanche(xxh_u64 h64)
  * inspired by Pelle Evensen's rrmxmx
  * preferable when input has not been previously mixed
  */
-static XXH64_hash_t XXH3_rrmxmx(xxh_u64 h64, xxh_u64 len)
+inline XXH64_hash_t XXH3_rrmxmx(xxh_u64 h64, xxh_u64 len)
 {
     /* this mix is inspired by Pelle Evensen's rrmxmx */
     h64 ^= XXH_rotl64(h64, 49) ^ XXH_rotl64(h64, 24);
@@ -4899,7 +4606,7 @@ XXH3_mix2Accs(const xxh_u64* XXH_RESTRICT acc, const xxh_u8* XXH_RESTRICT secret
                acc[1] ^ XXH_readLE64(secret+8) );
 }
 
-static XXH64_hash_t
+inline XXH64_hash_t
 XXH3_mergeAccs(const xxh_u64* XXH_RESTRICT acc, const xxh_u8* XXH_RESTRICT secret, xxh_u64 start)
 {
     xxh_u64 result64 = start;
@@ -5100,7 +4807,7 @@ XXH3_64bits_withSecretandSeed(const void* input, size_t length, const void* secr
  *
  * Align must be a power of 2 and 8 <= align <= 128.
  */
-static XXH_MALLOCF void* XXH_alignedMalloc(size_t s, size_t align)
+inline XXH_MALLOCF void* XXH_alignedMalloc(size_t s, size_t align)
 {
     XXH_ASSERT(align <= 128 && align >= 8); /* range check */
     XXH_ASSERT((align & (align-1)) == 0);   /* power of 2 */
@@ -5131,7 +4838,7 @@ static XXH_MALLOCF void* XXH_alignedMalloc(size_t s, size_t align)
  * Frees an aligned pointer allocated by XXH_alignedMalloc(). Don't pass
  * normal malloc'd pointers, XXH_alignedMalloc has a specific data layout.
  */
-static void XXH_alignedFree(void* p)
+inline void XXH_alignedFree(void* p)
 {
     if (p != NULL) {
         xxh_u8* ptr = (xxh_u8*)p;
@@ -5165,7 +4872,7 @@ XXH3_copyState(XXH3_state_t* dst_state, const XXH3_state_t* src_state)
     XXH_memcpy(dst_state, src_state, sizeof(*dst_state));
 }
 
-static void
+inline void
 XXH3_reset_internal(XXH3_state_t* statePtr,
                     XXH64_hash_t seed,
                     const void* secret, size_t secretSize)
@@ -6082,10 +5789,6 @@ XXH3_generateSecret_fromSeed(void* secretBuffer, XXH64_hash_t seed)
 #endif  /* XXH_IMPLEMENTATION */
 
 
-#if defined (__cplusplus)
-}
-#endif
- 
 /* ---- original file ends here ---- */
 
 #pragma clang diagnostic pop

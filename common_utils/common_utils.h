@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "constexpr_power_helper.h"
-#include "arena_allocator.h"
+// #include "arena_allocator.h"
 #include "cxx2a_bit_cast_helper.h"
 #include "error_context.h"
 #include "get_mem_fn_address_helper.h"
