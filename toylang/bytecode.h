@@ -4151,8 +4151,99 @@ public:
     }
 } __attribute__((__packed__));
 
+inline double WARN_UNUSED ModulusWithLuaSemantics(double a, double b)
+{
+    // Quoted from PUC Lua llimits.h:320:
+    //     modulo: defined as 'a - floor(a/b)*b'; the direct computation
+    //     using this definition has several problems with rounding errors,
+    //     so it is better to use 'fmod'. 'fmod' gives the result of
+    //     'a - trunc(a/b)*b', and therefore must be corrected when
+    //     'trunc(a/b) ~= floor(a/b)'. That happens when the division has a
+    //     non-integer negative result: non-integer result is equivalent to
+    //     a non-zero remainder 'm'; negative result is equivalent to 'a' and
+    //     'b' with different signs, or 'm' and 'b' with different signs
+    //     (as the result 'm' of 'fmod' has the same sign of 'a').
+    //
+    double m = fmod(a, b);
+    if ((m > 0) ? b < 0 : (m < 0 && b > 0)) m += b;
+    return m;
+}
+
 // Lua allows crazy things like "1 " + " 0xf " (which yields 16): string can be silently converted to number (ignoring whitespace) when
 // performing an arithmetic operation. This function does this job. 'func' must be a lambda (double, double) -> double
+//
+inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, LuaMetamethodKind opKind)
+{
+    double lhsNumber;
+    if (lhs.IsDouble())
+    {
+        lhsNumber = lhs.AsDouble();
+    }
+    else if (lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::String)
+    {
+        HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
+        {
+            lhsNumber = ssr.d;
+        }
+        else
+        {
+            return {};
+        }
+    }
+    else
+    {
+        return {};
+    }
+
+    double rhsNumber;
+    if (rhs.IsDouble())
+    {
+        rhsNumber = rhs.AsDouble();
+    }
+    else if (rhs.IsPointer() && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::String)
+    {
+        HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
+        {
+            rhsNumber = ssr.d;
+        }
+        else
+        {
+            return {};
+        }
+    }
+    else
+    {
+        return {};
+    }
+
+    // This is fine: string to integer coercion is already slow enough..
+    // And this string-to-int coercion behavior is just some historical garbage of Lua that probably nobody ever used
+    //
+    switch (opKind)
+    {
+    case LuaMetamethodKind::Add:
+        return lhsNumber + rhsNumber;
+    case LuaMetamethodKind::Sub:
+        return lhsNumber - rhsNumber;
+    case LuaMetamethodKind::Mul:
+        return lhsNumber * rhsNumber;
+    case LuaMetamethodKind::Div:
+        return lhsNumber / rhsNumber;
+    case LuaMetamethodKind::Mod:
+        return ModulusWithLuaSemantics(lhsNumber, rhsNumber);
+    case LuaMetamethodKind::Pow:
+        return pow(lhsNumber, rhsNumber);
+    default:
+        assert(false);
+        __builtin_unreachable();
+    }
+}
+
+// TODO: delete this function after we port all the legacy code
 //
 template<typename Func>
 std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, const Func& func)
@@ -4206,6 +4297,9 @@ std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversio
     double result = func(lhsNumber, rhsNumber);
     return result;
 }
+
+
+
 
 template<LuaMetamethodKind mtKind>
 TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue rhs)
@@ -4693,24 +4787,6 @@ public:
     BytecodeSlot m_lhs;
     BytecodeSlot m_rhs;
     BytecodeSlot m_result;
-
-    static double WARN_UNUSED ModulusWithLuaSemantics(double a, double b)
-    {
-        // Quoted from PUC Lua llimits.h:320:
-        //     modulo: defined as 'a - floor(a/b)*b'; the direct computation
-        //     using this definition has several problems with rounding errors,
-        //     so it is better to use 'fmod'. 'fmod' gives the result of
-        //     'a - trunc(a/b)*b', and therefore must be corrected when
-        //     'trunc(a/b) ~= floor(a/b)'. That happens when the division has a
-        //     non-integer negative result: non-integer result is equivalent to
-        //     a non-zero remainder 'm'; negative result is equivalent to 'a' and
-        //     'b' with different signs, or 'm' and 'b' with different signs
-        //     (as the result 'm' of 'fmod' has the same sign of 'a').
-        //
-        double m = fmod(a, b);
-        if ((m > 0) ? b < 0 : (m < 0 && b > 0)) m += b;
-        return m;
-    }
 
     static void Execute(CoroutineRuntimeContext* rc, RestrictPtr<void> stackframe, ConstRestrictPtr<uint8_t> bcu, uint64_t /*unused*/)
     {

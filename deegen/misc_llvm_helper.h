@@ -597,6 +597,7 @@ inline void RunLLVMOptimizePass(llvm::Module* module)
 {
     using namespace llvm;
 
+    // AutoTimer timer;
     ValidateLLVMModule(module);
 
     PassBuilder passBuilder;

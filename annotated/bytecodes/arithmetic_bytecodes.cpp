@@ -8,7 +8,8 @@ static void NO_RETURN ArithmeticOperationMetamethodCallContinuation(TValue /*lhs
     Return(GetReturnValue(0));
 }
 
-static void NO_RETURN ArithmeticAdd(TValue lhs, TValue rhs)
+template<LuaMetamethodKind opKind>
+static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 {
     if (likely(lhs.Is<tDouble>() && rhs.Is<tDouble>()))
     {
@@ -27,8 +28,8 @@ static void NO_RETURN ArithmeticAdd(TValue lhs, TValue rhs)
             {
                 HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
                 GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Add), icInfo /*out*/);
-                metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Add).As<void>(), icInfo);
+                TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(opKind), icInfo /*out*/);
+                metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(opKind).As<void>(), icInfo);
                 if (likely(!metamethod.IsNil()))
                 {
                     goto do_metamethod_call;
@@ -39,7 +40,7 @@ static void NO_RETURN ArithmeticAdd(TValue lhs, TValue rhs)
         // Handle case that lhs/rhs are number or string that can be converted to number
         //
         {
-            std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, [](double l, double r) { return l + r; });
+            std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, opKind);
             if (res)
             {
                 Return(TValue::CreateDouble(res.value()));
@@ -49,13 +50,14 @@ static void NO_RETURN ArithmeticAdd(TValue lhs, TValue rhs)
         // Now we know we will need to call metamethod, determine the metamethod to call
         //
         // TODO: this could have been better since we already know lhs is not a table with metatable
+        // TODO: I don't think this should be a templated function..
         //
-        metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Add>(lhs, rhs);
+        metamethod = GetMetamethodForBinaryArithmeticOperation<opKind>(lhs, rhs);
         if (metamethod.IsNil())
         {
             // TODO: make this error consistent with Lua
             //
-            ThrowError("Invalid types for arithmetic add");
+            ThrowError("Invalid types for arithmetic operation");
         }
 
 do_metamethod_call:
@@ -78,14 +80,14 @@ do_metamethod_call:
     }
 }
 
-DEEGEN_DEFINE_BYTECODE(ArithmeticAdd)
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(ArithmeticOperation, LuaMetamethodKind opKind)
 {
     Operands(
         BytecodeSlotOrConstant("lhs"),
         BytecodeSlotOrConstant("rhs")
     );
     Result(BytecodeValue);
-    Implementation(ArithmeticAdd);
+    Implementation(ArithmeticOperationImpl<opKind>);
     Variant(
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
@@ -99,5 +101,12 @@ DEEGEN_DEFINE_BYTECODE(ArithmeticAdd)
         Op("rhs").IsConstant<tDouble>()
     );
 }
+
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Add, ArithmeticOperation, LuaMetamethodKind::Add);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Sub, ArithmeticOperation, LuaMetamethodKind::Sub);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Mul, ArithmeticOperation, LuaMetamethodKind::Mul);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Div, ArithmeticOperation, LuaMetamethodKind::Div);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Mod, ArithmeticOperation, LuaMetamethodKind::Mod);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Pow, ArithmeticOperation, LuaMetamethodKind::Pow);
 
 DEEGEN_END_BYTECODE_DEFINITIONS
