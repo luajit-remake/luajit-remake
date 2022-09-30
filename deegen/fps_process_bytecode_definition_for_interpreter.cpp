@@ -109,9 +109,18 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     }
 
     fprintf(hdrOutFile.fp(), "#define GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES ");
-    for (std::string& name : allClassNames)
+    for (size_t i = 0; i < allClassNames.size(); i++)
     {
-        fprintf(hdrOutFile.fp(), "\\\n%s ", name.c_str());
+        fprintf(hdrOutFile.fp(), "\\\n");
+        if (i > 0)
+        {
+            fprintf(hdrOutFile.fp(), ", ");
+        }
+        else
+        {
+            fprintf(hdrOutFile.fp(), "  ");
+        }
+        fprintf(hdrOutFile.fp(), "%s ", allClassNames[i].c_str());
     }
 
     fprintf(hdrOutFile.fp(), "\n\n\n");
