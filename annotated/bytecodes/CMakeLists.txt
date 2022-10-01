@@ -1,5 +1,6 @@
 SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   arithmetic_bytecodes.cpp
+  comparison_bytecodes.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
@@ -39,10 +40,11 @@ set(bytecode_builder_api_header "${GENERATED_FILES_DIR}/all_bytecode_builder_api
 set(interpreter_dispatch_table_builder "${GENERATED_FILES_DIR}/build_interpreter_dispatch_table.cpp")
 set_source_files_properties(${bytecode_builder_api_header} PROPERTIES GENERATED true)
 set_source_files_properties(${interpreter_dispatch_table_builder} PROPERTIES GENERATED true)
+list(JOIN generated_json_list "," comma_separated_json_file_list)
 add_custom_command(
   OUTPUT ${bytecode_builder_api_header}
   OUTPUT ${interpreter_dispatch_table_builder}
-  COMMAND ${fps_exec} --generate-bytecode-builder-api-header --input-list='${generated_json_list}' --hdr-output=${bytecode_builder_api_header} --cpp-output=${interpreter_dispatch_table_builder}
+  COMMAND ${fps_exec} --generate-bytecode-builder-api-header --input-list='${comma_separated_json_file_list}' --hdr-output=${bytecode_builder_api_header} --cpp-output=${interpreter_dispatch_table_builder}
   DEPENDS fps ${generated_json_list} ${generated_src_list}
 )
 

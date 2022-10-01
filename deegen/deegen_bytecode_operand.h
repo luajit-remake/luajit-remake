@@ -40,7 +40,17 @@ public:
     // Return 0 if this operand is specialized to have a constant value so it doesn't have to sit in the bytecode struct
     // Otherwise, return the max # of bytes needed to represent this operand
     //
-    virtual size_t WARN_UNUSED ValueByteLength() = 0;
+
+    // Retunr true if this operand is specialized to have a constant value so it doesn't have to sit in the bytecode struct
+    //
+    virtual bool WARN_UNUSED IsElidedFromBytecodeStruct()
+    {
+        return false;
+    }
+
+    // Return the # of bytes for the full representation of this operand
+    //
+    virtual size_t WARN_UNUSED ValueFullByteLength() = 0;
 
     // Whether this operand should be treated as a signed value or an unsigned value
     //
@@ -55,6 +65,11 @@ public:
     // 'bytecodeValue' is an i64 denoting the value of the operand in the bytecode struct (or void if it is eliminated from bytecode struct).
     //
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
+
+    llvm::Type* WARN_UNUSED GetSourceValueFullRepresentationType(llvm::LLVMContext& ctx)
+    {
+        return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(ValueFullByteLength() * 8));
+    }
 
     // Do custom transformation to the implementation function
     //
@@ -84,6 +99,7 @@ public:
     size_t GetSizeInBytecodeStruct()
     {
         ReleaseAssert(m_offsetInBytecodeStruct != static_cast<size_t>(-1));
+        ReleaseAssert(m_sizeInBytecodeStruct <= ValueFullByteLength());
         return m_sizeInBytecodeStruct;
     }
 
@@ -95,9 +111,16 @@ public:
 
     void AssignOrChangeBytecodeStructOffsetAndSize(size_t offset, size_t size)
     {
-        size_t maxSize = ValueByteLength();
-        ReleaseAssertIff(maxSize == 0, offset == static_cast<size_t>(-1));
-        ReleaseAssertIff(maxSize == 0, size == 0);
+        size_t maxSize = ValueFullByteLength();
+        if (IsElidedFromBytecodeStruct())
+        {
+            ReleaseAssert(offset == static_cast<size_t>(-1));
+            ReleaseAssert(size == 0);
+        }
+        else
+        {
+            ReleaseAssert(offset > 0 && size > 0);
+        }
         ReleaseAssert(size <= maxSize);
         m_offsetInBytecodeStruct = offset;
         m_sizeInBytecodeStruct = size;
@@ -137,7 +160,7 @@ public:
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::Slot; }
 
-    virtual size_t WARN_UNUSED ValueByteLength() override
+    virtual size_t WARN_UNUSED ValueFullByteLength() override
     {
         return 8;
     }
@@ -174,7 +197,7 @@ public:
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::Constant; }
 
-    virtual size_t WARN_UNUSED ValueByteLength() override
+    virtual size_t WARN_UNUSED ValueFullByteLength() override
     {
         // TODO: this can be improved: if the type is known to have only one value, the constant can be eliminated
         //
@@ -225,7 +248,7 @@ public:
         return false;
     }
 
-    virtual size_t WARN_UNUSED ValueByteLength() override
+    virtual size_t WARN_UNUSED ValueFullByteLength() override final
     {
         return m_numBytes;
     }
@@ -237,7 +260,7 @@ public:
 
     virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override final
     {
-        return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 4));
+        return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 8));
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -291,11 +314,11 @@ public:
         return true;
     }
 
-    virtual size_t WARN_UNUSED ValueByteLength() override
+    virtual bool WARN_UNUSED IsElidedFromBytecodeStruct() override final
     {
         // This is a specialized constant, so it doesn't have to live in the bytecode struct
         //
-        return 0;
+        return true;
     }
 
     virtual bool WARN_UNUSED IsSignedValue() override
@@ -316,14 +339,17 @@ public:
         size_t currentOffset = x_opcodeSizeBytes;
         auto update = [&](BcOperand* operand)
         {
-            size_t operandMaxWidth = operand->ValueByteLength();
-            if (operandMaxWidth == 0)
+            if (operand->IsElidedFromBytecodeStruct())
             {
-                return;
+                operand->AssignOrChangeBytecodeStructOffsetAndSize(static_cast<size_t>(-1) /*offset*/, 0 /*size*/);
             }
-            size_t width = std::min(operandMaxWidth, maxWidthBytes);
-            operand->AssignOrChangeBytecodeStructOffsetAndSize(currentOffset, width);
-            currentOffset += width;
+            else
+            {
+                size_t operandMaxWidth = operand->ValueFullByteLength();
+                size_t width = std::min(operandMaxWidth, maxWidthBytes);
+                operand->AssignOrChangeBytecodeStructOffsetAndSize(currentOffset, width);
+                currentOffset += width;
+            }
         };
         for (auto& operand : m_list)
         {

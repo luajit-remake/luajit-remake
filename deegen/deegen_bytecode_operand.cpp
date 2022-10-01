@@ -13,19 +13,19 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     LLVMContext& ctx = ifi->GetModule()->getContext();
     llvm::Value* bytecodeStruct = ifi->GetCurBytecode();
     ReleaseAssert(llvm_value_has_type<void*>(bytecodeStruct));
-    ReleaseAssertIff(m_offsetInBytecodeStruct == static_cast<size_t>(-1), ValueByteLength() == 0);
-    if (m_offsetInBytecodeStruct == static_cast<size_t>(-1))
+    if (IsElidedFromBytecodeStruct())
     {
         return nullptr;
     }
-    ReleaseAssert(m_sizeInBytecodeStruct > 0 && m_sizeInBytecodeStruct <= ValueByteLength());
 
-    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecodeStruct, { CreateLLVMConstantInt<uint64_t>(ctx, m_offsetInBytecodeStruct) }, "", targetBB);
+    size_t offsetInBytecodeStruct = GetOffsetInBytecodeStruct();
+    size_t numBytesInBytecodeStruct = GetSizeInBytecodeStruct();
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecodeStruct, { CreateLLVMConstantInt<uint64_t>(ctx, offsetInBytecodeStruct) }, "", targetBB);
     ReleaseAssert(llvm_value_has_type<uint8_t*>(gep));
-    Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(m_sizeInBytecodeStruct * 8));
+    Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(numBytesInBytecodeStruct * 8));
     LoadInst* storageValue = new LoadInst(storageTypeInBytecodeStruct, gep, "", false /*isVolatile*/, Align(1), targetBB);
 
-    Type* dstType = GetUsageType(ctx);
+    Type* dstType = GetSourceValueFullRepresentationType(ctx);
     Value* result;
     if (IsSignedValue())
     {
@@ -44,10 +44,11 @@ llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterBy
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
     Value* stackBase = ifi->GetStackBase();
-    ReleaseAssert(llvm_value_has_type<int64_t>(bytecodeValue));
+    ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(ctx));
     Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), stackBase, { bytecodeValue }, "", targetBB);
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
     bv->setAlignment(Align(8));
+    ReleaseAssert(bv->getType() == GetUsageType(ctx));
     return bv;
 }
 
@@ -56,16 +57,19 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(Interpret
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
     Value* codeBlock = ifi->GetCodeBlock();
-    ReleaseAssert(llvm_value_has_type<int64_t>(bytecodeValue));
+    ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(ctx));
     Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), codeBlock, { bytecodeValue }, "", targetBB);
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
     bv->setAlignment(Align(8));
+    ReleaseAssert(bv->getType() == GetUsageType(ctx));
     return bv;
 }
 
-llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* /*targetBB*/ /*out*/, llvm::Value* bytecodeValue)
 {
-    ReleaseAssert(&bytecodeValue->getContext() == &targetBB->getContext());
+    ReleaseAssert(bytecodeValue != nullptr);
+    ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(bytecodeValue->getContext()));
+    ReleaseAssert(bytecodeValue->getType() == GetUsageType(bytecodeValue->getContext()));
     return bytecodeValue;
 }
 
@@ -74,7 +78,9 @@ llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue
     using namespace llvm;
     ReleaseAssert(bytecodeValue == nullptr);
     LLVMContext& ctx = targetBB->getContext();
-    return ConstantInt::get(ctx, APInt(static_cast<uint32_t>(m_numBytes * 8) /*bitWidth*/, m_concreteValue, m_isSigned));
+    Value* res = ConstantInt::get(ctx, APInt(static_cast<uint32_t>(m_numBytes * 8) /*bitWidth*/, m_concreteValue, m_isSigned));
+    ReleaseAssert(res->getType() == GetUsageType(ctx));
+    return res;
 }
 
 llvm::Value* WARN_UNUSED BytecodeVariantDefinition::DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore)

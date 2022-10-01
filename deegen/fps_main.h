@@ -36,13 +36,13 @@ inline cl::opt<FpsCommand> cl_mainCommand(
     cl::cat(FPSOptions));
 
 inline cl::opt<std::string> cl_irInputFilename("ir-input", cl::desc("The input LLVM IR file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
-inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A semicolon-separated list of input files"), cl::value_desc("filenames"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A comma-separated list of input files"), cl::value_desc("filenames"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_headerOutputFilename("hdr-output", cl::desc("The output file name for the generated C++ header"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename("cpp-output", cl::desc("The output file name for the generated CPP file"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_assemblyOutputFilename("asm-output", cl::desc("The output file name for the generated assembly"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonOutputFilename("json-output", cl::desc("The output file name for the generated JSON"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 
-std::vector<std::string> WARN_UNUSED ParseSemicolonSeparatedFileList(const std::string& semicolonSeparatedFiles);
+std::vector<std::string> WARN_UNUSED ParseCommaSeparatedFileList(const std::string& commaSeparatedFiles);
 
 void FPS_EmitHeaderFileCommonHeader(FILE* fp);
 void FPS_EmitCPPFileCommonHeader(FILE* fp);

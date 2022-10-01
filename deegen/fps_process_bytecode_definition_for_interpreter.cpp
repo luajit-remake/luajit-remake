@@ -65,7 +65,7 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
 
 void FPS_GenerateBytecodeBuilderAPIHeader()
 {
-    std::vector<std::string> jsonFileNameList = ParseSemicolonSeparatedFileList(cl_inputListFilenames);
+    std::vector<std::string> jsonFileNameList = ParseCommaSeparatedFileList(cl_inputListFilenames);
     std::vector<json> jlist;
     for (std::string& filename : jsonFileNameList)
     {

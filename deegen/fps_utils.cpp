@@ -19,9 +19,9 @@ void FPS_EmitCPPFileCommonHeader(FILE* fp)
     fprintf(fp, "#include \"common_utils.h\"\n\n");
 }
 
-std::vector<std::string> WARN_UNUSED ParseSemicolonSeparatedFileList(const std::string& semicolonSeparatedFiles)
+std::vector<std::string> WARN_UNUSED ParseCommaSeparatedFileList(const std::string& commaSeparatedFiles)
 {
-    if (semicolonSeparatedFiles == "")
+    if (commaSeparatedFiles == "")
     {
         return {};
     }
@@ -29,15 +29,15 @@ std::vector<std::string> WARN_UNUSED ParseSemicolonSeparatedFileList(const std::
     size_t curPos = 0;
     while (true)
     {
-        size_t nextPos = semicolonSeparatedFiles.find(";", curPos);
+        size_t nextPos = commaSeparatedFiles.find(",", curPos);
         if (nextPos == std::string::npos)
         {
-            ReleaseAssert(curPos < semicolonSeparatedFiles.length());
-            out.push_back(semicolonSeparatedFiles.substr(curPos));
+            ReleaseAssert(curPos < commaSeparatedFiles.length());
+            out.push_back(commaSeparatedFiles.substr(curPos));
             break;
         }
         ReleaseAssert(curPos < nextPos);
-        out.push_back(semicolonSeparatedFiles.substr(curPos, nextPos - curPos));
+        out.push_back(commaSeparatedFiles.substr(curPos, nextPos - curPos));
         curPos = nextPos + 1;
     }
     return out;

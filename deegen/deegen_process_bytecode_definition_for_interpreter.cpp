@@ -326,7 +326,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
                 std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
-                if (operand->ValueByteLength() == 0)
+                if (operand->IsElidedFromBytecodeStruct())
                 {
                     continue;
                 }

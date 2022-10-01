@@ -1,5 +1,3 @@
-Clean up the XXH mess: currently XXH_INLINE_ALL is causing huge code bloat.. We should make it use C++ style inline
-
 Deduplicate return continuations: many return continuations are identical. We should try to see if LLVM's MergeFunctions pass can fix it
 
 Further reduce calling conv overhead: currently even with GHC cc, LLVM still always generate a 'sub rsp, xxx' at the start and 'add rsp, xxx' at the end, even if the fast path makes no function call. I can see two ideas to optimize this: 
