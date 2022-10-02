@@ -2,6 +2,7 @@
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
 #include "misc_llvm_helper.h"
+#include "deegen_ast_simple_lowering_utils.h"
 
 namespace dast {
 
@@ -45,43 +46,21 @@ llvm::Function* WARN_UNUSED GetThrowCStringErrorDispatchTargetFunction(llvm::Mod
     return GetThrowErrorDispatchTargetFunctionImpl(module, "DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl");
 }
 
-void DeegenLowerThrowErrorAPIForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+struct LowerThrowErrorApiPass final : public DeegenSimpleApiLoweringPass<LowerThrowErrorApiPass>
 {
-    using namespace llvm;
-    LLVMContext& ctx = ifi->GetModule()->getContext();
-
-    std::vector<CallInst*> allUsesInFunction;
-    for (BasicBlock& bb : *func)
+    virtual bool WARN_UNUSED IsMagicCSymbol(const std::string& symbolName) override
     {
-        for (Instruction& inst : bb)
-        {
-            CallInst* callInst = dyn_cast<CallInst>(&inst);
-            if (callInst != nullptr)
-            {
-                Function* callee = callInst->getCalledFunction();
-                if (callee != nullptr)
-                {
-                    std::string calleeName = callee->getName().str();
-                    if (calleeName == "DeegenImpl_ThrowErrorTValue" || calleeName == "DeegenImpl_ThrowErrorCString")
-                    {
-                        allUsesInFunction.push_back(callInst);
-                    }
-                }
-            }
-        }
+        return symbolName == "DeegenImpl_ThrowErrorTValue" || symbolName == "DeegenImpl_ThrowErrorCString";
     }
 
-    if (allUsesInFunction.empty())
+    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
     {
-        return;
-    }
-
-    for (CallInst* origin : allUsesInFunction)
-    {
+        using namespace llvm;
         ReleaseAssert(origin->arg_size() == 1);
         std::string calleeName = origin->getCalledFunction()->getName().str();
         ReleaseAssert(calleeName == "DeegenImpl_ThrowErrorTValue" || calleeName == "DeegenImpl_ThrowErrorCString");
 
+        LLVMContext& ctx = ifi->GetModule()->getContext();
         Function* dispatchTarget;
         Value* errorObject = origin->getArgOperand(0);
         if (calleeName == "DeegenImpl_ThrowErrorTValue")
@@ -110,6 +89,6 @@ void DeegenLowerThrowErrorAPIForInterpreter(InterpreterBytecodeImplCreator* ifi,
         origin->eraseFromParent();
         unreachableInst->eraseFromParent();
     }
-}
+};
 
 }   // namespace dast

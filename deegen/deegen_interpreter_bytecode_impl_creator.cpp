@@ -6,6 +6,7 @@
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_ast_throw_error.h"
 #include "tvalue_typecheck_optimization.h"
+#include "deegen_ast_simple_lowering_utils.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -312,7 +313,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     AstBytecodeReturn::LowerForInterpreter(this, m_wrapper);
     AstMakeCall::LowerForInterpreter(this, m_wrapper);
     AstReturnValueAccessor::LowerForInterpreter(this, m_wrapper);
-    DeegenLowerThrowErrorAPIForInterpreter(this, m_wrapper);
+    DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
