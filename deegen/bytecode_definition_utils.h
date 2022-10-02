@@ -8,6 +8,8 @@ enum class DeegenBytecodeOperandType
     BytecodeSlotOrConstant,     // this is a pseudo-type that must be concretized in each Variant()
     BytecodeSlot,
     Constant,
+    BytecodeRangeRO,
+    BytecodeRangeRW,
     Int8,
     UInt8,
     Int16,
@@ -37,14 +39,16 @@ constexpr bool DeegenBytecodeOperandIsLiteralType(DeegenBytecodeOperandType valu
     case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
     case DeegenBytecodeOperandType::BytecodeSlot:
     case DeegenBytecodeOperandType::Constant:
-        return true;
+    case DeegenBytecodeOperandType::BytecodeRangeRO:
+    case DeegenBytecodeOperandType::BytecodeRangeRW:
+        return false;
     case DeegenBytecodeOperandType::Int8:
     case DeegenBytecodeOperandType::UInt8:
     case DeegenBytecodeOperandType::Int16:
     case DeegenBytecodeOperandType::UInt16:
     case DeegenBytecodeOperandType::Int32:
     case DeegenBytecodeOperandType::UInt32:
-        return false;
+        return true;
     }
 }
 
@@ -78,6 +82,46 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     static consteval Operand Constant(const char* name)
     {
         return Operand { name, DeegenBytecodeOperandType::Constant };
+    }
+
+    template<typename T>
+    static consteval Operand Literal(const char* name)
+    {
+        if constexpr(std::is_same_v<T, uint8_t>)
+        {
+            return Operand { name, DeegenBytecodeOperandType::UInt8 };
+        }
+        else if constexpr(std::is_same_v<T, int8_t>)
+        {
+            return Operand { name, DeegenBytecodeOperandType::Int8 };
+        }
+        else if constexpr(std::is_same_v<T, uint16_t>)
+        {
+            return Operand { name, DeegenBytecodeOperandType::UInt16 };
+        }
+        else if constexpr(std::is_same_v<T, int16_t>)
+        {
+            return Operand { name, DeegenBytecodeOperandType::Int16 };
+        }
+        else if constexpr(std::is_same_v<T, uint32_t>)
+        {
+            return Operand { name, DeegenBytecodeOperandType::UInt32 };
+        }
+        else
+        {
+            static_assert(std::is_same_v<T, int32_t>, "unhandled type");
+            return Operand { name, DeegenBytecodeOperandType::Int32 };
+        }
+    }
+
+    static consteval Operand BytecodeRangeBaseRO(const char* name)
+    {
+        return Operand { name, DeegenBytecodeOperandType::BytecodeRangeRO };
+    }
+
+    static consteval Operand BytecodeRangeBaseRW(const char* name)
+    {
+        return Operand { name, DeegenBytecodeOperandType::BytecodeRangeRW };
     }
 
     struct SpecializedOperand
@@ -198,6 +242,12 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType);
                 break;
             }
+            case DeegenBytecodeOperandType::BytecodeRangeRO:
+            case DeegenBytecodeOperandType::BytecodeRangeRW:
+            {
+                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized);
+                break;
+            }
             case DeegenBytecodeOperandType::Int8:
             case DeegenBytecodeOperandType::UInt8:
             case DeegenBytecodeOperandType::Int16:
@@ -312,6 +362,16 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             case DeegenBytecodeOperandType::Constant:
             {
                 ReleaseAssert((std::is_same_v<Arg, TValue>));
+                break;
+            }
+            case DeegenBytecodeOperandType::BytecodeRangeRO:
+            {
+                ReleaseAssert((std::is_same_v<Arg, const TValue*>));
+                break;
+            }
+            case DeegenBytecodeOperandType::BytecodeRangeRW:
+            {
+                ReleaseAssert((std::is_same_v<Arg, TValue*>));
                 break;
             }
             case DeegenBytecodeOperandType::Int8:

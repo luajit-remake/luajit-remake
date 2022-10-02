@@ -1,6 +1,7 @@
 SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   arithmetic_bytecodes.cpp
   comparison_bytecodes.cpp
+  call_bytecodes.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

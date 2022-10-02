@@ -14,7 +14,8 @@ enum class BcOperandKind
     Slot,
     Constant,
     Literal,
-    SpecializedLiteral
+    SpecializedLiteral,
+    BytecodeRangeBase
 };
 
 class InterpreterBytecodeImplCreator;
@@ -243,11 +244,6 @@ public:
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::Literal; }
 
-    virtual bool WARN_UNUSED IsSpecializedToConcreteValue()
-    {
-        return false;
-    }
-
     virtual size_t WARN_UNUSED ValueFullByteLength() override final
     {
         return m_numBytes;
@@ -309,11 +305,6 @@ public:
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::SpecializedLiteral; }
 
-    virtual bool WARN_UNUSED IsSpecializedToConcreteValue() override
-    {
-        return true;
-    }
-
     virtual bool WARN_UNUSED IsElidedFromBytecodeStruct() override final
     {
         // This is a specialized constant, so it doesn't have to live in the bytecode struct
@@ -329,6 +320,76 @@ public:
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     uint64_t m_concreteValue;
+};
+
+// A bytecode operand that is a bytecode range starting point
+//
+class BcOpBytecodeRangeBase final : public BcOperand
+{
+public:
+    BcOpBytecodeRangeBase(const std::string& name, bool isReadOnly)
+        : BcOperand(name)
+        , m_isReadOnly(isReadOnly)
+        , m_hasRangeLimit(false)
+        , m_isRangeLimitConstant(false)
+        , m_constantRangeLimit(0)
+        , m_operandRangeLimit(nullptr)
+    { }
+
+    virtual void dump(std::stringstream& ss) override
+    {
+        ss << "Arg '" << OperandName() << "': BytecodeRangeBase [ ";
+        if (m_isReadOnly)
+        {
+            ss << "readonly";
+        }
+        else
+        {
+            ss << "readwrite";
+        }
+        ss << ", ";
+        if (m_hasRangeLimit)
+        {
+            if (m_isRangeLimitConstant)
+            {
+                ss << "len = " << m_constantRangeLimit;
+            }
+            else
+            {
+                ss << "len = " << m_operandRangeLimit->OperandName();
+            }
+        }
+        else
+        {
+            ss << "len = unlimited";
+        }
+        ss << " ]" << std::endl;
+    }
+
+    virtual BcOperandKind GetKind() override { return BcOperandKind::BytecodeRangeBase; }
+
+    virtual size_t WARN_UNUSED ValueFullByteLength() override
+    {
+        return 8;
+    }
+
+    virtual bool WARN_UNUSED IsSignedValue() override
+    {
+        return false;
+    }
+
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override
+    {
+        return llvm_type_of<void*>(ctx);
+    }
+
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
+    bool m_isReadOnly;
+    bool m_hasRangeLimit;
+    bool m_isRangeLimitConstant;
+    size_t m_constantRangeLimit;
+    BcOperand* m_operandRangeLimit;
 };
 
 class BytecodeVariantDefinition

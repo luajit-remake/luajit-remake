@@ -83,6 +83,16 @@ llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue
     return res;
 }
 
+llvm::Value* WARN_UNUSED BcOpBytecodeRangeBase::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+    ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(bytecodeValue->getContext()));
+    Value* res = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { bytecodeValue }, "", targetBB);
+    ReleaseAssert(res->getType() == GetUsageType(ctx));
+    return res;
+}
+
 llvm::Value* WARN_UNUSED BytecodeVariantDefinition::DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
@@ -240,9 +250,69 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                     }
                     def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, specMask));
                 }
+                else if (opType == DeegenBytecodeOperandType::BytecodeRangeRO || opType == DeegenBytecodeOperandType::BytecodeRangeRW)
+                {
+                    ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
+                    bool isReadOnly = (opType == DeegenBytecodeOperandType::BytecodeRangeRO);
+                    def->m_list.push_back(std::make_unique<BcOpBytecodeRangeBase>(operandName, isReadOnly));
+                }
                 else
                 {
-                    ReleaseAssert(false && "unimplemented");
+                    bool isSigned;
+                    size_t numBytes;
+                    switch (opType)
+                    {
+                    case DeegenBytecodeOperandType::Int8:
+                    {
+                        isSigned = true;
+                        numBytes = 1;
+                        break;
+                    }
+                    case DeegenBytecodeOperandType::UInt8:
+                    {
+                        isSigned = false;
+                        numBytes = 1;
+                        break;
+                    }
+                    case DeegenBytecodeOperandType::Int16:
+                    {
+                        isSigned = true;
+                        numBytes = 2;
+                        break;
+                    }
+                    case DeegenBytecodeOperandType::UInt16:
+                    {
+                        isSigned = false;
+                        numBytes = 2;
+                        break;
+                    }
+                    case DeegenBytecodeOperandType::Int32:
+                    {
+                        isSigned = true;
+                        numBytes = 4;
+                        break;
+                    }
+                    case DeegenBytecodeOperandType::UInt32:
+                    {
+                        isSigned = false;
+                        numBytes = 4;
+                        break;
+                    }
+                    default:
+                    {
+                        ReleaseAssert(false && "unhandled enum");
+                    }
+                    }   /*switch opType*/
+
+                    if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
+                    {
+                        def->m_list.push_back(std::make_unique<BcOpLiteral>(operandName, isSigned, numBytes));
+                    }
+                    else
+                    {
+                        ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::Literal);
+                        def->m_list.push_back(std::make_unique<BcOpSpecializedLiteral>(operandName, isSigned, numBytes, spOp.m_value));
+                    }
                 }
             }
             ReleaseAssert(def->m_list.size() == def->m_opNames.size());

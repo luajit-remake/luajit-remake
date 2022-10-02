@@ -38,6 +38,14 @@ std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType
     {
         return "CsTab";
     }
+    case DeegenBytecodeOperandType::BytecodeRangeRO:
+    {
+        return "Local";
+    }
+    case DeegenBytecodeOperandType::BytecodeRangeRW:
+    {
+        return "Local";
+    }
     case DeegenBytecodeOperandType::Int8:
     {
         return "ForbidUninitialized<int8_t>";
@@ -340,6 +348,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 else if (operand->GetKind() == BcOperandKind::Constant)
                 {
                     fprintf(fp, "param%d.m_csTableOrd", static_cast<int>(i));
+                }
+                else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                {
+                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
                 }
                 else
                 {
