@@ -145,8 +145,8 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
             {
                 goto fail;
             }
-            HeapEntityType lhsTy = lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-            HeapEntityType rhsTy = rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+            HeapEntityType lhsTy = lhs.GetHeapEntityType();
+            HeapEntityType rhsTy = rhs.GetHeapEntityType();
             if (unlikely(lhsTy != rhsTy))
             {
                 goto fail;

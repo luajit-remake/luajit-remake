@@ -40,27 +40,27 @@ std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType
     }
     case DeegenBytecodeOperandType::Int8:
     {
-        return "int8_t";
+        return "ForbidUninitialized<int8_t>";
     }
     case DeegenBytecodeOperandType::UInt8:
     {
-        return "uint8_t";
+        return "ForbidUninitialized<uint8_t>";
     }
     case DeegenBytecodeOperandType::Int16:
     {
-        return "int16_t";
+        return "ForbidUninitialized<int16_t>";
     }
     case DeegenBytecodeOperandType::UInt16:
     {
-        return "uint16_t";
+        return "ForbidUninitialized<uint16_t>";
     }
     case DeegenBytecodeOperandType::Int32:
     {
-        return "int32_t";
+        return "ForbidUninitialized<int32_t>";
     }
     case DeegenBytecodeOperandType::UInt32:
     {
-        return "uint32_t";
+        return "ForbidUninitialized<uint32_t>";
     }
     }   /* switch ty */
     ReleaseAssert(false);
@@ -344,7 +344,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 else
                 {
                     ReleaseAssert(operand->GetKind() == BcOperandKind::Literal);
-                    fprintf(fp, "param%d", static_cast<int>(i));
+                    fprintf(fp, "param%d.m_value", static_cast<int>(i));
                 }
                 fprintf(fp, "));\n");
             }

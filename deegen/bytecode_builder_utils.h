@@ -31,6 +31,13 @@ struct LocalOrCsTab
     uint64_t m_ord;
 };
 
+template<typename T>
+struct ForbidUninitialized
+{
+    ForbidUninitialized(T v) : m_value(v) { }
+    T m_value;
+};
+
 class BytecodeBuilderBase
 {
     MAKE_NONCOPYABLE(BytecodeBuilderBase);

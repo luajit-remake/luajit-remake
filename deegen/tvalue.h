@@ -148,6 +148,8 @@ struct TValue
         return m_value == x_pureNaN;
     }
 
+    HeapEntityType ALWAYS_INLINE GetHeapEntityType() const;
+
     double ALWAYS_INLINE AsDouble() const
     {
         assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
@@ -422,6 +424,12 @@ struct tInt32
 inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
+}
+
+inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
+{
+    assert(IsPointer());
+    return DeegenImpl_TValueGetPointerType(*this);
 }
 
 #define macro(hoi)                                                                                                              \
