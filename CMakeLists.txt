@@ -155,11 +155,19 @@ include_directories("${PROJECT_SOURCE_DIR}/deegen")
 
 add_subdirectory(common_utils)
 
-add_subdirectory(toylang)
-
 add_subdirectory(deegen)
 
 add_subdirectory(annotated)
+
+# This target must contain any FPS step that could generate header files
+# All the post-FPS build steps should come after this target and depend on this target
+#
+add_library(deegen_fps_lib 
+  $<TARGET_OBJECTS:deegen_generated_interpreter_impl>
+  $<TARGET_OBJECTS:deegen_interpreter_fn_entry_logic>
+)
+
+add_subdirectory(toylang)
 
 # add the executable
 #
@@ -199,11 +207,10 @@ target_link_libraries(main PUBLIC
   common_utils
   toylang
   deegen_rt
-  deegen_generated
+  deegen_fps_lib
+  deegen_user_builtin_lib
   deegen_unit_test_ir
   deegen_common_snippet_ir
-  deegen_user_builtin_lib
-  deegen_generated_interpreter_impl
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )

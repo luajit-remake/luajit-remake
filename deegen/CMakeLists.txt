@@ -43,7 +43,7 @@ target_link_libraries(fps PUBLIC
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
 
-set(deegen_generated_sources "")
+set(deegen_interpreter_function_entry_sources "")
 
 # generate the interpreter function entry logic
 #
@@ -52,11 +52,11 @@ set_source_files_properties(${hdr_name} PROPERTIES GENERATED true)
 
 set(asm_name "${GENERATED_FILES_DIR}/guest_language_function_interpreter_entry_point_asm.s")
 set_source_files_properties(${asm_name} PROPERTIES GENERATED true)
-list(APPEND deegen_generated_sources ${asm_name})
+list(APPEND deegen_interpreter_function_entry_sources ${asm_name})
 
 set(cpp_name "${GENERATED_FILES_DIR}/guest_language_function_interpreter_entry_point_cpp.cpp")
 set_source_files_properties(${cpp_name} PROPERTIES GENERATED true)
-list(APPEND deegen_generated_sources ${cpp_name})
+list(APPEND deegen_interpreter_function_entry_sources ${cpp_name})
 
 add_custom_command(
   OUTPUT ${hdr_name}
@@ -66,7 +66,7 @@ add_custom_command(
   DEPENDS fps
 )
 
-add_library(deegen_generated 
-	${deegen_generated_sources}
+add_library(deegen_interpreter_fn_entry_logic OBJECT
+  ${deegen_interpreter_function_entry_sources}
 )
 

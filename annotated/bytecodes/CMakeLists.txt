@@ -56,7 +56,7 @@ add_custom_command(
   DEPENDS fps ${generated_json_list} ${generated_src_list}
 )
 
-add_library(deegen_generated_interpreter_impl
+add_library(deegen_generated_interpreter_impl OBJECT
   ${generated_src_list}
   ${interpreter_dispatch_table_builder}
 )
