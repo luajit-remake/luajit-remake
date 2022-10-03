@@ -161,6 +161,8 @@ void GenerateVariantSelectorImpl(FILE* fp,
         GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
         selectedType.pop_back();
         fprintf(fp, "%s} else {\n", extraIndentStr.c_str());
+        // TODO: this need to correctly handle the constant type
+        //
         selectedType.push_back(DeegenBytecodeOperandType::Constant);
         GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
         selectedType.pop_back();

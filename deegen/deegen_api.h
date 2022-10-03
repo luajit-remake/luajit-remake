@@ -32,6 +32,7 @@ extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo();
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorTValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorCString(const char* value);
+extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 
 // Return zero or one value as the result of the operation
 //
@@ -66,6 +67,13 @@ inline void ALWAYS_INLINE NO_RETURN ThrowError(TValue value)
 inline void ALWAYS_INLINE NO_RETURN ThrowError(const char* value)
 {
     DeegenImpl_ThrowErrorCString(value);
+}
+
+// Get the global object captured by the current function
+//
+inline HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE GetFEnvGlobalObject()
+{
+    return DeegenImpl_GetFEnvGlobalObject();
 }
 
 namespace detail {

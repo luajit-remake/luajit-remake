@@ -46,7 +46,7 @@ llvm::Function* WARN_UNUSED GetThrowCStringErrorDispatchTargetFunction(llvm::Mod
     return GetThrowErrorDispatchTargetFunctionImpl(module, "DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl");
 }
 
-struct LowerThrowErrorApiPass final : public DeegenSimpleApiLoweringPass<LowerThrowErrorApiPass>
+struct LowerThrowErrorApiPass final : public DeegenAbstractSimpleApiLoweringPass
 {
     virtual bool WARN_UNUSED IsMagicCSymbol(const std::string& symbolName) override
     {
@@ -90,5 +90,7 @@ struct LowerThrowErrorApiPass final : public DeegenSimpleApiLoweringPass<LowerTh
         unreachableInst->eraseFromParent();
     }
 };
+
+DEEGEN_REGISTER_SIMPLE_API_LOWERING_PASS(LowerThrowErrorApiPass);
 
 }   // namespace dast

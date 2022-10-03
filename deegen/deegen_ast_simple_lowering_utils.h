@@ -23,49 +23,28 @@ public:
     virtual bool WARN_UNUSED IsMagicCXXSymbol(const std::string& /*demangledSymbolName*/) { return false; }
 
     virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) = 0;
-
-private:
-    // Do not inherit this class directly: inherit DeegenSimpleApiLoweringPass instead
-    //
-    virtual void DoNotInheritDirectly_InheritDeegenSimpleApiLoweringPass() = 0;
 };
-
-// Intentionally declared as a plain pointer global variable (not an object, and no C++17 inline), so that it has constant initialization.
-// All the registration helpers (the 's_registrationHelper' globals) have dynamic initialization, which happens after constant/zero initialization.
-// This guarantees that this variable is initialized before all the registration helpers, so we won't get into weird initialization order issues.
-//
-extern std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>>* g_deegenAllRegisteredSimpleApiLoweringPasses;
 
 class DeegenAllSimpleApiLoweringPasses
 {
 public:
-    static void Register(std::unique_ptr<DeegenAbstractSimpleApiLoweringPass> pass);
-    static DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED GetHandlerMaybeNull(const std::string& symbolName);
+    static std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> WARN_UNUSED GetAllPasses();
     static void LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func);
 };
 
-template<typename CRTP>
-struct DeegenSimpleApiLoweringPass : public DeegenAbstractSimpleApiLoweringPass
-{
-private:
-    virtual void DoNotInheritDirectly_InheritDeegenSimpleApiLoweringPass() override final { ReleaseAssert(false); }
+// Each pass should use 'DEEGEN_REGISTER_SIMPLE_API_LOWERING_PASS(name)' to register the pass, then put the pass class name into the following list
+//
+#define DEEGEN_ALL_SIMPLE_API_LOWERING_PASS_NAMES   \
+    LowerThrowErrorApiPass                          \
+  , LowerGetGlobalObjectApiPass                     \
 
-    struct RegistrationHelper
-    {
-        RegistrationHelper()
-        {
-            static_assert(std::is_base_of_v<DeegenAbstractSimpleApiLoweringPass, CRTP>);
-            static_assert(std::is_base_of_v<DeegenSimpleApiLoweringPass<CRTP>, CRTP>);
-            DeegenAllSimpleApiLoweringPasses::Register(std::make_unique<CRTP>());
-        }
-    };
-
-    static inline RegistrationHelper s_registrationHelper;
-
-    // Force ODR-use of 's_registrationHelper' so that it is instantiated
-    //
-    template<auto> struct value_tag {};
-    value_tag<&s_registrationHelper> force_odr_use() = delete;
-};
+/* The helper macro to register the classes */
+#define DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(name) createDeegenSimpleLoweringPass_ ## name
+#define DEEGEN_REGISTER_SIMPLE_API_LOWERING_PASS(name)                                                                                          \
+    std::unique_ptr<DeegenAbstractSimpleApiLoweringPass> WARN_UNUSED DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(name) ();          \
+    std::unique_ptr<DeegenAbstractSimpleApiLoweringPass> WARN_UNUSED DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(name) () {         \
+        return std::make_unique<name>();                                                                                                        \
+    }                                                                                                                                           \
+    static_assert(std::is_base_of_v<DeegenAbstractSimpleApiLoweringPass, name>)
 
 }   // namespace dast

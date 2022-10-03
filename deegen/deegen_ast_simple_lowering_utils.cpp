@@ -3,31 +3,27 @@
 
 namespace dast {
 
-std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>>* g_deegenAllRegisteredSimpleApiLoweringPasses = nullptr;
+#define macro(e) std::unique_ptr<DeegenAbstractSimpleApiLoweringPass> WARN_UNUSED DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(e) ();
+PP_FOR_EACH(macro, DEEGEN_ALL_SIMPLE_API_LOWERING_PASS_NAMES)
+#undef macro
 
-void DeegenAllSimpleApiLoweringPasses::Register(std::unique_ptr<DeegenAbstractSimpleApiLoweringPass> pass)
+std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> WARN_UNUSED DeegenAllSimpleApiLoweringPasses::GetAllPasses()
 {
-    ReleaseAssert(pass.get() != nullptr);
-    if (g_deegenAllRegisteredSimpleApiLoweringPasses == nullptr)
-    {
-        g_deegenAllRegisteredSimpleApiLoweringPasses = new std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>>();
-    }
-    g_deegenAllRegisteredSimpleApiLoweringPasses->push_back(std::move(pass));
+    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> res;
+#define macro(e) res.push_back(DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(e)());
+    PP_FOR_EACH(macro, DEEGEN_ALL_SIMPLE_API_LOWERING_PASS_NAMES)
+#undef macro
+    return res;
 }
 
-DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED DeegenAllSimpleApiLoweringPasses::GetHandlerMaybeNull(const std::string& symbolName)
+static DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED GetPassHandlerMaybeNull(std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>>& passes, const std::string& symbolName)
 {
-    if (g_deegenAllRegisteredSimpleApiLoweringPasses == nullptr)
-    {
-        return nullptr;
-    }
-
     DeegenAbstractSimpleApiLoweringPass* result = nullptr;
     bool isCXXSymbol = IsCXXSymbol(symbolName);
     std::string cxxSymbolName;
     if (isCXXSymbol) { cxxSymbolName = DemangleCXXSymbol(symbolName); }
 
-    for (auto& it : *g_deegenAllRegisteredSimpleApiLoweringPasses)
+    for (auto& it : passes)
     {
         bool shouldHandle = false;
         if (it->IsMagicCSymbol(symbolName))
@@ -55,6 +51,7 @@ DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED DeegenAllSimpleApiLoweringPasse
 void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
 {
     using namespace llvm;
+    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = GetAllPasses();
     std::vector<std::pair<DeegenAbstractSimpleApiLoweringPass*, CallInst*>> allUsesInFunction;
     for (BasicBlock& bb : *func)
     {
@@ -67,7 +64,7 @@ void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecod
                 if (callee != nullptr)
                 {
                     std::string calleeName = callee->getName().str();
-                    DeegenAbstractSimpleApiLoweringPass* handler = GetHandlerMaybeNull(calleeName);
+                    DeegenAbstractSimpleApiLoweringPass* handler = GetPassHandlerMaybeNull(passes, calleeName);
                     if (handler != nullptr)
                     {
                         // Important to collect everything first and then run each of them, so we won't get into iterator invalidation problems
