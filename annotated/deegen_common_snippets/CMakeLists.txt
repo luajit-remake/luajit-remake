@@ -25,6 +25,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_ret_addr_from_stack_frame_header.cpp
   populate_new_call_frame_header_for_c_func.cpp
   get_global_object_from_code_block.cpp
+  append_variadic_results_to_function_returns.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

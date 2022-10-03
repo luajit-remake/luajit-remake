@@ -18,6 +18,7 @@ add_library(deegen_rt
   deegen_process_bytecode_definition_for_interpreter.cpp
   deegen_ast_simple_lowering_utils.cpp
   deegen_ast_get_global_object.cpp
+  deegen_ast_guest_language_funtion_return.cpp
 ) 
 
 # Build the main Futamura projection stage binary

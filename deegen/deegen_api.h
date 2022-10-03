@@ -33,6 +33,9 @@ extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicR
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorTValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorCString(const char* value);
 extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
+extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
+extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(TValue* retStart, size_t numRets);
+extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets);
 
 // Return zero or one value as the result of the operation
 //
@@ -74,6 +77,21 @@ inline void ALWAYS_INLINE NO_RETURN ThrowError(const char* value)
 inline HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE GetFEnvGlobalObject()
 {
     return DeegenImpl_GetFEnvGlobalObject();
+}
+
+inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn()
+{
+    DeegenImpl_GuestLanguageFunctionReturn_NoValue();
+}
+
+inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn(TValue* retStart, size_t numRets)
+{
+    DeegenImpl_GuestLanguageFunctionReturn(retStart, numRets);
+}
+
+inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets)
+{
+    DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(retStart, numRets);
 }
 
 namespace detail {

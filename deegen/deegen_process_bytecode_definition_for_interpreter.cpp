@@ -207,13 +207,16 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             fprintf(fp, "    struct RobustInputDesc {\n");
             size_t numOperands = def->m_opNames.size();
             ReleaseAssert(numOperands == def->m_originalOperandTypes.size());
+            bool hasAnyOperandsToProvide = false;
             for (size_t i = 0; i < numOperands; i++)
             {
                 fprintf(fp, "        %s %s;\n", GetCppTypeNameForDeegenBytecodeOperandType(def->m_originalOperandTypes[i]).c_str(), def->m_opNames[i].c_str());
+                hasAnyOperandsToProvide = true;
             }
             if (def->m_hasOutputValue)
             {
                 fprintf(fp, "        Local output;\n");
+                hasAnyOperandsToProvide = true;
             }
             fprintf(fp, "    };\n");
 
@@ -225,7 +228,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             {
                 bytecodeBuilderFunctionReturnType = "void";
             }
-            fprintf(fp, "    %s ALWAYS_INLINE Create%s(RobustInputDesc inputDesc) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str());
+            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "RobustInputDesc inputDesc" : "");
 
             {
                 std::vector<DeegenBytecodeOperandType> selectedTypes;
