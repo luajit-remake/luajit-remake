@@ -179,7 +179,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeSlot, .m_value = 0 }, .m_ord = m_ord };
         }
 
-        template<typename T>
+        template<typename T = tTop>
         consteval SpecializedOperandRef IsConstant()
         {
             static_assert(IsValidTypeSpecialization<T>);

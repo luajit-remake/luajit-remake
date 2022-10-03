@@ -5,6 +5,10 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   global_get.cpp
   global_put.cpp
   return_bytecodes.cpp
+  bytecode_mov.cpp
+  unconditional_branch.cpp
+  set_constant_value.cpp
+  new_closure.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

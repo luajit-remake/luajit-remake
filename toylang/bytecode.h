@@ -336,18 +336,22 @@ public:
         {
             return self->m_defaultCodeBlock;
         }
-        RareGlobalObjectToCodeBlockMap* rareMap = self->m_rareGOtoCBMap;
-        if (unlikely(rareMap == nullptr))
+        UnlinkedCodeBlock* raw = TranslateToRawPointer(self);
+        return raw->GetCodeBlockSlowPath(globalObject);
+    }
+
+    CodeBlock* WARN_UNUSED NO_INLINE GetCodeBlockSlowPath(UserHeapPointer<TableObject> globalObject)
+    {
+        if (unlikely(m_rareGOtoCBMap == nullptr))
         {
-            rareMap = new RareGlobalObjectToCodeBlockMap;
-            self->m_rareGOtoCBMap = rareMap;
+            m_rareGOtoCBMap = new RareGlobalObjectToCodeBlockMap;
         }
-        auto iter = rareMap->find(globalObject.m_value);
-        if (unlikely(iter == rareMap->end()))
+        auto iter = m_rareGOtoCBMap->find(globalObject.m_value);
+        if (unlikely(iter == m_rareGOtoCBMap->end()))
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
-            CodeBlock* newCb = CodeBlock::Create(vm, TranslateToRawPointer(vm, self), globalObject);
-            (*rareMap)[globalObject.m_value] = newCb;
+            CodeBlock* newCb = CodeBlock::Create(vm, this /*ucb*/, globalObject);
+            (*m_rareGOtoCBMap)[globalObject.m_value] = newCb;
             return newCb;
         }
         else
@@ -584,9 +588,9 @@ public:
         return TCGet(self->m_upvalues[ord]);
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateAndFillUpvalues(UnlinkedCodeBlock* ucb, CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
     {
-        assert(cb->m_owner == ucb);
+        UnlinkedCodeBlock* ucb = cb->m_owner;
         HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
         assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
         assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
@@ -3854,7 +3858,7 @@ public:
         assert(bc->m_opcode == x_opcodeId<Self>);
         UnlinkedCodeBlock* ucb = CodeBlock::GetConstantAsUnlinkedCodeBlock(rc->m_codeBlock, bc->m_src.ConstantOrd());
         CodeBlock* cb = UnlinkedCodeBlock::GetCodeBlock(ucb, rc->m_globalObject);
-        UserHeapPointer<FunctionObject> func = FunctionObject::CreateAndFillUpvalues(ucb, cb, rc, reinterpret_cast<TValue*>(stackframe), StackFrameHeader::GetStackFrameHeader(stackframe)->m_func);
+        UserHeapPointer<FunctionObject> func = FunctionObject::CreateAndFillUpvalues(cb, rc, reinterpret_cast<TValue*>(stackframe), StackFrameHeader::GetStackFrameHeader(stackframe)->m_func);
         *StackFrameHeader::GetLocalAddr(stackframe, bc->m_dst) = TValue::CreatePointer(func);
         Dispatch(rc, stackframe, bcu + sizeof(Self));
     }

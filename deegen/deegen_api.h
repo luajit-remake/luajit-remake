@@ -36,6 +36,7 @@ extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(TValue* retStart, size_t numRets);
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets);
+extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb);
 
 // Return zero or one value as the result of the operation
 //
@@ -92,6 +93,11 @@ inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn(TValue* retStart
 inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets)
 {
     DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(retStart, numRets);
+}
+
+inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb)
+{
+    return DeegenImpl_CreateNewClosure(cb);
 }
 
 namespace detail {
