@@ -3,10 +3,10 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* stackframeBase, CodeBlock* cb)
+static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* calleeStackBase, CodeBlock* cb)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackframeBase);
-    uint32_t bytecodeOffset = hdr->m_callerBytecodeOffset;
+    StackFrameHeader* calleeHdr = StackFrameHeader::GetStackFrameHeader(calleeStackBase);
+    uint32_t bytecodeOffset = calleeHdr->m_callerBytecodeOffset;
     uint8_t* bytecodeBase = cb->m_bytecode;
     return bytecodeBase + bytecodeOffset;
 }

@@ -10,44 +10,46 @@ target triple = "x86_64-pc-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local void @__deegen_interpreter_op_test4_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
-  %2 = ptrtoint ptr %numRet to i64
-  %3 = getelementptr inbounds %0, ptr %stackBase, i64 -1
-  %4 = load ptr addrspace(256), ptr %3, align 8, !tbaa !3
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %4, align 4, !tbaa !9
-  %5 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %6 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %7 = ptrtoint ptr %6 to i64
-  %8 = add i64 %7, %5
-  %9 = inttoptr i64 %8 to ptr
-  %10 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
-  %11 = load i32, ptr %10, align 8, !tbaa !11
-  %12 = getelementptr inbounds %1, ptr %9, i64 0, i32 4
-  %13 = load ptr, ptr %12, align 8, !tbaa !12
-  %14 = zext i32 %11 to i64
-  %15 = getelementptr inbounds i8, ptr %13, i64 %14
-  %16 = getelementptr inbounds i8, ptr %15, i64 2
-  %17 = load i32, ptr %16, align 1
-  %18 = tail call noundef i64 @_Z2a1v() #2
-  %19 = icmp ult i64 %18, %2
-  br i1 %19, label %20, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+define dso_local void @__deegen_interpreter_op_test4_0_retcont_0(ptr %coroutineCtx, ptr nocapture readonly %stackBase, ptr nocapture readonly %retStart, ptr %numRet, i64 %0) #0 {
+  %2 = getelementptr %0, ptr %stackBase, i64 -1, i32 1
+  %3 = load ptr, ptr %2, align 8, !tbaa !3
+  %4 = ptrtoint ptr %numRet to i64
+  %5 = getelementptr inbounds %0, ptr %3, i64 -1
+  %6 = load ptr addrspace(256), ptr %5, align 8, !tbaa !9
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %6, align 4, !tbaa !10
+  %7 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
+  %8 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
+  %9 = ptrtoint ptr %8 to i64
+  %10 = add i64 %9, %7
+  %11 = inttoptr i64 %10 to ptr
+  %12 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
+  %13 = load i32, ptr %12, align 8, !tbaa !12
+  %14 = getelementptr inbounds %1, ptr %11, i64 0, i32 4
+  %15 = load ptr, ptr %14, align 8, !tbaa !13
+  %16 = zext i32 %13 to i64
+  %17 = getelementptr inbounds i8, ptr %15, i64 %16
+  %18 = getelementptr inbounds i8, ptr %17, i64 2
+  %19 = load i32, ptr %18, align 1
+  %20 = tail call noundef i64 @_Z2a1v() #2
+  %21 = icmp ult i64 %20, %4
+  br i1 %21, label %22, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-20:                                               ; preds = %1
-  %21 = getelementptr inbounds i64, ptr %retStart, i64 %18
-  %22 = load i64, ptr %21, align 8, !tbaa !18
+22:                                               ; preds = %1
+  %23 = getelementptr inbounds i64, ptr %retStart, i64 %20
+  %24 = load i64, ptr %23, align 8, !tbaa !19
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %20, %1
-  %.0.i = phi i64 [ %22, %20 ], [ -844429225099137, %1 ]
-  %outputSlot = zext i32 %17 to i64
-  %23 = getelementptr inbounds i64, ptr %stackBase, i64 %outputSlot
-  store i64 %.0.i, ptr %23, align 8
-  %24 = getelementptr inbounds i8, ptr %15, i64 6
-  %25 = load i16, ptr %24, align 1
-  %26 = zext i16 %25 to i64
-  %27 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %26
-  %28 = load ptr, ptr %27, align 8
-  musttail call void %28(ptr %coroutineCtx, ptr nonnull %stackBase, ptr nonnull %24, ptr nonnull %9, i64 undef) #2
+__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %22, %1
+  %.0.i = phi i64 [ %24, %22 ], [ -844429225099137, %1 ]
+  %outputSlot = zext i32 %19 to i64
+  %25 = getelementptr inbounds i64, ptr %3, i64 %outputSlot
+  store i64 %.0.i, ptr %25, align 8
+  %26 = getelementptr inbounds i8, ptr %17, i64 6
+  %27 = load i16, ptr %26, align 1
+  %28 = zext i16 %27 to i64
+  %29 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %28
+  %30 = load ptr, ptr %29, align 8
+  musttail call void %30(ptr %coroutineCtx, ptr nonnull %3, ptr nonnull %26, ptr nonnull %11, i64 undef) #2
   ret void
 }
 
@@ -59,25 +61,26 @@ attributes #2 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2, !2}
+!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2, !2, !2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
 !2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!3 = !{!4, !5, i64 0}
+!3 = !{!4, !5, i64 8}
 !4 = !{!"_ZTS16StackFrameHeader", !5, i64 0, !5, i64 8, !5, i64 16, !8, i64 24, !8, i64 28}
 !5 = !{!"any pointer", !6, i64 0}
 !6 = !{!"omnipotent char", !7, i64 0}
 !7 = !{!"Simple C++ TBAA"}
 !8 = !{!"int", !6, i64 0}
-!9 = !{!6, !6, i64 0}
-!10 = !{!5, !5, i64 0}
-!11 = !{!4, !8, i64 24}
-!12 = !{!13, !5, i64 8}
-!13 = !{!"_ZTS14ExecutableCode", !14, i64 0, !6, i64 2, !17, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
-!14 = !{!"_ZTS24SystemHeapGcObjectHeader", !15, i64 0, !16, i64 1}
-!15 = !{!"_ZTS14HeapEntityType", !6, i64 0}
-!16 = !{!"_ZTS11GcCellState", !6, i64 0}
-!17 = !{!"bool", !6, i64 0}
-!18 = !{!19, !19, i64 0}
-!19 = !{!"long", !6, i64 0}
+!9 = !{!4, !5, i64 0}
+!10 = !{!6, !6, i64 0}
+!11 = !{!5, !5, i64 0}
+!12 = !{!4, !8, i64 24}
+!13 = !{!14, !5, i64 8}
+!14 = !{!"_ZTS14ExecutableCode", !15, i64 0, !6, i64 2, !18, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
+!15 = !{!"_ZTS24SystemHeapGcObjectHeader", !16, i64 0, !17, i64 1}
+!16 = !{!"_ZTS14HeapEntityType", !6, i64 0}
+!17 = !{!"_ZTS11GcCellState", !6, i64 0}
+!18 = !{!"bool", !6, i64 0}
+!19 = !{!20, !20, i64 0}
+!20 = !{!"long", !6, i64 0}

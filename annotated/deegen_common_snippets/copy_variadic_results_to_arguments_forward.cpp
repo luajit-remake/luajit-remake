@@ -3,12 +3,12 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint64_t* dst, uint64_t* stackFrameBase, CoroutineRuntimeContext* coroCtx)
+static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint64_t* dst, uint64_t* stackBase, CoroutineRuntimeContext* coroCtx)
 {
     int32_t srcOffset = coroCtx->m_variadicRetSlotBegin;
     uint32_t num = coroCtx->m_numVariadicRets;
 
-    uint64_t* src = stackFrameBase + srcOffset;
+    uint64_t* src = stackBase + srcOffset;
 
     // What we need is just a memmove. We hand-implement it because:
     // 1. Calling 'memmove' will result in a ton of code, which is bad for our case.

@@ -19,6 +19,16 @@ struct Local
 struct CsTab
 {
     explicit CsTab(uint64_t ord) : m_csTableOrd(ord) { }
+
+    // For simplicity, the model of the constant table we expose to the user is a 0-indexed array
+    // However, internally, to better fit our implementation, we store this array reversed, and index it with negative indices.
+    // This API translates the ordinal. It should never be called by the user.
+    //
+    int64_t GetTrueOffset()
+    {
+        return -static_cast<int64_t>(m_csTableOrd) - 1;
+    }
+
     uint64_t m_csTableOrd;
 };
 
@@ -49,13 +59,18 @@ public:
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
     {
-        size_t len = GetCurBytecodeLength();
+        size_t len = GetCurLength();
         // Add a few bytes so that tentative decoding of the next bytecode won't segfault..
         //
         uint8_t* res = new uint8_t[len + x_numExtraPaddingAtEnd];
         memcpy(res, GetBytecodeStart(), len);
         memset(res + len, 0, x_numExtraPaddingAtEnd);
         return std::make_pair(res, len);
+    }
+
+    size_t GetCurLength()
+    {
+        return static_cast<size_t>(m_bufferCur - m_bufferBegin);
     }
 
 protected:
@@ -106,11 +121,6 @@ protected:
         return m_bufferBegin;
     }
 
-    size_t GetCurBytecodeLength()
-    {
-        return static_cast<size_t>(m_bufferCur - m_bufferBegin);
-    }
-
 private:
     uint8_t* m_bufferBegin;
     uint8_t* m_bufferCur;
@@ -120,12 +130,16 @@ private:
 class BranchTargetPopulator
 {
 public:
+    BranchTargetPopulator() : m_fillOffset(static_cast<uint64_t>(-1)) { }
+
     BranchTargetPopulator(uint64_t fillOffset, uint64_t bytecodeBaseOffset)
         : m_fillOffset(fillOffset), m_bytecodeBaseOffset(bytecodeBaseOffset)
     { }
 
     void PopulateBranchTarget(BytecodeBuilderBase& builder, uint64_t bytecodeLoc)
     {
+        assert(m_fillOffset != static_cast<uint64_t>(-1));
+        assert(bytecodeLoc < builder.GetCurLength());
         int64_t diff = static_cast<int64_t>(bytecodeLoc - m_bytecodeBaseOffset);
         // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
         //

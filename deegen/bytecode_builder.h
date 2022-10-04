@@ -25,7 +25,7 @@ PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES)
     if constexpr(std::is_same_v<T, e<BytecodeBuilder>>) {   \
         return res;                                         \
     } else {                                                \
-        res += e<BytecodeBuilder>::GetNumVariants();
+        res += GetNumVariantsOfBytecode<e>();
 
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES)
 #undef macro
@@ -37,6 +37,13 @@ PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES)
 #define macro(e) }
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES)
 #undef macro
+    }
+
+    template<template<typename> class T>
+    static constexpr size_t GetNumVariantsOfBytecode()
+    {
+        static_assert(std::is_base_of_v<T<BytecodeBuilder>, BytecodeBuilder>);
+        return T<BytecodeBuilder>::GetNumVariants();
     }
 };
 

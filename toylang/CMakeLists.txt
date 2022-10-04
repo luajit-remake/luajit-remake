@@ -1,5 +1,6 @@
 add_library(toylang 
   bytecode.cpp  
+  bytecode_new.cpp
 )
 
 add_dependencies(toylang 

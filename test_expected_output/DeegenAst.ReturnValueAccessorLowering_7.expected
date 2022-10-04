@@ -10,34 +10,36 @@ target triple = "x86_64-pc-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local void @__deegen_interpreter_op_test7_0_retcont_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readonly %retStart, ptr nocapture readnone %numRet, i64 %0) #0 {
-  %2 = getelementptr inbounds %0, ptr %stackBase, i64 -1
-  %3 = load ptr addrspace(256), ptr %2, align 8, !tbaa !3
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %3, align 4, !tbaa !9
-  %4 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %5 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %6 = ptrtoint ptr %5 to i64
-  %7 = add i64 %6, %4
-  %8 = inttoptr i64 %7 to ptr
-  %9 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
-  %10 = load i32, ptr %9, align 8, !tbaa !11
-  %11 = getelementptr inbounds %1, ptr %8, i64 0, i32 4
-  %12 = load ptr, ptr %11, align 8, !tbaa !12
-  %13 = zext i32 %10 to i64
-  %14 = getelementptr inbounds i8, ptr %12, i64 %13
-  %15 = tail call noundef ptr @_Z2d1v() #2
-  %16 = load i64, ptr %retStart, align 8
-  %17 = getelementptr inbounds i64, ptr %retStart, i64 1
-  %18 = load i64, ptr %17, align 8
-  store i64 %16, ptr %15, align 8
-  %19 = getelementptr inbounds i64, ptr %15, i64 1
-  store i64 %18, ptr %19, align 8
-  %20 = getelementptr inbounds i8, ptr %14, i64 2
-  %21 = load i16, ptr %20, align 1
-  %22 = zext i16 %21 to i64
-  %23 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %22
-  %24 = load ptr, ptr %23, align 8
-  musttail call void %24(ptr %coroutineCtx, ptr %stackBase, ptr nonnull %20, ptr %8, i64 undef) #2
+define dso_local void @__deegen_interpreter_op_test7_0_retcont_0(ptr %coroutineCtx, ptr nocapture readonly %stackBase, ptr nocapture readonly %retStart, ptr nocapture readnone %numRet, i64 %0) #0 {
+  %2 = getelementptr %0, ptr %stackBase, i64 -1, i32 1
+  %3 = load ptr, ptr %2, align 8, !tbaa !3
+  %4 = getelementptr inbounds %0, ptr %3, i64 -1
+  %5 = load ptr addrspace(256), ptr %4, align 8, !tbaa !9
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %5, align 4, !tbaa !10
+  %6 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
+  %7 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
+  %8 = ptrtoint ptr %7 to i64
+  %9 = add i64 %8, %6
+  %10 = inttoptr i64 %9 to ptr
+  %11 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
+  %12 = load i32, ptr %11, align 8, !tbaa !12
+  %13 = getelementptr inbounds %1, ptr %10, i64 0, i32 4
+  %14 = load ptr, ptr %13, align 8, !tbaa !13
+  %15 = zext i32 %12 to i64
+  %16 = getelementptr inbounds i8, ptr %14, i64 %15
+  %17 = tail call noundef ptr @_Z2d1v() #2
+  %18 = load i64, ptr %retStart, align 8
+  %19 = getelementptr inbounds i64, ptr %retStart, i64 1
+  %20 = load i64, ptr %19, align 8
+  store i64 %18, ptr %17, align 8
+  %21 = getelementptr inbounds i64, ptr %17, i64 1
+  store i64 %20, ptr %21, align 8
+  %22 = getelementptr inbounds i8, ptr %16, i64 2
+  %23 = load i16, ptr %22, align 1
+  %24 = zext i16 %23 to i64
+  %25 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %24
+  %26 = load ptr, ptr %25, align 8
+  musttail call void %26(ptr %coroutineCtx, ptr %3, ptr nonnull %22, ptr %10, i64 undef) #2
   ret void
 }
 
@@ -49,23 +51,24 @@ attributes #2 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2}
+!llvm.ident = !{!2, !2, !2, !2, !2, !2, !2, !2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
 !2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!3 = !{!4, !5, i64 0}
+!3 = !{!4, !5, i64 8}
 !4 = !{!"_ZTS16StackFrameHeader", !5, i64 0, !5, i64 8, !5, i64 16, !8, i64 24, !8, i64 28}
 !5 = !{!"any pointer", !6, i64 0}
 !6 = !{!"omnipotent char", !7, i64 0}
 !7 = !{!"Simple C++ TBAA"}
 !8 = !{!"int", !6, i64 0}
-!9 = !{!6, !6, i64 0}
-!10 = !{!5, !5, i64 0}
-!11 = !{!4, !8, i64 24}
-!12 = !{!13, !5, i64 8}
-!13 = !{!"_ZTS14ExecutableCode", !14, i64 0, !6, i64 2, !17, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
-!14 = !{!"_ZTS24SystemHeapGcObjectHeader", !15, i64 0, !16, i64 1}
-!15 = !{!"_ZTS14HeapEntityType", !6, i64 0}
-!16 = !{!"_ZTS11GcCellState", !6, i64 0}
-!17 = !{!"bool", !6, i64 0}
+!9 = !{!4, !5, i64 0}
+!10 = !{!6, !6, i64 0}
+!11 = !{!5, !5, i64 0}
+!12 = !{!4, !8, i64 24}
+!13 = !{!14, !5, i64 8}
+!14 = !{!"_ZTS14ExecutableCode", !15, i64 0, !6, i64 2, !18, i64 3, !8, i64 4, !5, i64 8, !5, i64 16}
+!15 = !{!"_ZTS24SystemHeapGcObjectHeader", !16, i64 0, !17, i64 1}
+!16 = !{!"_ZTS14HeapEntityType", !6, i64 0}
+!17 = !{!"_ZTS11GcCellState", !6, i64 0}
+!18 = !{!"bool", !6, i64 0}

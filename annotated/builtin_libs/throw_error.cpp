@@ -356,4 +356,21 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     MakeInPlaceCall(callFrameBegin + x_numSlotsForStackFrameHeader /*argsBegin*/, numCalleeArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
 }
 
+// Lua standard library base.error
+//
+DEEGEN_DEFINE_LIB_FUNC(base_error)
+{
+    TValue errorObject;
+    if (GetNumArgs() == 0)
+    {
+        errorObject = TValue::Nil();
+    }
+    else
+    {
+        errorObject = GetArg(0);
+    }
+
+    ThrowError(errorObject);
+}
+
 DEEGEN_END_LIB_FUNC_DEFINITIONS

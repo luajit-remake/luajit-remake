@@ -8,3 +8,5 @@ sub rsp, 256
 jmp *entry
 This should be completely safe since every function is always tail-calling (i.e., jumping to) the next function.
 
+We probably shouldn't call memcpy/memmove, since it's in a .so thus an indirect call..
+

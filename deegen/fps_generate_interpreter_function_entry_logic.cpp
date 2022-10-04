@@ -76,11 +76,11 @@ struct GeneratorContext
         fprintf(fp, "extern const std::array<void(*)(), %d> x_interpreterEntryFuncListNoVa;\n", static_cast<int>(novaNames.size() + 1));
         fprintf(fp, "extern const std::array<void(*)(), %d> x_interpreterEntryFuncListVa;\n", static_cast<int>(vaNames.size() + 1));
 
-        fprintf(fp, "\nvoid* WARN_UNUSED GetGuestLanguageFunctionEntryPointForInterpreter(bool takesVarArgs, size_t numFixedParams) {\n");
+        fprintf(fp, "\nvoid* WARN_UNUSED GetGuestLanguageFunctionEntryPointForInterpreter(bool takeVarArgs, size_t numFixedParams) {\n");
         fprintf(fp, "    if (takeVarArgs) {\n");
-        fprintf(fp, "        return reinterpret_cast<void*>(x_interpreterEntryFuncListVa[std::min(numFixedParams, x_interpreterEntryFuncListVa.size() - 1]);\n");
+        fprintf(fp, "        return reinterpret_cast<void*>(x_interpreterEntryFuncListVa[std::min(numFixedParams, x_interpreterEntryFuncListVa.size() - 1)]);\n");
         fprintf(fp, "    } else {\n");
-        fprintf(fp, "        return reinterpret_cast<void*>(x_interpreterEntryFuncListNova[std::min(numFixedParams, x_interpreterEntryFuncListNova.size() - 1]);\n");
+        fprintf(fp, "        return reinterpret_cast<void*>(x_interpreterEntryFuncListNoVa[std::min(numFixedParams, x_interpreterEntryFuncListNoVa.size() - 1)]);\n");
         fprintf(fp, "    }\n");
         fprintf(fp, "}\n\n");
 

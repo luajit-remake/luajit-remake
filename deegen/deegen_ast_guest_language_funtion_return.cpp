@@ -43,11 +43,8 @@ struct LowerGuestLanguageFunctionReturnPass final : public DeegenAbstractSimpleA
         ReleaseAssert(llvm_value_has_type<uint64_t>(numRet));
         ifi->CallDeegenCommonSnippet("PopulateNilForReturnValues", { retStart, numRet }, origin);
 
-        Value* stackFrameHeader = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", origin);
-        Value* returnStackBase = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetCallerStackBaseFromStackFrameHeader", { stackFrameHeader }, origin);
-        Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackFrameHeader", { stackFrameHeader }, origin);
-
-        InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), returnStackBase, retStart, numRet, origin);
+        Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackBase", { ifi->GetStackBase() }, origin);
+        InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), ifi->GetStackBase(), retStart, numRet, origin);
 
         AssertInstructionIsFollowedByUnreachable(origin);
         Instruction* unreachableInst = origin->getNextNode();

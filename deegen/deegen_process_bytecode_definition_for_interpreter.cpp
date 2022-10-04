@@ -99,17 +99,17 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 {
                     if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
                     {
-                        fprintf(fp, "Local(inputDesc.%s.m_ord)", opNames[i].c_str());
+                        fprintf(fp, "Local(ops.%s.m_ord)", opNames[i].c_str());
                     }
                     else
                     {
                         ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
-                        fprintf(fp, "CsTab(inputDesc.%s.m_ord)", opNames[i].c_str());
+                        fprintf(fp, "CsTab(ops.%s.m_ord)", opNames[i].c_str());
                     }
                 }
                 else
                 {
-                    fprintf(fp, "inputDesc.%s", opNames[i].c_str());
+                    fprintf(fp, "ops.%s", opNames[i].c_str());
                 }
             }
             if (hasOutputOperand)
@@ -118,7 +118,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 {
                     fprintf(fp, ", ");
                 }
-                fprintf(fp, "inputDesc.output");
+                fprintf(fp, "ops.output");
             }
             fprintf(fp, ");\n");
         }
@@ -141,7 +141,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 }
             }
             errMsg += " is not instantiated as a valid variant!";
-            fprintf(fp, "%sassert(!\"%s\");\n", extraIndentStr.c_str(), errMsg.c_str());
+            fprintf(fp, "%sassert(false && \"%s\");\n", extraIndentStr.c_str(), errMsg.c_str());
             fprintf(fp, "%s__builtin_unreachable();\n", extraIndentStr.c_str());
         }
         return;
@@ -156,7 +156,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
     }
     else
     {
-        fprintf(fp, "%sif (inputDesc.%s.m_isLocal) {\n", extraIndentStr.c_str(), opNames[curOrd].c_str());
+        fprintf(fp, "%sif (ops.%s.m_isLocal) {\n", extraIndentStr.c_str(), opNames[curOrd].c_str());
         selectedType.push_back(DeegenBytecodeOperandType::BytecodeSlot);
         GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
         selectedType.pop_back();
@@ -203,8 +203,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             finalRes.m_generatedClassNames.push_back(generatedClassName);
             fprintf(fp, "template<typename CRTP>\nclass %s {\n", generatedClassName.c_str());
             fprintf(fp, "public:\n");
-            fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(bytecodeDef.size()));
-            fprintf(fp, "    struct RobustInputDesc {\n");
+            fprintf(fp, "    struct Operands {\n");
             size_t numOperands = def->m_opNames.size();
             ReleaseAssert(numOperands == def->m_originalOperandTypes.size());
             bool hasAnyOperandsToProvide = false;
@@ -228,7 +227,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             {
                 bytecodeBuilderFunctionReturnType = "void";
             }
-            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "RobustInputDesc inputDesc" : "");
+            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "Operands ops" : "");
 
             {
                 std::vector<DeegenBytecodeOperandType> selectedTypes;
@@ -273,6 +272,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             fprintf(fp, "    }\n\n");
 
+            fprintf(fp, "protected:\n");
+            fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(bytecodeDef.size()));
             fprintf(fp, "private:\n");
         }
 
@@ -344,15 +345,15 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     continue;
                 }
                 size_t offset = operand->GetOffsetInBytecodeStruct();
-                int numBitsInBytecodeStruct = static_cast<int>(operand->GetSizeInBytecodeStruct()) * 8;
-                fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, BitwiseTruncateTo<uint%d_t>(", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
+                std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
+                fprintf(fp, "        auto originalVal%d = ", static_cast<int>(i));
                 if (operand->GetKind() == BcOperandKind::Slot)
                 {
                     fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
                 }
                 else if (operand->GetKind() == BcOperandKind::Constant)
                 {
-                    fprintf(fp, "param%d.m_csTableOrd", static_cast<int>(i));
+                    fprintf(fp, "param%d.GetTrueOffset()", static_cast<int>(i));
                 }
                 else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
                 {
@@ -363,7 +364,9 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     ReleaseAssert(operand->GetKind() == BcOperandKind::Literal);
                     fprintf(fp, "param%d.m_value", static_cast<int>(i));
                 }
-                fprintf(fp, "));\n");
+                fprintf(fp, ";\n");
+                fprintf(fp, "        static_assert(std::is_signed_v<%s> == std::is_signed_v<decltype(originalVal%d)>);\n", tyName.c_str(), static_cast<int>(i));
+                fprintf(fp, "        UnalignedStore<%s>(base + %u, SafeIntegerCast<%s>(originalVal%d));\n", tyName.c_str(), SafeIntegerCast<unsigned int>(offset), tyName.c_str(), static_cast<int>(i));
             }
 
             if (bytecodeVariantDef->m_hasOutputValue)
@@ -371,13 +374,13 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 size_t offset = bytecodeVariantDef->m_outputOperand->GetOffsetInBytecodeStruct();
                 ReleaseAssert(bytecodeVariantDef->m_outputOperand->GetKind() == BcOperandKind::Slot);
                 int numBitsInBytecodeStruct = static_cast<int>(bytecodeVariantDef->m_outputOperand->GetSizeInBytecodeStruct()) * 8;
-                fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, BitwiseTruncateTo<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
+                fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, SafeIntegerCast<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
             }
 
             if (bytecodeVariantDef->m_hasConditionalBranchTarget)
             {
                 size_t offset = bytecodeVariantDef->m_condBrTarget->GetOffsetInBytecodeStruct();
-                fprintf(fp, "        size_t curBytecodeOffset = crtp->GetCurBytecodeLength();\n");
+                fprintf(fp, "        size_t curBytecodeOffset = crtp->GetCurLength();\n");
                 fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
                 fprintf(fp, "        return BranchTargetPopulator(curBytecodeOffset + %u /*fillOffset*/, curBytecodeOffset /*bytecodeBaseOffset*/);\n", SafeIntegerCast<unsigned int>(offset));
             }
@@ -485,6 +488,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             GlobalVariable* gvInOriginal = module->getGlobalVariable(gvName, true /*allowInternal*/);
             ReleaseAssert(gvInOriginal != nullptr);
+            if (gvInOriginal == nullptr) { continue; }
             if (changeMap.count(gvName))
             {
                 continue;

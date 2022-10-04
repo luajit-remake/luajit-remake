@@ -3,11 +3,11 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static void DeegenSnippet_PopulateNewCallFrameHeaderForCallFromCFunc(StackFrameHeader* newStackframeBase, void* oldStackFrameBase, void* onReturn)
+static void DeegenSnippet_PopulateNewCallFrameHeaderForCallFromCFunc(void* newStackBase, void* oldStackBase, void* onReturn)
 {
-    StackFrameHeader* hdr = newStackframeBase - 1;
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(newStackBase);
     hdr->m_retAddr = onReturn;
-    hdr->m_caller = oldStackFrameBase;
+    hdr->m_caller = oldStackBase;
     hdr->m_callerBytecodeOffset = 0;
     hdr->m_numVariadicArguments = 0;
 }

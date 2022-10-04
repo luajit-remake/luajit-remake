@@ -166,6 +166,7 @@ public:
 };
 
 UserHeapPointer<TableObject> CreateGlobalObject(VM* vm);
+UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm);
 
 template<>
 inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
@@ -174,6 +175,16 @@ inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
     //
     VM* vm = static_cast<VM*>(this);
     UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
+    m_rootCoroutine = CoroutineRuntimeContext::Create(vm, globalObject);
+}
+
+template<>
+inline void VMGlobalDataManager<VM>::CreateRootCoroutine2()
+{
+    // Create global object
+    //
+    VM* vm = static_cast<VM*>(this);
+    UserHeapPointer<TableObject> globalObject = CreateGlobalObject2(vm);
     m_rootCoroutine = CoroutineRuntimeContext::Create(vm, globalObject);
 }
 
@@ -215,6 +226,19 @@ public:
         return e;
     }
 
+    // TODO: remove the above function after we port the old interpreter
+    //
+    static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction2(VM* vm, void* fn)
+    {
+        HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
+        SystemHeapGcObjectHeader::Populate(e);
+        e->m_hasVariadicArguments = true;
+        e->m_numFixedArguments = 0;
+        e->m_bytecode = reinterpret_cast<uint8_t*>(~reinterpret_cast<uintptr_t>(fn));
+        e->m_bestEntryPoint = reinterpret_cast<InterpreterFn>(fn);
+        return e;
+    }
+
     uint8_t m_reserved;
 
     // The # of fixed arguments and whether it accepts variadic arguments
@@ -231,6 +255,8 @@ public:
     // For bytecode function, this is the most optimized implementation (interpreter or some JIT tier)
     // For user C function, this is a trampoline that calls the function
     // The 'codeBlock' parameter and 'curBytecode' parameter is not needed for intrinsic or JIT but we have them anyway for a unified interface
+    //
+    // TODO: this should be a void*
     //
     InterpreterFn m_bestEntryPoint;
 };
@@ -283,6 +309,7 @@ class alignas(8) CodeBlock final : public ExecutableCode
 {
 public:
     static CodeBlock* WARN_UNUSED Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
+    static CodeBlock* WARN_UNUSED Create2(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
     static ReinterpretCastPreservingAddressSpaceType<BytecodeConstantTableEntry*, T> GetConstantTableEnd(T self)
@@ -351,6 +378,39 @@ public:
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
             CodeBlock* newCb = CodeBlock::Create(vm, this /*ucb*/, globalObject);
+            (*m_rareGOtoCBMap)[globalObject.m_value] = newCb;
+            return newCb;
+        }
+        else
+        {
+            return iter->second;
+        }
+    }
+
+    // This is for the new interpreter. We should remove the above functions after we port everything to the new interpreter
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, UnlinkedCodeBlock>>>
+    static CodeBlock* WARN_UNUSED GetCodeBlock2(T self, UserHeapPointer<TableObject> globalObject)
+    {
+        if (likely(globalObject == self->m_defaultGlobalObject))
+        {
+            return self->m_defaultCodeBlock;
+        }
+        UnlinkedCodeBlock* raw = TranslateToRawPointer(self);
+        return raw->GetCodeBlockSlowPath2(globalObject);
+    }
+
+    CodeBlock* WARN_UNUSED NO_INLINE GetCodeBlockSlowPath2(UserHeapPointer<TableObject> globalObject)
+    {
+        if (unlikely(m_rareGOtoCBMap == nullptr))
+        {
+            m_rareGOtoCBMap = new RareGlobalObjectToCodeBlockMap;
+        }
+        auto iter = m_rareGOtoCBMap->find(globalObject.m_value);
+        if (unlikely(iter == m_rareGOtoCBMap->end()))
+        {
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            CodeBlock* newCb = CodeBlock::Create2(vm, this /*ucb*/, globalObject);
             (*m_rareGOtoCBMap)[globalObject.m_value] = newCb;
             return newCb;
         }
@@ -645,9 +705,16 @@ public:
 
     static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
 
+    static ScriptModule* WARN_UNUSED ParseFromJSON2(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
+
     static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, const std::string& content)
     {
         return ParseFromJSON(vm, vm->GetRootGlobalObject(), content);
+    }
+
+    static ScriptModule* WARN_UNUSED ParseFromJSON2(VM* vm, const std::string& content)
+    {
+        return ParseFromJSON2(vm, vm->GetRootGlobalObject(), content);
     }
 };
 

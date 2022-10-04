@@ -1,5 +1,5 @@
 SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
-  get_codeblock_from_stack_header.cpp
+  get_codeblock_from_stack_base.cpp
   get_bytecode_ptr_after_return_from_call.cpp
   copy_variadic_results_to_arguments_forward.cpp
   copy_variadic_results_to_arguments.cpp
@@ -21,8 +21,8 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   fixup_stack_frame_for_variadic_arg_function.cpp
   get_bytecode_ptr_from_codeblock.cpp
   populate_nil_for_return_values.cpp
-  get_caller_stackbase_from_stack_frame_header.cpp
-  get_ret_addr_from_stack_frame_header.cpp
+  get_caller_stackbase_from_stack_base.cpp
+  get_ret_addr_from_stack_base.cpp
   populate_new_call_frame_header_for_c_func.cpp
   get_global_object_from_code_block.cpp
   append_variadic_results_to_function_returns.cpp

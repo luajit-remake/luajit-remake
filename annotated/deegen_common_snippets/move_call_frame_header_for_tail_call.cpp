@@ -5,13 +5,13 @@
 
 // Returns the updated stack frame base
 //
-static void* DeegenSnippet_MoveCallFrameHeaderForTailCall(StackFrameHeader* stackframeBase, uint64_t target)
+static void* DeegenSnippet_MoveCallFrameHeaderForTailCall(void* stackBase, uint64_t target)
 {
-    StackFrameHeader* hdr = stackframeBase - 1;
+    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
     if (likely(hdr->m_numVariadicArguments == 0))
     {
         hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);
-        return stackframeBase;
+        return stackBase;
     }
     else
     {

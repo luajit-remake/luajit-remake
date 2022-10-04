@@ -5,7 +5,7 @@
 
 // Return true if the variadic results are moved
 //
-static bool DeegenSnippet_MoveVariadicResultsForVariadicNotInPlaceTailCall(uint64_t* stackFrameBase, CoroutineRuntimeContext* coroCtx, uint64_t numArgs)
+static bool DeegenSnippet_MoveVariadicResultsForVariadicNotInPlaceTailCall(uint64_t* stackBase, CoroutineRuntimeContext* coroCtx, uint64_t numArgs)
 {
     int32_t srcOffset = coroCtx->m_variadicRetSlotBegin;
     if (srcOffset < 0)
@@ -18,8 +18,8 @@ static bool DeegenSnippet_MoveVariadicResultsForVariadicNotInPlaceTailCall(uint6
         return false;
     }
 
-    uint64_t* src = stackFrameBase + srcOffset;
-    uint64_t* dst = stackFrameBase + numArgs;
+    uint64_t* src = stackBase + srcOffset;
+    uint64_t* dst = stackBase + numArgs;
     memmove(dst, src, sizeof(uint64_t) * coroCtx->m_numVariadicRets);
     return true;
 }

@@ -8,7 +8,7 @@ target triple = "x86_64-pc-linux-gnu"
 %struct.TValue = type { i64 }
 
 ; Function Attrs: nounwind
-declare void @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1(ptr, ptr, ptr, ptr, i64) #0
+declare void @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1(ptr, ptr nocapture readonly, ptr, ptr, i64) #0
 
 ; Function Attrs: nounwind
 define void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn7(ptr %0, ptr %1, ptr %2, ptr nocapture readnone %3, i64 %4) local_unnamed_addr #0 {

@@ -16,11 +16,9 @@ define void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn8(ptr %0, ptr %1
   store i64 -844429225099137, ptr %7, align 8, !tbaa !10
   %8 = getelementptr inbounds i64, ptr %1, i64 2
   store i64 -844429225099137, ptr %8, align 8, !tbaa !10
-  %9 = getelementptr %class.StackFrameHeader, ptr %6, i64 -1, i32 1
-  %10 = load ptr, ptr %9, align 8, !tbaa !3
-  %11 = getelementptr %class.StackFrameHeader, ptr %6, i64 -1, i32 2
-  %12 = load ptr, ptr %11, align 8, !tbaa !12
-  musttail call void %12(ptr %0, ptr %10, ptr nonnull %1, ptr nonnull inttoptr (i64 1 to ptr), i64 undef) #1
+  %9 = getelementptr %class.StackFrameHeader, ptr %6, i64 -1, i32 2
+  %10 = load ptr, ptr %9, align 8, !tbaa !12
+  musttail call void %10(ptr %0, ptr %6, ptr nonnull %1, ptr nonnull inttoptr (i64 1 to ptr), i64 undef) #1
   ret void
 }
 

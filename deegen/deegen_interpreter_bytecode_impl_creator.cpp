@@ -185,13 +185,19 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     else
     {
         m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
-        m_valuePreserver.Preserve(x_stackBase, m_wrapper->getArg(1));
+
+        UnreachableInst* tmpInst = new UnreachableInst(ctx, currentBlock);
+        Value* calleeStackBase = m_wrapper->getArg(1);
+        Value* stackBase = CallDeegenCommonSnippet("GetCallerStackBaseFromStackBase", { calleeStackBase }, tmpInst);
+        m_valuePreserver.Preserve(x_stackBase, stackBase);
+        tmpInst->eraseFromParent();
+
         m_valuePreserver.Preserve(x_retStart, m_wrapper->getArg(2));
 
         PtrToIntInst* numRet = new PtrToIntInst(m_wrapper->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, currentBlock);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
-        Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackFrameBase");
+        Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackBase");
         ReleaseAssert(getCbFunc->arg_size() == 1 && llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getParamType(0)));
         ReleaseAssert(llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getReturnType()));
         Instruction* codeblock = CallInst::Create(getCbFunc, { GetStackBase() }, "" /*name*/, currentBlock);
@@ -201,7 +207,9 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
                       llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(0)) &&
                       llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(1)));
         ReleaseAssert(llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getReturnType()));
-        Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { GetStackBase(), codeblock }, "" /*name*/, currentBlock);
+        // Note that the 'm_callerBytecodeOffset' is stored in the callee's stack frame header, so we should pass 'calleeStackBase' here
+        //
+        Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { calleeStackBase, codeblock }, "" /*name*/, currentBlock);
 
         m_valuePreserver.Preserve(x_codeBlock, codeblock);
         m_valuePreserver.Preserve(x_curBytecode, bytecodePtr);

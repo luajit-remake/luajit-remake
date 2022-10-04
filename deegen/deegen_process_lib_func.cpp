@@ -141,20 +141,19 @@ void UserLibReturnAPI::DoLowering(DeegenLibFuncInstance* ifi)
         CreateCallToDeegenCommonSnippet(ifi->GetModule(), "PopulateNilForReturnValues", { m_retRangeBegin, m_retRangeNum }, m_origin);
     }
 
-    Value* stackFrameHeader;
+    Value* stackbase;
     if (m_isLongJump)
     {
-        stackFrameHeader = m_longJumpFromHeader;
+        stackbase = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), m_longJumpFromHeader, { CreateLLVMConstantInt<int64_t>(ctx, x_numSlotsForStackFrameHeader) }, "", m_origin);
     }
     else
     {
-        stackFrameHeader = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", m_origin);
+        stackbase = ifi->GetStackBase();
     }
 
-    Value* returnStackBase = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetCallerStackBaseFromStackFrameHeader", { stackFrameHeader }, m_origin);
-    Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackFrameHeader", { stackFrameHeader }, m_origin);
+    Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackBase", { stackbase }, m_origin);
 
-    InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), returnStackBase, m_retRangeBegin, m_retRangeNum, m_origin);
+    InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), stackbase, m_retRangeBegin, m_retRangeNum, m_origin);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();
@@ -348,9 +347,11 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
 
     BasicBlock* bb = BasicBlock::Create(ctx, "", m_target);
     m_valuePreserver.Preserve(x_coroutineCtx, m_target->getArg(0));
-    m_valuePreserver.Preserve(x_stackBase, m_target->getArg(1));
+
     if (m_isReturnContinuation)
     {
+        Value* stackBase = CreateCallToDeegenCommonSnippet(m_module, "GetCallerStackBaseFromStackBase", { m_target->getArg(1) }, bb);
+        m_valuePreserver.Preserve(x_stackBase, stackBase);
         m_valuePreserver.Preserve(x_retStart, m_target->getArg(2));
         PtrToIntInst* numRet = new PtrToIntInst(m_target->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
         m_valuePreserver.Preserve(x_numRet, numRet);
@@ -360,6 +361,7 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
     }
     else
     {
+        m_valuePreserver.Preserve(x_stackBase, m_target->getArg(1));
         PtrToIntInst* numArgs = new PtrToIntInst(m_target->getArg(2), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
         m_valuePreserver.Preserve(x_numArgs, numArgs);
 

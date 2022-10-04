@@ -3,6 +3,8 @@ source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
+%class.StackFrameHeader = type { ptr addrspace(256), ptr, ptr, i32, i32 }
+
 ; Function Attrs: nounwind
 define void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn4(ptr %0, ptr %1, ptr %2, ptr nocapture readnone %3, i64 %4) local_unnamed_addr #0 {
   %6 = icmp ult ptr %2, inttoptr (i64 3 to ptr)
@@ -21,11 +23,9 @@ define void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn4(ptr %0, ptr %1
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit, label %.lr.ph.i, !llvm.loop !7
 
 __DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit: ; preds = %.lr.ph.i, %5
-  %10 = getelementptr inbounds i64, ptr %1, i64 -3
+  %10 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 2
   %11 = load ptr, ptr %10, align 8, !tbaa !9
-  %12 = getelementptr inbounds i64, ptr %1, i64 -2
-  %13 = load ptr, ptr %12, align 8, !tbaa !13
-  musttail call void %13(ptr %0, ptr %11, ptr %1, ptr %2, i64 undef) #1
+  musttail call void %11(ptr %0, ptr %1, ptr %1, ptr %2, i64 undef) #1
   ret void
 }
 
@@ -45,8 +45,7 @@ attributes #1 = { nounwind }
 !6 = !{!"Simple C++ TBAA"}
 !7 = distinct !{!7, !8}
 !8 = !{!"llvm.loop.mustprogress"}
-!9 = !{!10, !11, i64 8}
+!9 = !{!10, !11, i64 16}
 !10 = !{!"_ZTS16StackFrameHeader", !11, i64 0, !11, i64 8, !11, i64 16, !12, i64 24, !12, i64 28}
 !11 = !{!"any pointer", !5, i64 0}
 !12 = !{!"int", !5, i64 0}
-!13 = !{!10, !11, i64 16}

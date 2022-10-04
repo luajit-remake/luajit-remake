@@ -3,9 +3,9 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static uint64_t* DeegenSnippet_GetEndOfCallFrame(uint64_t* stackFrameBase, CodeBlock* cb)
+static uint64_t* DeegenSnippet_GetEndOfCallFrame(uint64_t* stackBase, CodeBlock* cb)
 {
-    return stackFrameBase + cb->m_stackFrameNumSlots;
+    return stackBase + cb->m_stackFrameNumSlots;
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetEndOfCallFrame", DeegenSnippet_GetEndOfCallFrame)
