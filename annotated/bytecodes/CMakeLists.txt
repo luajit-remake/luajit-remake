@@ -17,6 +17,7 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   table_get_by_imm.cpp
   table_put_by_imm.cpp
   unary_minus.cpp
+  table_new.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

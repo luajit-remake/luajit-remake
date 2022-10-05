@@ -116,20 +116,17 @@ TEST(LuaTest, TestTableDup3)
 
 TEST(LuaTest, TestTableSizeHint)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_size_hint.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_size_hint.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    std::string expectedOut =
-            "3\t4\tnil\t1\t2\tnil\t1\t1\tnil\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 
     {

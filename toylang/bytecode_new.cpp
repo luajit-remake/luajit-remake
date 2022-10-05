@@ -919,7 +919,43 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             }
             case LJOpcode::TNEW:
             {
-                ReleaseAssert(false && "unimplemented");
+                TestAssert(opdata.size() == 2);
+                // For TNEW, the second parameter should be interpreted as uint32_t and split into two parts
+                //
+                uint32_t tdata = static_cast<uint32_t>(opdata[1]);
+                uint32_t arrayPartHint = tdata & 2047;
+                uint32_t hashPartLog2Hint = tdata >> 11;
+                uint32_t inlineCapacity;
+                // TODO: refine this strategy
+                //
+                if (hashPartLog2Hint == 0)
+                {
+                    inlineCapacity = 0;
+                }
+                else if (hashPartLog2Hint <= 4)
+                {
+                    inlineCapacity = (1U << hashPartLog2Hint);
+                }
+                else if (hashPartLog2Hint <= 8)
+                {
+                    inlineCapacity = (1U << (hashPartLog2Hint - 1));
+                }
+                else
+                {
+                    inlineCapacity = 0;
+                }
+
+                uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);
+                // Create the structure now, so we can call GetInitialStructureForSteppingKnowingAlreadyBuilt at runtime
+                //
+                std::ignore = Structure::GetInitialStructureForStepping(vm, stepping);
+
+                bw.CreateTableNew({
+                    .inlineStorageSizeStepping = stepping,
+                    .arrayPartSizeHint = static_cast<uint16_t>(arrayPartHint),
+                    .output = local(opdata[0])
+                });
+                break;
             }
             case LJOpcode::TDUP:
             {
