@@ -483,6 +483,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             return static_cast<size_t>(jumpBytecodeOrdinal);
         };
 
+        auto getBytecodeOrdinalOfJump = [&](int32_t offset) -> size_t
+        {
+            int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+            int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + offset;
+            TestAssert(jumpBytecodeOrdinal >= 0);
+            return static_cast<size_t>(jumpBytecodeOrdinal);
+        };
+
         for (/*no-op*/; it != bytecodeList.end(); it++)
         {
             bytecodeLocation.push_back(bw.GetCurLength());
@@ -1078,19 +1086,60 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             case LJOpcode::UCLO:
             {
                 TestAssert(opdata.size() == 2);
-                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
-                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
-                TestAssert(jumpBytecodeOrdinal >= 0);
+                size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
                 BranchTargetPopulator p = bw.CreateUpvalueClose({
                     .base = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(static_cast<size_t>(jumpBytecodeOrdinal), p));
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::FORI:
+            {
+                // Loop init
+                // semantics:
+                // [A] = tonumber([A]), [A+1] = tonumber([A+1]), [A+2] = tonumber([A+2])
+                // if (!([A+2] > 0 && [A] <= [A+1]) || ([A+2] <= 0 && [A] >= [A+1])): jump
+                // [A+3] = [A]
+                //
+                TestAssert(opdata.size() == 2);
+                size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
+                BranchTargetPopulator p = bw.CreateForLoopInit({
+                    .base = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
+            }
             case LJOpcode::FORL:
+            {
+                // Loop step
+                // semantics:
+                // [A] += [A+2]
+                // if ([A+2] > 0 && [A] <= [A+1]) || ([A+2] <= 0 && [A] >= [A+1]): jump
+                //
+                TestAssert(opdata.size() == 2);
+                size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
+                BranchTargetPopulator p = bw.CreateForLoopStep({
+                    .base = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
+            }
             case LJOpcode::LOOP:
+            {
+                // LOOP is a no-op used for LuaJIT's internal profiling
+                // For now make it a no-op for us as well
+                //
+                break;
+            }
             case LJOpcode::JMP:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
+                // opdata[0] is unused for now (indicates stack frame size after jump)
+                BranchTargetPopulator p = bw.CreateBranch();
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
+            }
             case LJOpcode::VARG:
             case LJOpcode::KNIL:
             case LJOpcode::ITERN:

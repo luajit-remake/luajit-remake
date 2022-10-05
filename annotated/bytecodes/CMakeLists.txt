@@ -19,6 +19,7 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   unary_minus.cpp
   table_new.cpp
   upvalue_bytecodes.cpp
+  numeric_for_loop.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

@@ -210,17 +210,16 @@ TEST(LuaTest, NaNEdgeCase)
 
 TEST(LuaTest, ForLoopCoercion)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_loop_coercion.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_loop_coercion.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
