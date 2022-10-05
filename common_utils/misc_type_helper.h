@@ -265,6 +265,24 @@ template<typename T, size_t N>
 using arg_nth_t = typename arg_nth_impl<N, T>::type;
 
 template<typename T>
+struct fn_num_args_impl;
+
+template<typename R, typename... Args>
+struct fn_num_args_impl<R(*)(Args...)>
+{
+    constexpr static size_t value = sizeof...(Args);
+};
+
+template<typename R, typename... Args>
+struct fn_num_args_impl<NO_RETURN R(*)(Args...)>
+{
+    constexpr static size_t value = sizeof...(Args);
+};
+
+template<typename T>
+constexpr size_t fn_num_args = fn_num_args_impl<T>::value;
+
+template<typename T>
 struct is_no_return_function : std::false_type { };
 
 template<typename R, typename... Args>

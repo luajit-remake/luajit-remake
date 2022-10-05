@@ -907,13 +907,78 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::TNEW:
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
             case LJOpcode::TDUP:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateTableDup({
+                    .src = objCst(opdata[1]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TGETV:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTableGetByVal({
+                    .base = local(opdata[1]),
+                    .index = local(opdata[2]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TGETS:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTableGetById({
+                    .base = local(opdata[1]),
+                    .index = objCst(opdata[2]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TSETV:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTablePutByVal({
+                    .base = local(opdata[1]),
+                    .index = local(opdata[2]),
+                    .value = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TSETS:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTablePutById({
+                    .base = local(opdata[1]),
+                    .index = objCst(opdata[2]),
+                    .value = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TGETB:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTableGetByImm({
+                    .base = local(opdata[1]),
+                    .index = SafeIntegerCast<int16_t>(opdata[2]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TSETB:
+            {
+                TestAssert(opdata.size() == 3);
+                bw.CreateTablePutByImm({
+                    .base = local(opdata[1]),
+                    .index = SafeIntegerCast<int16_t>(opdata[2]),
+                    .value = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::TSETM:
             case LJOpcode::UGET:
             case LJOpcode::USETV:

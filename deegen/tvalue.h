@@ -254,8 +254,11 @@ struct TValue
     template<typename T>
     auto WARN_UNUSED ALWAYS_INLINE As();
 
-    template<typename T>
+    template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 1>>
     static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
+
+    template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 0>>
+    static TValue WARN_UNUSED Create();
 
     uint64_t m_value;
 };
@@ -475,9 +478,9 @@ struct tHeapEntity
         return TValue::CreatePointer(UserHeapPointer<void> { v });
     }
 
-    static UserHeapPointer<void> decode(TValue v)
+    static HeapPtr<void> decode(TValue v)
     {
-        return v.AsPointer();
+        return v.AsPointer().As();
     }
 };
 
@@ -1002,11 +1005,18 @@ auto WARN_UNUSED ALWAYS_INLINE TValue::As()
     return DeegenImpl_TValueAs<T>(*this);
 }
 
-template<typename T>
+template<typename T, typename>
 TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val)
 {
     static_assert(IsValidTypeSpecialization<T>);
     return T::encode(val);
+}
+
+template<typename T, typename>
+TValue WARN_UNUSED TValue::Create()
+{
+    static_assert(IsValidTypeSpecialization<T>);
+    return T::encode();
 }
 
 class FunctionObject;

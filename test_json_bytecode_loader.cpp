@@ -2,6 +2,7 @@
 #include "bytecode.h"
 #include "gtest/gtest.h"
 #include "json_utils.h"
+#include "test_util_helper.h"
 #include "test_vm_utils.h"
 
 namespace {
@@ -67,45 +68,33 @@ TEST(LuaTest, TestPrint)
 
 TEST(LuaTest, TestTableDup)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    std::string expectedOut =
-            "0\t25\t50\t100\t150\t200\t250\t275\t299\tnil\t300\t304\t301\t302\t303\n"
-            "1\t26\t51\t100\t150\t200\t251\t275\t300\tnil\t301\t305\t302\t302\t303\n"
-            "0\t25\t50\t100\t150\t200\t250\t275\t299\tnil\t300\t304\t301\t302\t303\n"
-            "1\t26\t51\t100\t150\t200\t251\t275\t300\tnil\t301\t305\t302\t302\t303\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
 TEST(LuaTest, TestTableDup2)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup2.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup2.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    std::string expectedOut =
-            "0\t1\t2\t3\t4\tnil\tnil\tnil\t301\t302\t303\tnil\n"
-            "1\t1\t2\t3\t4\tnil\tnil\tnil\t302\t302\t303\tnil\n"
-            "0\t1\t2\t3\t4\tnil\tnil\tnil\t301\t302\t303\tnil\n"
-            "1\t1\t2\t3\t4\tnil\tnil\tnil\t302\t302\t303\tnil\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 

@@ -9,6 +9,13 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   unconditional_branch.cpp
   set_constant_value.cpp
   new_closure.cpp
+  table_dup.cpp
+  table_get_by_id.cpp
+  table_get_by_val.cpp
+  table_put_by_id.cpp
+  table_put_by_val.cpp
+  table_get_by_imm.cpp
+  table_put_by_imm.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

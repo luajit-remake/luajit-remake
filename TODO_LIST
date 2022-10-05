@@ -10,3 +10,5 @@ This should be completely safe since every function is always tail-calling (i.e.
 
 We probably shouldn't call memcpy/memmove, since it's in a .so thus an indirect call..
 
+remove the 'used' attribute of the strength reduction rule symbol, so the implementations can be dropped
+
