@@ -865,7 +865,18 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::NOT:
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
             case LJOpcode::UNM:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUnaryMinus({
+                    .input = local(opdata[1]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::LEN:
             {
                 ReleaseAssert(false && "unimplemented");

@@ -100,23 +100,17 @@ TEST(LuaTest, TestTableDup2)
 
 TEST(LuaTest, TestTableDup3)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_dup3.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup3.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
 
-    std::string expectedOut =
-            "1\t2\tnil\tnil\n"
-            "2\t3\t4\t5\t-0\tnil\n"
-            "nil\t4\t5\t6\t7\t8\tnil\n"
-            "nil\t233\tnil\tnil\tasd\tnil\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
