@@ -344,20 +344,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         func.setLinkage(GlobalValue::ExternalLinkage);
         func.setComdat(nullptr);
     }
-    for (GlobalVariable& gv : m_module->globals())
-    {
-        if (gv.hasLocalLinkage())
-        {
-            if (gv.isConstant() && gv.hasInitializer())
-            {
-                gv.setLinkage(GlobalValue::LinkOnceODRLinkage);
-            }
-            else
-            {
-                gv.setLinkage(GlobalValue::ExternalLinkage);
-            }
-        }
-    }
 
     // Sanity check that 'm_wrapper' is there, and extract it
     //

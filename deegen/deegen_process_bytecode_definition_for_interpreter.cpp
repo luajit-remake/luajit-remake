@@ -477,16 +477,28 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         for (GlobalVariable& gvInExtracted : m->globals())
         {
+            if (gvInExtracted.hasLocalLinkage())
+            {
+                // If the global has local linkage, just link them in. There isn't any downside other than we potentially get one more copy
+                // if the variable already exists in the main module. But that's fine, because LLVM optimizer should usually be able to merge
+                // identical copies of internal globals into one. We should not try to manually merge them because it's very tricky and risky.
+                //
+                continue;
+            }
+
             std::string gvName = gvInExtracted.getName().str();
             if (gvName == x_deegen_interpreter_dispatch_table_symbol_name)
             {
-                // That's the only global we added to the extracted module, it's fine that it's not
+                // That's the only external global we added to the extracted module, it's fine that it's not
                 // in the original module, and we don't have to do anything about it
                 //
                 continue;
             }
 
-            GlobalVariable* gvInOriginal = module->getGlobalVariable(gvName, true /*allowInternal*/);
+            GlobalVariable* gvInOriginal = module->getGlobalVariable(gvName);
+            // Currently we simply fail if the processed module introduced new external global variables that we do not know.
+            // We should be able to do better, but there is no use case for such scenario right now.
+            //
             ReleaseAssert(gvInOriginal != nullptr);
             if (gvInOriginal == nullptr) { continue; }
             if (changeMap.count(gvName))
