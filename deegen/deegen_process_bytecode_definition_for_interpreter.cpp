@@ -483,6 +483,11 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 // if the variable already exists in the main module. But that's fine, because LLVM optimizer should usually be able to merge
                 // identical copies of internal globals into one. We should not try to manually merge them because it's very tricky and risky.
                 //
+                // TODO: after some more investigation, it seems like LLVM does not merge identical internal globals with unnamed_addr on the spot.
+                // It seems like some optimization pass is needed to merge them. We don't want to run the whole optimization pipeline again
+                // since LLVM doesn't recommend that (it could bloat the code), so we should identify what pass does that and run that pass alone.
+                // But it's not very important anyway.
+                //
                 continue;
             }
 
