@@ -20,6 +20,7 @@ add_library(deegen_rt
   deegen_ast_get_global_object.cpp
   deegen_ast_guest_language_funtion_return.cpp
   deegen_ast_new_closure.cpp
+  deegen_ast_upvalue_accessor.cpp
 ) 
 
 # Build the main Futamura projection stage binary

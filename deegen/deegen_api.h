@@ -37,6 +37,9 @@ extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(TValue* retStart, size_t numRets);
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets);
 extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb);
+TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_Get(size_t ord);
+void DeegenImpl_UpvalueAccessor_Put(size_t ord, TValue valueToPut);
+void DeegenImpl_UpvalueAccessor_Close(const TValue* limit);
 
 // Return zero or one value as the result of the operation
 //
@@ -99,6 +102,26 @@ inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBl
 {
     return DeegenImpl_CreateNewClosure(cb);
 }
+
+struct UpvalueAccessor
+{
+    static TValue WARN_UNUSED ALWAYS_INLINE Get(size_t ord)
+    {
+        return DeegenImpl_UpvalueAccessor_Get(ord);
+    }
+
+    static void ALWAYS_INLINE Put(size_t ord, TValue valueToPut)
+    {
+        DeegenImpl_UpvalueAccessor_Put(ord, valueToPut);
+    }
+
+    // Close all upvalues >= limit
+    //
+    static void ALWAYS_INLINE Close(const TValue* limit)
+    {
+        DeegenImpl_UpvalueAccessor_Close(limit);
+    }
+};
 
 namespace detail {
 

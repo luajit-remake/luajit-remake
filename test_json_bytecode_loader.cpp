@@ -148,43 +148,27 @@ TEST(LuaTest, TestTableSizeHint)
 
 TEST(LuaTest, Upvalue)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/upvalue.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/upvalue.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    std::string expectedOut =
-            "10123\t456\t1001\t2\t178\t90\t13\t54321\n"
-            "10765\t43\t1001\t2\t112\t963\t13\t4356\n"
-            "20123\t456\t2001\t2\t278\t90\t23\t65432\n"
-            "20765\t43\t2001\t2\t333\t852\t13\t7531\n"
-            "30123\t456\t3001\t2\t112\t34\t13\t987\n"
-            "30765\t43\t3001\t2\t433\t852\t23\t9999\n"
-            "40123\t456\t4001\t2\t212\t34\t23\t654\n"
-            "40765\t43\t4001\t2\t533\t852\t33\t987\n"
-            "50123\t456\t5001\t2\t378\t90\t33\t432\n"
-            "50765\t43\t5001\t2\t212\t963\t23\t3232\n"
-            "60123\t456\t6001\t2\t478\t90\t43\t321\n"
-            "70123\t456\t7001\t2\t312\t34\t33\t16\n"
-            "80123\t456\t8001\t2\t9112\t234\t13\t88\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
 TEST(LuaTest, Fib_upvalue)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/fib_upvalue.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/fib_upvalue.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();

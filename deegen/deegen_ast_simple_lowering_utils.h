@@ -39,6 +39,7 @@ public:
   , LowerGetGlobalObjectApiPass                     \
   , LowerGuestLanguageFunctionReturnPass            \
   , LowerCreateNewClosureApiPass                    \
+  , LowerUpvalueAccessorApiPass                     \
 
 /* The helper macro to register the classes */
 #define DEEGEN_CREATE_WRAPPER_NAME_FOR_SIMPLE_API_LOWERING_PASS(name) createDeegenSimpleLoweringPass_ ## name

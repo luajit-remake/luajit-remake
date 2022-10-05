@@ -27,6 +27,9 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_global_object_from_code_block.cpp
   append_variadic_results_to_function_returns.cpp
   create_new_closure_from_code_block.cpp
+  get_upvalue.cpp
+  put_upvalue.cpp
+  close_upvalues.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

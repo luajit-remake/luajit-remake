@@ -1027,12 +1027,66 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::TSETM:
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
             case LJOpcode::UGET:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUpvalueGet({
+                    .ord = SafeIntegerCast<uint16_t>(opdata[1]),
+                    .output = local(opdata[0])
+                });
+                break;
+            }
             case LJOpcode::USETV:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUpvaluePut({
+                    .ord = SafeIntegerCast<uint16_t>(opdata[0]),
+                    .value = local(opdata[1])
+                });
+                break;
+            }
             case LJOpcode::USETS:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUpvaluePut({
+                    .ord = SafeIntegerCast<uint16_t>(opdata[0]),
+                    .value = objCst(opdata[1])
+                });
+                break;
+            }
             case LJOpcode::USETN:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUpvaluePut({
+                    .ord = SafeIntegerCast<uint16_t>(opdata[0]),
+                    .value = numCst(opdata[1])
+                });
+                break;
+            }
             case LJOpcode::USETP:
+            {
+                TestAssert(opdata.size() == 2);
+                bw.CreateUpvaluePut({
+                    .ord = SafeIntegerCast<uint16_t>(opdata[0]),
+                    .value = priCst(opdata[1])
+                });
+                break;
+            }
             case LJOpcode::UCLO:
+            {
+                TestAssert(opdata.size() == 2);
+                int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+                int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + opdata[1];
+                TestAssert(jumpBytecodeOrdinal >= 0);
+                BranchTargetPopulator p = bw.CreateUpvalueClose({
+                    .base = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(static_cast<size_t>(jumpBytecodeOrdinal), p));
+                break;
+            }
             case LJOpcode::FORI:
             case LJOpcode::FORL:
             case LJOpcode::LOOP:
