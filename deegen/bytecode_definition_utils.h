@@ -183,7 +183,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         consteval SpecializedOperandRef IsConstant()
         {
             static_assert(IsValidTypeSpecialization<T>);
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::Constant);
             return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeConstantWithType, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
         }
 

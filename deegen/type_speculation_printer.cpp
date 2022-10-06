@@ -88,9 +88,8 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
 
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask, bool printMaskValue)
 {
-    using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
-    constexpr size_t n = detail::get_type_speculation_defs<TypeSpecializationList>::count;
-    constexpr std::array<ElementT, n> arr = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+    constexpr auto arr = x_list_of_type_speculation_mask_and_name;
+    constexpr size_t n = arr.size();
 
     std::stringstream ss;
     if (mask == 0)

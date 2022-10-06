@@ -427,12 +427,14 @@ public:
 
     uint8_t* m_bytecode;
     UpvalueMetadata* m_upvalueInfo;
+    // TODO: this field should really just be a uint64_t*
     BytecodeConstantTableEntry* m_cstTable;
     UnlinkedCodeBlock* m_parent;
 
     uint32_t m_cstTableLength;
     uint32_t m_bytecodeLength;
     uint32_t m_numUpvalues;
+    // TODO: this field should be deleted
     uint32_t m_numNumberConstants;
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;

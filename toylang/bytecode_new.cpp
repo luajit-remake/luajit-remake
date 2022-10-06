@@ -134,16 +134,6 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
         TestAssert(j.count("Upvalues") && j["Upvalues"].is_array());
         uint32_t numUpvalues = SafeIntegerCast<uint32_t>(j["Upvalues"].size());
         ucb->m_numUpvalues = numUpvalues;
-
-        // We always insert 3 constants 'nil', 'false', 'true', to make things easier
-        //
-        TestAssert(j.count("NumberConstants") && j["NumberConstants"].is_array());
-        size_t numNumberConstants = j["NumberConstants"].size() + 3;
-        ucb->m_numNumberConstants = SafeIntegerCast<uint32_t>(numNumberConstants);
-
-        TestAssert(j.count("ObjectConstants") && j["ObjectConstants"].is_array());
-        size_t numObjectConstants = j["ObjectConstants"].size();
-
         ucb->m_upvalueInfo = new UpvalueMetadata[ucb->m_numUpvalues];
 
         {
@@ -167,22 +157,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             TestAssert(i == ucb->m_numUpvalues);
         }
 
-        ucb->m_cstTableLength = SafeIntegerCast<uint32_t>(numObjectConstants + ucb->m_numNumberConstants);
-        ucb->m_cstTable = new BytecodeConstantTableEntry[ucb->m_cstTableLength];
-
+        std::vector<TValue> numberCstList;
+        TestAssert(j.count("NumberConstants") && j["NumberConstants"].is_array());
+        size_t numNumberConstants = j["NumberConstants"].size();
         {
-            uint32_t i = ucb->m_cstTableLength;
-            {
-                i--;
-                ucb->m_cstTable[i].m_tv = TValue::Nil();
-                i--;
-                ucb->m_cstTable[i].m_tv = TValue::CreateFalse();
-                i--;
-                ucb->m_cstTable[i].m_tv = TValue::CreateTrue();
-            }
             for (auto& c : j["NumberConstants"])
             {
-                i--;
                 std::string ty = JSONCheckedGet<std::string>(c, "Type");
                 TestAssert(ty == "Int32" || ty == "Double");
                 if (ty == "Int32")
@@ -197,26 +177,30 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                     {
                         tv = TValue::CreateInt32(value);
                     }
-                    ucb->m_cstTable[i].m_tv = tv;
+                    numberCstList.push_back(tv);
                 }
                 else
                 {
                     double value = JSONCheckedGet<double>(c, "Value");
-                    ucb->m_cstTable[i].m_tv = TValue::CreateDouble(value);
+                    numberCstList.push_back(TValue::CreateDouble(value));
                 }
             }
-            TestAssert(i == numObjectConstants);
+            TestAssert(numNumberConstants == numberCstList.size());
+        }
 
+        TestAssert(j.count("ObjectConstants") && j["ObjectConstants"].is_array());
+        size_t numObjectConstants = j["ObjectConstants"].size();
+        std::vector<TValue> objectCstList;
+        {
             for (auto& c : j["ObjectConstants"])
             {
-                i--;
                 std::string ty = JSONCheckedGet<std::string>(c, "Type");
                 ReleaseAssert(ty == "String" || ty == "FunctionPrototype" || ty == "Table");
                 if (ty == "String")
                 {
                     std::string data = JSONCheckedGet<std::string>(c, "Value");
                     UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(data.c_str(), static_cast<uint32_t>(data.length()));
-                    ucb->m_cstTable[i].m_tv = TValue::CreatePointer(hs);
+                    objectCstList.push_back(TValue::CreatePointer(hs));
                 }
                 else if (ty == "FunctionPrototype")
                 {
@@ -225,7 +209,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                     UnlinkedCodeBlock* childUcb = r->m_unlinkedCodeBlocks[ordinal];
                     TestAssert(childUcb->m_parent == nullptr);
                     childUcb->m_parent = ucb;
-                    ucb->m_cstTable[i].m_ucb = childUcb;
+                    // TODO: this really shouldn't be that hacky..
+                    //
+                    TValue tmp;
+                    tmp.m_value = reinterpret_cast<uint64_t>(childUcb);
+                    objectCstList.push_back(tmp);
                 }
                 else
                 {
@@ -408,30 +396,41 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                     std::ignore = numPropsInserted;
                     std::ignore = numericIndexInserted;
 
-                    ucb->m_cstTable[i].m_tv = TValue::CreatePointer(UserHeapPointer<TableObject>(obj));
+                    objectCstList.push_back(TValue::CreatePointer(UserHeapPointer<TableObject>(obj)));
 
                     // TODO: we should assert that 'obj' contains exactly everything we expected
                 }
             }
-            TestAssert(i == 0);
+            TestAssert(objectCstList.size() == numObjectConstants);
         }
 
-        auto priCst = [&](int32_t ord) -> CsTab
+        auto priCst = [&](int32_t ord)
         {
             TestAssert(0 <= ord && ord < 3);
-            return CsTab(static_cast<size_t>(ord));
+            if (ord == 0)
+            {
+                return Cst<tNil>();
+            }
+            else if (ord == 1)
+            {
+                return Cst<tBool>(false);
+            }
+            else
+            {
+                return Cst<tBool>(true);
+            }
         };
 
-        auto numCst = [&](int32_t ord) -> CsTab
+        auto numCst = [&](int32_t ord) -> TValue
         {
-            TestAssert(0 <= ord && ord < static_cast<int32_t>(numNumberConstants) - 3);
-            return CsTab(static_cast<size_t>(ord + 3));
+            TestAssert(0 <= ord && ord < static_cast<int32_t>(numNumberConstants));
+            return numberCstList[static_cast<size_t>(ord)];
         };
 
-        auto objCst = [&](int32_t ord) -> CsTab
+        auto objCst = [&](int32_t ord) -> TValue
         {
             TestAssert(0 <= ord && ord < static_cast<int32_t>(numObjectConstants));
-            return CsTab(numNumberConstants + static_cast<size_t>(ord));
+            return objectCstList[static_cast<size_t>(ord)];
         };
 
         auto local = [&](int32_t ord) -> Local
@@ -1189,6 +1188,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
         }
 
         std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();
+        std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
+
+        ucb->m_cstTableLength = static_cast<uint32_t>(constantTableData.second);
+        ucb->m_cstTable = reinterpret_cast<BytecodeConstantTableEntry*>(constantTableData.first);
+
         ucb->m_bytecode = bytecodeData.first;
         ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
         ucb->m_bytecodeMetadataLength = 0;

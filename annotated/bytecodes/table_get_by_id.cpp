@@ -75,7 +75,9 @@ DEEGEN_DEFINE_BYTECODE(TableGetById)
     );
     Result(BytecodeValue);
     Implementation(TableGetByIdImpl);
-    Variant();
+    Variant(
+        Op("index").IsConstant<tString>()
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

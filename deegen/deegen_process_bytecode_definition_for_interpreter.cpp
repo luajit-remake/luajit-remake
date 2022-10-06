@@ -18,7 +18,7 @@ std::string GetGeneratedBuilderClassNameFromBytecodeName(const std::string& byte
     return std::string("DeegenGenerated_BytecodeBuilder_" + bytecodeName);
 }
 
-std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType ty)
+std::string GetApiCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType ty)
 {
     switch (ty)
     {
@@ -28,7 +28,7 @@ std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType
     }
     case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
     {
-        return "LocalOrCsTab";
+        return "LocalOrCstWrapper";
     }
     case DeegenBytecodeOperandType::BytecodeSlot:
     {
@@ -36,7 +36,7 @@ std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType
     }
     case DeegenBytecodeOperandType::Constant:
     {
-        return "CsTab";
+        return "CstWrapper";
     }
     case DeegenBytecodeOperandType::BytecodeRangeRO:
     {
@@ -74,100 +74,423 @@ std::string GetCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType
     ReleaseAssert(false);
 }
 
+std::string GetVariantCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOperandType ty)
+{
+    switch (ty)
+    {
+    case DeegenBytecodeOperandType::INVALID_TYPE:
+    {
+        ReleaseAssert(false);
+    }
+    case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
+    {
+        ReleaseAssert(false);
+    }
+    case DeegenBytecodeOperandType::BytecodeSlot:
+    {
+        return "Local";
+    }
+    case DeegenBytecodeOperandType::Constant:
+    {
+        return "TValue";
+    }
+    case DeegenBytecodeOperandType::BytecodeRangeRO:
+    {
+        return "Local";
+    }
+    case DeegenBytecodeOperandType::BytecodeRangeRW:
+    {
+        return "Local";
+    }
+    case DeegenBytecodeOperandType::Int8:
+    {
+        return "int8_t";
+    }
+    case DeegenBytecodeOperandType::UInt8:
+    {
+        return "uint8_t";
+    }
+    case DeegenBytecodeOperandType::Int16:
+    {
+        return "int16_t";
+    }
+    case DeegenBytecodeOperandType::UInt16:
+    {
+        return "uint16_t";
+    }
+    case DeegenBytecodeOperandType::Int32:
+    {
+        return "int32_t";
+    }
+    case DeegenBytecodeOperandType::UInt32:
+    {
+        return "uint32_t";
+    }
+    }   /* switch ty */
+    ReleaseAssert(false);
+}
+
+// Invariant:
+// At the current point of the code, we know that for all variants in S, condition for operands [0, k) have been satisfied.
+// We are responsible for generating the implementation that handles all variants in S.
+// When our function returns, all variants in S have been handled, and control flow would reach the updated code cursor
+// if and only if the specified operands cannot be handled by any variant in S.
+//
 void GenerateVariantSelectorImpl(FILE* fp,
                                  const std::vector<DeegenBytecodeOperandType>& opTypes,
-                                 const std::vector<std::string>& opNames,
-                                 const std::function<bool(const std::vector<DeegenBytecodeOperandType>&)>& selectionOk,
+                                 std::vector<BytecodeVariantDefinition*> S,
                                  std::vector<DeegenBytecodeOperandType>& selectedType,
-                                 bool hasOutputOperand,
+                                 size_t k,
+                                 bool isFirstCheckForK,
                                  size_t extraIndent)
 {
-    ReleaseAssert(selectedType.size() <= opTypes.size());
+    ReleaseAssert(S.size() > 0);
+    size_t numOperands = S[0]->m_list.size();
+    ReleaseAssert(k <= numOperands);
+    ReleaseAssert(selectedType.size() == k);
+
     std::string extraIndentStr = std::string(extraIndent, ' ');
-    if (selectedType.size() == opTypes.size())
+    if (k == numOperands)
     {
-        if (selectionOk(selectedType))
+        // We have checked all operands. Now the variant set should have been filtered to exactly one variant
+        //
+        ReleaseAssert(S.size() == 1);
+        ReleaseAssert(opTypes.size() == numOperands);
+        BytecodeVariantDefinition* def = S[0];
+        fprintf(fp, "%sreturn DeegenCreateImpl%u(", extraIndentStr.c_str(), SafeIntegerCast<unsigned int>(def->m_variantOrd));
+        for (size_t i = 0; i < selectedType.size(); i++)
         {
-            fprintf(fp, "%sreturn DeegenCreateImpl(", extraIndentStr.c_str());
-            for (size_t i = 0; i < selectedType.size(); i++)
+            std::string operandName =  def->m_list[i]->OperandName();
+            if (i > 0)
             {
-                if (i > 0)
+                fprintf(fp, ", ");
+            }
+            if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+            {
+                // LocalOrCstWrapper -> Local / TValue
+                //
+                if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
                 {
-                    fprintf(fp, ", ");
-                }
-                if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
-                {
-                    if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
-                    {
-                        fprintf(fp, "Local(ops.%s.m_ord)", opNames[i].c_str());
-                    }
-                    else
-                    {
-                        ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
-                        fprintf(fp, "CsTab(ops.%s.m_ord)", opNames[i].c_str());
-                    }
+                    fprintf(fp, "ops.%s.AsLocal()", operandName.c_str());
                 }
                 else
                 {
-                    fprintf(fp, "ops.%s", opNames[i].c_str());
+                    ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
+                    fprintf(fp, "ops.%s.AsConstant()", operandName.c_str());
                 }
             }
-            if (hasOutputOperand)
+            else if (opTypes[i] == DeegenBytecodeOperandType::Constant)
             {
-                if (selectedType.size() > 0)
-                {
-                    fprintf(fp, ", ");
-                }
-                fprintf(fp, "ops.output");
+                // CstWrapper -> TValue
+                //
+                fprintf(fp, "ops.%s.m_value", operandName.c_str());
             }
-            fprintf(fp, ");\n");
+            else if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlot || opTypes[i] == DeegenBytecodeOperandType::BytecodeRangeRO || opTypes[i] == DeegenBytecodeOperandType::BytecodeRangeRW)
+            {
+                // Local -> Local, pass directly
+                //
+                fprintf(fp, "ops.%s", operandName.c_str());
+            }
+            else
+            {
+                // ForbidUninitialized<T> -> T
+                //
+                fprintf(fp, "ops.%s.m_value", operandName.c_str());
+            }
         }
-        else
+        if (def->m_hasOutputValue)
         {
-            std::string errMsg = "Combination";
-            for (size_t i = 0; i < selectedType.size(); i++)
+            if (selectedType.size() > 0)
             {
-                if (opTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
-                {
-                    if (selectedType[i] == DeegenBytecodeOperandType::BytecodeSlot)
-                    {
-                        errMsg += " " + opNames[i] + "=Local";
-                    }
-                    else
-                    {
-                        ReleaseAssert(selectedType[i] == DeegenBytecodeOperandType::Constant);
-                        errMsg += " " + opNames[i] + "=CsTab";
-                    }
-                }
+                fprintf(fp, ", ");
             }
-            errMsg += " is not instantiated as a valid variant!";
-            fprintf(fp, "%sassert(false && \"%s\");\n", extraIndentStr.c_str(), errMsg.c_str());
-            fprintf(fp, "%s__builtin_unreachable();\n", extraIndentStr.c_str());
+            fprintf(fp, "ops.output");
         }
+        fprintf(fp, ");\n");
+
         return;
     }
 
-    size_t curOrd = selectedType.size();
-    if (opTypes[curOrd] != DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+    auto emitCheckSlot = [&]()
     {
-        selectedType.push_back(opTypes[curOrd]);
-        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent);
-        selectedType.pop_back();
-    }
-    else
-    {
-        fprintf(fp, "%sif (ops.%s.m_isLocal) {\n", extraIndentStr.c_str(), opNames[curOrd].c_str());
+        std::vector<BytecodeVariantDefinition*> selected;
+        std::vector<BytecodeVariantDefinition*> remaining;
+        for (BytecodeVariantDefinition* def : S)
+        {
+            if (def->m_list[k]->GetKind() == BcOperandKind::Slot)
+            {
+                selected.push_back(def);
+            }
+            else
+            {
+                remaining.push_back(def);
+            }
+        }
+
+        std::string operandName =  S[0]->m_list[k]->OperandName();
+        ReleaseAssert(opTypes[k] == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+        fprintf(fp, "%sif (ops.%s.m_isLocal) {\n", extraIndentStr.c_str(), operandName.c_str());
         selectedType.push_back(DeegenBytecodeOperandType::BytecodeSlot);
-        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
-        selectedType.pop_back();
-        fprintf(fp, "%s} else {\n", extraIndentStr.c_str());
-        // TODO: this need to correctly handle the constant type
-        //
-        selectedType.push_back(DeegenBytecodeOperandType::Constant);
-        GenerateVariantSelectorImpl(fp, opTypes, opNames, selectionOk, selectedType, hasOutputOperand, extraIndent + 4);
-        selectedType.pop_back();
+
+        GenerateVariantSelectorImpl(fp, opTypes, selected, selectedType, k + 1, true /*isFirstForK*/, extraIndent + 4);
+
         fprintf(fp, "%s}\n", extraIndentStr.c_str());
+        selectedType.pop_back();
+        S = remaining;
+    };
+
+    auto emitCheckConstantType = [&](bool mustEmitTopCheck)
+    {
+        // Handle edge case: no constant is specialized
+        //
+        {
+            bool isNoSpecializationEdgeCase = true;
+            for (BytecodeVariantDefinition* def : S)
+            {
+                ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
+                BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
+                TypeSpeculationMask mask = op->m_typeMask;
+                ReleaseAssert(mask <= x_typeSpeculationMaskFor<tTop>);
+                if (mask != x_typeSpeculationMaskFor<tTop>)
+                {
+                    isNoSpecializationEdgeCase = false;
+                }
+            }
+
+            if (isNoSpecializationEdgeCase)
+            {
+                if (!mustEmitTopCheck)
+                {
+                    // I believe it's impossible to reach here for BytecodeSlotOrConstant: if we have already emitted
+                    // at least one type check, we should never see any tTop specialization in S
+                    //
+                    ReleaseAssert(opTypes[k] == DeegenBytecodeOperandType::Constant);
+
+                    // The check is tautologically true, no need to do anything
+                    //
+                    selectedType.push_back(DeegenBytecodeOperandType::Constant);
+                    GenerateVariantSelectorImpl(fp, opTypes, S, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent);
+                    selectedType.pop_back();
+                }
+                else
+                {
+                    ReleaseAssert(opTypes[k] == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+                    selectedType.push_back(DeegenBytecodeOperandType::Constant);
+                    std::string operandName =  S[0]->m_list[k]->OperandName();
+                    fprintf(fp, "%sif (!ops.%s.m_isLocal) {\n", extraIndentStr.c_str(), operandName.c_str());
+
+                    GenerateVariantSelectorImpl(fp, opTypes, S, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent + 4);
+
+                    fprintf(fp, "%s}\n", extraIndentStr.c_str());
+                    selectedType.pop_back();
+                }
+                S.clear();
+                return;
+            }
+        }
+
+        while (S.size() > 0)
+        {
+            // Find one 'maximal' (i.e. no other mask is a superset of it) type mask in the set
+            //
+            TypeSpeculationMask maximalMask = 0;
+            for (BytecodeVariantDefinition* def : S)
+            {
+                ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
+                BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
+                TypeSpeculationMask mask = op->m_typeMask;
+                ReleaseAssert(mask > 0);
+                if ((mask & maximalMask) == maximalMask)
+                {
+                    maximalMask = mask;
+                }
+            }
+
+            // Emit check to the mask
+            //
+            std::string maskName = "";
+            {
+                for (auto& maskAndName : x_list_of_type_speculation_mask_and_name)
+                {
+                    TypeSpeculationMask mask = maskAndName.first;
+                    if (mask == maximalMask)
+                    {
+                        maskName = maskAndName.second;
+                    }
+                }
+            }
+            ReleaseAssert(maskName != "");
+            std::string checkFnName;
+            if (opTypes[k] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+            {
+                checkFnName = "IsConstantAndHasType";
+            }
+            else
+            {
+                ReleaseAssert(opTypes[k] == DeegenBytecodeOperandType::Constant);
+                checkFnName = "HasType";
+            }
+
+            std::string operandName =  S[0]->m_list[k]->OperandName();
+            fprintf(fp, "%sif (ops.%s.template %s<%s>()) {\n", extraIndentStr.c_str(), operandName.c_str(), checkFnName.c_str(), maskName.c_str());
+
+            // Now, we need to first get all the variants which mask is the strict subset of 'maximalMask'
+            // These more specialized variants must take precedence before we handle the more generalized case of specialization == maximalMask
+            //
+            {
+                std::vector<BytecodeVariantDefinition*> selected;
+                std::vector<BytecodeVariantDefinition*> remaining;
+                for (BytecodeVariantDefinition* def : S)
+                {
+                    ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
+                    BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
+                    TypeSpeculationMask mask = op->m_typeMask;
+                    if ((mask & maximalMask) == mask && mask < maximalMask)
+                    {
+                        selected.push_back(def);
+                    }
+                    else
+                    {
+                        remaining.push_back(def);
+                    }
+                }
+
+                if (selected.size() > 0)
+                {
+                    // These more specialized variants needs further checking, so we cannot advance to the next operand yet
+                    //
+                    GenerateVariantSelectorImpl(fp, opTypes, selected, selectedType, k, false /*isFirstCheckForK*/, extraIndent + 4);
+                }
+
+                S = remaining;
+            }
+
+            // Having handled all the more specialized variants, we can now handle the variants where specialization == maximalMask
+            // In this case we can advance to the next operand, because all the variants here have the same mask
+            //
+            {
+                std::vector<BytecodeVariantDefinition*> selected;
+                std::vector<BytecodeVariantDefinition*> remaining;
+                for (BytecodeVariantDefinition* def : S)
+                {
+                    ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
+                    BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
+                    TypeSpeculationMask mask = op->m_typeMask;
+                    if (mask == maximalMask)
+                    {
+                        selected.push_back(def);
+                    }
+                    else
+                    {
+                        remaining.push_back(def);
+                    }
+                }
+
+                ReleaseAssert(selected.size() > 0);
+                selectedType.push_back(DeegenBytecodeOperandType::Constant);
+
+                GenerateVariantSelectorImpl(fp, opTypes, selected, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent + 4);
+
+                selectedType.pop_back();
+                S = remaining;
+            }
+
+            // In this iteration, we handled all the variants which specialization mask subseteq maximalMask, and removed them from S
+            // If S is not empty yet, the next iterations will handle them.
+            //
+            fprintf(fp, "%s}\n", extraIndentStr.c_str());
+        }
+    };
+
+    if (opTypes[k] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+    {
+        bool hasSlotVariant = false;
+        bool hasConstantVariant = false;
+        for (BytecodeVariantDefinition* def : S)
+        {
+            BcOperandKind kind = def->m_list[k]->GetKind();
+            if (kind == BcOperandKind::Slot)
+            {
+                hasSlotVariant = true;
+            }
+            else
+            {
+                ReleaseAssert(kind == BcOperandKind::Constant);
+                hasConstantVariant = true;
+            }
+        }
+
+        if (hasSlotVariant)
+        {
+            ReleaseAssert(isFirstCheckForK);
+            emitCheckSlot();
+        }
+
+        if (hasConstantVariant)
+        {
+            emitCheckConstantType(isFirstCheckForK /*mustEmitTopCheck*/);
+        }
+
+        ReleaseAssert(S.size() == 0);
+        return;
     }
+
+    if (opTypes[k] == DeegenBytecodeOperandType::Constant)
+    {
+        emitCheckConstantType(false /*mustEmitTopCheck*/);
+
+        ReleaseAssert(S.size() == 0);
+        return;
+    }
+
+    if (opTypes[k] == DeegenBytecodeOperandType::BytecodeSlot ||
+        opTypes[k] == DeegenBytecodeOperandType::BytecodeRangeRO ||
+        opTypes[k] == DeegenBytecodeOperandType::BytecodeRangeRW)
+    {
+        // These kinds cannot be specialized, nothing to do
+        //
+        selectedType.push_back(opTypes[k]);
+        GenerateVariantSelectorImpl(fp, opTypes, S, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent);
+        selectedType.pop_back();
+        return;
+    }
+
+    if (opTypes[k] == DeegenBytecodeOperandType::Int8 ||
+        opTypes[k] == DeegenBytecodeOperandType::Int16 ||
+        opTypes[k] == DeegenBytecodeOperandType::Int32 ||
+        opTypes[k] == DeegenBytecodeOperandType::UInt8 ||
+        opTypes[k] == DeegenBytecodeOperandType::UInt16 ||
+        opTypes[k] == DeegenBytecodeOperandType::UInt32)
+    {
+        bool hasSpecializedLiteral = false;
+        for (BytecodeVariantDefinition* def : S)
+        {
+            BcOperandKind kind = def->m_list[k]->GetKind();
+            if (kind == BcOperandKind::SpecializedLiteral)
+            {
+                hasSpecializedLiteral = true;
+            }
+            else
+            {
+                ReleaseAssert(kind == BcOperandKind::Literal);
+            }
+        }
+        if (hasSpecializedLiteral)
+        {
+            ReleaseAssert(false && "unimplemented");
+        }
+        else
+        {
+            // This literal operand has no specialized variants, nothing to do
+            //
+            selectedType.push_back(opTypes[k]);
+            GenerateVariantSelectorImpl(fp, opTypes, S, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent);
+            selectedType.pop_back();
+            return;
+        }
+    }
+
+    ReleaseAssert(false && "unhandled DeegenBytecodeOperandType");
 }
 
 }   // anonymous namespace
@@ -209,7 +532,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             bool hasAnyOperandsToProvide = false;
             for (size_t i = 0; i < numOperands; i++)
             {
-                fprintf(fp, "        %s %s;\n", GetCppTypeNameForDeegenBytecodeOperandType(def->m_originalOperandTypes[i]).c_str(), def->m_opNames[i].c_str());
+                fprintf(fp, "        %s %s;\n", GetApiCppTypeNameForDeegenBytecodeOperandType(def->m_originalOperandTypes[i]).c_str(), def->m_opNames[i].c_str());
                 hasAnyOperandsToProvide = true;
             }
             if (def->m_hasOutputValue)
@@ -227,49 +550,23 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             {
                 bytecodeBuilderFunctionReturnType = "void";
             }
-            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "Operands ops" : "");
+            // Pass the operands with 'const&' since the Operands struct may contain sub-integer fields, which could require Clang to do weird ABI lowerings that hamper LLVM optimization
+            //
+            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "const Operands& ops" : "");
 
             {
                 std::vector<DeegenBytecodeOperandType> selectedTypes;
-                auto selectionValidChecker = [&](const std::vector<DeegenBytecodeOperandType>& selection) -> bool {
-                    ReleaseAssert(selection.size() == def->m_originalOperandTypes.size());
-                    for (auto& bytecodeVariantDef : bytecodeDef)
-                    {
-                        bool ok = true;
-                        for (size_t i = 0; i < def->m_originalOperandTypes.size(); i++)
-                        {
-                            if (def->m_originalOperandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
-                            {
-                                if (selection[i] == DeegenBytecodeOperandType::BytecodeSlot)
-                                {
-                                    if (bytecodeVariantDef->m_list[i]->GetKind() != BcOperandKind::Slot)
-                                    {
-                                        ok = false;
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    ReleaseAssert(selection[i] == DeegenBytecodeOperandType::Constant);
-                                    if (bytecodeVariantDef->m_list[i]->GetKind() != BcOperandKind::Constant)
-                                    {
-                                        ok = false;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (ok)
-                        {
-                            return true;
-                        }
-                    }
-                    return false;
-                };
-                GenerateVariantSelectorImpl(fp, def->m_originalOperandTypes, def->m_opNames, selectionValidChecker, selectedTypes, def->m_hasOutputValue, 8 /*indent*/);
+                std::vector<BytecodeVariantDefinition*> S;
+                for (auto& it : bytecodeDef)
+                {
+                    S.push_back(it.get());
+                }
+                GenerateVariantSelectorImpl(fp, def->m_originalOperandTypes, S, selectedTypes, 0 /*curOperandOrd*/, true /*isFirstCheckForK*/, 8 /*indent*/);
                 ReleaseAssert(selectedTypes.size() == 0);
             }
 
+            fprintf(fp, "        assert(false && \"unsupported variant!\");\n");
+            fprintf(fp, "        __builtin_unreachable();\n");
             fprintf(fp, "    }\n\n");
 
             fprintf(fp, "protected:\n");
@@ -290,7 +587,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
             cdeclNameForVariants.push_back(InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
 
-            fprintf(fp, "    %s DeegenCreateImpl(", bytecodeBuilderFunctionReturnType.c_str());
+            fprintf(fp, "    %s DeegenCreateImpl%u(", bytecodeBuilderFunctionReturnType.c_str(), SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             for (size_t i = 0; i < bytecodeVariantDef->m_originalOperandTypes.size(); i++)
             {
                 if (i > 0)
@@ -306,12 +603,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     else
                     {
                         ReleaseAssert(bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::Constant);
-                        fprintf(fp, "CsTab param%d", static_cast<int>(i));
+                        fprintf(fp, "TValue param%d", static_cast<int>(i));
                     }
                 }
                 else
                 {
-                    fprintf(fp, "%s param%d", GetCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
+                    fprintf(fp, "%s param%d", GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
                 }
             }
             if (bytecodeVariantDef->m_hasOutputValue)
@@ -329,6 +626,59 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             ReleaseAssert(static_cast<size_t>(currentBytecodeVariantOrdinal) == bytecodeVariantDef->m_variantOrd);
             fprintf(fp, "        static constexpr size_t x_opcode = CRTP::template GetBytecodeOpcodeBase<%s>() + %d;\n", generatedClassName.c_str(), currentBytecodeVariantOrdinal);
             fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
+
+            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            {
+                std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
+                if (operand->IsElidedFromBytecodeStruct())
+                {
+                    continue;
+                }
+                if (operand->GetKind() == BcOperandKind::Constant)
+                {
+                    BcOpConstant* bcOpCst = static_cast<BcOpConstant*>(operand.get());
+                    if (bcOpCst->m_typeMask != x_typeSpeculationMaskFor<tTop>)
+                    {
+                        std::string maskName = "";
+                        {
+                            for (auto& maskAndName : x_list_of_type_speculation_mask_and_name)
+                            {
+                                TypeSpeculationMask mask = maskAndName.first;
+                                if (mask == bcOpCst->m_typeMask)
+                                {
+                                    maskName = maskAndName.second;
+                                }
+                            }
+                        }
+                        ReleaseAssert(maskName != "");
+                        fprintf(fp, "        assert(param%d.Is<%s>());\n", static_cast<int>(i), maskName.c_str());
+                    }
+                }
+                std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
+                fprintf(fp, "        using StorageTypeForOperand%d = %s;\n", static_cast<int>(i), tyName.c_str());
+                fprintf(fp, "        auto originalVal%d = ", static_cast<int>(i));
+                if (operand->GetKind() == BcOperandKind::Slot)
+                {
+                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
+                }
+                else if (operand->GetKind() == BcOperandKind::Constant)
+                {
+
+                    fprintf(fp, "crtp->InsertConstantIntoTable(param%d)", static_cast<int>(i));
+                }
+                else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                {
+                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
+                }
+                else
+                {
+                    ReleaseAssert(operand->GetKind() == BcOperandKind::Literal);
+                    fprintf(fp, "param%d", static_cast<int>(i));
+                }
+                fprintf(fp, ";\n");
+                fprintf(fp, "        static_assert(std::is_signed_v<StorageTypeForOperand%d> == std::is_signed_v<decltype(originalVal%d)>);\n", static_cast<int>(i), static_cast<int>(i));
+            }
+
             fprintf(fp, "        uint8_t* base = crtp->Reserve(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
 
             int numBitsInOpcodeField = static_cast<int>(BytecodeVariantDefinition::x_opcodeSizeBytes) * 8;
@@ -340,33 +690,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
                 std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
-                if (operand->IsElidedFromBytecodeStruct())
-                {
-                    continue;
-                }
                 size_t offset = operand->GetOffsetInBytecodeStruct();
-                std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
-                fprintf(fp, "        auto originalVal%d = ", static_cast<int>(i));
-                if (operand->GetKind() == BcOperandKind::Slot)
-                {
-                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
-                }
-                else if (operand->GetKind() == BcOperandKind::Constant)
-                {
-                    fprintf(fp, "param%d.GetTrueOffset()", static_cast<int>(i));
-                }
-                else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
-                {
-                    fprintf(fp, "param%d.m_localOrd", static_cast<int>(i));
-                }
-                else
-                {
-                    ReleaseAssert(operand->GetKind() == BcOperandKind::Literal);
-                    fprintf(fp, "param%d.m_value", static_cast<int>(i));
-                }
-                fprintf(fp, ";\n");
-                fprintf(fp, "        static_assert(std::is_signed_v<%s> == std::is_signed_v<decltype(originalVal%d)>);\n", tyName.c_str(), static_cast<int>(i));
-                fprintf(fp, "        UnalignedStore<%s>(base + %u, SafeIntegerCast<%s>(originalVal%d));\n", tyName.c_str(), SafeIntegerCast<unsigned int>(offset), tyName.c_str(), static_cast<int>(i));
+                fprintf(fp, "        UnalignedStore<StorageTypeForOperand%d>(base + %u, SafeIntegerCast<StorageTypeForOperand%d>(originalVal%d));\n", static_cast<int>(i), SafeIntegerCast<unsigned int>(offset), static_cast<int>(i), static_cast<int>(i));
             }
 
             if (bytecodeVariantDef->m_hasOutputValue)
@@ -505,7 +830,6 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             // We should be able to do better, but there is no use case for such scenario right now.
             //
             ReleaseAssert(gvInOriginal != nullptr);
-            if (gvInOriginal == nullptr) { continue; }
             if (changeMap.count(gvName))
             {
                 continue;

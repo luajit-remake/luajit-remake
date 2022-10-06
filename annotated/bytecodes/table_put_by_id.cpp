@@ -77,7 +77,9 @@ DEEGEN_DEFINE_BYTECODE(TablePutById)
     );
     Result(NoOutput);
     Implementation(TablePutByIdImpl);
-    Variant();
+    Variant(
+        Op("index").IsConstant<tString>()
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

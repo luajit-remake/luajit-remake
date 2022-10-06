@@ -19,7 +19,9 @@ DEEGEN_DEFINE_BYTECODE(TableDup)
     );
     Result(BytecodeValue);
     Implementation(TableDupImpl);
-    Variant();
+    Variant(
+        Op("src").IsConstant<tTable>()
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

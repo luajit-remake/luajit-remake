@@ -82,7 +82,9 @@ DEEGEN_DEFINE_BYTECODE(GlobalPut)
     );
     Result(NoOutput);
     Implementation(GlobalPutImpl);
-    Variant();
+    Variant(
+        Op("index").IsConstant<tString>()
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

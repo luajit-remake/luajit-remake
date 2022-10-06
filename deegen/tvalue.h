@@ -249,10 +249,10 @@ struct TValue
     }
 
     template<typename T>
-    bool WARN_UNUSED ALWAYS_INLINE Is();
+    bool WARN_UNUSED ALWAYS_INLINE Is() const;
 
     template<typename T>
-    auto WARN_UNUSED ALWAYS_INLINE As();
+    auto WARN_UNUSED ALWAYS_INLINE As() const;
 
     template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 1>>
     static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
@@ -808,6 +808,8 @@ struct get_type_speculation_defs<std::tuple<Args...>>
 
 }   // namespace detail
 
+constexpr auto x_list_of_type_speculation_mask_and_name = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+
 // Returns the human readable definitions of each type speculation mask
 //
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculationDefinitions();
@@ -992,14 +994,14 @@ END_OF_TVALUE_TYPECHECK_STRENGTH_REDUCTION_DEFINITIONS
 #endif  // defined(DEEGEN_ANNOTATED_SOURCE_FOR_BYTECODE_DEFINITION)
 
 template<typename T>
-bool WARN_UNUSED ALWAYS_INLINE TValue::Is()
+bool WARN_UNUSED ALWAYS_INLINE TValue::Is() const
 {
     static_assert(IsValidTypeSpecialization<T>);
     return DeegenImpl_TValueIs<T>(*this);
 }
 
 template<typename T>
-auto WARN_UNUSED ALWAYS_INLINE TValue::As()
+auto WARN_UNUSED ALWAYS_INLINE TValue::As() const
 {
     static_assert(IsValidTypeSpecialization<T>);
     return DeegenImpl_TValueAs<T>(*this);
