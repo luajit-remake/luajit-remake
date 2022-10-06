@@ -30,6 +30,9 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_upvalue.cpp
   put_upvalue.cpp
   close_upvalues.cpp
+  get_variadic_arg_start.cpp
+  get_num_variadic_args.cpp
+  store_variadic_args_as_variadic_results.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

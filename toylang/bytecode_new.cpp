@@ -1265,6 +1265,26 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::VARG:
+            {
+                // should have 3 opdata, despite field C is ignored by us
+                //
+                TestAssert(opdata.size() == 3);
+                int32_t fieldB = opdata[1];
+                if (fieldB == 0)
+                {
+                    // Put vararg as variadic returns
+                    //
+                    bw.CreateStoreVarArgsAsVariadicResults();
+                }
+                else
+                {
+                    bw.CreateGetVarArgsPrefix({
+                        .base = local(opdata[0]),
+                        .numToPut = SafeIntegerCast<uint16_t>(fieldB - 1)
+                    });
+                }
+                break;
+            }
             case LJOpcode::KNIL:
             case LJOpcode::ITERN:
             case LJOpcode::ITERC:

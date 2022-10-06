@@ -359,11 +359,11 @@ TEST(LuaTest, VariadicTailCall_1)
 
 TEST(LuaTest, VariadicTailCall_2)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_2.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_2.lua.json"));
 
     // Manually lower the stack size
     //
@@ -371,12 +371,11 @@ TEST(LuaTest, VariadicTailCall_2)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript(module);
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "\n100000\t80000\t20000\t120000\t40000\t120000\t60000\t80000\t80000\t0\t100000\t0\t100000\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 

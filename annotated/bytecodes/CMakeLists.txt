@@ -24,6 +24,7 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   test_and_branch_bytecodes.cpp
   logical_not.cpp
   length_operator.cpp
+  variadic_args_accessor.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

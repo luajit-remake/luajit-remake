@@ -40,6 +40,9 @@ extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeB
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_Get(size_t ord);
 void DeegenImpl_UpvalueAccessor_Put(size_t ord, TValue valueToPut);
 void DeegenImpl_UpvalueAccessor_Close(const TValue* limit);
+extern "C" TValue* WARN_UNUSED DeegenImpl_GetVarArgsStart();
+extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVarArgs();
+extern "C" void DeegenImpl_StoreVarArgsAsVariadicResults();
 
 // Return zero or one value as the result of the operation
 //
@@ -120,6 +123,24 @@ struct UpvalueAccessor
     static void ALWAYS_INLINE Close(const TValue* limit)
     {
         DeegenImpl_UpvalueAccessor_Close(limit);
+    }
+};
+
+struct VarArgsAccessor
+{
+    static TValue* WARN_UNUSED ALWAYS_INLINE GetPtr()
+    {
+        return DeegenImpl_GetVarArgsStart();
+    }
+
+    static size_t WARN_UNUSED ALWAYS_INLINE GetNum()
+    {
+        return DeegenImpl_GetNumVarArgs();
+    }
+
+    static void ALWAYS_INLINE StoreAllVarArgsAsVariadicResults()
+    {
+        return DeegenImpl_StoreVarArgsAsVariadicResults();
     }
 };
 
