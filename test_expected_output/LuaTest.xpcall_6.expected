@@ -1,0 +1,14 @@
+enter g	attempt to call a nil value	nil
+doing xpcall
+enter g	attempt to call a nil value	nil
+doing xpcall
+enter g	attempt to call a nil value	nil
+doing xpcall
+enter g	attempt to call a nil value	nil
+doing xpcall
+enter g	attempt to call a nil value	nil
+returned from xpcall	false	14
+returned from xpcall	false	3
+returned from xpcall	false	2
+returned from xpcall	false	1
+false	0

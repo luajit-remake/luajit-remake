@@ -69,7 +69,7 @@ handle_metamethod:
     {
         // TODO: make error message consistent with Lua
         //
-        ThrowError("bad type for PutById");
+        ThrowError("bad type for GlobalPut");
     }
     goto handle_metamethod;
 }

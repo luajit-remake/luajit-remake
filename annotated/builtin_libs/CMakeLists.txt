@@ -1,6 +1,9 @@
 SET(DEEGEN_USER_BUILTIN_LIB_SOURCES
   throw_error.cpp
   base_lib.cpp
+  lib_math.cpp
+  lib_io.cpp
+  lib_debug.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")

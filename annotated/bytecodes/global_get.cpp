@@ -65,7 +65,7 @@ handle_metamethod:
     {
         // TODO: make error message consistent with Lua
         //
-        ThrowError("bad type for GetById");
+        ThrowError("bad type for GlobalGet");
     }
     goto handle_metamethod;
 }

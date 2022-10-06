@@ -169,9 +169,9 @@ add_library(deegen_fps_lib
 
 add_subdirectory(toylang)
 
-# add the executable
+# add the unit test executable
 #
-add_executable(main
+set(UNIT_TEST_SRC
   main.cpp        
   test_boxing.cpp
   test_call_opcode.cpp
@@ -194,16 +194,8 @@ add_executable(main
   test_throw_error_api_lowering.cpp
 )
 
-# Our unit test needs LLVM JIT
-# add -rdynamic so that symbols are exposed to generated code
-# 
-target_link_options(main PUBLIC
-   -rdynamic 
-)
-
-target_link_libraries(main PUBLIC
+set(UNIT_TEST_LINK_LIBRARIES
   gtest
-  -Wl,--start-group
   common_utils
   toylang
   deegen_rt
@@ -211,7 +203,40 @@ target_link_libraries(main PUBLIC
   deegen_user_builtin_lib
   deegen_unit_test_ir
   deegen_common_snippet_ir
+)
+
+# Our unit test needs LLVM JIT
+# add -rdynamic so that symbols are exposed to generated code
+# 
+set(UNIT_TEST_LINK_OPTIONS
+  -rdynamic 
+)
+
+add_library(unit_test_main_src OBJECT
+  ${UNIT_TEST_SRC}
+)
+
+add_executable(main $<TARGET_OBJECTS:unit_test_main_src> )
+target_link_options(main PUBLIC ${UNIT_TEST_LINK_OPTIONS})
+target_link_libraries(main PUBLIC
+  -Wl,--start-group
+  ${UNIT_TEST_LINK_LIBRARIES}
   -Wl,--end-group
+  ${LLVM_EXTRA_LINK_LIBRARIES} 
+)
+
+# It seems like duplicate symbols (e.g., defining the same function twice, or other ODR violations) are 
+# normally ignored if they happen in the static library, which could cause tricky bugs.
+# But if explicitly passed --whole-archive option, those duplicate symbols can be detected by the linker.
+# So we create another fake executable, to detect such bugs.
+# It seems like mold is so fast that linking time is negligible, so it shouldn't slow down build.
+#
+add_executable(main_detect_duplicate_symbols $<TARGET_OBJECTS:unit_test_main_src> )
+target_link_options(main_detect_duplicate_symbols PUBLIC ${UNIT_TEST_LINK_OPTIONS})
+target_link_libraries(main_detect_duplicate_symbols PUBLIC
+  -Wl,--whole-archive
+  ${UNIT_TEST_LINK_LIBRARIES}
+  -Wl,--no-whole-archive
   ${LLVM_EXTRA_LINK_LIBRARIES} 
 )
 

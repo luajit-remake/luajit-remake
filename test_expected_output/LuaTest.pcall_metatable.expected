@@ -1,0 +1,4 @@
+enter g	gg	1	2	nil	nil
+false	true
+enter g2	gg	1	2	nil	nil
+true	1	2	3	4

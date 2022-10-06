@@ -1,0 +1,180 @@
+-- test 1 --
+false
+false
+false
+false
+false
+false
+-- test 2 --
+mt_nil	nil	nil
+true
+false
+false
+mt_nil	nil	nil
+false
+false
+false
+-- test 3 --
+mt_nil_2	nil	nil
+false
+false
+false
+mt_nil_2	nil	nil
+true
+false
+false
+-- test 4 --
+mt_nil_2	nil	nil
+false
+false
+mt_bool	false	true
+true
+mt_nil_2	nil	nil
+true
+false
+mt_bool	false	true
+false
+-- test 5 --
+mt_nil_2	nil	nil
+false
+false
+mt_bool_2	false	true
+false
+mt_nil_2	nil	nil
+true
+false
+mt_bool_2	false	true
+true
+-- test 6 --
+true
+false
+false
+true
+false
+true
+true
+false
+-- test 7 --
+true
+false
+false
+true
+false
+true
+true
+false
+-- test 8 --
+false
+false
+func_mt
+true
+func_mt
+false
+-- test 9 --
+false
+false
+false
+false
+true
+false
+false
+true
+false
+true
+--- test 10 ---
+f1	t1	t1	nil
+true
+f1	t1	t1	nil
+false
+f1	t1	t2	nil
+true
+f1	t1	t2	nil
+false
+--- test 11 ---
+f2	t1	t1	nil
+false
+f2	t1	t1	nil
+true
+f2	t1	t2	nil
+false
+f2	t1	t2	nil
+true
+--- test 12 ---
+t3_0	t3	t1	t1	nil
+true
+t3_0	t3	t1	t1	nil
+false
+false
+false
+--- test 13 ---
+t3_1	t3	t1	t1	nil
+true
+t3_1	t3	t1	t1	nil
+false
+t3_1	t3	t1	t2	nil
+true
+t3_1	t3	t1	t2	nil
+false
+--- test 14 ---
+t3_2	t3	t1	t1	nil
+false
+t3_2	t3	t1	t1	nil
+true
+t3_2	t3	t1	t2	nil
+false
+t3_2	t3	t1	t2	nil
+true
+--- test 15 ---
+tn	1234	t1	t1	nil
+true
+tn	1234	t1	t1	nil
+false
+tn	1234	t1	t2	nil
+true
+tn	1234	t1	t2	nil
+false
+--- test 16 ---
+tn_2	1234	t1	t1	nil
+false
+tn_2	1234	t1	t1	nil
+true
+tn_2	1234	t1	t2	nil
+false
+tn_2	1234	t1	t2	nil
+true
+--- test 17 ---
+tn_3	1234	t1	t1	nil
+true
+tn_3	1234	t1	t1	nil
+false
+false
+false
+--- test 18 ---
+false
+false
+false
+false
+--- test 19 ---
+tn_3	0	t1	t1	nil
+true
+tn_3	0	t1	t1	nil
+false
+tn_3	0	t1	t2	nil
+true
+tn_3	0	t1	t2	nil
+false
+--- test 20 ---
+tn_4	0	t1	t1	nil
+false
+tn_4	0	t1	t1	nil
+true
+tn_4	0	t1	t2	nil
+false
+tn_4	0	t1	t2	nil
+true
+--- test 21 ---
+false
+false
+false
+false
+test end

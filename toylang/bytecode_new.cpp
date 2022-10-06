@@ -32,51 +32,6 @@ CodeBlock* WARN_UNUSED CodeBlock::Create2(VM* vm, UnlinkedCodeBlock* ucb, UserHe
     return cb;
 }
 
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_print);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_error);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_pcall);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_xpcall);
-
-UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm)
-{
-    HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
-
-    auto insertField = [&](HeapPtr<TableObject> r, const char* propName, TValue value)
-    {
-        UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(propName, static_cast<uint32_t>(strlen(propName)));
-        PutByIdICInfo icInfo;
-        TableObject::PreparePutById(r, hs /*prop*/, icInfo /*out*/);
-        TableObject::PutById(r, hs.As<void>(), value, icInfo);
-    };
-
-    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, void* func) -> UserHeapPointer<FunctionObject>
-    {
-        UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction2(vm, func));
-        insertField(r, propName, TValue::CreatePointer(funcObj));
-        return funcObj;
-    };
-
-#if 0
-    auto insertObject = [&](HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity) -> HeapPtr<TableObject>
-    {
-        SystemHeapPointer<Structure> initialStructure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapacity);
-        UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, initialStructure.As()), 0 /*initialButterflyArrayPartCapacity*/);
-        insertField(r, propName, TValue::CreatePointer(o));
-        return o.As();
-    };
-#endif
-
-    insertField(globalObject, "_G", TValue::CreatePointer(UserHeapPointer<TableObject> { globalObject }));
-
-    insertCFunc(globalObject, "print", DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_print));
-    UserHeapPointer<FunctionObject> baseDotError = insertCFunc(globalObject, "error", DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_error));
-    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(baseDotError.As()));
-    insertCFunc(globalObject, "pcall", DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_pcall));
-    insertCFunc(globalObject, "xpcall", DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_xpcall));
-
-    return globalObject;
-}
-
 void VM::LaunchScript2(ScriptModule* module)
 {
     CoroutineRuntimeContext* rc = GetRootCoroutine();

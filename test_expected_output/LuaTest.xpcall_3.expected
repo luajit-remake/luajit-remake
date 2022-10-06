@@ -1,0 +1,19 @@
+enter f	nil	nil
+enter g	true	nil
+doing xpcall
+enter f	nil	nil
+enter g	true	nil
+doing xpcall
+enter f	nil	nil
+enter g	true	nil
+doing xpcall
+enter f	nil	nil
+enter g	true	nil
+doing xpcall
+enter f	nil	nil
+enter g	true	nil
+returned from xpcall	false	14
+returned from xpcall	false	3
+returned from xpcall	false	2
+returned from xpcall	false	1
+false	0
