@@ -1286,6 +1286,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::KNIL:
+            {
+                TestAssert(opdata.size() == 2);
+                TestAssert(opdata[1] >= opdata[0]);
+                uint32_t numSlotsToFill = static_cast<uint32_t>(opdata[1] - opdata[0] + 1);
+                bw.CreateRangeFillNils({
+                    .base = local(opdata[0]),
+                    .numToPut = SafeIntegerCast<uint16_t>(numSlotsToFill)
+                });
+                break;
+            }
             case LJOpcode::ITERN:
             case LJOpcode::ITERC:
             case LJOpcode::ITERL:

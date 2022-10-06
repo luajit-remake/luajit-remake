@@ -381,11 +381,11 @@ TEST(LuaTest, VariadicTailCall_2)
 
 TEST(LuaTest, VariadicTailCall_3)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_3.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_3.lua.json"));
 
     // Manually lower the stack size
     //
@@ -393,35 +393,26 @@ TEST(LuaTest, VariadicTailCall_3)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript(module);
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "\n100000\t50000\t25000\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
 TEST(LuaTest, OpcodeKNIL)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/test_knil.lua.json"));
-
-    // Manually lower the stack size
-    //
-    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
-    rc->m_stackBegin = new TValue[200];
-
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/test_knil.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "nil\tnil\tnil\tnil\tnil\tnil\tnil\n1\tnil\ta\tnil\t1.2\tnil\tnil\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
@@ -443,17 +434,16 @@ TEST(LuaTest, IterativeForLoop)
 
 TEST(LuaTest, NegativeZeroAsIndex)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/negative_zero_as_index.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/negative_zero_as_index.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "2\t2\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
