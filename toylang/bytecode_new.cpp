@@ -734,13 +734,93 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::ISEQV:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = local(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISNEV:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = local(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISEQS:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = objCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISNES:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = objCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISEQN:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = numCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISNEN:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = numCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISEQP:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = priCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISNEP:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                    .lhs = local(opdata[0]),
+                    .rhs = priCst(opdata[1])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISTC:
             case LJOpcode::ISFC:
             case LJOpcode::IST:

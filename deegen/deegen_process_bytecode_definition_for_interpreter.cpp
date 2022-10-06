@@ -565,7 +565,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 ReleaseAssert(selectedTypes.size() == 0);
             }
 
-            fprintf(fp, "        assert(false && \"unsupported variant!\");\n");
+            fprintf(fp, "        assert(false && \"Bad operand type/value combination! Did you forget to put it in Variant() list?\");\n");
             fprintf(fp, "        __builtin_unreachable();\n");
             fprintf(fp, "    }\n\n");
 

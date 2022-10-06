@@ -178,12 +178,12 @@ TEST(LuaTest, Fib_upvalue)
 
 TEST(LuaTest, LinearSieve)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/linear_sieve.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/linear_sieve.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -194,17 +194,16 @@ TEST(LuaTest, LinearSieve)
 
 TEST(LuaTest, NaNEdgeCase)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/nan_edge_case.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/nan_edge_case.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "1\n0\n0\n0\n0\n0\n1\n0\n1\n0\n0\n0\n0\n1\n0\n0\n0\n0\n0\n1\n1\n0\n0\n0\n0\n0\n1\n0\n0\n0\n1\n1\n0\n1\n1\n1\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
@@ -225,33 +224,31 @@ TEST(LuaTest, ForLoopCoercion)
 
 TEST(LuaTest, ForLoopEdgeCases)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_loop_edge_cases.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_loop_edge_cases.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "test1\ntest2\n5\n5\n5\ntest3\ntest4\ntest5\ntest6\ntest7\ntest8\ntest9\ntest10\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
 TEST(LuaTest, PrimitiveConstants)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/primitive_constant.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/primitive_constant.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "0\n1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n1\n1\n1\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1\n0\n1\n1\n0\nfalse\ntrue\nnil\n0\ntrue\n0\ntrue\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 

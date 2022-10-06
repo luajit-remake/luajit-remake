@@ -95,14 +95,7 @@ void NO_RETURN ComparisonOperationMetamethodCallContinuation(TValue /*lhs*/, TVa
     bool res = isTruthy ^ shouldInvertResult;
     if constexpr(shouldBranch)
     {
-        if (res)
-        {
-            ReturnAndBranch();
-        }
-        else
-        {
-            Return();
-        }
+        if (res) { ReturnAndBranch(); } else { Return(); }
     }
     else
     {
@@ -122,14 +115,7 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
         bool result = DoComparison<opKind>(lhs.As<tDouble>(), rhs.As<tDouble>());
         if constexpr(shouldBranch)
         {
-            if (result)
-            {
-                ReturnAndBranch();
-            }
-            else
-            {
-                Return();
-            }
+            if (result) { ReturnAndBranch(); } else { Return(); }
         }
         else
         {
@@ -160,14 +146,7 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
                 bool result = DoComparison<opKind>(lhsString, rhsString);
                 if constexpr(shouldBranch)
                 {
-                    if (result)
-                    {
-                        ReturnAndBranch();
-                    }
-                    else
-                    {
-                        Return();
-                    }
+                    if (result) { ReturnAndBranch(); } else { Return(); }
                 }
                 else
                 {
