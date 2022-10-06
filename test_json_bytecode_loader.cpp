@@ -315,11 +315,11 @@ TEST(LuaTest, LengthOperator)
 
 TEST(LuaTest, TailCall)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/tail_call.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/tail_call.lua.json"));
 
     // Manually lower the stack size
     //
@@ -327,22 +327,21 @@ TEST(LuaTest, TailCall)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript(module);
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "\n100001\n123\t456\t789\t10\n100024\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
 TEST(LuaTest, VariadicTailCall_1)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_1.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_1.lua.json"));
 
     // Manually lower the stack size
     //
@@ -350,12 +349,11 @@ TEST(LuaTest, VariadicTailCall_1)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript(module);
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "\n100000\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
