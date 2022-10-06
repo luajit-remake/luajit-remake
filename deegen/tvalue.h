@@ -166,6 +166,7 @@ struct TValue
     //
     bool ALWAYS_INLINE IsTruthy() const
     {
+        // return (m_value | 2) == x_mivTag;
         return m_value != Nil().m_value && m_value != CreateFalse().m_value;
     }
 

@@ -822,11 +822,46 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::ISTC:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateCopyAndBranchIfTruthy({
+                    .value = local(opdata[1]),
+                    .output = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISFC:
+            {
+                TestAssert(opdata.size() == 2);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateCopyAndBranchIfFalsy({
+                    .value = local(opdata[1]),
+                    .output = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::IST:
+            {
+                TestAssert(opdata.size() == 1);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfTruthy({
+                    .value = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
+            }
             case LJOpcode::ISF:
             {
-                ReleaseAssert(false && "unimplemented");
+                TestAssert(opdata.size() == 1);
+                size_t brTarget = decodeAndSkipNextJumpBytecode();
+                BranchTargetPopulator p = bw.CreateBranchIfFalsy({
+                    .value = local(opdata[0])
+                });
+                jumpPatches.push_back(std::make_pair(brTarget, p));
+                break;
             }
             case LJOpcode::GGET:
             {

@@ -256,14 +256,6 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ComparisonOperation, bool shouldBranch, Comparat
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
     );
-    Variant(
-        Op("lhs").IsConstant<tDouble>(),
-        Op("rhs").IsBytecodeSlot()
-    );
-    Variant(
-        Op("lhs").IsBytecodeSlot(),
-        Op("rhs").IsConstant<tDouble>()
-    );
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfLT, ComparisonOperation, true /*shouldBranch*/, ComparatorKind::LessThan);
