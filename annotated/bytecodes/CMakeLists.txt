@@ -22,6 +22,7 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   numeric_for_loop.cpp
   equality_bytecodes.cpp
   test_and_branch_bytecodes.cpp
+  logical_not.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
