@@ -53,11 +53,11 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
 
     if (unlikely(callTarget.m_invokedThroughMetatable))
     {
-        MakeCall(callTarget.m_target.As(), metamethod, input, UnaryMinusMetamethodCallContinuation);
+        MakeCall(callTarget.m_target.As(), metamethod, input, input, UnaryMinusMetamethodCallContinuation);
     }
     else
     {
-        MakeCall(callTarget.m_target.As(), input, UnaryMinusMetamethodCallContinuation);
+        MakeCall(callTarget.m_target.As(), input, input, UnaryMinusMetamethodCallContinuation);
     }
 }
 
