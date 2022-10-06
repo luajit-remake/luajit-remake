@@ -278,8 +278,7 @@ TEST(LuaTest, PositiveAndNegativeInf)
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "inf\n-inf\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
@@ -719,20 +718,16 @@ TEST(LuaTest, BooleanAsTableIndex_3)
 
 TEST(LuaTest, ArithmeticSanity)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/arithmetic_sanity.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/arithmetic_sanity.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    std::string expectedOut =
-            "5\n-5\n-1\n1\n6\n6\n0.66666666666667\n0.66666666666667\n3\n-3\n-1\n1\n8\n1.4142135623731\n0.70710678118655\n-0.125\nnan\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 

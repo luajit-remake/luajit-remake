@@ -570,8 +570,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             {
                 TestAssert(opdata.size() == 3);
                 bw.CreateAdd({
-                    .lhs = numCst(opdata[1]),
-                    .rhs = local(opdata[2]),
+                    .lhs = numCst(opdata[2]),
+                    .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
                 break;
@@ -580,8 +580,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             {
                 TestAssert(opdata.size() == 3);
                 bw.CreateSub({
-                    .lhs = numCst(opdata[1]),
-                    .rhs = local(opdata[2]),
+                    .lhs = numCst(opdata[2]),
+                    .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
                 break;
@@ -590,8 +590,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             {
                 TestAssert(opdata.size() == 3);
                 bw.CreateMul({
-                    .lhs = numCst(opdata[1]),
-                    .rhs = local(opdata[2]),
+                    .lhs = numCst(opdata[2]),
+                    .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
                 break;
@@ -600,8 +600,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             {
                 TestAssert(opdata.size() == 3);
                 bw.CreateDiv({
-                    .lhs = numCst(opdata[1]),
-                    .rhs = local(opdata[2]),
+                    .lhs = numCst(opdata[2]),
+                    .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
                 break;
@@ -610,8 +610,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             {
                 TestAssert(opdata.size() == 3);
                 bw.CreateMod({
-                    .lhs = numCst(opdata[1]),
-                    .rhs = local(opdata[2]),
+                    .lhs = numCst(opdata[2]),
+                    .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
                 break;
