@@ -407,17 +407,16 @@ TEST(LuaTest, OpcodeKNIL)
 
 TEST(LuaTest, IterativeForLoop)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/iter_for.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/iter_for.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    ReleaseAssert(out == "for init\n1\t1\tnil\tnil\n2\t1\tnil\tnil\n3\t1\tnil\tnil\n4\t1\tnil\tnil\n");
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
@@ -597,12 +596,12 @@ TEST(LuaTest, ForPairsEmpty)
 
 TEST(LuaTest, ForPairsSlowNext)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs_slow_next.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs_slow_next.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -651,12 +650,12 @@ TEST(LuaTest, BooleanAsTableIndex_1)
 
 TEST(LuaTest, BooleanAsTableIndex_2)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_2.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/boolean_as_table_index_2.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -687,22 +686,16 @@ TEST(LuaTest, BooleanAsTableIndex_2)
 
 TEST(LuaTest, BooleanAsTableIndex_3)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_3.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/boolean_as_table_index_3.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    std::string expectedOut =
-            "1\t3\t2\tnil\t4\tnil\n"
-            "5\t7\t6\tnil\t8\tnil\n"
-            "nil\tnil\tnil\tnil\tnil\tnil\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 

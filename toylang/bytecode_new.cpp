@@ -402,6 +402,21 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
         auto& bytecodeList = j["Bytecode"];
         auto it = bytecodeList.begin();
 
+        auto getIntValue = [](const json& e) -> int32_t
+        {
+            TestAssert(e.is_number_integer() || e.is_number_unsigned());
+            int32_t res;
+            if (e.is_number_integer())
+            {
+                res = SafeIntegerCast<int32_t>(e.get<int64_t>());
+            }
+            else
+            {
+                res = SafeIntegerCast<int32_t>(e.get<uint64_t>());
+            }
+            return res;
+        };
+
         // In LuaJIT's format many bytecode must be followed by a JMP bytecode.
         // In our bytecode format we don't have this restriction.
         // This function decodes and skips the trailing JMP bytecode and returns the bytecode ordinal the JMP bytecode targets
@@ -420,20 +435,41 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             //
             bytecodeLocation.push_back(static_cast<size_t>(-1));
 
-            auto& e = nextBytecode["OpData"][1];
-            TestAssert(e.is_number_integer() || e.is_number_unsigned());
-            int32_t jumpTargetOffset;
-            if (e.is_number_integer())
-            {
-                jumpTargetOffset = SafeIntegerCast<int32_t>(e.get<int64_t>());
-            }
-            else
-            {
-                jumpTargetOffset = SafeIntegerCast<int32_t>(e.get<uint64_t>());
-            }
+            int32_t jumpTargetOffset = getIntValue(nextBytecode["OpData"][1]);
             int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + 1 + jumpTargetOffset;
             TestAssert(jumpBytecodeOrdinal >= 0);
+            return static_cast<size_t>(jumpBytecodeOrdinal);
+        };
 
+        // Similar to 'decodeAndSkipNextJumpBytecode', but skips the ITERL bytecode
+        //
+        auto decodeAndSkipNextITERLBytecode = [&]() WARN_UNUSED -> size_t
+        {
+            int32_t selfBytecodeOrdinal = static_cast<int32_t>(it - bytecodeList.begin());
+
+            auto& curBytecode = *it;
+            TestAssert(JSONCheckedGet<std::string>(curBytecode, "OpCode") == "ITERC" || JSONCheckedGet<std::string>(curBytecode, "OpCode") == "ITERN");
+            TestAssert(curBytecode.count("OpData") && curBytecode["OpData"].is_array() && curBytecode["OpData"].size() > 0);
+            int32_t curBase = getIntValue(curBytecode["OpData"][0]);
+
+            it++;
+            TestAssert(it < bytecodeList.end());
+            auto& nextBytecode = *it;
+            TestAssert(JSONCheckedGet<std::string>(nextBytecode, "OpCode") == "ITERL");
+            TestAssert(nextBytecode.count("OpData") && nextBytecode["OpData"].is_array() && nextBytecode["OpData"].size() == 2);
+
+            // This 'ITERL' bytecode should never be a valid jump target
+            //
+            bytecodeLocation.push_back(static_cast<size_t>(-1));
+
+            // The 'ITERL' bytecode should have the same base as the ITERC/ITERN bytecode
+            //
+            int32_t base = getIntValue(nextBytecode["OpData"][0]);
+            TestAssert(base == curBase);
+
+            int32_t jumpTargetOffset = getIntValue(nextBytecode["OpData"][1]);
+            int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + 1 + jumpTargetOffset;
+            TestAssert(jumpBytecodeOrdinal >= 0);
             return static_cast<size_t>(jumpBytecodeOrdinal);
         };
 
@@ -1274,8 +1310,31 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
                 break;
             }
             case LJOpcode::ITERN:
+            {
+                ReleaseAssert(false && "unimplemented");
+            }
             case LJOpcode::ITERC:
+            {
+                // semantics:
+                // [A], ... [A+B-2] = [A-3]([A-2], [A-1])
+                //
+                TestAssert(opdata.size() == 3);
+                TestAssert(opdata[2] == 3);
+                TestAssert(opdata[1] >= 2);
+                TestAssert(opdata[0] >= 3);
+                uint16_t numRets = SafeIntegerCast<uint16_t>(opdata[1] - 1);
+                size_t jumpTarget = decodeAndSkipNextITERLBytecode();
+                BranchTargetPopulator p = bw.CreateForLoopIter({
+                    .base = local(opdata[0] - 3),
+                    .numRets = numRets
+                });
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
+            }
             case LJOpcode::ITERL:
+            {
+                ReleaseAssert(false && "should never hit here since ITERL should always be after a ITERN/ITERC and skipped when we process the ITERN/ITERC");
+            }
             case LJOpcode::ISNEXT:
             {
                 ReleaseAssert(false && "unimplemented");
