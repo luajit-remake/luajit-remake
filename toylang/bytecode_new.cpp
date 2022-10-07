@@ -633,7 +633,15 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             }
             case LJOpcode::CAT:
             {
-                ReleaseAssert(false && "unimplemented");
+                TestAssert(opdata.size() == 3);
+                TestAssert(opdata[2] >= opdata[1]);
+                uint16_t num = SafeIntegerCast<uint16_t>(opdata[2] - opdata[1] + 1);
+                bw.CreateConcat({
+                    .base = local(opdata[1]),
+                    .num = num,
+                    .output = local(opdata[0])
+                });
+                break;
             }
             case LJOpcode::KSHORT:
             {

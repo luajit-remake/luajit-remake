@@ -1,0 +1,30 @@
+enter concat nil	nil	234
+enter concat bool	true	nil234
+enter concat bool	false	789345.6truenil234
+false789345.6truenil234
+
+enter concat nil	b	nil
+enter concat bool	false	abnil
+enter concat bool	true	falseabnil
+123truefalseabnil
+
+enter concat nil	nil	true
+enter concat bool	false	cniltrue
+enter concat bool	true	falsecniltrue
+23.4truefalsecniltrue
+
+enter concat bool	true	nil
+enter concat nil	nil	dtruenil
+enter concat bool	true	nildtruenil
+23.4truenildtruenil
+
+enter concat nil	nil	nil
+enter concat nil	nil	enilnil
+enter concat nil	nil	nilenilnil
+23.4nilnilenilnil
+
+enter concat bool	false	false
+enter concat nil	nil	efalsefalse
+enter concat nil	nil	nilefalsefalse
+23.4nilnilefalsefalse
+

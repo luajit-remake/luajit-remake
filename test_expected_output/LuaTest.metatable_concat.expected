@@ -1,0 +1,54 @@
+enter concat a	a	234
+enter concat b	123	b
+x789345.6qwerty
+
+enter concat a	a	234x
+enter concat b	123	b
+789345.6qwerty
+
+enter concat a	a	234x789345.6
+enter concat b	123	b
+qwerty
+
+enter concat a	a	234
+enter concat b	123	b
+enter concat a	a	345.6qwerty
+enter concat b	x	b
+qwerty
+
+enter concat a	a	234
+enter concat str	123	b
+x789345.6asdf
+
+enter concat a	a	234x
+enter concat str	123	b
+789345.6asdf
+
+enter concat a	a	234x789345.6
+enter concat str	123	b
+asdf
+
+enter concat a	a	234
+enter concat str	123	b
+enter concat a	a	345.6asdf
+enter concat str	x	b
+asdf
+
+enter len	1234
+enter concat c	c	1234	67
+nil
+
+enter len	1234
+enter concat d	1234	d	67
+nil
+
+enter concat a	a	234
+enter concat b	123	b
+false
+
+enter concat a	a	234789x
+enter concat b	123	b
+false
+
+false
+ok

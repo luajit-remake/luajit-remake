@@ -31,11 +31,11 @@ UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm)
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
     };
 
-    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, void* func) -> UserHeapPointer<FunctionObject>
+    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, void* func) -> HeapPtr<FunctionObject>
     {
         UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction2(vm, func));
         insertField(r, propName, TValue::CreatePointer(funcObj));
-        return funcObj;
+        return funcObj.As();
     };
 
     auto insertObject = [&](HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity) -> HeapPtr<TableObject>
@@ -46,11 +46,11 @@ UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm)
         return o.As();
     };
 
-    insertField(globalObject, "_G", TValue::CreatePointer(UserHeapPointer<TableObject> { globalObject }));
+    insertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
 
     insertCFunc(globalObject, "print", LIB_FN(base_print));
-    UserHeapPointer<FunctionObject> baseDotError = insertCFunc(globalObject, "error", LIB_FN(base_error));
-    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(baseDotError.As()));
+    HeapPtr<FunctionObject> baseDotError = insertCFunc(globalObject, "error", LIB_FN(base_error));
+    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(baseDotError));
     insertCFunc(globalObject, "pcall", LIB_FN(base_pcall));
     insertCFunc(globalObject, "xpcall", LIB_FN(base_xpcall));
 

@@ -723,20 +723,16 @@ TEST(LuaTest, ArithmeticSanity)
 
 TEST(LuaTest, StringConcat)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/string_concat.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/string_concat.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
-
-    std::string expectedOut =
-            "abcdefgHIJ\na2340.66666666666667-1024g\n";
-
-    ReleaseAssert(out == expectedOut);
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
@@ -1440,73 +1436,31 @@ TEST(LuaTest, metatable_len)
 
 TEST(LuaTest, metatable_concat)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/metatable_concat.lua.json"));
-    vm->LaunchScript(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_concat.lua.json"));
+    vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
+    AssertIsExpectedOutput(out);
+    ReleaseAssert(err == "");
+}
 
-    std::string expectedOut =
-            "enter concat a\ta\t234\n"
-            "enter concat b\t123\tb\n"
-            "x789345.6qwerty\n"
-            "\n"
-            "enter concat a\ta\t234x\n"
-            "enter concat b\t123\tb\n"
-            "789345.6qwerty\n"
-            "\n"
-            "enter concat a\ta\t234x789345.6\n"
-            "enter concat b\t123\tb\n"
-            "qwerty\n"
-            "\n"
-            "enter concat a\ta\t234\n"
-            "enter concat b\t123\tb\n"
-            "enter concat a\ta\t345.6qwerty\n"
-            "enter concat b\tx\tb\n"
-            "qwerty\n"
-            "\n"
-            "enter concat a\ta\t234\n"
-            "enter concat str\t123\tb\n"
-            "x789345.6asdf\n"
-            "\n"
-            "enter concat a\ta\t234x\n"
-            "enter concat str\t123\tb\n"
-            "789345.6asdf\n"
-            "\n"
-            "enter concat a\ta\t234x789345.6\n"
-            "enter concat str\t123\tb\n"
-            "asdf\n"
-            "\n"
-            "enter concat a\ta\t234\n"
-            "enter concat str\t123\tb\n"
-            "enter concat a\ta\t345.6asdf\n"
-            "enter concat str\tx\tb\n"
-            "asdf\n"
-            "\n"
-            "enter len\t1234\n"
-            "enter concat c\tc\t1234\t67\n"
-            "nil\n"
-            "\n"
-            "enter len\t1234\n"
-            "enter concat d\t1234\td\t67\n"
-            "nil\n"
-            "\n"
-            "enter concat a\ta\t234\n"
-            "enter concat b\t123\tb\n"
-            "false\n"
-            "\n"
-            "enter concat a\ta\t234789x\n"
-            "enter concat b\t123\tb\n"
-            "false\n"
-            "\n"
-            "false\n"
-            "ok\n";
+TEST(LuaTest, metatable_concat_2)
+{
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
 
-    ReleaseAssert(out == expectedOut);
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_concat_2.lua.json"));
+    vm->LaunchScript2(module);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
 }
 
