@@ -183,8 +183,6 @@ inline HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject()
     return m_rootCoroutine->m_globalObject.As();
 }
 
-using InterpreterFn = void(*)(CoroutineRuntimeContext* /*rc*/, RestrictPtr<void> /*stackframe*/, ConstRestrictPtr<uint8_t> /*instr*/, uint64_t /*unused*/);
-
 // Base class for some executable, either an intrinsic, or a bytecode function with some fixed global object, or a user C function
 //
 class ExecutableCode : public SystemHeapGcObjectHeader
