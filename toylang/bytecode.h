@@ -204,7 +204,7 @@ public:
         return reinterpret_cast<UserCFunctionPrototype>(~reinterpret_cast<uintptr_t>(m_bytecode));
     }
 
-    static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction2(VM* vm, void* fn)
+    static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction(VM* vm, void* fn)
     {
         HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
         SystemHeapGcObjectHeader::Populate(e);
@@ -596,11 +596,11 @@ public:
     UserHeapPointer<TableObject> m_defaultGlobalObject;
     UserHeapPointer<FunctionObject> m_defaultEntryPoint;
 
-    static ScriptModule* WARN_UNUSED ParseFromJSON2(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
+    static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
 
-    static ScriptModule* WARN_UNUSED ParseFromJSON2(VM* vm, const std::string& content)
+    static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, const std::string& content)
     {
-        return ParseFromJSON2(vm, vm->GetRootGlobalObject(), content);
+        return ParseFromJSON(vm, vm->GetRootGlobalObject(), content);
     }
 };
 

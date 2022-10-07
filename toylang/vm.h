@@ -1083,9 +1083,8 @@ public:
         static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup();
     }
 
-    void LaunchScript(ScriptModule* module);
     static void LaunchScriptReturnEndpoint(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/) { }
-    void LaunchScript2(ScriptModule* module);
+    void LaunchScript(ScriptModule* module);
 };
 
 template<> HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject();

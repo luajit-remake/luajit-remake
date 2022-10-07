@@ -32,7 +32,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     return cb;
 }
 
-void VM::LaunchScript2(ScriptModule* module)
+void VM::LaunchScript(ScriptModule* module)
 {
     CoroutineRuntimeContext* rc = GetRootCoroutine();
     HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(module->m_defaultEntryPoint.As()->m_executable).As());
@@ -82,7 +82,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     return r;
 }
 
-ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
+ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
 {
     using namespace DeegenBytecodeBuilder;
 

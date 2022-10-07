@@ -35,7 +35,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 
     auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, void* func) -> HeapPtr<FunctionObject>
     {
-        UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction2(vm, func));
+        UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func));
         insertField(r, propName, TValue::CreatePointer(funcObj));
         return funcObj.As();
     };

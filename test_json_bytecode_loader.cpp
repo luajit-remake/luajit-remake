@@ -35,8 +35,8 @@ void RunSimpleLuaTest(const std::string& filename)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile(filename));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile(filename));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -55,8 +55,8 @@ TEST(LuaTest, TestPrint)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/test_print.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/test_print.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -87,8 +87,8 @@ TEST(LuaTest, TestTableSizeHint)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_size_hint.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/table_size_hint.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -173,7 +173,7 @@ TEST(LuaTest, TailCall)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/tail_call.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/tail_call.lua.json"));
 
     // Manually lower the stack size
     //
@@ -181,7 +181,7 @@ TEST(LuaTest, TailCall)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript2(module);
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -195,7 +195,7 @@ TEST(LuaTest, VariadicTailCall_1)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_1.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_1.lua.json"));
 
     // Manually lower the stack size
     //
@@ -203,7 +203,7 @@ TEST(LuaTest, VariadicTailCall_1)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript2(module);
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -217,7 +217,7 @@ TEST(LuaTest, VariadicTailCall_2)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_2.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_2.lua.json"));
 
     // Manually lower the stack size
     //
@@ -225,7 +225,7 @@ TEST(LuaTest, VariadicTailCall_2)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript2(module);
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -239,7 +239,7 @@ TEST(LuaTest, VariadicTailCall_3)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/variadic_tail_call_3.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/variadic_tail_call_3.lua.json"));
 
     // Manually lower the stack size
     //
@@ -247,7 +247,7 @@ TEST(LuaTest, VariadicTailCall_3)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
-    vm->LaunchScript2(module);
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -364,8 +364,8 @@ TEST(LuaTest, ForPairs)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -382,8 +382,8 @@ TEST(LuaTest, ForPairsPoisonNext)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs_poison_next.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs_poison_next.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -413,8 +413,8 @@ TEST(LuaTest, ForPairsSlowNext)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs_slow_next.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/for_pairs_slow_next.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -431,8 +431,8 @@ TEST(LuaTest, BooleanAsTableIndex_1)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/boolean_as_table_index_1.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_1.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -467,8 +467,8 @@ TEST(LuaTest, BooleanAsTableIndex_2)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/boolean_as_table_index_2.lua.json"));
-    vm->LaunchScript2(module);
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/boolean_as_table_index_2.lua.json"));
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -528,7 +528,7 @@ TEST(LuaBenchmark, Ack)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/ack.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile("luatests/ack.lua.json"));
 
     // This benchmark needs a larger stack
     //
@@ -536,7 +536,7 @@ TEST(LuaBenchmark, Ack)
     delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[1000000];
 
-    vm->LaunchScript2(module);
+    vm->LaunchScript(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
