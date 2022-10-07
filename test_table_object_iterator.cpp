@@ -6,7 +6,7 @@ namespace {
 
 TEST(TableObjectIterator, Sanity)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), 1000 /*numStrings*/);
 
@@ -174,7 +174,7 @@ TEST(TableObjectIterator, Sanity)
 //
 TEST(TableObjectIterator, IterateWithDeleteInBetween)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), 1000 /*numStrings*/);
 

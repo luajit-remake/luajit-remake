@@ -314,98 +314,98 @@ void DoBfsTest(size_t numStrings, size_t numNodes, size_t degreeParam)
 
 TEST(Structure, SanityPropertyAdd1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 1 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 2 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 3 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd4)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 4 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd5)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 30 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd6)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 100 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd7)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoDfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 3000 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd8)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 1 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd9)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 2 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd10)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 3 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd11)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 4 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd12)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 30 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd13)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 100 /*degreeParam*/);
 }
 
 TEST(Structure, SanityPropertyAdd14)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoBfsTest(400 /*numStrings*/, 3000 /*numNodes*/, 3000 /*degreeParam*/);
 }
@@ -544,7 +544,7 @@ void DoMetatableTransitionTest(size_t numStrings, size_t numNodes, size_t degree
 
 TEST(Structure, MetatableTransition)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoMetatableTransitionTest(400 /*numStrings*/, 1500 /*numNodes*/, 3 /*degreeParam*/);
 }
@@ -606,7 +606,7 @@ void DoArrayTypeTransitionTest(size_t numStrings, size_t numNodes, size_t degree
 
 TEST(Structure, ArrayTypeTransition)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     DoArrayTypeTransitionTest(400 /*numStrings*/, 1500 /*numNodes*/, 3 /*degreeParam*/);
 }

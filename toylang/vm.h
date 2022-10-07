@@ -912,7 +912,7 @@ template<typename CRTP>
 class VMGlobalDataManager
 {
 public:
-    bool WARN_UNUSED Initialize(bool usingNewInterpreter)
+    bool WARN_UNUSED Initialize()
     {
         static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
 
@@ -937,10 +937,7 @@ public:
         m_metatableForFunction = UserHeapPointer<void>();
         m_metatableForCoroutine = UserHeapPointer<void>();
 
-        if (usingNewInterpreter)
-        {
-            CreateRootCoroutine2();
-        }
+        CreateRootCoroutine();
         return true;
     }
 
@@ -1022,7 +1019,6 @@ public:
 
 private:
     void CreateRootCoroutine();
-    void CreateRootCoroutine2();
 
     CoroutineRuntimeContext* m_rootCoroutine;
 
@@ -1063,9 +1059,8 @@ class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>, public
 public:
     static_assert(x_segmentRegisterSelfReferencingOffset == offsetof_member_v<&VM::m_self>);
 
-    bool WARN_UNUSED Initialize(bool usingNewInterpreter = false)
+    bool WARN_UNUSED Initialize()
     {
-        ReleaseAssert(usingNewInterpreter);
         bool success = false;
 
         CHECK_LOG_ERROR(static_cast<VMMemoryManager<VM>*>(this)->Initialize());
@@ -1074,7 +1069,7 @@ public:
         CHECK_LOG_ERROR(static_cast<GlobalStringHashConser<VM>*>(this)->Initialize());
         Auto(if (!success) static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup());
 
-        CHECK_LOG_ERROR(static_cast<VMGlobalDataManager<VM>*>(this)->Initialize(usingNewInterpreter));
+        CHECK_LOG_ERROR(static_cast<VMGlobalDataManager<VM>*>(this)->Initialize());
         Auto(if (!success) static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup());
 
         success = true;

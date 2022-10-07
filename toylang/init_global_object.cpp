@@ -19,7 +19,7 @@ DEEGEN_FORWARD_DECLARE_LIB_FUNC(io_write);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(debug_getmetatable);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(debug_setmetatable);
 
-UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm)
+UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
 #define LIB_FN DEEGEN_CODE_POINTER_FOR_LIB_FUNC
 

@@ -165,15 +165,15 @@ public:
     TValue* m_stackBegin;
 };
 
-UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm);
+UserHeapPointer<TableObject> CreateGlobalObject(VM* vm);
 
 template<>
-inline void VMGlobalDataManager<VM>::CreateRootCoroutine2()
+inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
 {
     // Create global object
     //
     VM* vm = static_cast<VM*>(this);
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject2(vm);
+    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
     m_rootCoroutine = CoroutineRuntimeContext::Create(vm, globalObject);
 }
 
@@ -282,7 +282,7 @@ static_assert(sizeof(BytecodeConstantTableEntry) == 8);
 class alignas(8) CodeBlock final : public ExecutableCode
 {
 public:
-    static CodeBlock* WARN_UNUSED Create2(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
+    static CodeBlock* WARN_UNUSED Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
     static ReinterpretCastPreservingAddressSpaceType<BytecodeConstantTableEntry*, T> GetConstantTableEnd(T self)
@@ -332,17 +332,17 @@ public:
     // This is for the new interpreter. We should remove the above functions after we port everything to the new interpreter
     //
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, UnlinkedCodeBlock>>>
-    static CodeBlock* WARN_UNUSED GetCodeBlock2(T self, UserHeapPointer<TableObject> globalObject)
+    static CodeBlock* WARN_UNUSED GetCodeBlock(T self, UserHeapPointer<TableObject> globalObject)
     {
         if (likely(globalObject == self->m_defaultGlobalObject))
         {
             return self->m_defaultCodeBlock;
         }
         UnlinkedCodeBlock* raw = TranslateToRawPointer(self);
-        return raw->GetCodeBlockSlowPath2(globalObject);
+        return raw->GetCodeBlockSlowPath(globalObject);
     }
 
-    CodeBlock* WARN_UNUSED NO_INLINE GetCodeBlockSlowPath2(UserHeapPointer<TableObject> globalObject)
+    CodeBlock* WARN_UNUSED NO_INLINE GetCodeBlockSlowPath(UserHeapPointer<TableObject> globalObject)
     {
         if (unlikely(m_rareGOtoCBMap == nullptr))
         {
@@ -352,7 +352,7 @@ public:
         if (unlikely(iter == m_rareGOtoCBMap->end()))
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
-            CodeBlock* newCb = CodeBlock::Create2(vm, this /*ucb*/, globalObject);
+            CodeBlock* newCb = CodeBlock::Create(vm, this /*ucb*/, globalObject);
             (*m_rareGOtoCBMap)[globalObject.m_value] = newCb;
             return newCb;
         }

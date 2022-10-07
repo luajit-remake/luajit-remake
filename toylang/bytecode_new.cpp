@@ -8,7 +8,7 @@
 
 constexpr bool x_json_parser_force_use_double = true;
 
-CodeBlock* WARN_UNUSED CodeBlock::Create2(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
+CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
     size_t sizeToAllocate = GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(ucb->m_bytecodeMetadataLength) + sizeof(TValue) * ucb->m_cstTableLength;
     uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
@@ -1429,7 +1429,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
         ucb->m_bytecode = bytecodeData.first;
         ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
         ucb->m_bytecodeMetadataLength = 0;
-        ucb->m_defaultCodeBlock = CodeBlock::Create2(vm, ucb, globalObject);
+        ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, globalObject);
         r->m_unlinkedCodeBlocks.push_back(ucb);
 
         /*
@@ -1452,7 +1452,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
 #endif
 
     TestAssert(chunkFn->m_numUpvalues == 0);
-    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, UnlinkedCodeBlock::GetCodeBlock2(chunkFn, globalObject));
+    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, UnlinkedCodeBlock::GetCodeBlock(chunkFn, globalObject));
     r->m_defaultEntryPoint = entryPointFunc;
 
     return r;

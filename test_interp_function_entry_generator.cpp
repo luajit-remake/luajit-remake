@@ -90,7 +90,7 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_
 void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCall, uint64_t numProvidedArgs, void* testFnAddr)
 {
     using namespace llvm;
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
 
     CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock)).AsNoAssert<CodeBlock>());

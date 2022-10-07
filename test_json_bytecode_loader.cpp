@@ -31,7 +31,7 @@ std::string LoadFile(std::string filename)
 
 void RunSimpleLuaTest(const std::string& filename)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -51,7 +51,7 @@ TEST(LuaTest, Fib)
 
 TEST(LuaTest, TestPrint)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -83,7 +83,7 @@ TEST(LuaTest, TestTableDup3)
 
 TEST(LuaTest, TestTableSizeHint)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -169,7 +169,7 @@ TEST(LuaTest, LengthOperator)
 
 TEST(LuaTest, TailCall)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -191,7 +191,7 @@ TEST(LuaTest, TailCall)
 
 TEST(LuaTest, VariadicTailCall_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -213,7 +213,7 @@ TEST(LuaTest, VariadicTailCall_1)
 
 TEST(LuaTest, VariadicTailCall_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -235,7 +235,7 @@ TEST(LuaTest, VariadicTailCall_2)
 
 TEST(LuaTest, VariadicTailCall_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -360,7 +360,7 @@ void CheckForPairsThreeTestOutput(std::stringstream& ss)
 
 TEST(LuaTest, ForPairs)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -378,7 +378,7 @@ TEST(LuaTest, ForPairs)
 
 TEST(LuaTest, ForPairsPoisonNext)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -409,7 +409,7 @@ TEST(LuaTest, ForPairsEmpty)
 
 TEST(LuaTest, ForPairsSlowNext)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -427,7 +427,7 @@ TEST(LuaTest, ForPairsSlowNext)
 
 TEST(LuaTest, BooleanAsTableIndex_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -463,7 +463,7 @@ TEST(LuaTest, BooleanAsTableIndex_1)
 
 TEST(LuaTest, BooleanAsTableIndex_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
@@ -524,7 +524,7 @@ TEST(LuaBenchmark, NBody)
 
 TEST(LuaBenchmark, Ack)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 

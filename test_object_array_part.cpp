@@ -9,7 +9,7 @@ namespace {
 //
 TEST(ObjectArrayPart, PutFirstElement)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
 
     constexpr uint32_t numPropsToAdd = 4;
@@ -346,7 +346,7 @@ TEST(ObjectArrayPart, PutFirstElement)
 
 TEST(ObjectArrayPart, ContinuousArray)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
 
     constexpr uint32_t numAllString = 600;
@@ -704,7 +704,7 @@ TEST(ObjectArrayPart, ContinuousArray)
 
 TEST(ObjectArrayPart, RandomTest)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
 
     constexpr uint32_t maxNumProps = 2000;
@@ -1127,14 +1127,14 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
 
 TEST(ObjectArrayPart, DensityTest1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     ObjectArrayPartDensityTest(vm, 4 /*numProps*/);
 }
 
 TEST(ObjectArrayPart, DensityTest2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
+    VM* vm = VM::Create();
     Auto(vm->Destroy());
     ObjectArrayPartDensityTest(vm, 2000 /*numProps*/);
 }
