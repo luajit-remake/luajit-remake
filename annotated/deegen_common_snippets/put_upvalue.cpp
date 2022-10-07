@@ -5,7 +5,7 @@
 
 static void DeegenSnippet_PutUpvalue(uint64_t* stackBase, size_t upvalueOrd, TValue valueToPut)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     assert(upvalueOrd < hdr->m_func->m_numUpvalues);
     TValue* ptr = TCGet(hdr->m_func->m_upvalues[upvalueOrd]).As()->m_ptr;
     *ptr = valueToPut;

@@ -4,9 +4,6 @@
 
 #include "bytecode_definition_utils.h"
 
-// TODO: fix this
-#include "runtime_utils.h"
-
 namespace dast {
 
 enum class BcOperandKind

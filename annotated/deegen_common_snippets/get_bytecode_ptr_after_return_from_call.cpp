@@ -5,7 +5,7 @@
 
 static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* calleeStackBase, CodeBlock* cb)
 {
-    StackFrameHeader* calleeHdr = StackFrameHeader::GetStackFrameHeader(calleeStackBase);
+    StackFrameHeader* calleeHdr = StackFrameHeader::Get(calleeStackBase);
     uint32_t bytecodeOffset = calleeHdr->m_callerBytecodeOffset;
     uint8_t* bytecodeBase = cb->m_bytecode;
     return bytecodeBase + bytecodeOffset;

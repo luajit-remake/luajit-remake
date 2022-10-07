@@ -10,7 +10,6 @@
 
 #include "llvm/Linker/Linker.h"
 
-// TODO: extract out needed logic
 #include "runtime_utils.h"
 
 namespace dast {

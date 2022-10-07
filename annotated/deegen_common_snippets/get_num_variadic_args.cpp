@@ -5,7 +5,7 @@
 
 static uint64_t DeegenSnippet_GetNumVariadicArgs(uint64_t* stackBase)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     return hdr->m_numVariadicArguments;
 }
 

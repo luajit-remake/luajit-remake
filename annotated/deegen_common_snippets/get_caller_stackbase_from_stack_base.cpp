@@ -5,7 +5,7 @@
 
 static void* DeegenSnippet_GetCallerStackBaseFromStackBase(void* stackBase)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     return hdr->m_caller;
 }
 

@@ -77,7 +77,6 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         // Now we know we will need to call metamethod, determine the metamethod to call
         //
         // TODO: this could have been better since we already know lhs is not a table with metatable
-        // TODO: I don't think this should be a templated function..
         //
         metamethod = GetMetamethodForBinaryArithmeticOperation(lhs, rhs, opKind);
         if (metamethod.IsNil())

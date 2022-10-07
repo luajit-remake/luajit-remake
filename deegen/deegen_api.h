@@ -248,9 +248,6 @@ constexpr size_t x_stackFrameHeaderSlots = 4;
 template<typename... ContinuationFnArgs>
 void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
-    //       We should fix up the header file and let this file have access to the StackFrameHeader struct
-    //
     handler = DeegenImpl_MakeCall_ReportTarget(handler, (argsBegin - x_stackFrameHeaderSlots)->m_value);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
@@ -258,9 +255,6 @@ void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, TValue* arg
 
 inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, TValue* argsBegin, size_t numArgs)
 {
-    // TODO: this is really bad, we are assuming m_func is the first element of the stack frame header here
-    //       We should fix up the header file and let this file have access to the StackFrameHeader struct
-    //
     handler = DeegenImpl_MakeCall_ReportTarget(handler, (argsBegin - x_stackFrameHeaderSlots)->m_value);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);

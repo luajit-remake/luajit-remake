@@ -1476,7 +1476,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
 
         ucb->m_cstTableLength = static_cast<uint32_t>(constantTableData.second);
-        ucb->m_cstTable = reinterpret_cast<BytecodeConstantTableEntry*>(constantTableData.first);
+        ucb->m_cstTable = constantTableData.first;
 
         ucb->m_bytecode = bytecodeData.first;
         ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);

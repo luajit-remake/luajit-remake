@@ -5,7 +5,7 @@
 
 static void DeegenSnippet_PopulateNewCallFrameHeader(void* newStackBase, void* oldStackBase, CodeBlock* callerCb, uint8_t* curBytecode, uint64_t target, void* onReturn, bool doNotFillFunc)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(newStackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(newStackBase);
     if (!doNotFillFunc)
     {
         hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);

@@ -5,7 +5,7 @@
 
 static void DeegenSnippet_PopulateNewCallFrameHeaderForCallFromCFunc(void* newStackBase, void* oldStackBase, void* onReturn)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(newStackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(newStackBase);
     hdr->m_retAddr = onReturn;
     hdr->m_caller = oldStackBase;
     hdr->m_callerBytecodeOffset = 0;

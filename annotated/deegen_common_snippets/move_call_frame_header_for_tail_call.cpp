@@ -7,7 +7,7 @@
 //
 static void* DeegenSnippet_MoveCallFrameHeaderForTailCall(void* stackBase, uint64_t target)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     if (likely(hdr->m_numVariadicArguments == 0))
     {
         hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);

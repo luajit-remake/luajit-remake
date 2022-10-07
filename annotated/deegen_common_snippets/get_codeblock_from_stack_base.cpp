@@ -5,7 +5,7 @@
 
 static void* DeegenSnippet_GetCodeBlockFromStackBase(void* stackBase)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     HeapPtr<ExecutableCode> callerEc = TCGet(hdr->m_func->m_executable).As();
     return TranslateToRawPointer(callerEc);
 }

@@ -178,7 +178,7 @@ set(UNIT_TEST_SRC
   test_structure.cpp
   test_object_get_put_by_id.cpp
   test_object_array_part.cpp
-  test_json_bytecode_loader.cpp
+  test_lua_programs.cpp
   test_table_object_iterator.cpp
   test_annotation_switch_case.cpp
   test_dump_type_speculation.cpp

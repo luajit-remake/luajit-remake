@@ -4,6 +4,7 @@
 #include "annotated/unit_test/unit_test_ir_accessor.h"
 
 #include "lambda_parser.h"
+#include "runtime_utils.h"
 #include "switch_case.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"

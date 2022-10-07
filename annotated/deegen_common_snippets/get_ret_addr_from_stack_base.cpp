@@ -5,7 +5,7 @@
 
 static void* DeegenSnippet_GetRetAddrFromStackBase(void* stackBase)
 {
-    StackFrameHeader* hdr = StackFrameHeader::GetStackFrameHeader(stackBase);
+    StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     return hdr->m_retAddr;
 }
 

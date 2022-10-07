@@ -276,9 +276,6 @@ static bool SCCPPassCanRemoveInstruction(llvm::Instruction* I)
 
     // Some instructions can be handled but are rejected above. Catch
     // those cases by falling through to here.
-    // TODO: Mark globals as being constant earlier, so
-    // TODO: wouldInstructionBeTriviallyDead() knows that atomic loads
-    // TODO: are safe to remove.
     return isa<LoadInst>(I);
 }
 

@@ -323,27 +323,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleI
         }
     }
 
-    {
-        // Copied from llvm_extract.cpp
-        // Delete dead declarations
-        // TODO: switch to new pass manager?
-        //
-        legacy::PassManager Passes;
-
-        // Delete unreachable globals
-        //
-        Passes.add(createGlobalDCEPass());
-
-        // Remove dead debug info
-        //
-        Passes.add(createStripDeadDebugInfoPass());
-
-        // Remove dead func decls
-        //
-        Passes.add(createStripDeadPrototypesPass());
-
-        Passes.run(*module);
-    }
+    RunLLVMDeadGlobalElimination(module);
 
     // Change the linkage type to External
     //

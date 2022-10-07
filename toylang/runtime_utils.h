@@ -264,13 +264,6 @@ class UnlinkedCodeBlock;
 // which mean when a pointer is interpreted as a TValue, it will always be interpreted into a double, so the GC marking
 // algorithm will correctly ignore it for the marking.
 //
-union BytecodeConstantTableEntry
-{
-    BytecodeConstantTableEntry() : m_ucb(nullptr) { }
-    TValue m_tv;
-    UnlinkedCodeBlock* m_ucb;
-};
-static_assert(sizeof(BytecodeConstantTableEntry) == 8);
 
 // This uniquely corresponds to each pair of <UnlinkedCodeBlock, GlobalObject>
 // It owns the bytecode and the corresponding metadata (the bytecode is copied from the UnlinkedCodeBlock,
@@ -283,26 +276,6 @@ class alignas(8) CodeBlock final : public ExecutableCode
 {
 public:
     static CodeBlock* WARN_UNUSED Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static ReinterpretCastPreservingAddressSpaceType<BytecodeConstantTableEntry*, T> GetConstantTableEnd(T self)
-    {
-        return ReinterpretCastPreservingAddressSpace<BytecodeConstantTableEntry*>(self);
-    }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static TValue GetConstantAsTValue(T self, int64_t ordinal)
-    {
-        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < 0);
-        return TCGet(GetConstantTableEnd(self)[ordinal]).m_tv;
-    }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CodeBlock>>>
-    static UnlinkedCodeBlock* GetConstantAsUnlinkedCodeBlock(T self, int64_t ordinal)
-    {
-        assert(-static_cast<int64_t>(self->m_owner->m_cstTableLength) <= ordinal && ordinal < 0);
-        return TCGet(GetConstantTableEnd(self)[ordinal]).m_ucb;
-    }
 
     static constexpr size_t GetTrailingArrayOffset()
     {
@@ -369,8 +342,7 @@ public:
 
     uint8_t* m_bytecode;
     UpvalueMetadata* m_upvalueInfo;
-    // TODO: this field should really just be a uint64_t*
-    BytecodeConstantTableEntry* m_cstTable;
+    uint64_t* m_cstTable;
     UnlinkedCodeBlock* m_parent;
 
     uint32_t m_cstTableLength;

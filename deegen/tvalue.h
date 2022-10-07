@@ -1024,42 +1024,6 @@ TValue WARN_UNUSED TValue::Create()
 
 class FunctionObject;
 
-// TODO: we should remove this class
-//
-class BytecodeSlot
-{
-public:
-    constexpr BytecodeSlot() : m_value(x_invalidValue) { }
-
-    static constexpr BytecodeSlot WARN_UNUSED Local(int ord)
-    {
-        assert(ord >= 0);
-        return BytecodeSlot(ord);
-    }
-    static constexpr BytecodeSlot WARN_UNUSED Constant(int ord)
-    {
-        assert(ord < 0);
-        return BytecodeSlot(ord);
-    }
-
-    bool IsInvalid() const { return m_value == x_invalidValue; }
-    bool IsLocal() const { assert(!IsInvalid()); return m_value >= 0; }
-    bool IsConstant() const { assert(!IsInvalid()); return m_value < 0; }
-
-    int WARN_UNUSED LocalOrd() const { assert(IsLocal()); return m_value; }
-    int WARN_UNUSED ConstantOrd() const { assert(IsConstant()); return m_value; }
-
-    TValue WARN_UNUSED Get(CoroutineRuntimeContext* rc, void* sfp) const;
-
-    explicit operator int() const { return m_value; }
-
-private:
-    constexpr BytecodeSlot(int value) : m_value(value) { }
-
-    static constexpr int x_invalidValue = 0x7fffffff;
-    int m_value;
-} __attribute__((__packed__));
-
 // stack frame format:
 //     [... VarArgs ...] [Header] [... Locals ...]
 //                                ^
@@ -1069,7 +1033,7 @@ class alignas(8) StackFrameHeader
 {
 public:
     // The function corresponding to this stack frame
-    // Must be first element: this is expected by call opcode
+    // Must be first element: this is expected by a lot of places
     //
     HeapPtr<FunctionObject> m_func;
     // The address of the caller stack frame (points to the END of the stack frame header)
@@ -1085,21 +1049,9 @@ public:
     //
     uint32_t m_numVariadicArguments;
 
-    static StackFrameHeader* GetStackFrameHeader(void* sfp)
+    static StackFrameHeader* Get(void* stackBase)
     {
-        return reinterpret_cast<StackFrameHeader*>(sfp) - 1;
-    }
-
-    static TValue* GetLocalAddr(void* sfp, BytecodeSlot slot)
-    {
-        assert(slot.IsLocal());
-        int ord = slot.LocalOrd();
-        return reinterpret_cast<TValue*>(sfp) + ord;
-    }
-
-    static TValue GetLocal(void* sfp, BytecodeSlot slot)
-    {
-        return *GetLocalAddr(sfp, slot);
+        return reinterpret_cast<StackFrameHeader*>(stackBase) - 1;
     }
 };
 
