@@ -20,7 +20,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create2(VM* vm, UnlinkedCodeBlock* ucb, UserHe
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
     cb->m_bytecode = new uint8_t[ucb->m_bytecodeLength];
     memcpy(cb->m_bytecode, ucb->m_bytecode, ucb->m_bytecodeLength);
-    cb->m_bestEntryPoint = reinterpret_cast<InterpreterFn>(generated::GetGuestLanguageFunctionEntryPointForInterpreter(ucb->m_hasVariadicArguments, ucb->m_numFixedArguments));
+    cb->m_bestEntryPoint = generated::GetGuestLanguageFunctionEntryPointForInterpreter(ucb->m_hasVariadicArguments, ucb->m_numFixedArguments);
     cb->m_globalObject = globalObject;
     cb->m_stackFrameNumSlots = ucb->m_stackFrameNumSlots;
     cb->m_numUpvalues = ucb->m_numUpvalues;
@@ -53,12 +53,7 @@ void VM::LaunchScript2(ScriptModule* module)
     // Currently the format expected by the entry function is 'coroCtx, stackbase, numArgs, cbHeapPtr, isMustTail
     //
     using Fn = void(*)(CoroutineRuntimeContext* coroCtx, void* stackBase, size_t numArgs, HeapPtr<CodeBlock> cbHeapPtr, size_t isMustTail);
-    // TODO: remove this cast after we switch to the new interpreter
-    //
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type"
     Fn entryPoint = reinterpret_cast<Fn>(cb->m_bestEntryPoint);
-#pragma clang diagnostic pop
     entryPoint(rc, stackbase, 0 /*numArgs*/, cbHeapPtr, 0 /*isMustTail*/);
 }
 

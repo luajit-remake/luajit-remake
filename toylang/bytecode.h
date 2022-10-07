@@ -204,19 +204,6 @@ public:
         return reinterpret_cast<UserCFunctionPrototype>(~reinterpret_cast<uintptr_t>(m_bytecode));
     }
 
-    static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction(VM* vm, InterpreterFn fn)
-    {
-        HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
-        SystemHeapGcObjectHeader::Populate(e);
-        e->m_hasVariadicArguments = true;
-        e->m_numFixedArguments = 0;
-        e->m_bytecode = reinterpret_cast<uint8_t*>(~reinterpret_cast<uintptr_t>(fn));
-        e->m_bestEntryPoint = fn;
-        return e;
-    }
-
-    // TODO: remove the above function after we port the old interpreter
-    //
     static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction2(VM* vm, void* fn)
     {
         HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
@@ -224,7 +211,7 @@ public:
         e->m_hasVariadicArguments = true;
         e->m_numFixedArguments = 0;
         e->m_bytecode = reinterpret_cast<uint8_t*>(~reinterpret_cast<uintptr_t>(fn));
-        e->m_bestEntryPoint = reinterpret_cast<InterpreterFn>(fn);
+        e->m_bestEntryPoint = fn;
         return e;
     }
 
@@ -245,9 +232,7 @@ public:
     // For user C function, this is a trampoline that calls the function
     // The 'codeBlock' parameter and 'curBytecode' parameter is not needed for intrinsic or JIT but we have them anyway for a unified interface
     //
-    // TODO: this should be a void*
-    //
-    InterpreterFn m_bestEntryPoint;
+    void* m_bestEntryPoint;
 };
 static_assert(sizeof(ExecutableCode) == 24);
 
@@ -391,8 +376,6 @@ public:
     uint32_t m_cstTableLength;
     uint32_t m_bytecodeLength;
     uint32_t m_numUpvalues;
-    // TODO: this field should be deleted
-    uint32_t m_numNumberConstants;
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;
     uint32_t m_numFixedArguments;
@@ -840,10 +823,7 @@ inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringCo
     }
 }
 
-// TODO: this should not be a templated function
-//
-template<LuaMetamethodKind mtKind>
-TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue rhs)
+inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue rhs, LuaMetamethodKind mtKind)
 {
     {
         UserHeapPointer<void> lhsMetatableMaybeNull = GetMetatableForValue(lhs);
@@ -874,8 +854,6 @@ TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue 
     }
 }
 
-// TODO: we should make the template bool isEq, instead of mtKind
-//
 // For EQ/NEQ operator:
 //     For Lua 5.1 & 5.2, the metamethod is only called if both are table or both are full userdata, AND both share the same metamethod
 //     For Lua 5.3+, the restriction "both share the same metamethod" is removed.
@@ -883,15 +861,15 @@ TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, TValue 
 //     For Lua 5.1, the metamethod is called if both are same type, are not number/string, and both share the same metamethod
 //     For Lua 5.2+, the restriction "both have the same type and both share the same metamethod" is removed.
 //
-template<LuaMetamethodKind mtKind>
-TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<TableObject> lhsMetatable, HeapPtr<TableObject> rhsMetatable)
+template<bool supportsQuicklyRuleOutMetamethod>
+TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<TableObject> lhsMetatable, HeapPtr<TableObject> rhsMetatable, LuaMetamethodKind mtKind)
 {
     TValue lhsMetamethod;
     {
         // For 'eq', if either table doesn't have metamethod, the result is 'false', so it's a probable case that worth a fast path.
         // For 'le' or 'lt', however, the behavior is to throw error, so the situtation becomes just the opposite: it's unlikely the table doesn't have metamethod.
         //
-        if constexpr(mtKind == LuaMetamethodKind::Eq)
+        if constexpr(supportsQuicklyRuleOutMetamethod)
         {
             if (TableObject::TryQuicklyRuleOutMetamethod(lhsMetatable, mtKind))
             {
@@ -909,7 +887,7 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
 
     TValue rhsMetamethod;
     {
-        if constexpr(mtKind == LuaMetamethodKind::Eq)
+        if constexpr(supportsQuicklyRuleOutMetamethod)
         {
             if (TableObject::TryQuicklyRuleOutMetamethod(rhsMetatable, mtKind))
             {

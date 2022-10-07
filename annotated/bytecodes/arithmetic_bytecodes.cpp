@@ -79,7 +79,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         // TODO: this could have been better since we already know lhs is not a table with metatable
         // TODO: I don't think this should be a templated function..
         //
-        metamethod = GetMetamethodForBinaryArithmeticOperation<opKind>(lhs, rhs);
+        metamethod = GetMetamethodForBinaryArithmeticOperation(lhs, rhs, opKind);
         if (metamethod.IsNil())
         {
             // TODO: make this error consistent with Lua

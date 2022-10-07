@@ -128,7 +128,7 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
 
     // Call metamethod
     //
-    TValue metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Concat>(fsr.m_lhsValue, fsr.m_rhsValue);
+    TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (metamethod.Is<tNil>())
     {
         // TODO: make this error consistent with Lua
@@ -211,7 +211,7 @@ static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
 
     // Call metamethod
     //
-    TValue metamethod = GetMetamethodForBinaryArithmeticOperation<LuaMetamethodKind::Concat>(fsr.m_lhsValue, fsr.m_rhsValue);
+    TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (metamethod.Is<tNil>())
     {
         // TODO: make this error consistent with Lua

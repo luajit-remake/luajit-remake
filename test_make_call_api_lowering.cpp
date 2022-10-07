@@ -100,13 +100,7 @@ void TestModuleOneCase(Module* moduleIn,
     CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock)).AsNoAssert<CodeBlock>());
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
 
-    // TODO: we need this hack becuase we are currently using a different interpreter interface...
-    // We can remove the pragma once we migrated our handwritten interpreter to use the new interface as well
-    //
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-function-type"
-    calleeCb->m_bestEntryPoint = reinterpret_cast<InterpreterFn>(ResultChecker);
-#pragma clang diagnostic pop
+    calleeCb->m_bestEntryPoint = reinterpret_cast<void*>(ResultChecker);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;

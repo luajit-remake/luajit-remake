@@ -70,7 +70,7 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
             rhsMetatable = gmr.m_result.As<TableObject>();
         }
 
-        TValue metamethod = GetMetamethodFromMetatableForComparisonOperation<LuaMetamethodKind::Eq>(lhsMetatable, rhsMetatable);
+        TValue metamethod = GetMetamethodFromMetatableForComparisonOperation<true /*supportsQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Eq);
         if (metamethod.Is<tNil>())
         {
             goto not_equal;

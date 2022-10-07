@@ -178,7 +178,7 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
                     rhsMetatable = result.m_result.As<TableObject>();
                 }
 
-                metamethod = GetMetamethodFromMetatableForComparisonOperation<GetMetamethodKind<opKind>()>(lhsMetatable, rhsMetatable);
+                metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, GetMetamethodKind<opKind>());
                 if (metamethod.IsNil())
                 {
                     goto fail;

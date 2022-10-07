@@ -7,7 +7,8 @@ static std::pair<HeapPtr<ExecutableCode>, void*> DeegenSnippet_GetCalleeEntryPoi
 {
     HeapPtr<FunctionObject> o = reinterpret_cast<HeapPtr<FunctionObject>>(target);
     HeapPtr<ExecutableCode> ec = TCGet(o->m_executable).As();
-    return std::make_pair(ec, reinterpret_cast<void*>(ec->m_bestEntryPoint));
+    void* entrypoint = ec->m_bestEntryPoint;
+    return std::make_pair(ec, entrypoint);
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetCalleeEntryPoint", DeegenSnippet_GetCalleeEntryPoint)
