@@ -1,5 +1,4 @@
 #include "runtime_utils.h"
-#include "lj_opcode_info.h"
 #include "vm.h"
 #include "table_object.h"
 
