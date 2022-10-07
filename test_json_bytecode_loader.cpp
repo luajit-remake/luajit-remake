@@ -29,19 +29,24 @@ std::string LoadFile(std::string filename)
     return std::string { iter, end };
 }
 
-TEST(LuaTest, Fib)
+void RunSimpleLuaTest(const std::string& filename)
 {
     VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/fib.lua.json"));
+    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile(filename));
     vm->LaunchScript2(module);
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
     AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, Fib)
+{
+    RunSimpleLuaTest("luatests/fib.lua.json");
 }
 
 TEST(LuaTest, TestPrint)
@@ -63,47 +68,17 @@ TEST(LuaTest, TestPrint)
 
 TEST(LuaTest, TestTableDup)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/table_dup.lua.json");
 }
 
 TEST(LuaTest, TestTableDup2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/table_dup2.lua.json");
 }
 
 TEST(LuaTest, TestTableDup3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_dup3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/table_dup3.lua.json");
 }
 
 TEST(LuaTest, TestTableSizeHint)
@@ -139,167 +114,57 @@ TEST(LuaTest, TestTableSizeHint)
 
 TEST(LuaTest, Upvalue)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/upvalue.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/upvalue.lua.json");
 }
 
 TEST(LuaTest, Fib_upvalue)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/fib_upvalue.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/fib_upvalue.lua.json");
 }
 
 TEST(LuaTest, LinearSieve)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/linear_sieve.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/linear_sieve.lua.json");
 }
 
 TEST(LuaTest, NaNEdgeCase)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/nan_edge_case.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/nan_edge_case.lua.json");
 }
 
 TEST(LuaTest, ForLoopCoercion)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_loop_coercion.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/for_loop_coercion.lua.json");
 }
 
 TEST(LuaTest, ForLoopEdgeCases)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_loop_edge_cases.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/for_loop_edge_cases.lua.json");
 }
 
 TEST(LuaTest, PrimitiveConstants)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/primitive_constant.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/primitive_constant.lua.json");
 }
 
 TEST(LuaTest, LogicalOpSanity)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/logical_op_sanity.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/logical_op_sanity.lua.json");
 }
 
 TEST(LuaTest, PositiveAndNegativeInf)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/pos_and_neg_inf.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/pos_and_neg_inf.lua.json");
 }
 
 TEST(LuaTest, LogicalNot)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/logical_not.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/logical_not.lua.json");
 }
 
 TEST(LuaTest, LengthOperator)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/length_operator.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/length_operator.lua.json");
 }
 
 TEST(LuaTest, TailCall)
@@ -392,47 +257,17 @@ TEST(LuaTest, VariadicTailCall_3)
 
 TEST(LuaTest, OpcodeKNIL)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/test_knil.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/test_knil.lua.json");
 }
 
 TEST(LuaTest, IterativeForLoop)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/iter_for.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/iter_for.lua.json");
 }
 
 TEST(LuaTest, NegativeZeroAsIndex)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/negative_zero_as_index.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/negative_zero_as_index.lua.json");
 }
 
 // We have a few different tests by slightly changing the Lua source code, but expects the same output with insensitive order
@@ -564,32 +399,12 @@ TEST(LuaTest, ForPairsPoisonNext)
 
 TEST(LuaTest, ForPairsPoisonPairs)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs_poison_pairs.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/for_pairs_poison_pairs.lua.json");
 }
 
 TEST(LuaTest, ForPairsEmpty)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/for_pairs_empty.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/for_pairs_empty.lua.json");
 }
 
 TEST(LuaTest, ForPairsSlowNext)
@@ -684,77 +499,27 @@ TEST(LuaTest, BooleanAsTableIndex_2)
 
 TEST(LuaTest, BooleanAsTableIndex_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/boolean_as_table_index_3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/boolean_as_table_index_3.lua.json");
 }
 
 TEST(LuaTest, ArithmeticSanity)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/arithmetic_sanity.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/arithmetic_sanity.lua.json");
 }
 
 TEST(LuaTest, StringConcat)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/string_concat.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/string_concat.lua.json");
 }
 
 TEST(LuaTest, TableVariadicPut)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/table_variadic_put.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/table_variadic_put.lua.json");
 }
 
 TEST(LuaBenchmark, NBody)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/n-body.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/n-body.lua.json");
 }
 
 TEST(LuaBenchmark, Ack)
@@ -781,782 +546,262 @@ TEST(LuaBenchmark, Ack)
 
 TEST(LuaBenchmark, BinaryTrees_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/binary-trees-1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/binary-trees-1.lua.json");
 }
 
 TEST(LuaBenchmark, BinaryTrees_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/binary-trees-2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/binary-trees-2.lua.json");
 }
 
 TEST(LuaBenchmark, Fannkuch_Redux)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/fannkuch-redux.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/fannkuch-redux.lua.json");
 }
 
 TEST(LuaBenchmark, Fixpoint_Fact)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/fixpoint-fact.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/fixpoint-fact.lua.json");
 }
 
 TEST(LuaBenchmark, Mandel_NoMetatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/mandel-nometatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/mandel-nometatable.lua.json");
 }
 
 TEST(LuaBenchmark, Mandel)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/mandel.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/mandel.lua.json");
 }
 
 TEST(LuaBenchmark, QuadTree)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/qt.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/qt.lua.json");
 }
 
 TEST(LuaBenchmark, Queen)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/queen.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/queen.lua.json");
 }
 
 TEST(LuaBenchmark, NlgN_Sieve)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/nlgn_sieve.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/nlgn_sieve.lua.json");
 }
 
 TEST(LuaBenchmark, Spectral_Norm)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/spectral-norm.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/spectral-norm.lua.json");
 }
 
 TEST(LuaTest, xpcall_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_1.lua.json");
 }
 
 TEST(LuaTest, xpcall_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_2.lua.json");
 }
 
 TEST(LuaTest, xpcall_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_3.lua.json");
 }
 
 TEST(LuaTest, xpcall_4)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_4.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_4.lua.json");
 }
 
 TEST(LuaTest, xpcall_5)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_5.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_5.lua.json");
 }
 
 TEST(LuaTest, xpcall_6)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_6.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_6.lua.json");
 }
 
 TEST(LuaTest, pcall_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/pcall_1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/pcall_1.lua.json");
 }
 
 TEST(LuaTest, pcall_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/pcall_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/pcall_2.lua.json");
 }
 
 TEST(LuaTest, GetSetMetatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/get_set_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/get_set_metatable.lua.json");
 }
 
 TEST(LuaTest, metatable_call_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_call_1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_call_1.lua.json");
 }
 
 TEST(LuaTest, metatable_call_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_call_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_call_2.lua.json");
 }
 
 TEST(LuaTest, metatable_call_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_call_3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_call_3.lua.json");
 }
 
 TEST(LuaTest, metatable_call_4)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_call_4.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_call_4.lua.json");
 }
 
 TEST(LuaTest, metatable_call_5)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_call_5.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_call_5.lua.json");
 }
 
 TEST(LuaTest, xpcall_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/xpcall_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/xpcall_metatable.lua.json");
 }
 
 TEST(LuaTest, pcall_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/pcall_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/pcall_metatable.lua.json");
 }
 
 TEST(LuaTest, metatable_add_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_add_1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_add_1.lua.json");
 }
 
 TEST(LuaTest, metatable_add_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_add_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_add_2.lua.json");
 }
 
 TEST(LuaTest, metatable_add_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_add_3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_add_3.lua.json");
 }
 
 TEST(LuaTest, metatable_sub)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_sub.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_sub.lua.json");
 }
 
 TEST(LuaTest, metatable_mul)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_mul.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_mul.lua.json");
 }
 
 TEST(LuaTest, metatable_div)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_div.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_div.lua.json");
 }
 
 TEST(LuaTest, metatable_mod)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_mod.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_mod.lua.json");
 }
 
 TEST(LuaTest, metatable_pow)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_pow.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_pow.lua.json");
 }
 
 TEST(LuaTest, metatable_unm)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_unm.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_unm.lua.json");
 }
 
 TEST(LuaTest, metatable_len)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_len.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_len.lua.json");
 }
 
 TEST(LuaTest, metatable_concat)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_concat.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_concat.lua.json");
 }
 
 TEST(LuaTest, metatable_concat_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_concat_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_concat_2.lua.json");
 }
 
 TEST(LuaTest, metatable_eq_1)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_eq_1.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_eq_1.lua.json");
 }
 
 TEST(LuaTest, metatable_eq_2)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_eq_2.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_eq_2.lua.json");
 }
 
 TEST(LuaTest, metatable_lt)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_lt.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_lt.lua.json");
 }
 
 TEST(LuaTest, metatable_le)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_le.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_le.lua.json");
 }
 
 TEST(LuaTest, metatable_eq_3)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/metatable_eq_3.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/metatable_eq_3.lua.json");
 }
 
 TEST(LuaTest, getbyid_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/getbyid_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/getbyid_metatable.lua.json");
 }
 
 TEST(LuaTest, globalget_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/globalget_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/globalget_metatable.lua.json");
 }
 
 TEST(LuaTest, getbyval_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/getbyval_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/getbyval_metatable.lua.json");
 }
 
 TEST(LuaTest, getbyintegerval_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/getbyintegerval_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/getbyintegerval_metatable.lua.json");
 }
 
 TEST(LuaTest, rawget_and_rawset)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/rawget_rawset.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/rawget_rawset.lua.json");
 }
 
 TEST(LuaTest, putbyid_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/putbyid_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/putbyid_metatable.lua.json");
 }
 
 TEST(LuaTest, globalput_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/globalput_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/globalput_metatable.lua.json");
 }
 
 TEST(LuaTest, putbyintegerval_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/putbyintegerval_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/putbyintegerval_metatable.lua.json");
 }
 
 TEST(LuaTest, putbyval_metatable)
 {
-    VM* vm = VM::Create(true /*forNewInterpreter*/);
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
-
-    ScriptModule* module = ScriptModule::ParseFromJSON2(vm, LoadFile("luatests/putbyval_metatable.lua.json"));
-    vm->LaunchScript2(module);
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+    RunSimpleLuaTest("luatests/putbyval_metatable.lua.json");
 }
 
 }   // anonymous namespace
