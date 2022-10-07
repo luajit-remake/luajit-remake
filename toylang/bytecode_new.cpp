@@ -62,6 +62,31 @@ void VM::LaunchScript2(ScriptModule* module)
     entryPoint(rc, stackbase, 0 /*numArgs*/, cbHeapPtr, 0 /*isMustTail*/);
 }
 
+UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
+{
+    UnlinkedCodeBlock* ucb = cb->m_owner;
+    HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
+    assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
+    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
+    uint32_t numUpvalues = cb->m_numUpvalues;
+    UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
+    for (uint32_t ord = 0; ord < numUpvalues; ord++)
+    {
+        UpvalueMetadata& uvmt = upvalueInfo[ord];
+        GeneralHeapPointer<Upvalue> uv;
+        if (uvmt.m_isParentLocal)
+        {
+            uv = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
+        }
+        else
+        {
+            uv = GetUpvalue(parent, uvmt.m_slot);
+        }
+        TCSet(r->m_upvalues[ord], uv);
+    }
+    return r;
+}
+
 ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
 {
     using namespace DeegenBytecodeBuilder;
@@ -1432,7 +1457,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
 #endif
 
     TestAssert(chunkFn->m_numUpvalues == 0);
-    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, UnlinkedCodeBlock::GetCodeBlock(chunkFn, globalObject));
+    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, UnlinkedCodeBlock::GetCodeBlock2(chunkFn, globalObject));
     r->m_defaultEntryPoint = entryPointFunc;
 
     return r;

@@ -128,6 +128,7 @@ constexpr bool x_json_parser_force_use_double = true;
 
 ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
 {
+    ReleaseAssert(false);
     json module = json::parse(content);
     TestAssert(module.is_object());
     TestAssert(module.count("ChunkName") && module["ChunkName"].is_string());

@@ -80,7 +80,7 @@ void TestModuleOneCase(Module* moduleIn,
                        // 0 = arg range, otherwise it is the value ordinal
                        const std::vector<int>& expectedArgComposition)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
 
     std::string expectedFnName = "__deegen_interpreter_op_test" + std::to_string(testcaseNum) + "_0";

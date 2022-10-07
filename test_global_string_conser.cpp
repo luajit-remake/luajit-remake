@@ -17,9 +17,8 @@ void CheckStringObjectIsAsExpected(UserHeapPointer<HeapString> p, const void* ex
 
 TEST(GlobalStringHashConser, Sanity)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
 
     UserHeapPointer<HeapString> p1 = vm->CreateStringObjectFromRawString("abc", 3);
     CheckStringObjectIsAsExpected(p1, "abc", 3);
@@ -45,9 +44,8 @@ TEST(GlobalStringHashConser, Sanity)
 
 TEST(GlobalStringHashConser, Stress)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
-    vm->SetUpSegmentationRegister();
 
     std::map<std::string, UserHeapPointer<HeapString>> expectedMap;
     std::vector<std::string> vec;

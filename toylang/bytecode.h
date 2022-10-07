@@ -171,6 +171,7 @@ UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm);
 template<>
 inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
 {
+    ReleaseAssert(false);
     // Create global object
     //
     VM* vm = static_cast<VM*>(this);
@@ -359,6 +360,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, UnlinkedCodeBlock>>>
     static CodeBlock* WARN_UNUSED GetCodeBlock(T self, UserHeapPointer<TableObject> globalObject)
     {
+        ReleaseAssert(false);
         if (likely(globalObject == self->m_defaultGlobalObject))
         {
             return self->m_defaultCodeBlock;
@@ -446,6 +448,7 @@ void EnterInterpreter(CoroutineRuntimeContext* rc, RestrictPtr<void> sfp, ConstR
 
 inline CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
+    ReleaseAssert(false);
     size_t sizeToAllocate = GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(ucb->m_bytecodeMetadataLength) + sizeof(TValue) * ucb->m_cstTableLength;
     uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
@@ -650,30 +653,7 @@ public:
         return TCGet(self->m_upvalues[ord]);
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
-    {
-        UnlinkedCodeBlock* ucb = cb->m_owner;
-        HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
-        assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
-        assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
-        uint32_t numUpvalues = cb->m_numUpvalues;
-        UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
-        for (uint32_t ord = 0; ord < numUpvalues; ord++)
-        {
-            UpvalueMetadata& uvmt = upvalueInfo[ord];
-            GeneralHeapPointer<Upvalue> uv;
-            if (uvmt.m_isParentLocal)
-            {
-                uv = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
-            }
-            else
-            {
-                uv = GetUpvalue(parent, uvmt.m_slot);
-            }
-            TCSet(r->m_upvalues[ord], uv);
-        }
-        return r;
-    }
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent);
 
     static constexpr size_t GetTrailingArrayOffset()
     {
@@ -1771,6 +1751,7 @@ inline void LJR_LIB_BASE_rawset(CoroutineRuntimeContext* rc, RestrictPtr<void> s
 
 inline UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
+    ReleaseAssert(false);
     HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
 
     auto insertField = [&](HeapPtr<TableObject> r, const char* propName, TValue value)

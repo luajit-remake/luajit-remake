@@ -1069,6 +1069,7 @@ public:
 
     bool WARN_UNUSED Initialize(bool usingNewInterpreter = false)
     {
+        ReleaseAssert(usingNewInterpreter);
         bool success = false;
 
         CHECK_LOG_ERROR(static_cast<VMMemoryManager<VM>*>(this)->Initialize());

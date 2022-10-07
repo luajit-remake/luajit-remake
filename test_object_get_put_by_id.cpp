@@ -6,7 +6,7 @@ namespace {
 
 TEST(ObjectGetPutById, Sanity)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), 1000 /*numStrings*/);
 
@@ -293,7 +293,7 @@ TEST(ObjectGetPutById, Sanity)
 
 TEST(ObjectGetSetById, CacheableDictionary)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     uint32_t numStrings = 2000;
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
@@ -401,7 +401,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
 //
 TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
 {
-    VM* vm = VM::Create();
+    VM* vm = VM::Create(true /*forNewInterpreter*/);
     Auto(vm->Destroy());
     const uint32_t numStrings = 500;
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
