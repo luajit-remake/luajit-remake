@@ -24,7 +24,6 @@ static void NO_RETURN ValidateIsNextAndBranchImpl(TValue* base)
 
     if (validateOK)
     {
-        // Overwrite base[0] with
         // Overwrite base[2] with TableObjectIterator
         //
         static_assert(sizeof(TableObjectIterator) == 8);
