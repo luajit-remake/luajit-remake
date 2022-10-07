@@ -1,7 +1,7 @@
 #include "force_release_build.h"
 
 #include "define_deegen_common_snippet.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 static void DeegenSnippet_SimpleLeftToRightCopyMayOvercopy(uint64_t* dst, uint64_t* src, uint64_t num)
 {

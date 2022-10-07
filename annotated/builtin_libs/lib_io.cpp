@@ -1,5 +1,5 @@
 #include "deegen_api.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 // Lua standard library io.write
 //

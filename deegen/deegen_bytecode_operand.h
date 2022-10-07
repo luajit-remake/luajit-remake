@@ -5,7 +5,7 @@
 #include "bytecode_definition_utils.h"
 
 // TODO: fix this
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 namespace dast {
 

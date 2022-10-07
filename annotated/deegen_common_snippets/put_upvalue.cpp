@@ -1,7 +1,7 @@
 #include "force_release_build.h"
 
 #include "define_deegen_common_snippet.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 static void DeegenSnippet_PutUpvalue(uint64_t* stackBase, size_t upvalueOrd, TValue valueToPut)
 {

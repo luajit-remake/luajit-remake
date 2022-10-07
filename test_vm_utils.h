@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 class VMOutputInterceptor
 {

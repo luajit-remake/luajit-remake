@@ -1,7 +1,7 @@
 #include "force_release_build.h"
 
 #include "define_deegen_common_snippet.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 static void DeegenSnippet_PopulateNewCallFrameHeader(void* newStackBase, void* oldStackBase, CodeBlock* callerCb, uint8_t* curBytecode, uint64_t target, void* onReturn, bool doNotFillFunc)
 {

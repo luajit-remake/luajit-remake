@@ -1,7 +1,7 @@
 #include "bytecode_definition_utils.h"
 #include "deegen_api.h"
 
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 static void NO_RETURN TablePutByImmMetamethodCallContinuation(TValue /*base*/, int16_t /*index*/, TValue /*valueToPut*/)
 {

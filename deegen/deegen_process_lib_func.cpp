@@ -2,7 +2,7 @@
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_def_lib_func_api.h"
 #include "deegen_ast_throw_error.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 namespace dast {
 

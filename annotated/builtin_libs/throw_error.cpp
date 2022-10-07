@@ -1,5 +1,5 @@
 #include "deegen_api.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 // Design for pcall/xpcall:
 //     There are two return function: 'onSuccessReturn' and 'onErrorReturn'.

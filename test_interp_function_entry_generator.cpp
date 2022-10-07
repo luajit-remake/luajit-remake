@@ -4,7 +4,7 @@
 
 #include "deegen_interpreter_function_entry.h"
 #include "deegen_ast_return.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 #include "test_util_helper.h"
 #include "test_util_llvm_jit.h"

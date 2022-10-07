@@ -2,7 +2,7 @@
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
 
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 namespace dast {
 

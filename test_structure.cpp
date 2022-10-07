@@ -1,4 +1,4 @@
-#include "bytecode.h"
+#include "runtime_utils.h"
 #include "gtest/gtest.h"
 
 namespace {

@@ -1,6 +1,6 @@
 #include "deegen_ast_return_value_accessor.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 namespace dast {
 

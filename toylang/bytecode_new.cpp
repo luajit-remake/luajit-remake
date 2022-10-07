@@ -1,4 +1,4 @@
-#include "bytecode.h"
+#include "runtime_utils.h"
 #include "lj_opcode_info.h"
 #include "deegen_def_lib_func_api.h"
 

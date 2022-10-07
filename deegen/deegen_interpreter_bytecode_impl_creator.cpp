@@ -11,7 +11,7 @@
 #include "llvm/Linker/Linker.h"
 
 // TODO: extract out needed logic
-#include "bytecode.h"
+#include "runtime_utils.h"
 
 namespace dast {
 

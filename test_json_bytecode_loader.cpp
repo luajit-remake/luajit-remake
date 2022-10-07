@@ -1,5 +1,5 @@
 #include <fstream>
-#include "bytecode.h"
+#include "runtime_utils.h"
 #include "gtest/gtest.h"
 #include "json_utils.h"
 #include "test_util_helper.h"
