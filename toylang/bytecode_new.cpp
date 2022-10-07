@@ -1123,7 +1123,21 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             }
             case LJOpcode::TSETM:
             {
-                ReleaseAssert(false && "unimplemented");
+                TestAssert(opdata.size() == 2);
+                // This opcode reads from slot A-1...
+                //
+                TestAssert(opdata[0] >= 1);
+                int32_t localSlot = opdata[0] - 1;
+                TValue tvIndex = numCst(opdata[1]);
+                TestAssert(tvIndex.Is<tDouble>());
+                // For some reason LuaJIT's format stores the real index as the low-32 bit of the double...
+                //
+                int32_t idx = BitwiseTruncateTo<int32_t>(tvIndex.m_value);
+                bw.CreateTableVariadicPutBySeq({
+                    .base = local(localSlot),
+                    .index = Cst<tInt32>(idx)
+                });
+                break;
             }
             case LJOpcode::UGET:
             {

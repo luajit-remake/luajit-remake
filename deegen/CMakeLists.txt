@@ -22,6 +22,7 @@ add_library(deegen_rt
   deegen_ast_new_closure.cpp
   deegen_ast_upvalue_accessor.cpp
   deegen_ast_variadic_args_accessor.cpp
+  deegen_ast_variadic_results_accessor.cpp
 ) 
 
 # Build the main Futamura projection stage binary

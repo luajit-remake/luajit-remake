@@ -9,6 +9,8 @@ DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_getmetatable);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_setmetatable);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_rawget);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_rawset);
+DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_pairs);
+DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_next);
 
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(math_sqrt);
 
@@ -54,9 +56,9 @@ UserHeapPointer<TableObject> CreateGlobalObject2(VM* vm)
     insertCFunc(globalObject, "pcall", LIB_FN(base_pcall));
     insertCFunc(globalObject, "xpcall", LIB_FN(base_xpcall));
 
-    // insertCFunc(globalObject, "pairs", LJR_LIB_BASE_pairs);
-    // UserHeapPointer<FunctionObject> nextFn = insertCFunc(globalObject, "next", LJR_LIB_BASE_next);
-    // vm->InitLibBaseDotNextFunctionObject(TValue::CreatePointer(nextFn));
+    insertCFunc(globalObject, "pairs", LIB_FN(base_pairs));
+    HeapPtr<FunctionObject> nextFn = insertCFunc(globalObject, "next", LIB_FN(base_next));
+    vm->InitLibBaseDotNextFunctionObject(TValue::Create<tFunction>(nextFn));
 
     insertCFunc(globalObject, "getmetatable", LIB_FN(base_getmetatable));
     insertCFunc(globalObject, "setmetatable", LIB_FN(base_setmetatable));

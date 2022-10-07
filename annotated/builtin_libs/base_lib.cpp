@@ -242,4 +242,69 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
     Return();
 }
 
+// Lua standard library base.pairs
+//
+DEEGEN_DEFINE_LIB_FUNC(base_pairs)
+{
+    if (GetNumArgs() == 0)
+    {
+        ThrowError("bad argument #1 to 'pairs' (table expected, got no value)");
+    }
+    TValue input = GetArg(0);
+    if (!input.Is<tTable>())
+    {
+        ThrowError("bad argument #1 to 'pairs' (table expected)");
+    }
+
+    Return(VM::GetActiveVMForCurrentThread()->GetLibBaseDotNextFunctionObject(), input, TValue::Create<tNil>());
+}
+
+// Lua standard library base.next
+//
+DEEGEN_DEFINE_LIB_FUNC(base_next)
+{
+    if (GetNumArgs() == 0)
+    {
+        ThrowError("bad argument #1 to 'next' (table expected, got no value)");
+    }
+
+    TValue tab = GetArg(0);
+    if (!tab.Is<tTable>())
+    {
+        ThrowError("bad argument #1 to 'next' (table expected)");
+    }
+    HeapPtr<TableObject> tableObj = tab.As<tTable>();
+
+    TValue key;
+    if (GetNumArgs() >= 2)
+    {
+        key = GetArg(1);
+    }
+    else
+    {
+        key = TValue::Create<tNil>();
+    }
+
+    TableObjectIterator::KeyValuePair kv;
+    bool success = TableObjectIterator::GetNextFromKey(tableObj, key, kv /*out*/);
+    if (!success)
+    {
+        ThrowError("invalid key to 'next'");
+    }
+
+    // Lua manual states:
+    //     "When called with the last index, or with 'nil' in an empty table, 'next' returns 'nil'."
+    // So when end of table is reached, this should return "nil", not "nil, nil"...
+    //
+    if (kv.m_key.Is<tNil>())
+    {
+        assert(kv.m_value.Is<tNil>());
+        Return(TValue::Create<tNil>());
+    }
+    else
+    {
+        Return(kv.m_key, kv.m_value);
+    }
+}
+
 DEEGEN_END_LIB_FUNC_DEFINITIONS

@@ -1,0 +1,7 @@
+nil	1	2	3	nil
+123	456	nil	1	2	3	nil
+4	nil	nil	ccc	ddd	1	2	3	4	nil
+nil	nil	nil	ddd	ccc	nil
+nil	nil	nil	nil
+nil
+nil	nil	nil	1	2	3	4	nil	a	nil	nil	nil	nil	nil

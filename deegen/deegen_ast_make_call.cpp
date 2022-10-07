@@ -406,9 +406,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
                 // Compute 'totalNumArgs = argNum + numVRes'
                 //
                 Value* numVRes = ifi->CallDeegenCommonSnippet("GetNumVariadicResults", { ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
-                ReleaseAssert(llvm_value_has_type<uint32_t>(numVRes));
-                Value* numVRes64 = new ZExtInst(numVRes, llvm_type_of<uint64_t>(ctx), "", m_origin /*insertBefore*/);
-                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes64, m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<uint64_t>(numVRes));
+                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes, m_origin /*insertBefore*/);
 
                 // Set up the call frame by copying variadic results to the right position.
                 // In this case, using CopyVariadicResultsToArgumentsForwardMayOvercopy is fine:
@@ -476,9 +475,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
             if (m_passVariadicRes)
             {
                 Value* numVRes = ifi->CallDeegenCommonSnippet("GetNumVariadicResults", { ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
-                ReleaseAssert(llvm_value_has_type<uint32_t>(numVRes));
-                Value* numVRes64 = new ZExtInst(numVRes, llvm_type_of<uint64_t>(ctx), "", m_origin /*insertBefore*/);
-                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes64, m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<uint64_t>(numVRes));
+                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes, m_origin /*insertBefore*/);
 
                 Value* copyDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newSfBase, { argNum }, "", m_origin /*insertBefore*/);
                 ifi->CallDeegenCommonSnippet("CopyVariadicResultsToArguments", { copyDst, ifi->GetStackBase(), ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
@@ -663,9 +661,8 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
                     m_origin /*insertBefore*/);
 
                 Value* numVRes = ifi->CallDeegenCommonSnippet("GetNumVariadicResults", { ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
-                ReleaseAssert(llvm_value_has_type<uint32_t>(numVRes));
-                Value* numVRes64 = new ZExtInst(numVRes, llvm_type_of<uint64_t>(ctx), "", m_origin /*insertBefore*/);
-                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes64, m_origin /*insertBefore*/);
+                ReleaseAssert(llvm_value_has_type<uint64_t>(numVRes));
+                totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes, m_origin /*insertBefore*/);
 
                 Value* vaDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, ifi->GetStackBase(), { argNum }, "", m_origin);
                 ifi->CallDeegenCommonSnippet(

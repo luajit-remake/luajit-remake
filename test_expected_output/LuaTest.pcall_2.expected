@@ -1,0 +1,26 @@
+enter f
+false	123
+false	attempt to call a nil value
+false	attempt to call a nil value
+false	attempt to call a number value
+false	attempt to call a table value
+enter g	nil	nil	nil
+true	321	654
+enter g	1	nil	nil
+true	321	654
+enter g	1	2	3
+true	321	654
+enter g	1	2	3
+true	321	654
+enter g2	nil	nil	nil	0	nil	nil	nil	nil	nil	nil	nil	nil
+true	233	124
+enter g2	1	nil	nil	0	nil	nil	nil	nil	nil	nil	nil	nil
+true	233	124
+enter g2	1	2	3	0	nil	nil	nil	nil	nil	nil	nil	nil
+true	233	124
+enter g2	1	2	3	2	nil	4	5	nil	nil	nil	nil	nil
+true	233	124
+enter g2	1	2	3	4	nil	4	5	6	7	nil	nil	nil
+true	233	124
+enter g2	1	2	3	6	nil	4	5	6	7	8	9	nil
+true	233	124

@@ -3,7 +3,7 @@
 #include "define_deegen_common_snippet.h"
 #include "bytecode.h"
 
-static uint32_t DeegenSnippet_GetNumVariadicResults(CoroutineRuntimeContext* coroCtx)
+static uint64_t DeegenSnippet_GetNumVariadicResults(CoroutineRuntimeContext* coroCtx)
 {
     return coroCtx->m_numVariadicRets;
 }

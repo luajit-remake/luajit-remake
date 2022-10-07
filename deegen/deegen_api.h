@@ -43,6 +43,8 @@ void DeegenImpl_UpvalueAccessor_Close(const TValue* limit);
 extern "C" TValue* WARN_UNUSED DeegenImpl_GetVarArgsStart();
 extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVarArgs();
 extern "C" void DeegenImpl_StoreVarArgsAsVariadicResults();
+extern "C" TValue* WARN_UNUSED DeegenImpl_GetVariadicResultsStart();
+extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVariadicResults();
 
 // Return zero or one value as the result of the operation
 //
@@ -141,6 +143,19 @@ struct VarArgsAccessor
     static void ALWAYS_INLINE StoreAllVarArgsAsVariadicResults()
     {
         return DeegenImpl_StoreVarArgsAsVariadicResults();
+    }
+};
+
+struct VariadicResultsAccessor
+{
+    static TValue* WARN_UNUSED ALWAYS_INLINE GetPtr()
+    {
+        return DeegenImpl_GetVariadicResultsStart();
+    }
+
+    static size_t WARN_UNUSED ALWAYS_INLINE GetNum()
+    {
+        return DeegenImpl_GetNumVariadicResults();
     }
 };
 
