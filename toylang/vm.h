@@ -941,10 +941,6 @@ public:
         {
             CreateRootCoroutine2();
         }
-        else
-        {
-            CreateRootCoroutine();
-        }
         return true;
     }
 
@@ -1097,7 +1093,6 @@ public:
     void LaunchScript2(ScriptModule* module);
 };
 
-template<> void VMGlobalDataManager<VM>::CreateRootCoroutine();
 template<> HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject();
 
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
