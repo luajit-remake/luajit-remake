@@ -1019,6 +1019,11 @@ public:
         return offsetof_base_v<VMGlobalDataManager, CRTP> + offsetof_member_v<&VMGlobalDataManager::m_stringNameForMetatableKind>;
     }
 
+    static constexpr size_t OffsetofLjrLibBaseDotNextFunctionObject()
+    {
+        return offsetof_base_v<VMGlobalDataManager, CRTP> + offsetof_member_v<&VMGlobalDataManager::m_ljrLibBaseDotErrorFunctionObject>;
+    }
+
 private:
     void CreateRootCoroutine();
     void CreateRootCoroutine2();
@@ -1104,4 +1109,10 @@ inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetametho
 {
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
+}
+
+inline TValue VM_GetVMTrueBaseLibNextFunctionObject()
+{
+    constexpr size_t offset = VM::OffsetofLjrLibBaseDotNextFunctionObject();
+    return TCGet(*reinterpret_cast<HeapPtr<TValue>>(offset));
 }

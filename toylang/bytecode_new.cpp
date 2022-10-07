@@ -1311,7 +1311,22 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             }
             case LJOpcode::ITERN:
             {
-                ReleaseAssert(false && "unimplemented");
+                // semantics:
+                // [A], ... [A+B-2] = [A-3]([A-2], [A-1])
+                //
+                TestAssert(opdata.size() == 3);
+                TestAssert(opdata[2] == 3);
+                TestAssert(opdata[1] >= 2);
+                TestAssert(opdata[0] >= 3);
+                uint8_t numRets = SafeIntegerCast<uint8_t>(opdata[1] - 1);
+                TestAssert(1 <= numRets && numRets <= 2);
+                size_t jumpTarget = decodeAndSkipNextITERLBytecode();
+                BranchTargetPopulator p = bw.CreateKVLoopIter({
+                    .base = local(opdata[0] - 3),
+                    .numRets = numRets
+                });
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
             }
             case LJOpcode::ITERC:
             {
@@ -1337,7 +1352,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON2(VM* vm, UserHeapPointer<T
             }
             case LJOpcode::ISNEXT:
             {
-                ReleaseAssert(false && "unimplemented");
+                TestAssert(opdata.size() == 2);
+                TestAssert(opdata[0] >= 3);
+                size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
+                BranchTargetPopulator p = bw.CreateValidateIsNextAndBranch({
+                    .base = local(opdata[0] - 3)
+                });
+                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                break;
             }
             case LJOpcode::KCDATA:
             case LJOpcode::ISTYPE:
