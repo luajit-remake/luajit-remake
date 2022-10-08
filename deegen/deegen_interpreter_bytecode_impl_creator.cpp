@@ -140,29 +140,8 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
 
     // Now, we can start processing our own module
     //
-    {
-        FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-        ReleaseAssert(m_module->getNamedValue(m_resultFuncName) == nullptr);
-        m_wrapper = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, m_resultFuncName, m_module.get());
-        ReleaseAssert(m_wrapper->getName() == m_resultFuncName);
-        m_wrapper->setDSOLocal(true);
-    }
-
-    // Set parameter names just to make dumps more readable
-    //
-    ReleaseAssert(m_wrapper->arg_size() == 5);
-    m_wrapper->getArg(0)->setName(x_coroutineCtx);
-    m_wrapper->getArg(1)->setName(x_stackBase);
-    if (m_isReturnContinuation)
-    {
-        m_wrapper->getArg(2)->setName(x_retStart);
-        m_wrapper->getArg(3)->setName(x_numRet);
-    }
-    else
-    {
-        m_wrapper->getArg(2)->setName(x_curBytecode);
-        m_wrapper->getArg(3)->setName(x_codeBlock);
-    }
+    m_wrapper = InterpreterFunctionInterface::CreateFunction(m_module.get(), m_resultFuncName);
+    ReleaseAssert(m_wrapper->arg_size() == 10);
 
     // Set up the function attributes
     // TODO: add alias attributes to parameters
@@ -176,10 +155,24 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
 
     if (!m_isReturnContinuation)
     {
-        m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
-        m_valuePreserver.Preserve(x_stackBase, m_wrapper->getArg(1));
-        m_valuePreserver.Preserve(x_curBytecode, m_wrapper->getArg(2));
-        m_valuePreserver.Preserve(x_codeBlock, m_wrapper->getArg(3));
+        // Note that we also set parameter names here.
+        // These are not required, but just to make dumps more readable
+        //
+        Value* coroCtx = m_wrapper->getArg(0);
+        coroCtx->setName(x_coroutineCtx);
+        m_valuePreserver.Preserve(x_coroutineCtx, coroCtx);
+
+        Value* stackBase = m_wrapper->getArg(1);
+        stackBase->setName(x_stackBase);
+        m_valuePreserver.Preserve(x_stackBase, stackBase);
+
+        Value* curBytecode = m_wrapper->getArg(2);
+        curBytecode->setName(x_curBytecode);
+        m_valuePreserver.Preserve(x_curBytecode, curBytecode);
+
+        Value* codeBlock = m_wrapper->getArg(3);
+        codeBlock->setName(x_codeBlock);
+        m_valuePreserver.Preserve(x_codeBlock, codeBlock);
     }
     else
     {
@@ -191,9 +184,12 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         m_valuePreserver.Preserve(x_stackBase, stackBase);
         tmpInst->eraseFromParent();
 
-        m_valuePreserver.Preserve(x_retStart, m_wrapper->getArg(2));
+        Value* retStart = m_wrapper->getArg(5);
+        retStart->setName(x_retStart);
+        m_valuePreserver.Preserve(x_retStart, retStart);
 
-        PtrToIntInst* numRet = new PtrToIntInst(m_wrapper->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, currentBlock);
+        Value* numRet = m_wrapper->getArg(6);
+        numRet->setName(x_numRet);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
         Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackBase");

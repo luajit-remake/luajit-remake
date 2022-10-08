@@ -6,26 +6,23 @@ target triple = "x86_64-pc-linux-gnu"
 %class.StackFrameHeader = type { ptr addrspace(256), ptr, ptr, i32, i32 }
 
 ; Function Attrs: nounwind
-define void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn4(ptr %0, ptr %1, ptr %2, ptr nocapture readnone %3, i64 %4) local_unnamed_addr #0 {
-  %6 = icmp ult ptr %2, inttoptr (i64 3 to ptr)
-  br i1 %6, label %.lr.ph.i.preheader, label %__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn4(ptr %0, ptr %1, ptr %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, i64 %9) local_unnamed_addr #0 {
+  %11 = ptrtoint ptr %2 to i64
+  %12 = icmp ult ptr %2, inttoptr (i64 3 to ptr)
+  br i1 %12, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit
 
-.lr.ph.i.preheader:                               ; preds = %5
-  %7 = ptrtoint ptr %2 to i64
-  br label %.lr.ph.i
-
-.lr.ph.i:                                         ; preds = %.lr.ph.i, %.lr.ph.i.preheader
-  %.04.i = phi i64 [ %9, %.lr.ph.i ], [ %7, %.lr.ph.i.preheader ]
-  %8 = getelementptr inbounds i64, ptr %1, i64 %.04.i
-  store i64 -844429225099137, ptr %8, align 8, !tbaa !3
-  %9 = add i64 %.04.i, 1
-  %exitcond.not.i = icmp eq i64 %9, 3
+.lr.ph.i:                                         ; preds = %.lr.ph.i, %10
+  %.04.i = phi i64 [ %14, %.lr.ph.i ], [ %11, %10 ]
+  %13 = getelementptr inbounds i64, ptr %1, i64 %.04.i
+  store i64 -844429225099137, ptr %13, align 8, !tbaa !3
+  %14 = add i64 %.04.i, 1
+  %exitcond.not.i = icmp eq i64 %14, 3
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit, label %.lr.ph.i, !llvm.loop !7
 
-__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit: ; preds = %.lr.ph.i, %5
-  %10 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 2
-  %11 = load ptr, ptr %10, align 8, !tbaa !9
-  musttail call void %11(ptr %0, ptr %1, ptr %1, ptr %2, i64 undef) #1
+__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit: ; preds = %.lr.ph.i, %10
+  %15 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 2
+  %16 = load ptr, ptr %15, align 8, !tbaa !9
+  musttail call ghccc void %16(ptr %0, ptr %1, ptr undef, ptr undef, i64 %4, ptr %1, i64 %11, i64 undef, i64 undef, i64 %9) #1
   ret void
 }
 

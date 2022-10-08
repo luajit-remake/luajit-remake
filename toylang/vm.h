@@ -1084,7 +1084,7 @@ public:
     }
 
     static void LaunchScriptReturnEndpoint(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/) { }
-    void LaunchScript(ScriptModule* module);
+    std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
 };
 
 template<> HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject();

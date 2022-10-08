@@ -317,8 +317,7 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
         //
         m_target->setName(funName + "_tmp");
 
-        FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-        Function* wrapper = Function::Create(fty, GlobalValue::ExternalLinkage, funName, m_module);
+        Function* wrapper = InterpreterFunctionInterface::CreateFunction(m_module, funName);
         ReleaseAssert(wrapper->getName() == funName);
 
         CopyFunctionAttributes(wrapper, m_impl);
@@ -352,9 +351,8 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
     {
         Value* stackBase = CreateCallToDeegenCommonSnippet(m_module, "GetCallerStackBaseFromStackBase", { m_target->getArg(1) }, bb);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
-        m_valuePreserver.Preserve(x_retStart, m_target->getArg(2));
-        PtrToIntInst* numRet = new PtrToIntInst(m_target->getArg(3), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
-        m_valuePreserver.Preserve(x_numRet, numRet);
+        m_valuePreserver.Preserve(x_retStart, m_target->getArg(5));
+        m_valuePreserver.Preserve(x_numRet, m_target->getArg(6));
 
         ReleaseAssert(m_impl->arg_size() == 4);
         CallInst::Create(m_impl, { GetCoroutineCtx(), GetStackBase(), GetRetStart(), GetNumRet() }, "", bb);
@@ -484,6 +482,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         ReleaseAssert(func != nullptr);
         ReleaseAssert(!func->empty());
         ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
+        ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
         ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
     }
 }

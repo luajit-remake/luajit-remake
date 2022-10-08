@@ -33,8 +33,10 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, CodeBlock* codeBlock, uint64_t /*unused*/)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, CodeBlock* codeBlock, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
 {
+    ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
+    ReleaseAssert(tagRegister2 == TValue::x_mivTag);
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
 
@@ -163,9 +165,19 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
 
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
 
-    using EntryFnType = void(*)(CoroutineRuntimeContext*, uint64_t* /*sb*/, uint64_t /*numArgs*/, uint64_t /*cbHeapPtrAsU64*/, uint64_t /*isMustTail64*/);
+    using EntryFnType = void(*)(
+        CoroutineRuntimeContext* /*coroCtx*/,
+        uint64_t* /*sb*/,
+        uint64_t /*numArgs*/,
+        uint64_t /*cbHeapPtrAsU64*/,
+        uint64_t /*tagRegister1*/,
+        uint64_t /*unused*/,
+        uint64_t /*isMustTail64*/,
+        uint64_t /*unused*/,
+        uint64_t /*unused*/,
+        uint64_t /*tagRegister2*/);
     HeapPtr<CodeBlock> calleeCbHeapPtr = TranslateToHeapPtr(calleeCb);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, reinterpret_cast<uint64_t>(calleeCbHeapPtr), static_cast<uint64_t>(isTailCall));
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, reinterpret_cast<uint64_t>(calleeCbHeapPtr), TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
@@ -179,6 +191,27 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
 
     Function* func = module->getFunction(ifi.GetFunctionName());
     ReleaseAssert(func != nullptr);
+    ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
+    ReleaseAssert(func->arg_size() == 10);
+    func->setCallingConv(CallingConv::C);
+
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                if (callInst->getCallingConv() == CallingConv::GHC)
+                {
+                    ReleaseAssert(callInst->getCalledFunction() == nullptr);
+                    ReleaseAssert(callInst->isMustTailCall());
+                    ReleaseAssert(callInst->arg_size() == 10);
+                    callInst->setCallingConv(CallingConv::C);
+                }
+            }
+        }
+    }
 
     GlobalVariable* gv = module->getGlobalVariable(x_deegen_interpreter_dispatch_table_symbol_name);
 

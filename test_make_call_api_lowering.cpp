@@ -51,8 +51,10 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cbHeapPtr, uint64_t isMustTail)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cbHeapPtr, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
 {
+    ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
+    ReleaseAssert(tagRegister2 == TValue::x_mivTag);
     ReleaseAssert(g_expectedResult.m_expectedCoroCtx == coroCtx);
     ReleaseAssert(g_expectedResult.m_expectedCallFrameBase == stackBase);
     ReleaseAssert(g_expectedResult.m_expectedNumArgs == numArgs);
@@ -91,6 +93,9 @@ void TestModuleOneCase(Module* moduleIn,
     LLVMContext& ctx = module->getContext();
     Function* func = module->getFunction(expectedFnName);
     ReleaseAssert(func != nullptr);
+    ReleaseAssert(func->arg_size() == 10);
+    ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
+    func->setCallingConv(CallingConv::C);
 
     std::string expectedRcName = expectedFnName + "_retcont_0";
     if (!isMustTail)
@@ -172,6 +177,13 @@ void TestModuleOneCase(Module* moduleIn,
                             replaceInstByValueMap[&inst] = val;
                         }
                     }
+                }
+                if (callInst->getCallingConv() == CallingConv::GHC)
+                {
+                    ReleaseAssert(callee == nullptr);
+                    ReleaseAssert(callInst->isMustTailCall());
+                    ReleaseAssert(callInst->arg_size() == 10);
+                    callInst->setCallingConv(CallingConv::C);
                 }
             }
         }
@@ -366,8 +378,18 @@ void TestModuleOneCase(Module* moduleIn,
 
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
 
-    using EntryFnType = void(*)(CoroutineRuntimeContext*, uint64_t* /*sb*/, uint8_t* /*curbytecode*/, CodeBlock* /*cb*/, uint64_t /*unused*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, 0);
+    using EntryFnType = void(*)(
+        CoroutineRuntimeContext* /*coroCtx*/,
+        uint64_t* /*sb*/,
+        uint8_t* /*curbytecode*/,
+        CodeBlock* /*cb*/,
+        uint64_t /*tagRegister1*/,
+        uint64_t /*unused*/,
+        uint64_t /*unused*/,
+        uint64_t /*unused*/,
+        uint64_t /*unused*/,
+        uint64_t /*tagRegister2*/);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, TValue::x_int32Tag, 0, 0, 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }

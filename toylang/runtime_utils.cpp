@@ -1,6 +1,7 @@
 #include "runtime_utils.h"
 #include "vm.h"
 #include "table_object.h"
+#include "deegen_enter_vm_from_c.h"
 
 #include "generated/get_guest_language_function_interpreter_entry_point.h"
 #include "json_utils.h"
@@ -99,29 +100,10 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     return cb;
 }
 
-void VM::LaunchScript(ScriptModule* module)
+std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModule* module)
 {
     CoroutineRuntimeContext* rc = GetRootCoroutine();
-    HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(module->m_defaultEntryPoint.As()->m_executable).As());
-    CodeBlock* cb = TranslateToRawPointer(cbHeapPtr);
-    rc->m_codeBlock = cb;
-    assert(cb->m_numFixedArguments == 0);
-    StackFrameHeader* sfh = reinterpret_cast<StackFrameHeader*>(rc->m_stackBegin);
-    sfh->m_caller = nullptr;
-    // TODO: we need to fix this once we switch to GHC convention
-    //
-    sfh->m_retAddr = reinterpret_cast<void*>(LaunchScriptReturnEndpoint);
-    sfh->m_func = module->m_defaultEntryPoint.As();
-    sfh->m_callerBytecodeOffset = 0;
-    sfh->m_numVariadicArguments = 0;
-    void* stackbase = sfh + 1;
-    // TODO: we need to fix this once we switch to GHC convention, we need to provide a wrapper for this...
-    //
-    // Currently the format expected by the entry function is 'coroCtx, stackbase, numArgs, cbHeapPtr, isMustTail
-    //
-    using Fn = void(*)(CoroutineRuntimeContext* coroCtx, void* stackBase, size_t numArgs, HeapPtr<CodeBlock> cbHeapPtr, size_t isMustTail);
-    Fn entryPoint = reinterpret_cast<Fn>(cb->m_bestEntryPoint);
-    entryPoint(rc, stackbase, 0 /*numArgs*/, cbHeapPtr, 0 /*isMustTail*/);
+    return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
 }
 
 UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)

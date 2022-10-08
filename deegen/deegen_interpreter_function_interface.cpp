@@ -5,24 +5,97 @@ namespace dast {
 llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVMContext& ctx)
 {
     using namespace llvm;
-    // TODO: we should make it use GHC calling convension so we can pass more info
-    // and allow less-overhead C runtime call.
+    // We use GHC calling convension so we can pass more info and allow less-overhead C runtime call.
+    //
     // Speficially, all 6 callee-saved registers (under default cc calling convention)
-    // are available as parameters in GHC. We should use them as a register pinning
-    // mechanism to pin the important states (coroutineCtx, stackBase, etc) into these registers
+    // are available as parameters in GHC. We use this as a register pinning mechanism to pin
+    // the important states (coroutineCtx, stackBase, etc) into these registers
     // so that they are not clobbered by C calls.
+    //
+    // GHC passes integral parameters in the following order:
+    //   R13 [CC/MSABI callee saved]
+    //   RBP [CC/MSABI callee saved]
+    //   R12 [CC/MSABI callee saved]
+    //   RBX [CC/MSABI callee saved]
+    //   R14 [CC/MSABI callee saved]
+    //   RSI [MSABI callee saved]
+    //   RDI [MSABI callee saved]
+    //   R8
+    //   R9
+    //   R15 [CC/MSABI callee saved]
     //
     return FunctionType::get(
         llvm_type_of<void>(ctx) /*result*/,
         {
-            llvm_type_of<void*>(ctx) /*coroutineCtx*/,
-            llvm_type_of<void*>(ctx) /*stackBase*/,
-            /* Arg meaning if the function is:  bytecodeImpl    return cont     func entry        */
-            llvm_type_of<void*>(ctx)         /* bytecode        RetStart        numArgs           */,
-            llvm_type_of<void*>(ctx)         /* codeblock       numRets         codeblockHeapPtr  */,
-            llvm_type_of<uint64_t>(ctx),     /* unused          unused          isMustTail        */
+            // R13 [CC/MSABI callee saved]
+            // CoroutineCtx
+            //
+            llvm_type_of<void*>(ctx),
+
+            // RBP [CC/MSABI callee saved]
+            // StackBase (for return continuation, this is the callee's stack base)
+            //
+            llvm_type_of<void*>(ctx),
+
+            // R12 [CC/MSABI callee saved]
+            // For bytecode function: the current bytecode
+            // For return continuation: unused
+            // For function entry: #args
+            //
+            llvm_type_of<void*>(ctx),
+
+            // RBX [CC/MSABI callee saved]
+            // For bytecode function: the current codeBlock
+            // For return continuation: unused
+            // For function entry: codeblockHeapPtr
+            //
+            llvm_type_of<void*>(ctx),
+
+            // R14 [CC/MSABI callee saved]
+            // Tag register 1
+            //
+            llvm_type_of<uint64_t>(ctx),
+
+            // RSI [MSABI callee saved]
+            // For return continuation: the start of the ret values
+            // Otherwise unused
+            //
+            llvm_type_of<void*>(ctx),
+
+            // RDI [MSABI callee saved]
+            // For return continuation: the # of ret values
+            // For function entry: isMustTail64
+            // Otherwise unused
+            //
+            llvm_type_of<uint64_t>(ctx),
+
+            // R8
+            // unused
+            //
+            llvm_type_of<uint64_t>(ctx),
+
+            // R9
+            // unused
+            //
+            llvm_type_of<uint64_t>(ctx),
+
+            // R15 [CC/MSABI callee saved]
+            // Tag register 2
+            //
+            llvm_type_of<uint64_t>(ctx)
         } /*params*/,
         false /*isVarArg*/);
+}
+
+llvm::Function* WARN_UNUSED InterpreterFunctionInterface::CreateFunction(llvm::Module* module, const std::string& name)
+{
+    using namespace llvm;
+    ReleaseAssert(module->getNamedValue(name) == nullptr);
+    Function* func = Function::Create(GetType(module->getContext()), GlobalValue::ExternalLinkage, name, module);
+    ReleaseAssert(func != nullptr && func->getName() == name);
+    func->setCallingConv(CallingConv::GHC);
+    func->setDSOLocal(true);
+    return func;
 }
 
 void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
@@ -34,16 +107,30 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
     ReleaseAssert(llvm_value_has_type<void*>(stackbase));
     ReleaseAssert(llvm_value_has_type<void*>(bytecodePtr));
     ReleaseAssert(llvm_value_has_type<void*>(codeBlock));
+    ReleaseAssert(insertBefore != nullptr);
+    ReleaseAssert(insertBefore->getParent() != nullptr);
+    Function* func = insertBefore->getParent()->getParent();
+    ReleaseAssert(func != nullptr);
 
     CallInst* callInst = CallInst::Create(
         GetType(ctx),
         target,
         {
-            coroutineCtx, stackbase, bytecodePtr, codeBlock, UndefValue::get(llvm_type_of<uint64_t>(ctx))
+            /*R13*/ coroutineCtx,
+            /*RBP*/ stackbase,
+            /*R12*/ bytecodePtr,
+            /*RBX*/ codeBlock,
+            /*R14*/ func->getArg(4),
+            /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RDI*/ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R15*/ func->getArg(9)
         },
         "" /*name*/,
         insertBefore);
     callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    callInst->setCallingConv(CallingConv::GHC);
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
@@ -58,17 +145,30 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     ReleaseAssert(llvm_value_has_type<void*>(stackbase));
     ReleaseAssert(llvm_value_has_type<void*>(retStart));
     ReleaseAssert(llvm_value_has_type<uint64_t>(numRets));
+    ReleaseAssert(insertBefore != nullptr);
+    ReleaseAssert(insertBefore->getParent() != nullptr);
+    Function* func = insertBefore->getParent()->getParent();
+    ReleaseAssert(func != nullptr);
 
-    IntToPtrInst* numRetAsPtr = new IntToPtrInst(numRets, llvm_type_of<void*>(ctx), "", insertBefore);
     CallInst* callInst = CallInst::Create(
         GetType(ctx),
         target,
         {
-            coroutineCtx, stackbase, retStart, numRetAsPtr, UndefValue::get(llvm_type_of<uint64_t>(ctx))
+            /*R13*/ coroutineCtx,
+            /*RBP*/ stackbase,
+            /*R12*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RBX*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*R14*/ func->getArg(4),
+            /*RSI*/ retStart,
+            /*RDI*/ numRets,
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R15*/ func->getArg(9)
         },
         "" /*name*/,
         insertBefore);
     callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    callInst->setCallingConv(CallingConv::GHC);
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
@@ -84,6 +184,10 @@ void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePoint
     ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCodeBlockHeapPtr));
     ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
     ReleaseAssert(llvm_value_has_type<uint64_t>(isMustTail64));
+    ReleaseAssert(insertBefore != nullptr);
+    ReleaseAssert(insertBefore->getParent() != nullptr);
+    Function* func = insertBefore->getParent()->getParent();
+    ReleaseAssert(func != nullptr);
 
     IntToPtrInst* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", insertBefore);
     // We need this cast only because LLVM's rule of musttail which requires identical prototype..
@@ -95,11 +199,21 @@ void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePoint
         GetType(ctx),
         codePointer,
         {
-            coroutineCtx, preFixupStackBase, numArgsAsPtr, fakeCodeBlockPtr, isMustTail64
+            /*R13*/ coroutineCtx,
+            /*RBP*/ preFixupStackBase,
+            /*R12*/ numArgsAsPtr,
+            /*RBX*/ fakeCodeBlockPtr,
+            /*R14*/ func->getArg(4),
+            /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RDI*/ isMustTail64,
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R15*/ func->getArg(9)
         },
         "" /*name*/,
         insertBefore);
     callInst->setTailCallKind(CallInst::TailCallKind::TCK_MustTail);
+    callInst->setCallingConv(CallingConv::GHC);
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);

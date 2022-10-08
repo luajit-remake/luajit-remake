@@ -126,7 +126,6 @@ public:
         CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass = x_hiddenClassForCoroutineRuntimeContext;
-        r->m_codeBlock = nullptr;
         r->m_globalObject = globalObject;
         r->m_numVariadicRets = 0;
         r->m_variadicRetSlotBegin = 0;
@@ -142,10 +141,6 @@ public:
     GcCellState m_cellState;
 
     uint16_t m_reserved1;
-
-    // The CodeBlock of the current function, if interpreter
-    //
-    CodeBlock* m_codeBlock;
 
     // The global object, if interpreter
     //

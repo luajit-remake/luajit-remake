@@ -10,36 +10,36 @@ target triple = "x86_64-pc-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local void @__deegen_interpreter_op_test2_0_retcont_0(ptr %coroutineCtx, ptr nocapture readonly %stackBase, ptr nocapture readonly %retStart, ptr nocapture readnone %numRet, i64 %0) #0 {
-  %2 = getelementptr %0, ptr %stackBase, i64 -1, i32 1
-  %3 = load ptr, ptr %2, align 8, !tbaa !3
-  %4 = getelementptr inbounds %0, ptr %3, i64 -1
-  %5 = load ptr addrspace(256), ptr %4, align 8, !tbaa !9
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %5, align 4, !tbaa !10
-  %6 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %7 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
-  %8 = ptrtoint ptr %7 to i64
-  %9 = add i64 %8, %6
-  %10 = inttoptr i64 %9 to ptr
-  %11 = getelementptr %0, ptr %stackBase, i64 -1, i32 3
-  %12 = load i32, ptr %11, align 8, !tbaa !12
-  %13 = getelementptr inbounds %1, ptr %10, i64 0, i32 4
-  %14 = load ptr, ptr %13, align 8, !tbaa !13
-  %15 = zext i32 %12 to i64
-  %16 = getelementptr inbounds i8, ptr %14, i64 %15
-  %17 = getelementptr inbounds i8, ptr %16, i64 2
-  %18 = load i32, ptr %17, align 1
-  %outputSlot = zext i32 %18 to i64
-  %19 = getelementptr inbounds i64, ptr %retStart, i64 1
-  %20 = load i64, ptr %19, align 8
-  %21 = getelementptr inbounds i64, ptr %3, i64 %outputSlot
-  store i64 %20, ptr %21, align 8
-  %22 = getelementptr inbounds i8, ptr %16, i64 6
-  %23 = load i16, ptr %22, align 1
-  %24 = zext i16 %23 to i64
-  %25 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %24
-  %26 = load ptr, ptr %25, align 8
-  musttail call void %26(ptr %coroutineCtx, ptr %3, ptr nonnull %22, ptr %10, i64 undef) #1
+define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, i64 %7) #0 {
+  %9 = getelementptr %0, ptr %1, i64 -1, i32 1
+  %10 = load ptr, ptr %9, align 8, !tbaa !3
+  %11 = getelementptr inbounds %0, ptr %10, i64 -1
+  %12 = load ptr addrspace(256), ptr %11, align 8, !tbaa !9
+  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %12, align 4, !tbaa !10
+  %13 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
+  %14 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
+  %15 = ptrtoint ptr %14 to i64
+  %16 = add i64 %15, %13
+  %17 = inttoptr i64 %16 to ptr
+  %18 = getelementptr %0, ptr %1, i64 -1, i32 3
+  %19 = load i32, ptr %18, align 8, !tbaa !12
+  %20 = getelementptr inbounds %1, ptr %17, i64 0, i32 4
+  %21 = load ptr, ptr %20, align 8, !tbaa !13
+  %22 = zext i32 %19 to i64
+  %23 = getelementptr inbounds i8, ptr %21, i64 %22
+  %24 = getelementptr inbounds i8, ptr %23, i64 2
+  %25 = load i32, ptr %24, align 1
+  %outputSlot = zext i32 %25 to i64
+  %26 = getelementptr inbounds i64, ptr %retStart, i64 1
+  %27 = load i64, ptr %26, align 8
+  %28 = getelementptr inbounds i64, ptr %10, i64 %outputSlot
+  store i64 %27, ptr %28, align 8
+  %29 = getelementptr inbounds i8, ptr %23, i64 6
+  %30 = load i16, ptr %29, align 1
+  %31 = zext i16 %30 to i64
+  %32 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %31
+  %33 = load ptr, ptr %32, align 8
+  musttail call ghccc void %33(ptr %0, ptr %10, ptr nonnull %29, ptr %17, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7) #1
   ret void
 }
 

@@ -36,8 +36,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     using namespace llvm;
     std::unique_ptr<Module> module = std::make_unique<Module>("generated_function_entry_logic", ctx);
 
-    FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
-    Function* func = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, GetFunctionName(), module.get());
+    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), GetFunctionName());
 
     {
         // Just pull in some C++ function so we can set up the attributes..
@@ -50,14 +49,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     // TODO: add parameter attributes
     //
 
-    ReleaseAssert(func->arg_size() == 5);
+    ReleaseAssert(func->arg_size() == 10);
     Value* coroutineCtx = func->getArg(0);
     coroutineCtx->setName("coroCtx");
     Value* preFixupStackBase = func->getArg(1);
     preFixupStackBase->setName("preFixupStackBase");
     Value* numArgsAsPtr = func->getArg(2);
     Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
-    Value* isMustTail64 = func->getArg(4);
+    Value* isMustTail64 = func->getArg(6);
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
 
@@ -70,6 +69,9 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     Value* calleeCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "SimpleTranslateToRawPointer", { calleeCodeBlockHeapPtr }, entryBB);
     ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
     calleeCodeBlock->setName("calleeCodeBlock");
+
+    Value* bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, entryBB);
+    bytecodePtr->setName("bytecodePtr");
 
     Value* stackBaseAfterFixUp = nullptr;
     if (!m_acceptVarArgs)
@@ -126,9 +128,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
 
     ReleaseAssert(llvm_value_has_type<void*>(stackBaseAfterFixUp));
     stackBaseAfterFixUp->setName("stackBaseAfterFixUp");
-
-    Value* bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, entryBB);
-    bytecodePtr->setName("bytecodePtr");
 
     // Unfortunately a bunch of APIs only take 'insertBefore', not 'insertAtEnd'
     // We workaround it by creating a temporary instruction and remove it in the end
