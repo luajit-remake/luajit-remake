@@ -1,3 +1,5 @@
+#include "force_release_build.h"
+
 #include "bytecode_definition_utils.h"
 #include "deegen_api.h"
 

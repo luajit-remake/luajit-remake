@@ -5,22 +5,22 @@ target triple = "x86_64-pc-linux-gnu"
 
 @.str = private unnamed_addr constant [14 x i8] c"cannot handle\00", align 1
 
-; Function Attrs: mustprogress nounwind uwtable
+; Function Attrs: nounwind uwtable
 declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI6tTableEb6TValue(i64) #0
 
-; Function Attrs: mustprogress nounwind uwtable
+; Function Attrs: nounwind uwtable
 declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64) #0
 
 ; Function Attrs: mustprogress nounwind uwtable
-declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI7tDoubleEb6TValue(i64) #0
+declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI7tDoubleEb6TValue(i64) #1
 
 ; Function Attrs: noreturn nounwind uwtable
-define dso_local void @testfn4(i64 %0) #1 {
+define dso_local void @testfn4(i64 %0) #2 {
   %2 = tail call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI6tTableEb6TValue(i64 %0)
   br i1 %2, label %3, label %4
 
 3:                                                ; preds = %1
-  tail call void @DeegenImpl_ReturnValue(i64 4644776920376934400) #3
+  tail call void @DeegenImpl_ReturnValue(i64 4644776920376934400) #4
   unreachable
 
 4:                                                ; preds = %1
@@ -28,7 +28,7 @@ define dso_local void @testfn4(i64 %0) #1 {
   br i1 %5, label %6, label %7
 
 6:                                                ; preds = %4
-  tail call void @DeegenImpl_ReturnValue(i64 %0) #3
+  tail call void @DeegenImpl_ReturnValue(i64 %0) #4
   unreachable
 
 7:                                                ; preds = %4
@@ -36,24 +36,25 @@ define dso_local void @testfn4(i64 %0) #1 {
   br i1 %8, label %9, label %10
 
 9:                                                ; preds = %7
-  tail call void @DeegenImpl_ReturnValue(i64 4646729653027864576) #3
+  tail call void @DeegenImpl_ReturnValue(i64 4646729653027864576) #4
   unreachable
 
 10:                                               ; preds = %7
-  tail call void @DeegenImpl_ThrowErrorCString(ptr noundef nonnull @.str) #3
+  tail call void @DeegenImpl_ThrowErrorCString(ptr noundef nonnull @.str) #4
   unreachable
 }
 
 ; Function Attrs: noreturn
-declare dso_local void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #2
+declare dso_local void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #3
 
 ; Function Attrs: noreturn
-declare dso_local void @DeegenImpl_ThrowErrorCString(ptr noundef) local_unnamed_addr #2
+declare dso_local void @DeegenImpl_ThrowErrorCString(ptr noundef) local_unnamed_addr #3
 
-attributes #0 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #2 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #3 = { noreturn nounwind }
+attributes #0 = { nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #2 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #4 = { noreturn nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}

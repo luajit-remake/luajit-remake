@@ -115,7 +115,7 @@ using namespace llvm;
 // Logic stolen from llvm/lib/Passes/PassBuilder.cpp
 // function buildModuleSimplificationPipeline
 //
-static ModulePassManager CreateSimplificationPasses()
+static ModulePassManager BuildModuleSimplificationPassesForDesugaring()
 {
     ModulePassManager MPM;
     MPM.addPass(InferFunctionAttrsPass());
@@ -135,6 +135,80 @@ static ModulePassManager CreateSimplificationPasses()
     GlobalCleanupPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(GlobalCleanupPM), true /*EagerlyInvalidateAnalyses*/));
     return MPM;
+}
+
+// This is mostly copied from LLVM PassBuilderPipelines.cpp:buildFunctionSimplificationPipeline except that
+// we removed the following passes:
+//   1. All the loop transformation passes
+//   2. LibCallsShrinkWrapPass
+//   3. MemCpyOptPass
+// We made the changes because our purpose is simplification. We do not want to prematurely lower the abstractions,
+// because we will do some transformations by ourselves. We will run the full optimization pass in the end anyway.
+//
+static FunctionPassManager BuildFunctionSimplificationPipelineForDesugaring()
+{
+    FunctionPassManager FPM;
+    FPM.addPass(SROAPass());
+    FPM.addPass(EarlyCSEPass(true /* Enable mem-ssa. */));
+    FPM.addPass(SpeculativeExecutionPass(/* OnlyIfDivergentTarget =*/true));
+    FPM.addPass(JumpThreadingPass());
+    FPM.addPass(CorrelatedValuePropagationPass());
+    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
+    FPM.addPass(InstCombinePass());
+    FPM.addPass(AggressiveInstCombinePass());
+    FPM.addPass(TailCallElimPass());
+    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
+    FPM.addPass(ReassociatePass());
+    FPM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
+    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
+    FPM.addPass(InstCombinePass());
+    FPM.addPass(SROAPass());
+    FPM.addPass(MergedLoadStoreMotionPass());
+    FPM.addPass(GVNPass());
+    FPM.addPass(SCCPPass());
+    FPM.addPass(BDCEPass());
+    FPM.addPass(InstCombinePass());
+    FPM.addPass(JumpThreadingPass());
+    FPM.addPass(CorrelatedValuePropagationPass());
+    FPM.addPass(ADCEPass());
+    FPM.addPass(DSEPass());
+    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
+                                    .convertSwitchRangeToICmp(true)
+                                    .hoistCommonInsts(true)
+                                    .sinkCommonInsts(true)));
+    FPM.addPass(InstCombinePass());
+    return FPM;
+}
+
+// Code copied from LLVM PassBuilderPipelines.cpp:buildInlinerPipeline
+// We have to copy the code because we want to use our 'BuildFunctionSimplificationPipelineForDesugaring' function in the pass,
+// not LLVM's buildFunctionSimplificationPipeline function.
+//
+// Note that I also removed 'PostOrderFunctionAttrsPass', because I'm not confident that
+// our transformation won't break the deduced attributes.
+//
+static ModuleInlinerWrapperPass BuildInlinerPipelineForDesugaring()
+{
+    InlineParams IP =  getInlineParams(OptimizationLevel::O3.getSpeedupLevel(), OptimizationLevel::O3.getSizeLevel());
+
+    ModuleInlinerWrapperPass MIWP(
+        IP, true /*PerformMandatoryInliningsFirst*/,
+        InlineContext{ThinOrFullLTOPhase::None, InlinePass::CGSCCInliner},
+        InliningAdvisorMode::Default, 4 /*maxDevirtIterations*/);
+
+    MIWP.addModulePass(RequireAnalysisPass<GlobalsAA, Module>());
+    MIWP.addModulePass(
+        createModuleToFunctionPassAdaptor(InvalidateAnalysisPass<AAManager>()));
+    MIWP.addModulePass(RequireAnalysisPass<ProfileSummaryAnalysis, Module>());
+    CGSCCPassManager &MainCGPipeline = MIWP.getPM();
+    MainCGPipeline.addPass(ArgumentPromotionPass());
+    MainCGPipeline.addPass(OpenMPOptCGSCCPass());
+    MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
+        BuildFunctionSimplificationPipelineForDesugaring(),
+        true /*EagerlyInvalidateAnalyses*/, true /*EnableNoRerunSimplificationPipeline*/));
+    MIWP.addLateModulePass(createModuleToFunctionPassAdaptor(
+        InvalidateAnalysisPass<ShouldNotRunFunctionPassesAnalysis>()));
+    return MIWP;
 }
 
 namespace dast {
@@ -162,21 +236,21 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
     MPM.addPass(Annotation2MetadataPass());
     MPM.addPass(ForceFunctionAttrsPass());
 
-    if (level == DesugaringLevel::HandleAlwaysInlineButNoSimplify || level == DesugaringLevel::PerFunctionSimplifyOnly)
+    if (level == DesugaringLevel::HandleAlwaysInlineButNoSimplify || level == DesugaringLevel::PerFunctionSimplifyOnly || level == DesugaringLevel::PerFunctionSimplifyOnlyAggresive)
     {
         MPM.addPass(AlwaysInlinerPass(true /* InsertLifetimeIntrinsics */));
     }
 
     if (level >= DesugaringLevel::PerFunctionSimplifyOnly)
     {
-        MPM.addPass(CreateSimplificationPasses());
+        MPM.addPass(BuildModuleSimplificationPassesForDesugaring());
     }
 
     // The set of function names with 'noinline' attribute
     //
     std::unordered_set<std::string> originalNoInlineFunctions;
 
-    if (level > DesugaringLevel::PerFunctionSimplifyOnly)
+    if (level > DesugaringLevel::PerFunctionSimplifyOnlyAggresive)
     {
         // Desugaring will add AlwaysInline and NoInline attributes.
         // It's OK to keep AlwaysInline attributes, since we can only raise desugaring level.
@@ -200,13 +274,18 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         AddLLVMInliningAttributesForDesugaringLevel(module, level);
 
         // Create the inlining pass
+        // TODO: I hope LLVM's inliner is sane and won't inline more and more stuffs if ran repeatedly...
         //
-        MPM.addPass(passBuilder.buildInlinerPipeline(OptimizationLevel::O3, ThinOrFullLTOPhase::None));
+        MPM.addPass(BuildInlinerPipelineForDesugaring());
+    }
+    else if (level == DesugaringLevel::PerFunctionSimplifyOnlyAggresive)
+    {
+        MPM.addPass(createModuleToFunctionPassAdaptor(BuildFunctionSimplificationPipelineForDesugaring(), true /*EagerlyInvalidateAnalyses*/));
     }
 
     MPM.run(*module, MAM);
 
-    if (level > DesugaringLevel::PerFunctionSimplifyOnly)
+    if (level > DesugaringLevel::PerFunctionSimplifyOnlyAggresive)
     {
         // Remove the added 'NoInline' attributes
         //

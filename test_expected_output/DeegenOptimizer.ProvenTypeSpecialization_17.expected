@@ -5,10 +5,10 @@ target triple = "x86_64-pc-linux-gnu"
 
 @.str = private unnamed_addr constant [14 x i8] c"cannot handle\00", align 1
 
-; Function Attrs: inlinehint mustprogress nounwind uwtable
+; Function Attrs: inlinehint nounwind uwtable
 declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_impl_holderI9tFunction11tHeapEntityE4implE6TValue(i64) #0 align 2
 
-; Function Attrs: inlinehint mustprogress nounwind uwtable
+; Function Attrs: inlinehint nounwind uwtable
 declare dso_local noundef zeroext i1 @_ZN47tvalue_typecheck_strength_reduction_impl_holderI6tTable11tHeapEntityE4implE6TValue(i64) #0 align 2
 
 ; Function Attrs: noreturn nounwind uwtable
@@ -39,7 +39,7 @@ declare dso_local void @DeegenImpl_ReturnValue(i64) local_unnamed_addr #2
 ; Function Attrs: noreturn
 declare dso_local void @DeegenImpl_ThrowErrorCString(ptr noundef) local_unnamed_addr #2
 
-attributes #0 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #0 = { inlinehint nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #2 = { noreturn "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #3 = { noreturn nounwind }

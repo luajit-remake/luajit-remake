@@ -24,9 +24,12 @@ enum class DesugaringLevel
     // Inline 'AlwaysInline' functions, but no other simplification (e.g., no mem2reg)
     //
     HandleAlwaysInlineButNoSimplify,
-    // Inline 'AlwaysInline' functions and run simplification pass on each function, but no further inlining allowed
+    // Inline 'AlwaysInline' functions and run basic simplification pass on each function, but no further inlining allowed
     //
     PerFunctionSimplifyOnly,
+    // Same as PerFunctionSimplifyOnly, but the simplification is more aggresive
+    //
+    PerFunctionSimplifyOnlyAggresive,
     // General (non-API) functions may be inlined
     //
     InlineGeneralFunctions,
