@@ -1,7 +1,7 @@
 #pragma once
 
 #include "memory_ptr.h"
-#include "vm_string.h"
+#include "tvalue.h"
 
 enum ThreadKind : uint8_t
 {
@@ -357,123 +357,105 @@ constexpr std::array<uint8_t, x_numInlineCapacitySteppings> x_inlineStorageSizeF
 
 }   // namespace internal
 
+class alignas(8) HeapString
+{
+public:
+    static constexpr uint32_t x_stringStructure = 0x8;
+    // Common object header
+    //
+    uint32_t m_structure;           // always x_StringStructure
+    HeapEntityType m_type;          // always TypeEnumForHeapObject<HeapString>
+    GcCellState m_cellState;
+
+    // This is the high 16 bits of the XXHash64 value, for quick comparison
+    //
+    uint16_t m_hashHigh;
+    // This is the low 32 bits of the XXHash64 value, for hash table indexing and quick comparison
+    //
+    uint32_t m_hashLow;
+    // The length of the string
+    //
+    uint32_t m_length;
+    // The string itself
+    //
+    uint8_t m_string[0];
+
+    static constexpr size_t TrailingArrayOffset()
+    {
+        return offsetof_member_v<&HeapString::m_string>;
+    }
+
+    void PopulateHeader(StringLengthAndHash slah)
+    {
+        m_structure = x_stringStructure;
+        m_type = TypeEnumForHeapObject<HeapString>;
+        m_cellState = x_defaultCellState;
+
+        m_hashHigh = static_cast<uint16_t>(slah.m_hashValue >> 48);
+        m_hashLow = BitwiseTruncateTo<uint32_t>(slah.m_hashValue);
+        m_length = SafeIntegerCast<uint32_t>(slah.m_length);
+    }
+
+    // Returns the allocation length to store a string of length 'length'
+    //
+    static size_t ComputeAllocationLengthForString(size_t length)
+    {
+        // Nonsense: despite Lua string can contain '\0', Lua nevertheless requires string to end with '\0'.
+        //
+        length++;
+        static_assert(TrailingArrayOffset() == sizeof(HeapString));
+        size_t beforeAlignment = TrailingArrayOffset() + length;
+        return RoundUpToMultipleOf<8>(beforeAlignment);
+    }
+
+    // Compare the string represented by 'this' and the string represented by 'other'
+    // -1 if <, 0 if ==, 1 if >
+    //
+    int WARN_UNUSED Compare(HeapString* other)
+    {
+        uint8_t* selfStr = m_string;
+        uint32_t selfLength = m_length;
+        uint8_t* otherStr = other->m_string;
+        uint32_t otherLength = other->m_length;
+        uint32_t minLen = std::min(selfLength, otherLength);
+        // Note that Lua string may contain '\0', so we must use memcmp, not strcmp.
+        //
+        int cmpResult = memcmp(selfStr, otherStr, minLen);
+        if (cmpResult != 0)
+        {
+            return cmpResult;
+        }
+        if (selfLength > minLen)
+        {
+            return 1;
+        }
+        if (otherLength > minLen)
+        {
+            return -1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+};
+static_assert(sizeof(HeapString) == 16);
+
+class ScriptModule;
+
 // [ 12GB user heap ] [ 2GB padding ] [ 2GB short-pointer data structures ] [ 2GB system heap ]
 //                                                                          ^
 //     userheap                                   SPDS region     32GB aligned baseptr   systemheap
 //
-template<typename CRTP>
-class VMMemoryManager
+class VM
 {
 public:
-    static constexpr size_t x_pageSize = 4096;
-    static constexpr size_t x_vmLayoutLength = 18ULL << 30;
-    // The start address of the VM is always at 16GB % 32GB, this makes sure the VM base is aligned at 32GB
-    //
-    static constexpr size_t x_vmLayoutAlignment = 32ULL << 30;
-    static constexpr size_t x_vmLayoutAlignmentOffset = 16ULL << 30;
-    static constexpr size_t x_vmBaseOffset = 16ULL << 30;
-    static constexpr size_t x_vmUserHeapSize = 12ULL << 30;
+    static VM* WARN_UNUSED Create();
+    void Destroy();
 
-    static_assert((1ULL << x_vmBasePtrLog2Alignment) == x_vmLayoutAlignment, "the constants must match");
-
-    template<typename... Args>
-    static CRTP* WARN_UNUSED Create(Args&&... args)
+    static VM* GetActiveVMForCurrentThread()
     {
-        constexpr size_t x_mmapLength = x_vmLayoutLength + x_vmLayoutAlignment * 2;
-        void* ptrVoid = mmap(nullptr, x_mmapLength, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-        CHECK_LOG_ERROR_WITH_ERRNO(ptrVoid != MAP_FAILED, "Failed to reserve VM address range, please make sure overcommit is allowed");
-
-        // cut out the desired properly-aligned space, and unmap the remaining
-        //
-        {
-            uintptr_t ptr = reinterpret_cast<uintptr_t>(ptrVoid);
-            uintptr_t alignedPtr = RoundUpToMultipleOf<x_vmLayoutAlignment>(ptr);
-            assert(alignedPtr >= ptr && alignedPtr % x_vmLayoutAlignment == 0 && alignedPtr - ptr < x_vmLayoutAlignment);
-
-            uintptr_t vmRangeStart = alignedPtr + x_vmLayoutAlignmentOffset;
-
-            // If any unmap failed, log a warning, but continue execution.
-            //
-            if (vmRangeStart > ptr)
-            {
-                int r = munmap(reinterpret_cast<void*>(ptr), vmRangeStart - ptr);
-                LOG_WARNING_WITH_ERRNO_IF(r != 0, "Failed to unmap unnecessary VM address range");
-            }
-
-            {
-                uintptr_t vmRangeEnd = vmRangeStart + x_vmLayoutLength;
-                uintptr_t originalMapEnd = ptr + x_mmapLength;
-                assert(vmRangeEnd <= originalMapEnd);
-                if (originalMapEnd > vmRangeEnd)
-                {
-                    int r = munmap(reinterpret_cast<void*>(vmRangeEnd), originalMapEnd - vmRangeEnd);
-                    LOG_WARNING_WITH_ERRNO_IF(r != 0, "Failed to unmap unnecessary VM address range");
-                }
-            }
-
-            ptrVoid = reinterpret_cast<void*>(vmRangeStart);
-        }
-
-        assert(reinterpret_cast<uintptr_t>(ptrVoid) % x_vmLayoutAlignment == x_vmLayoutAlignmentOffset);
-
-        bool success = false;
-        void* unmapPtrOnFailure = ptrVoid;
-        size_t unmapLengthOnFailure = x_vmLayoutLength;
-
-        Auto(
-            if (!success)
-            {
-                int r = munmap(unmapPtrOnFailure, unmapLengthOnFailure);
-                LOG_WARNING_WITH_ERRNO_IF(r != 0, "Cannot unmap VM on failure cleanup");
-            }
-        );
-
-        // Map memory and initialize the VM struct
-        //
-        void* vmVoid = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptrVoid) + x_vmBaseOffset);
-        assert(reinterpret_cast<uintptr_t>(vmVoid) % x_vmLayoutAlignment == 0);
-        constexpr size_t sizeToMap = RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP));
-        {
-            void* r = mmap(vmVoid, sizeToMap, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-            CHECK_LOG_ERROR_WITH_ERRNO(r != MAP_FAILED, "Failed to allocate VM struct");
-            TestAssert(vmVoid == r);
-        }
-
-        CRTP* vm = new (vmVoid) CRTP();
-        assert(vm == vmVoid);
-        Auto(
-            if (!success)
-            {
-                vm->~CRTP();
-            }
-        );
-
-        CHECK_LOG_ERROR(vm->Initialize(std::forward<Args>(args)...));
-        Auto(
-            if (!success)
-            {
-                vm->Cleanup();
-            }
-        );
-
-        success = true;
-        return vm;
-    }
-
-    void Destroy()
-    {
-        CRTP* ptr = static_cast<CRTP*>(this);
-        ptr->Cleanup();
-        ptr->~CRTP();
-
-        void* unmapAddr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) - x_vmBaseOffset);
-        int r = munmap(unmapAddr, x_vmLayoutLength);
-        LOG_WARNING_WITH_ERRNO_IF(r != 0, "Cannot unmap VM");
-    }
-
-    static CRTP* GetActiveVMForCurrentThread()
-    {
-        return reinterpret_cast<CRTP*>(reinterpret_cast<HeapPtr<CRTP>>(0)->m_self);
+        return reinterpret_cast<VM*>(reinterpret_cast<HeapPtr<VM>>(0)->m_self);
     }
 
     HeapPtrTranslator GetHeapPtrTranslator() const
@@ -486,22 +468,22 @@ public:
         X64_SetSegmentationRegister<X64SegmentationRegisterKind::GS>(VMBaseAddress());
     }
 
-    SpdsAllocImpl<CRTP, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
+    SpdsAllocImpl<VM, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
     {
-        return SpdsAllocImpl<CRTP, true /*isTempAlloc*/>(static_cast<CRTP*>(this));
+        return SpdsAllocImpl<VM, true /*isTempAlloc*/>(this);
     }
 
-    SpdsAllocImpl<CRTP, false /*isTempAlloc*/>& WARN_UNUSED GetCompilerThreadSpdsAlloc()
+    SpdsAllocImpl<VM, false /*isTempAlloc*/>& WARN_UNUSED GetCompilerThreadSpdsAlloc()
     {
         return m_compilerThreadSpdsAlloc;
     }
 
-    SpdsAllocImpl<CRTP, false /*isTempAlloc*/>& WARN_UNUSED GetExecutionThreadSpdsAlloc()
+    SpdsAllocImpl<VM, false /*isTempAlloc*/>& WARN_UNUSED GetExecutionThreadSpdsAlloc()
     {
         return m_executionThreadSpdsAlloc;
     }
 
-    SpdsAllocImpl<CRTP, false /*isTempAlloc*/>& WARN_UNUSED GetSpdsAllocForCurrentThread()
+    SpdsAllocImpl<VM, false /*isTempAlloc*/>& WARN_UNUSED GetSpdsAllocForCurrentThread()
     {
         assert(!IsGCThread());
         if (IsCompilerThread())
@@ -643,305 +625,41 @@ public:
         }
     }
 
-    bool WARN_UNUSED Initialize()
-    {
-        static_assert(std::is_base_of_v<VMMemoryManager, CRTP>, "wrong use of CRTP pattern");
-        // These restrictions might not be necessary, but just to make things safe and simple
-        //
-        static_assert(!std::is_polymorphic_v<CRTP>, "must be not polymorphic");
-        static_assert(offsetof_base_v<VMMemoryManager, CRTP> == 0, "VM must inherit VMMemoryManager as the first inherited class");
-
-        m_self = reinterpret_cast<uintptr_t>(static_cast<CRTP*>(this));
-
-        SetUpSegmentationRegister();
-
-        m_userHeapPtrLimit = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
-        m_userHeapCurPtr = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
-
-        static_assert(sizeof(CRTP) >= x_minimum_valid_heap_address);
-        m_systemHeapPtrLimit = static_cast<uint32_t>(RoundUpToMultipleOf<x_pageSize>(sizeof(CRTP)));
-        m_systemHeapCurPtr = sizeof(CRTP);
-
-        m_spdsPageFreeList.store(static_cast<uint64_t>(x_spdsAllocationPageSize));
-        m_spdsPageAllocLimit = -static_cast<int32_t>(x_pageSize);
-
-        m_executionThreadSpdsAlloc.SetHost(static_cast<CRTP*>(this));
-        m_compilerThreadSpdsAlloc.SetHost(static_cast<CRTP*>(this));
-
-        for (size_t i = 0; i < x_numSpdsAllocatableClassNotUsingLfFreelist; i++)
-        {
-            m_spdsCompilerThreadFreeList[i] = SpdsPtr<void> { 0 };
-        }
-
-        for (size_t i = 0; i < x_numSpdsAllocatableClassNotUsingLfFreelist; i++)
-        {
-            m_spdsExecutionThreadFreeList[i] = SpdsPtr<void> { 0 };
-        }
-        return true;
-    }
-
-    void Cleanup() { }
-
-private:
-    uintptr_t VMBaseAddress() const
-    {
-        uintptr_t result = reinterpret_cast<uintptr_t>(static_cast<const CRTP*>(this));
-        assert(result == m_self);
-        return result;
-    }
-
-    void NO_INLINE BumpUserHeap()
-    {
-        assert(m_userHeapCurPtr < m_userHeapPtrLimit);
-        VM_FAIL_IF(m_userHeapCurPtr < -static_cast<intptr_t>(x_vmBaseOffset),
-            "Resource limit exceeded: user heap overflowed %dGB memory limit.", static_cast<int>(x_vmUserHeapSize >> 30));
-
-        constexpr size_t x_allocationSize = 65536;
-        // TODO: consider allocating smaller sizes on the first few allocations
-        //
-        intptr_t newHeapLimit = m_userHeapCurPtr & (~static_cast<intptr_t>(x_allocationSize - 1));
-        assert(newHeapLimit <= m_userHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit < m_userHeapPtrLimit);
-        size_t lengthToAllocate = static_cast<size_t>(m_userHeapPtrLimit - newHeapLimit);
-        assert(lengthToAllocate % x_pageSize == 0);
-
-        uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(newHeapLimit);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        m_userHeapPtrLimit = newHeapLimit;
-        assert(m_userHeapPtrLimit <= m_userHeapCurPtr);
-        assert(m_userHeapPtrLimit >= -static_cast<intptr_t>(x_vmBaseOffset));
-    }
-
-    void NO_INLINE BumpSystemHeap()
-    {
-        assert(m_systemHeapCurPtr > m_systemHeapPtrLimit);
-        constexpr uint32_t x_allocationSize = 65536;
-
-        VM_FAIL_IF(m_systemHeapCurPtr > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) - x_allocationSize,
-            "Resource limit exceeded: system heap overflowed 2GB memory limit.");
-
-        // TODO: consider allocating smaller sizes on the first few allocations
-        //
-        uint32_t newHeapLimit = RoundUpToMultipleOf<x_allocationSize>(m_systemHeapCurPtr);
-        assert(newHeapLimit >= m_systemHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit > m_systemHeapPtrLimit);
-
-        size_t lengthToAllocate = static_cast<size_t>(newHeapLimit - m_systemHeapPtrLimit);
-        assert(lengthToAllocate % x_pageSize == 0);
-
-        uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(m_systemHeapPtrLimit);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        m_systemHeapPtrLimit = newHeapLimit;
-        assert(m_systemHeapPtrLimit >= m_systemHeapCurPtr);
-    }
-
-    bool WARN_UNUSED SpdsAllocateTryGetFreeListPage(int32_t* out)
-    {
-        uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_acquire);
-        while (true)
-        {
-            int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
-            assert(head % x_spdsAllocationPageSize == 0);
-            if (head == x_spdsAllocationPageSize)
-            {
-                return false;
-            }
-            uint32_t tag = BitwiseTruncateTo<uint32_t>(taggedValue >> 32);
-
-            std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(head) - 4);
-            int32_t newHead = addr->load(std::memory_order_relaxed);
-            assert(newHead % x_spdsAllocationPageSize == 0);
-            tag++;
-            uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(newHead);
-
-            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expected, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_acquire))
-            {
-                *out = head;
-                return true;
-            }
-        }
-    }
-
-    int32_t NO_INLINE WARN_UNUSED SpdsAllocatePageSlowPath()
-    {
-        while (true)
-        {
-            if (m_spdsAllocationMutex.try_lock())
-            {
-                int32_t result = SpdsAllocatePageSlowPathImpl();
-                m_spdsAllocationMutex.unlock();
-                return result;
-            }
-            else
-            {
-                // Someone else has took the lock, we wait until they finish, and retry
-                //
-                {
-                    std::lock_guard<std::mutex> blinkLock(m_spdsAllocationMutex);
-                }
-                int32_t out;
-                if (SpdsAllocateTryGetFreeListPage(&out))
-                {
-                    return out;
-                }
-            }
-        }
-    }
-
-    // Allocate a chunk of memory, return one of the pages, and put the rest into free list
+    // Create a string by concatenating start[0] ~ start[len-1]
+    // Each TValue must be a string
     //
-    int32_t WARN_UNUSED SpdsAllocatePageSlowPathImpl()
+    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(TValue* start, size_t len);
+
+    // Create a string by concatenating str1 .. start[0] ~ start[len-1]
+    // str1 and each TValue must be a string
+    //
+    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len);
+    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromRawString(const void* str, uint32_t len);
+
+    uint32_t GetGlobalStringHashConserCurrentHashTableSize() const
     {
-        constexpr int32_t x_allocationSize = 65536;
-
-        // Compute how much memory we should allocate
-        // We allocate 4K, 8K, 16K, 32K first (the highest 4K is not used to prevent all kinds of overflowing issue)
-        // After that we allocate 64K each time
-        //
-        assert(m_spdsPageAllocLimit % x_pageSize == 0 && m_spdsPageAllocLimit % x_spdsAllocationPageSize == 0);
-        size_t lengthToAllocate = x_allocationSize;
-        if (unlikely(m_spdsPageAllocLimit > -x_allocationSize))
-        {
-            if (m_spdsPageAllocLimit == 0)
-            {
-                lengthToAllocate = 4096;
-            }
-            else
-            {
-                assert(m_spdsPageAllocLimit < 0);
-                lengthToAllocate = static_cast<size_t>(-m_spdsPageAllocLimit);
-                assert(lengthToAllocate <= x_allocationSize);
-            }
-        }
-        assert(lengthToAllocate > 0 && lengthToAllocate % x_pageSize == 0 && lengthToAllocate % x_spdsAllocationPageSize == 0);
-
-        VM_FAIL_IF(SubWithOverflowCheck(m_spdsPageAllocLimit, static_cast<int32_t>(lengthToAllocate), &m_spdsPageAllocLimit),
-            "Resource limit exceeded: SPDS region overflowed 2GB memory limit.");
-
-        // We have some code that assumes the address std::numeric_limits<int32_t>::min() is not used
-        //
-        VM_FAIL_IF(m_spdsPageAllocLimit == std::numeric_limits<int32_t>::min(),
-            "Resource limit exceeded: SPDS region overflowed 2GB memory limit.");
-
-        // Allocate memory
-        //
-        uintptr_t allocAddr = VMBaseAddress() + SignExtendTo<uint64_t>(m_spdsPageAllocLimit);
-        assert(allocAddr % x_pageSize == 0 && allocAddr % x_spdsAllocationPageSize == 0);
-        void* r = mmap(reinterpret_cast<void*>(allocAddr), static_cast<size_t>(lengthToAllocate), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
-        VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
-            "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-
-        assert(r == reinterpret_cast<void*>(allocAddr));
-
-        // The first page is returned to caller
-        //
-        int32_t result = m_spdsPageAllocLimit + x_spdsAllocationPageSize;
-
-        // Insert the other pages, if any, into free list
-        //
-        size_t numPages = lengthToAllocate / x_spdsAllocationPageSize;
-        if (numPages > 1)
-        {
-            int32_t cur = result + static_cast<int32_t>(x_spdsAllocationPageSize);
-            int32_t firstPage = cur;
-            for (size_t i = 1; i < numPages - 1; i++)
-            {
-                int32_t next = cur + static_cast<int32_t>(x_spdsAllocationPageSize);
-                std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(cur) - 4);
-                addr->store(next, std::memory_order_relaxed);
-                cur = next;
-            }
-
-            int32_t lastPage = cur;
-            assert(lastPage == m_spdsPageAllocLimit + lengthToAllocate);
-
-            SpdsPutAllocatedPagesToFreeList(firstPage, lastPage);
-        }
-        return result;
+        return m_hashTableSizeMask + 1;
     }
 
-protected:
-    VMMemoryManager() { }
-
-    // must be first member, stores the value of static_cast<CRTP*>(this)
-    //
-    uintptr_t m_self;
-
-    alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
-
-    // user heap region grows from high address to low address
-    // highest physically mapped address of the user heap region (offsets from m_self)
-    //
-    int64_t m_userHeapPtrLimit;
-
-    // lowest logically used address of the user heap region (offsets from m_self)
-    //
-    int64_t m_userHeapCurPtr;
-
-    // system heap region grows from low address to high address
-    // lowest physically unmapped address of the system heap region (offsets from m_self)
-    //
-    uint32_t m_systemHeapPtrLimit;
-
-    // lowest logically available address of the system heap region (offsets from m_self)
-    //
-    uint32_t m_systemHeapCurPtr;
-
-    SpdsPtr<void> m_spdsExecutionThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
-
-    alignas(64) std::mutex m_spdsAllocationMutex;
-
-    // SPDS region grows from high address to low address
-    //
-    std::atomic<uint64_t> m_spdsPageFreeList;
-    int32_t m_spdsPageAllocLimit;
-
-    alignas(64) SpdsAllocImpl<CRTP, false /*isTempAlloc*/> m_compilerThreadSpdsAlloc;
-
-    SpdsPtr<void> m_spdsCompilerThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
-
-};
-
-template<typename CRTP>
-class VMGlobalDataManager
-{
-public:
-    bool WARN_UNUSED Initialize()
+    uint32_t GetGlobalStringHashConserCurrentElementCount() const
     {
-        static_assert(std::is_base_of_v<VMGlobalDataManager, CRTP>, "wrong use of CRTP pattern");
-
-        for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
-        {
-            m_stringNameForMetatableKind[i] = static_cast<CRTP*>(this)->CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
-            assert(m_stringNameForMetatableKind[i].As()->m_hashHigh == x_luaMetamethodHashes[i]);
-            assert(GetMetamethodOrdinalFromStringName(m_stringNameForMetatableKind[i].As()) == static_cast<int>(i));
-        }
-
-        for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
-        {
-            m_initialStructureForDifferentInlineCapacity[i].m_value = 0;
-        }
-        m_filePointerForStdout = stdout;
-        m_filePointerForStderr = stderr;
-
-        m_metatableForNil = UserHeapPointer<void>();
-        m_metatableForBoolean = UserHeapPointer<void>();
-        m_metatableForNumber = UserHeapPointer<void>();
-        m_metatableForString = UserHeapPointer<void>();
-        m_metatableForFunction = UserHeapPointer<void>();
-        m_metatableForCoroutine = UserHeapPointer<void>();
-
-        CreateRootCoroutine();
-        return true;
+        return m_elementCount;
     }
 
-    void Cleanup() { }
+    UserHeapPointer<HeapString> GetSpecialKeyForMetadataSlot()
+    {
+        return m_specialKeyForMetatableSlot;
+    }
+
+    UserHeapPointer<HeapString> GetSpecialKeyForBoolean(bool v)
+    {
+        return m_specialKeyForBooleanIndex[static_cast<size_t>(v)];
+    }
+
+    static constexpr size_t OffsetofSpecialKeyForBooleanIndex()
+    {
+        return offsetof_member_v<&VM::m_specialKeyForBooleanIndex>;
+    }
 
     FILE* WARN_UNUSED GetStdout() { return m_filePointerForStdout; }
     FILE* WARN_UNUSED GetStderr() { return m_filePointerForStderr; }
@@ -1009,16 +727,172 @@ public:
 
     static constexpr size_t OffsetofStringNameForMetatableKind()
     {
-        return offsetof_base_v<VMGlobalDataManager, CRTP> + offsetof_member_v<&VMGlobalDataManager::m_stringNameForMetatableKind>;
+        return offsetof_member_v<&VM::m_stringNameForMetatableKind>;
     }
 
     static constexpr size_t OffsetofLjrLibBaseDotNextFunctionObject()
     {
-        return offsetof_base_v<VMGlobalDataManager, CRTP> + offsetof_member_v<&VMGlobalDataManager::m_ljrLibBaseDotErrorFunctionObject>;
+        return offsetof_member_v<&VM::m_ljrLibBaseDotErrorFunctionObject>;
     }
 
+    std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
+
 private:
+    static constexpr size_t x_pageSize = 4096;
+    static constexpr size_t x_vmLayoutLength = 18ULL << 30;
+    // The start address of the VM is always at 16GB % 32GB, this makes sure the VM base is aligned at 32GB
+    //
+    static constexpr size_t x_vmLayoutAlignment = 32ULL << 30;
+    static constexpr size_t x_vmLayoutAlignmentOffset = 16ULL << 30;
+    static constexpr size_t x_vmBaseOffset = 16ULL << 30;
+    static constexpr size_t x_vmUserHeapSize = 12ULL << 30;
+
+    static_assert((1ULL << x_vmBasePtrLog2Alignment) == x_vmLayoutAlignment, "the constants must match");
+
+    uintptr_t VMBaseAddress() const
+    {
+        uintptr_t result = reinterpret_cast<uintptr_t>(this);
+        assert(result == m_self);
+        return result;
+    }
+
+    void BumpUserHeap();
+    void BumpSystemHeap();
+
+    bool WARN_UNUSED SpdsAllocateTryGetFreeListPage(int32_t* out)
+    {
+        uint64_t taggedValue = m_spdsPageFreeList.load(std::memory_order_acquire);
+        while (true)
+        {
+            int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
+            assert(head % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+            if (head == x_spdsAllocationPageSize)
+            {
+                return false;
+            }
+            uint32_t tag = BitwiseTruncateTo<uint32_t>(taggedValue >> 32);
+
+            std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(head) - 4);
+            int32_t newHead = addr->load(std::memory_order_relaxed);
+            assert(newHead % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+            tag++;
+            uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(newHead);
+
+            if (m_spdsPageFreeList.compare_exchange_weak(taggedValue /*expected, inout*/, newTaggedValue /*desired*/, std::memory_order_release, std::memory_order_acquire))
+            {
+                *out = head;
+                return true;
+            }
+        }
+    }
+
+    int32_t WARN_UNUSED SpdsAllocatePageSlowPath();
+
+    // Allocate a chunk of memory, return one of the pages, and put the rest into free list
+    //
+    int32_t WARN_UNUSED SpdsAllocatePageSlowPathImpl();
+
+    // In Lua all strings are hash-consed
+    // The global string conser implementation
+    //
+
+    // The hash table stores GeneralHeapPointer
+    // We know that they must be UserHeapPointer, so the below values should never appear as valid values
+    //
+    static constexpr int32_t x_stringConserHtNonexistentValue = 0;
+    static constexpr int32_t x_stringConserHtDeletedValue = 4;
+
+    static bool WARN_UNUSED StringHtCellValueIsNonExistentOrDeleted(GeneralHeapPointer<HeapString> ptr)
+    {
+        AssertIff(ptr.m_value >= 0, ptr.m_value == x_stringConserHtNonexistentValue || ptr.m_value == x_stringConserHtDeletedValue);
+        return ptr.m_value >= 0;
+    }
+
+    static bool WARN_UNUSED StringHtCellValueIsNonExistent(GeneralHeapPointer<HeapString> ptr)
+    {
+        return ptr.m_value == x_stringConserHtNonexistentValue;
+    }
+
+    // max load factor is x_stringht_loadfactor_numerator / (2^x_stringht_loadfactor_denominator_shift)
+    //
+    static constexpr uint32_t x_stringht_loadfactor_denominator_shift = 1;
+    static constexpr uint32_t x_stringht_loadfactor_numerator = 1;
+
+    static void ReinsertDueToResize(GeneralHeapPointer<HeapString>* hashTable, uint32_t hashTableSizeMask, GeneralHeapPointer<HeapString> e);
+
+    // TODO: when we have GC thread we need to figure out how this interacts with GC
+    //
+    void ExpandStringConserHashTableIfNeeded();
+
+    // Insert an abstract multi-piece string into the hash table if it does not exist
+    // Return the HeapString
+    //
+    template<typename Iterator>
+    UserHeapPointer<HeapString> WARN_UNUSED InsertMultiPieceString(Iterator iterator);
+
+    bool WARN_UNUSED InitializeVMBase();
+    bool WARN_UNUSED InitializeVMStringManager();
+    void CleanupVMStringManager();
+    bool WARN_UNUSED InitializeVMGlobalData();
+    bool WARN_UNUSED Initialize();
+    void Cleanup();
     void CreateRootCoroutine();
+
+    // The data members
+    //
+
+    // must be first member, stores the value of static_cast<CRTP*>(this)
+    //
+    uintptr_t m_self;
+
+    alignas(64) SpdsAllocImpl<VM, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
+
+    // user heap region grows from high address to low address
+    // highest physically mapped address of the user heap region (offsets from m_self)
+    //
+    int64_t m_userHeapPtrLimit;
+
+    // lowest logically used address of the user heap region (offsets from m_self)
+    //
+    int64_t m_userHeapCurPtr;
+
+    // system heap region grows from low address to high address
+    // lowest physically unmapped address of the system heap region (offsets from m_self)
+    //
+    uint32_t m_systemHeapPtrLimit;
+
+    // lowest logically available address of the system heap region (offsets from m_self)
+    //
+    uint32_t m_systemHeapCurPtr;
+
+    SpdsPtr<void> m_spdsExecutionThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
+
+    alignas(64) std::mutex m_spdsAllocationMutex;
+
+    // SPDS region grows from high address to low address
+    //
+    std::atomic<uint64_t> m_spdsPageFreeList;
+    int32_t m_spdsPageAllocLimit;
+
+    alignas(64) SpdsAllocImpl<VM, false /*isTempAlloc*/> m_compilerThreadSpdsAlloc;
+
+    SpdsPtr<void> m_spdsCompilerThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
+
+    uint32_t m_hashTableSizeMask;
+    uint32_t m_elementCount;
+    // use GeneralHeapPointer because it's 4 bytes
+    // All pointers are actually always HeapPtr<HeapString>
+    //
+    GeneralHeapPointer<HeapString>* m_hashTable;
+
+    // In PolyMetatable mode, the metatable is stored in a property slot
+    // For simplicity, we always assign this special key (which is used exclusively for this purpose) to this slot
+    //
+    UserHeapPointer<HeapString> m_specialKeyForMetatableSlot;
+
+    // These two special keys are used for 'false' and 'true' respectively
+    //
+    UserHeapPointer<HeapString> m_specialKeyForBooleanIndex[2];
 
     CoroutineRuntimeContext* m_rootCoroutine;
 
@@ -1051,43 +925,6 @@ public:
     UserHeapPointer<void> m_metatableForFunction;
     UserHeapPointer<void> m_metatableForCoroutine;
 };
-
-class ScriptModule;
-
-class VM : public VMMemoryManager<VM>, public GlobalStringHashConser<VM>, public VMGlobalDataManager<VM>
-{
-public:
-    static_assert(x_segmentRegisterSelfReferencingOffset == offsetof_member_v<&VM::m_self>);
-
-    bool WARN_UNUSED Initialize()
-    {
-        bool success = false;
-
-        CHECK_LOG_ERROR(static_cast<VMMemoryManager<VM>*>(this)->Initialize());
-        Auto(if (!success) static_cast<VMMemoryManager<VM>*>(this)->Cleanup());
-
-        CHECK_LOG_ERROR(static_cast<GlobalStringHashConser<VM>*>(this)->Initialize());
-        Auto(if (!success) static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup());
-
-        CHECK_LOG_ERROR(static_cast<VMGlobalDataManager<VM>*>(this)->Initialize());
-        Auto(if (!success) static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup());
-
-        success = true;
-        return true;
-    }
-
-    void Cleanup()
-    {
-        static_cast<GlobalStringHashConser<VM>*>(this)->Cleanup();
-        static_cast<VMMemoryManager<VM>*>(this)->Cleanup();
-        static_cast<VMGlobalDataManager<VM>*>(this)->Cleanup();
-    }
-
-    static void LaunchScriptReturnEndpoint(CoroutineRuntimeContext* /*rc*/, void* /*sfp*/, uint8_t* /*retValuesStart*/, uint64_t /*numRetValues*/) { }
-    std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
-};
-
-template<> HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject();
 
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
 {

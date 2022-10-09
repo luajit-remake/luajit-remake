@@ -3,7 +3,6 @@
 #include "common_utils.h"
 #include "memory_ptr.h"
 #include "vm.h"
-#include "vm_string.h"
 #include "structure.h"
 #include "table_object.h"
 
@@ -161,22 +160,6 @@ public:
 };
 
 UserHeapPointer<TableObject> CreateGlobalObject(VM* vm);
-
-template<>
-inline void VMGlobalDataManager<VM>::CreateRootCoroutine()
-{
-    // Create global object
-    //
-    VM* vm = static_cast<VM*>(this);
-    UserHeapPointer<TableObject> globalObject = CreateGlobalObject(vm);
-    m_rootCoroutine = CoroutineRuntimeContext::Create(vm, globalObject);
-}
-
-template<>
-inline HeapPtr<TableObject> VMGlobalDataManager<VM>::GetRootGlobalObject()
-{
-    return m_rootCoroutine->m_globalObject.As();
-}
 
 // Base class for some executable, either an intrinsic, or a bytecode function with some fixed global object, or a user C function
 //

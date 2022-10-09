@@ -1,5 +1,6 @@
 add_library(toylang 
   runtime_utils.cpp
+  vm.cpp
   lj_bytecode_parser.cpp
   init_global_object.cpp
 )

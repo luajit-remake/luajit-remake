@@ -3,7 +3,6 @@
 #include "common_utils.h"
 #include "memory_ptr.h"
 #include "vm.h"
-#include "vm_string.h"
 #include "structure.h"
 
 // This doesn't really need to inherit the GC header, but for now let's make thing simple..

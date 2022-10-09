@@ -140,6 +140,32 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
 
     // Now, we can start processing our own module
     //
+
+    // At this stage we can drop the bytecode definition global symbol, which will render all bytecode definitions dead.
+    // We temporarily change 'm_impl' to external linkage to keep it alive, then run DCE to strip the dead symbols,
+    // so that all bytecode defintions except 'm_impl' are stripped and later processing is faster
+    //
+    std::string implNameBak = m_impl->getName().str();
+    BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(m_module.get());
+    ReleaseAssert(m_impl->getLinkage() == GlobalValue::InternalLinkage);
+    m_impl->setLinkage(GlobalValue::ExternalLinkage);
+
+    RunLLVMDeadGlobalElimination(m_module.get());
+
+    // Sanity check 'm_impl' is still there
+    //
+    ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
+
+    // Before changing 'm_impl' back to internal linkage, run the general inlining pass to
+    // inline general (non-API) functions into 'm_impl' and canonicalize it
+    // (if we change it to internal linkage now, it will be dead and get removed)
+    //
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::InlineGeneralFunctions);
+    ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
+
+    // Now change the linkage back to internal and create the wrapper function
+    //
+    m_impl->setLinkage(GlobalValue::InternalLinkage);
     m_wrapper = InterpreterFunctionInterface::CreateFunction(m_module.get(), m_resultFuncName);
     ReleaseAssert(m_wrapper->arg_size() == 10);
 
@@ -260,19 +286,6 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     new UnreachableInst(ctx, currentBlock);
 
     ValidateLLVMFunction(m_wrapper);
-
-    // At this stage, we can drop the bytecode definition global symbol, which will render all bytecode definitions except ourselves dead.
-    // We then run DCE to strip the dead symbols, so that later processing is faster
-    //
-    std::string implNameBak = m_impl->getName().str();
-    std::string wrapperNameBak = m_wrapper->getName().str();
-    BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(m_module.get());
-    RunLLVMDeadGlobalElimination(m_module.get());
-
-    // Sanity check the functions we are processing are still there
-    //
-    ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
-    ReleaseAssert(m_module->getFunction(wrapperNameBak) == m_wrapper);
 }
 
 std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
