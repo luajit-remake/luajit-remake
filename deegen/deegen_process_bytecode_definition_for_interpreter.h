@@ -11,6 +11,7 @@ struct ProcessBytecodeDefinitionForInterpreterResult
     // Has same length as m_generatedClassNames, each subvector holding the names of all the variants, in the same order as the opcode used by the builder
     //
     std::vector<std::vector<std::string>> m_allExternCDeclarations;
+    std::vector<std::pair<std::string /*auditFileName*/, std::string /*content*/>> m_auditFiles;
     std::string m_generatedHeaderFile;
 };
 

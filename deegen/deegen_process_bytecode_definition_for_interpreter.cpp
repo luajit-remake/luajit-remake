@@ -493,6 +493,14 @@ void GenerateVariantSelectorImpl(FILE* fp,
     ReleaseAssert(false && "unhandled DeegenBytecodeOperandType");
 }
 
+std::string WARN_UNUSED DumpAuditFile(llvm::Module* module)
+{
+    ReleaseAssert(module != nullptr);
+    std::unique_ptr<llvm::Module> clone = llvm::CloneModule(*module);
+    std::string contents = CompileLLVMModuleToAssemblyFile(clone.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
+    return contents;
+}
+
 }   // anonymous namespace
 
 ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module)
@@ -584,8 +592,13 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
             ReleaseAssert(implFunc != nullptr);
             std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
+
+            std::string variantMainFunctionName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get());
+
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFile(bytecodeImpl.get())));
+
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
-            cdeclNameForVariants.push_back(InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
+            cdeclNameForVariants.push_back(variantMainFunctionName);
 
             fprintf(fp, "    %s DeegenCreateImpl%u(", bytecodeBuilderFunctionReturnType.c_str(), SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             for (size_t i = 0; i < bytecodeVariantDef->m_originalOperandTypes.size(); i++)

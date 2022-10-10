@@ -58,7 +58,7 @@ foreach(cur_src ${DEEGEN_BYTECODE_DEFINITION_SOURCES})
   add_custom_command(
     OUTPUT ${post_process_src}
     OUTPUT ${post_process_json}
-    COMMAND ${fps_exec} --process-bytecode-definition-for-interpreter --ir-input=$<TARGET_OBJECTS:${lib_name}> --asm-output=${post_process_src} --json-output=${post_process_json} --hdr-output=${post_process_hdr}
+    COMMAND ${fps_exec} --process-bytecode-definition-for-interpreter --ir-input=$<TARGET_OBJECTS:${lib_name}> --asm-output=${post_process_src} --json-output=${post_process_json} --hdr-output=${post_process_hdr} --audit-dir=${GENERATED_FILES_DIR}/../audit
     DEPENDS fps $<TARGET_OBJECTS:${lib_name}>
   )
   

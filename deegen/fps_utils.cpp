@@ -43,3 +43,29 @@ std::vector<std::string> WARN_UNUSED ParseCommaSeparatedFileList(const std::stri
     return out;
 }
 
+std::string WARN_UNUSED FPS_GetAuditFilePath(const std::string& filename)
+{
+    std::string auditDirPath = cl_auditDirPath;
+    ReleaseAssert(auditDirPath != "");
+    if (auditDirPath.ends_with("/"))
+    {
+        auditDirPath = auditDirPath.substr(0, auditDirPath.length() - 1);
+    }
+    ReleaseAssert(auditDirPath != "");
+
+    {
+        int status = mkdir(auditDirPath.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if (status != 0)
+        {
+            int err = errno;
+            if (err != EEXIST)
+            {
+                fprintf(stderr, "Failed to create audit file directory '%s', error = %d (%s)\n",
+                        auditDirPath.c_str(), err, strerror(err));
+                abort();
+            }
+        }
+    }
+
+    return auditDirPath + "/" + filename;
+}

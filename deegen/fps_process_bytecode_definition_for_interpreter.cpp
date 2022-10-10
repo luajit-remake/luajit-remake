@@ -58,6 +58,15 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     j["cdecl-names"] = result.m_allExternCDeclarations;
     jsonOutFile.write(j.dump(4 /*indent*/));
 
+    for (auto& it : result.m_auditFiles)
+    {
+        std::string fileName = it.first;
+        std::string& content = it.second;
+        TransactionalOutputFile auditFile(FPS_GetAuditFilePath(fileName));
+        auditFile.write(content);
+        auditFile.Commit();
+    }
+
     asmOutFile.Commit();
     hdrOutFile.Commit();
     jsonOutFile.Commit();
