@@ -246,6 +246,8 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         MPM.addPass(BuildModuleSimplificationPassesForDesugaring());
     }
 
+    LLVMRepeatedInliningInhibitor rii(module);
+
     // The set of function names with 'noinline' attribute
     //
     std::unordered_set<std::string> originalNoInlineFunctions;
@@ -273,8 +275,13 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         //
         AddLLVMInliningAttributesForDesugaringLevel(module, level);
 
+        // After we have added AlwaysInline and NoInline attributes for our API functions,
+        // call the general LLVMRepeatedInliningInhibitor, so that general functions won't get
+        // repeatedly inlined across many calls of DesugarAndSimplifyLLVMModule
+        //
+        rii.PrepareForInliningPass();
+
         // Create the inlining pass
-        // TODO: I hope LLVM's inliner is sane and won't inline more and more stuffs if ran repeatedly...
         //
         MPM.addPass(BuildInlinerPipelineForDesugaring());
     }
@@ -287,6 +294,10 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
 
     if (level > DesugaringLevel::PerFunctionSimplifyOnlyAggresive)
     {
+        // Restore action for LLVMRepeatedInliningInhibitor
+        //
+        rii.RestoreAfterInliningPass();
+
         // Remove the added 'NoInline' attributes
         //
         std::unordered_set<std::string> found;
@@ -307,7 +318,6 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
                 }
             }
         }
-        ReleaseAssert(found.size() == originalNoInlineFunctions.size());
     }
 
     ValidateLLVMModule(module);

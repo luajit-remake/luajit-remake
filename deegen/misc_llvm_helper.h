@@ -594,77 +594,6 @@ inline void ValidateLLVMModule(llvm::Module* module)
     ReleaseAssert(verifyModule(*module, &tmp) == false);
 }
 
-inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
-{
-    using namespace llvm;
-    ValidateLLVMModule(module);
-    legacy::PassManager Passes;
-    // Delete unreachable globals
-    //
-    Passes.add(createGlobalDCEPass());
-    // Remove dead debug info
-    //
-    Passes.add(createStripDeadDebugInfoPass());
-    // Remove dead func decls
-    //
-    Passes.add(createStripDeadPrototypesPass());
-    Passes.run(*module);
-}
-
-inline void RunLLVMOptimizePass(llvm::Module* module)
-{
-    using namespace llvm;
-
-    ValidateLLVMModule(module);
-
-    PassBuilder passBuilder;
-    LoopAnalysisManager LAM;
-    FunctionAnalysisManager FAM;
-    CGSCCAnalysisManager CGAM;
-    ModuleAnalysisManager MAM;
-    ModulePassManager MPM;
-
-    passBuilder.registerModuleAnalyses(MAM);
-    passBuilder.registerCGSCCAnalyses(CGAM);
-    passBuilder.registerFunctionAnalyses(FAM);
-    passBuilder.registerLoopAnalyses(LAM);
-    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-    MPM = passBuilder.buildPerModuleDefaultPipeline(OptimizationLevel::O3);
-
-    ReleaseAssert(module != nullptr);
-    MPM.run(*module, MAM);
-
-    ValidateLLVMModule(module);
-}
-
-inline void RunLLVMModuleSimplificationAndInliningPipeline(llvm::Module* module)
-{
-    using namespace llvm;
-
-    ValidateLLVMModule(module);
-
-    PassBuilder passBuilder;
-    LoopAnalysisManager LAM;
-    FunctionAnalysisManager FAM;
-    CGSCCAnalysisManager CGAM;
-    ModuleAnalysisManager MAM;
-    ModulePassManager MPM;
-
-    passBuilder.registerModuleAnalyses(MAM);
-    passBuilder.registerCGSCCAnalyses(CGAM);
-    passBuilder.registerFunctionAnalyses(FAM);
-    passBuilder.registerLoopAnalyses(LAM);
-    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-
-    MPM = passBuilder.buildModuleSimplificationPipeline(OptimizationLevel::O3, ThinOrFullLTOPhase::None);
-
-    ReleaseAssert(module != nullptr);
-    MPM.run(*module, MAM);
-
-    ValidateLLVMModule(module);
-}
-
 // Compile an LLVM module to assembly (.S) file
 //
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
@@ -1246,6 +1175,314 @@ inline bool AddUsedAttributeToGlobalValue(llvm::GlobalValue* globalVal)
 
     appendToUsed(*globalVal->getParent(), { globalVal });
     return true;
+}
+
+// It seems like the LLVM inlining pass does not run to fixpoint.
+// That is, if the LLVM inlining pass is executed repeatedly,
+// more and more callees can get inlined, causing undesirable code bloat.
+//
+// This utility is used to prevent this from happening.
+// Basically the rule here is, each function only gets one chance to be inlined.
+// Once an inlining pass gets run on the module, all the functions in the module
+// will be recorded in a magic global variable in the module.
+// Before the next time we run the inlining pass, the global variable will be read,
+// and all those functions will be marked no_inline before the LLVM pass.
+//
+// Note that this means if we run the inlining pass, and then create a new function
+// that calls some existing function in the module, the callee won't get inlined
+// since it's marked no_inline. But this is not a problem for our use case because
+// we will not create functions that call random user logic: we always manually mark
+// the callees of our created function as always_inline.
+//
+struct LLVMRepeatedInliningInhibitor
+{
+    LLVMRepeatedInliningInhibitor(llvm::Module* module)
+        : m_module(module)
+        , m_attrAnnotated(false)
+        , m_attrRestored(false)
+        , m_globalFound(false)
+    { }
+
+    ~LLVMRepeatedInliningInhibitor()
+    {
+        ReleaseAssertImp(m_attrAnnotated, m_attrRestored);
+    }
+
+    // Called before running an inlining pass
+    //
+    void PrepareForInliningPass()
+    {
+        using namespace llvm;
+
+        ReleaseAssert(!m_attrAnnotated);
+        m_attrAnnotated = true;
+
+        GlobalVariable* gv = m_module->getGlobalVariable(x_magic_global_name);
+        if (gv == nullptr)
+        {
+            ReleaseAssert(m_module->getNamedValue(x_magic_global_name) == nullptr);
+        }
+        else
+        {
+            RemoveGlobalValueUsedAttributeAnnotation(gv);
+            ReleaseAssert(gv->hasInitializer());
+            ConstantArray* list = dyn_cast<ConstantArray>(gv->getInitializer());
+            size_t numElements = list->getType()->getNumElements();
+            for (size_t i = 0; i < numElements; i++)
+            {
+                Constant* c = list->getOperand(static_cast<uint32_t>(i));
+                ReleaseAssert(llvm_value_has_type<void*>(c));
+                Function* func = dyn_cast<Function>(c);
+                ReleaseAssert(func != nullptr);
+
+                if (func->hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+                {
+                    // This means our caller has changed the function to always_inline.
+                    // We should respect it. Just skip.
+                    //
+                    continue;
+                }
+
+                std::string fnName = func->getName().str();
+
+                if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
+                {
+                    // This means our caller has added no_inline attribute to this function.
+                    // We should respect it by making sure it is still no_inline after the pass.
+                    // Nevertheless, this function has already got its chance to inline
+                    // while its no_inline attribute has not been added (which is why it is in this list),
+                    // so it should still be in the list after the pass
+                    //
+                    ReleaseAssert(!m_list.count(fnName));
+                    m_list.insert(fnName);
+                }
+                else
+                {
+                    // In addition to putting this function into 'm_list',
+                    // we should also add no_inline attribute, which shall be removed after the optimization passes
+                    //
+                    ReleaseAssert(!m_list.count(fnName));
+                    m_list.insert(fnName);
+
+                    func->addFnAttr(Attribute::AttrKind::NoInline);
+                    ReleaseAssert(!m_functionToRemoveNoInlineAttr.count(fnName));
+                    m_functionToRemoveNoInlineAttr.insert(fnName);
+                }
+            }
+            gv->eraseFromParent();
+            gv = nullptr;
+        }
+
+        // Iterate through all functions, record all the functions that does not have no_inline attribute:
+        // those functions will get their chance to inline in the incoming inlining pass, so they should get into the new list
+        //
+        for (Function& func : *m_module)
+        {
+            if (func.isIntrinsic())
+            {
+                continue;
+            }
+            if (func.hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+            {
+                continue;
+            }
+            if (!func.hasFnAttribute(Attribute::AttrKind::NoInline))
+            {
+                ReleaseAssert(!m_list.count(func.getName().str()));
+                m_list.insert(func.getName().str());
+            }
+        }
+    }
+
+    void RestoreAfterInliningPass()
+    {
+        using namespace llvm;
+
+        ReleaseAssert(m_attrAnnotated && !m_attrRestored);
+        m_attrRestored = true;
+
+        for (auto& fnName : m_functionToRemoveNoInlineAttr)
+        {
+            Function* func = m_module->getFunction(fnName);
+            if (func == nullptr)
+            {
+                ReleaseAssert(m_module->getNamedValue(fnName) == nullptr);
+            }
+            else
+            {
+                ReleaseAssert(func->hasFnAttribute(Attribute::AttrKind::NoInline));
+                func->removeFnAttr(Attribute::AttrKind::NoInline);
+            }
+        }
+
+        CreateNewList();
+    }
+
+    // Called before running DCE pass
+    // We need this because our magic global is holding a reference to a bunch of functions
+    // which prevents them from being dropped by DCE
+    //
+    void PrepareForDCE()
+    {
+        using namespace llvm;
+
+        ReleaseAssert(!m_attrAnnotated);
+        m_attrAnnotated = true;
+
+        GlobalVariable* gv = m_module->getGlobalVariable(x_magic_global_name);
+        if (gv == nullptr)
+        {
+            m_globalFound = false;
+            ReleaseAssert(m_module->getNamedValue(x_magic_global_name) == nullptr);
+        }
+        else
+        {
+            m_globalFound = true;
+            RemoveGlobalValueUsedAttributeAnnotation(gv);
+            ReleaseAssert(gv->hasInitializer());
+            ConstantArray* list = dyn_cast<ConstantArray>(gv->getInitializer());
+            size_t numElements = list->getType()->getNumElements();
+            for (size_t i = 0; i < numElements; i++)
+            {
+                Constant* c = list->getOperand(static_cast<uint32_t>(i));
+                ReleaseAssert(llvm_value_has_type<void*>(c));
+                Function* func = dyn_cast<Function>(c);
+                ReleaseAssert(func != nullptr);
+                ReleaseAssert(!m_list.count(func->getName().str()));
+                m_list.insert(func->getName().str());
+            }
+            gv->eraseFromParent();
+            gv = nullptr;
+        }
+    }
+
+    void RestoreAfterDCE()
+    {
+        using namespace llvm;
+
+        ReleaseAssert(m_attrAnnotated && !m_attrRestored);
+        m_attrRestored = true;
+
+        if (m_globalFound)
+        {
+            CreateNewList();
+        }
+    }
+
+    static void DropAllRecord(llvm::Module* module)
+    {
+        using namespace llvm;
+        GlobalVariable* gv = module->getGlobalVariable(x_magic_global_name);
+        if (gv != nullptr)
+        {
+            RemoveGlobalValueUsedAttributeAnnotation(gv);
+            gv->eraseFromParent();
+        }
+        ReleaseAssert(module->getNamedValue(x_magic_global_name) == nullptr);
+    }
+
+    static constexpr const char* x_magic_global_name = "__deegen_llvm_repeated_inlining_inhibitor_recorder";
+
+private:
+    void CreateNewList()
+    {
+        using namespace llvm;
+        LLVMContext& ctx = m_module->getContext();
+        std::vector<Constant*> newList;
+        for (auto& fnName : m_list)
+        {
+            Function* func = m_module->getFunction(fnName);
+            if (func == nullptr)
+            {
+                ReleaseAssert(m_module->getNamedValue(fnName) == nullptr);
+            }
+            else
+            {
+                newList.push_back(func);
+            }
+        }
+
+        Constant* ca = ConstantArray::get(ArrayType::get(llvm_type_of<void*>(ctx), newList.size()), newList);
+        ReleaseAssert(m_module->getNamedValue(x_magic_global_name) == nullptr);
+        GlobalVariable* newGv = new GlobalVariable(
+            *m_module,
+            ca->getType(),
+            true /*isConstant*/,
+            GlobalValue::ExternalLinkage,
+            ca /*initializer*/,
+            x_magic_global_name);
+        ReleaseAssert(newGv->getName().str() == x_magic_global_name);
+
+        AddUsedAttributeToGlobalValue(newGv);
+    }
+
+    llvm::Module* m_module;
+    bool m_attrAnnotated;
+    bool m_attrRestored;
+    bool m_globalFound;
+    std::unordered_set<std::string> m_list;
+    std::unordered_set<std::string> m_functionToRemoveNoInlineAttr;
+};
+
+inline void RunLLVMOptimizePass(llvm::Module* module)
+{
+    using namespace llvm;
+
+    LLVMRepeatedInliningInhibitor rii(module);
+    rii.PrepareForInliningPass();
+
+    ValidateLLVMModule(module);
+
+    PassBuilder passBuilder;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+    ModulePassManager MPM;
+
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    MPM = passBuilder.buildPerModuleDefaultPipeline(OptimizationLevel::O3);
+
+    ReleaseAssert(module != nullptr);
+    MPM.run(*module, MAM);
+
+    rii.RestoreAfterInliningPass();
+
+    // 'RunLLVMOptimizePass' should only be called once for the final codegen (either to binary, or for ExtractFunction).
+    // So we should remove the RepeatedInliningInhibitor global variable at this step.
+    //
+    LLVMRepeatedInliningInhibitor::DropAllRecord(module);
+
+    ValidateLLVMModule(module);
+}
+
+inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
+{
+    using namespace llvm;
+
+    LLVMRepeatedInliningInhibitor rii(module);
+    rii.PrepareForDCE();
+
+    ValidateLLVMModule(module);
+    legacy::PassManager Passes;
+    // Delete unreachable globals
+    //
+    Passes.add(createGlobalDCEPass());
+    // Remove dead debug info
+    //
+    Passes.add(createStripDeadDebugInfoPass());
+    // Remove dead func decls
+    //
+    Passes.add(createStripDeadPrototypesPass());
+    Passes.run(*module);
+
+    rii.RestoreAfterDCE();
+    ValidateLLVMModule(module);
 }
 
 }   // namespace dast
