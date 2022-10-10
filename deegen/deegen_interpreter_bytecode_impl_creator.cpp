@@ -305,14 +305,6 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
 }
 
-static void RunTagRegisterOptimizationPass(llvm::Function* func)
-{
-    TagRegisterOptimizationPass pass(func);
-    pass.AddTagRegister(func->getArg(4), TValue::x_int32Tag);
-    pass.AddTagRegister(func->getArg(9), TValue::x_mivTag);
-    pass.Run();
-}
-
 std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
 {
     using namespace llvm;

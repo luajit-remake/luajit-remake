@@ -31,4 +31,12 @@ private:
     std::vector<std::pair<llvm::Argument*, uint64_t>> m_tagRegisterList;
 };
 
+inline void RunTagRegisterOptimizationPass(llvm::Function* func)
+{
+    TagRegisterOptimizationPass pass(func);
+    pass.AddTagRegister(func->getArg(4), TValue::x_int32Tag);
+    pass.AddTagRegister(func->getArg(9), TValue::x_mivTag);
+    pass.Run();
+}
+
 }   // namespace dast

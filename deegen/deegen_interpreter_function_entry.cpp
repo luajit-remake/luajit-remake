@@ -3,6 +3,7 @@
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_return.h"
 #include "tvalue.h"
+#include "tag_register_optimization.h"
 
 namespace dast {
 
@@ -150,6 +151,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
 
     dummyInst->eraseFromParent();
 
+    RunTagRegisterOptimizationPass(func);
     RunLLVMOptimizePass(module.get());
 
     return module;
