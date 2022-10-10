@@ -183,6 +183,14 @@ struct TValue
         // So we simply do this optimization by hand right now. It unfortunately relies on
         // the fact that 'MIV::x_nil == 0' and 'MIV::x_false == 2'.
         //
+        // TODO: even with this, it turns out that we are still generating slightly inferior
+        // code for this operation: for some reason LLVM would rewrite the code below to
+        // 'm_value & -3 == x_mivTag - 2' instead, and once we change 'x_mivTag' to the tag
+        // register, the '-2' part will have to be executed and cannot be optimized out, so we
+        // end up generating one more instruction.
+        // We can fix this by emitting some llvm.assume, but it seems to me that this is just
+        // not worthy to optimize..
+        //
         return (m_value | 2) != x_mivTag;
         // return m_value != Nil().m_value && m_value != CreateFalse().m_value;
     }

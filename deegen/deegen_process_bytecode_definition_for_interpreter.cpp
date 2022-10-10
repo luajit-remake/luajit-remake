@@ -493,12 +493,18 @@ void GenerateVariantSelectorImpl(FILE* fp,
     ReleaseAssert(false && "unhandled DeegenBytecodeOperandType");
 }
 
-std::string WARN_UNUSED DumpAuditFile(llvm::Module* module)
+std::string WARN_UNUSED DumpAuditFileAsm(llvm::Module* module)
 {
     ReleaseAssert(module != nullptr);
     std::unique_ptr<llvm::Module> clone = llvm::CloneModule(*module);
-    std::string contents = CompileLLVMModuleToAssemblyFile(clone.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
-    return contents;
+    return CompileLLVMModuleToAssemblyFile(clone.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
+}
+
+std::string WARN_UNUSED DumpAuditFileIR(llvm::Module* module)
+{
+    ReleaseAssert(module != nullptr);
+    std::unique_ptr<llvm::Module> clone = llvm::CloneModule(*module);
+    return DumpLLVMModuleAsString(clone.get());
 }
 
 }   // anonymous namespace
@@ -595,7 +601,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
             std::string variantMainFunctionName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get());
 
-            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFile(bytecodeImpl.get())));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(bytecodeImpl.get())));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(bytecodeImpl.get())));
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
             cdeclNameForVariants.push_back(variantMainFunctionName);
 

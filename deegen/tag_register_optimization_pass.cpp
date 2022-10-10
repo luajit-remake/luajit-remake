@@ -78,6 +78,9 @@ static void TransformConstantToTagRegister(llvm::Function* target, llvm::Argumen
             {
                 // SwitchInst requires all the 'case' values to be immediate values, so we cannot process it naively
                 //
+                // TODO: for now we simply skip it altogether because we have no such use case, but in the future
+                // we should think about support rewriting SwitchInst for completeness.
+                //
                 continue;
             }
             for (uint32_t operandOrd = 0; operandOrd < inst.getNumOperands(); operandOrd++)
