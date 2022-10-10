@@ -591,12 +591,11 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             bytecodeVariantDef->SetMaxOperandWidthBytes(2);
             Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
             ReleaseAssert(implFunc != nullptr);
-            std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
 
+            std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
             std::string variantMainFunctionName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get());
 
             finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFile(bytecodeImpl.get())));
-
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
             cdeclNameForVariants.push_back(variantMainFunctionName);
 

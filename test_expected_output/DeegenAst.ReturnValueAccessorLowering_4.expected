@@ -39,7 +39,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test4_0_retcont_0(ptr %0, p
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
 __DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %28, %8
-  %.0.i = phi i64 [ %30, %28 ], [ -844429225099137, %8 ]
+  %.0.i = phi i64 [ %30, %28 ], [ %7, %8 ]
   %outputSlot = zext i32 %25 to i64
   %31 = getelementptr inbounds i64, ptr %10, i64 %outputSlot
   store i64 %.0.i, ptr %31, align 8

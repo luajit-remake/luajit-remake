@@ -7,6 +7,7 @@
 #include "deegen_ast_throw_error.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_ast_simple_lowering_utils.h"
+#include "tag_register_optimization.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -304,6 +305,14 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
 }
 
+static void RunTagRegisterOptimizationPass(llvm::Function* func)
+{
+    TagRegisterOptimizationPass pass(func);
+    pass.AddTagRegister(func->getArg(4), TValue::x_int32Tag);
+    pass.AddTagRegister(func->getArg(9), TValue::x_mivTag);
+    pass.Run();
+}
+
 std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
 {
     using namespace llvm;
@@ -340,7 +349,17 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     //
     m_valuePreserver.Cleanup();
 
-    // Run optimization pass
+    // Now, having lowered everything, we can run the tag register optimization pass
+    //
+    // The tag register optimization pass is supposed to be run after all API calls have been inlined, so lower all the API calls
+    //
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::Top);
+
+    // Now, run the tag register optimization pass
+    //
+    RunTagRegisterOptimizationPass(m_wrapper);
+
+    // Run LLVM optimization pass
     //
     RunLLVMOptimizePass(m_module.get());
 

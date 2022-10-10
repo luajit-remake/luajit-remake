@@ -36,7 +36,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(ptr %0, p
 .lr.ph.i:                                         ; preds = %.lr.ph.i, %8
   %.014.i = phi i64 [ %28, %.lr.ph.i ], [ %numRet, %8 ]
   %27 = getelementptr inbounds i64, ptr %22, i64 %.014.i
-  store i64 -844429225099137, ptr %27, align 8, !tbaa !19
+  store i64 %7, ptr %27, align 8, !tbaa !19
   %28 = add nuw i64 %.014.i, 1
   %exitcond.not.i = icmp eq i64 %28, %23
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.lr.ph.i, !llvm.loop !21

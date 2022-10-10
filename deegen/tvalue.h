@@ -166,8 +166,25 @@ struct TValue
     //
     bool ALWAYS_INLINE IsTruthy() const
     {
-        // return (m_value | 2) == x_mivTag;
-        return m_value != Nil().m_value && m_value != CreateFalse().m_value;
+        // This is hacky and unfortunate, but it turns out that if written naively (like
+        // the commented out line), LLVM will emit a switch with 2 cases and 1 default
+        // even after optimization, and relies on the backend to implement the switch with an
+        // OR followed by a CMP.
+        //
+        // In other words, the optimization of LLVM's SwitchInst happens at the LLVM backend,
+        // not at LLVM IR level.
+        //
+        // While this works for LLVM, it doesn't work for our tag register optimization.
+        // If we replace the constant 'x_mivTag' with our opaque tag register,
+        // the property that the two comparisons can be reduced to one with an OR instruction
+        // is lost. So we need to teach our tag register optimization pass to recognize
+        // the switch pattern and optimize it, which requires a lot of unjustified work.
+        //
+        // So we simply do this optimization by hand right now. It unfortunately relies on
+        // the fact that 'MIV::x_nil == 0' and 'MIV::x_false == 2'.
+        //
+        return (m_value | 2) != x_mivTag;
+        // return m_value != Nil().m_value && m_value != CreateFalse().m_value;
     }
 
     template<typename T = void>
