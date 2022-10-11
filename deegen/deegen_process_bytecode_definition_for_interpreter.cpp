@@ -130,6 +130,50 @@ std::string GetVariantCppTypeNameForDeegenBytecodeOperandType(DeegenBytecodeOper
     ReleaseAssert(false);
 }
 
+template<typename T>
+std::string GetSpecializedValueAsStringImpl(uint64_t spVal64)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+    using ST = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
+    ST st = static_cast<ST>(spVal64);
+    ReleaseAssert(IntegerCanBeRepresentedIn<T>(st));
+    T val = SafeIntegerCast<T>(st);
+    return std::to_string(val);
+}
+
+std::string GetSpecializedValueAsString(DeegenBytecodeOperandType ty, uint64_t spVal64)
+{
+    switch (ty)
+    {
+    case DeegenBytecodeOperandType::Int8:
+    {
+        return GetSpecializedValueAsStringImpl<int8_t>(spVal64);
+    }
+    case DeegenBytecodeOperandType::UInt8:
+    {
+        return GetSpecializedValueAsStringImpl<uint8_t>(spVal64);
+    }
+    case DeegenBytecodeOperandType::Int16:
+    {
+        return GetSpecializedValueAsStringImpl<int16_t>(spVal64);
+    }
+    case DeegenBytecodeOperandType::UInt16:
+    {
+        return GetSpecializedValueAsStringImpl<uint16_t>(spVal64);
+    }
+    case DeegenBytecodeOperandType::Int32:
+    {
+        return GetSpecializedValueAsStringImpl<int32_t>(spVal64);
+    }
+    case DeegenBytecodeOperandType::UInt32:
+    {
+        return GetSpecializedValueAsStringImpl<uint32_t>(spVal64);
+    }
+    default:
+        ReleaseAssert(false && "unexpected type");
+    }   /* switch ty */
+}
+
 // Invariant:
 // At the current point of the code, we know that for all variants in S, condition for operands [0, k) have been satisfied.
 // We are responsible for generating the implementation that handles all variants in S.
@@ -463,21 +507,59 @@ void GenerateVariantSelectorImpl(FILE* fp,
         opTypes[k] == DeegenBytecodeOperandType::UInt32)
     {
         bool hasSpecializedLiteral = false;
+        // Use std::map because we want 'specializedVal' to be sorted
+        // Also we cast it to int64_t so that negative values show up first
+        //
+        std::map<int64_t /*specializedVal*/, std::vector<BytecodeVariantDefinition*>> spValMap;
+        std::vector<BytecodeVariantDefinition*> unspecializedVariantList;
         for (BytecodeVariantDefinition* def : S)
         {
             BcOperandKind kind = def->m_list[k]->GetKind();
             if (kind == BcOperandKind::SpecializedLiteral)
             {
                 hasSpecializedLiteral = true;
+                BcOpSpecializedLiteral* sl = assert_cast<BcOpSpecializedLiteral*>(def->m_list[k].get());
+                ReleaseAssert(sl->GetLiteralType() == opTypes[k]);
+                uint64_t specializedVal = sl->m_concreteValue;
+                spValMap[static_cast<int64_t>(specializedVal)].push_back(def);
             }
             else
             {
                 ReleaseAssert(kind == BcOperandKind::Literal);
+                ReleaseAssert(assert_cast<BcOpLiteral*>(def->m_list[k].get())->GetLiteralType() == opTypes[k]);
+                unspecializedVariantList.push_back(def);
             }
         }
         if (hasSpecializedLiteral)
         {
-            ReleaseAssert(false && "unimplemented");
+            // This literal operand has specialized variants
+            // We should enumerate through each specialized variant and recurse,
+            // then finally fallback to the default variant (if any)
+            //
+            for (auto& it : spValMap)
+            {
+                uint64_t spVal64 = static_cast<uint64_t>(it.first);
+                auto& spVarList = it.second;
+                ReleaseAssert(spVarList.size() > 0);
+
+                std::string operandName =  S[0]->m_list[k]->OperandName();
+                std::string spVal = GetSpecializedValueAsString(opTypes[k], spVal64);
+                fprintf(fp, "%sif (ops.%s.m_value == %s) {\n", extraIndentStr.c_str(), operandName.c_str(), spVal.c_str());
+                selectedType.push_back(opTypes[k]);
+
+                GenerateVariantSelectorImpl(fp, opTypes, spVarList, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent + 4);
+
+                selectedType.pop_back();
+                fprintf(fp, "%s}\n", extraIndentStr.c_str());
+            }
+
+            if (unspecializedVariantList.size() > 0)
+            {
+                selectedType.push_back(opTypes[k]);
+                GenerateVariantSelectorImpl(fp, opTypes, unspecializedVariantList, selectedType, k + 1, true /*isFirstCheckForK*/, extraIndent);
+                selectedType.pop_back();
+            }
+            return;
         }
         else
         {
@@ -627,7 +709,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 }
                 else
                 {
-                    fprintf(fp, "%s param%d", GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
+                    std::string attr = "";
+                    if (bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::SpecializedLiteral)
+                    {
+                        attr = "[[maybe_unused]] ";
+                    }
+                    fprintf(fp, "%s%s param%d", attr.c_str(), GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
                 }
             }
             if (bytecodeVariantDef->m_hasOutputValue)
@@ -649,13 +736,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
                 std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
-                if (operand->IsElidedFromBytecodeStruct())
-                {
-                    continue;
-                }
+
                 if (operand->GetKind() == BcOperandKind::Constant)
                 {
-                    BcOpConstant* bcOpCst = static_cast<BcOpConstant*>(operand.get());
+                    BcOpConstant* bcOpCst = assert_cast<BcOpConstant*>(operand.get());
                     if (bcOpCst->m_typeMask != x_typeSpeculationMaskFor<tTop>)
                     {
                         std::string maskName = "";
@@ -673,6 +757,21 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         fprintf(fp, "        assert(param%d.Is<%s>());\n", static_cast<int>(i), maskName.c_str());
                     }
                 }
+
+                if (operand->GetKind() == BcOperandKind::SpecializedLiteral)
+                {
+                    BcOpSpecializedLiteral* spLit = assert_cast<BcOpSpecializedLiteral*>(operand.get());
+                    uint64_t spVal64 = spLit->m_concreteValue;
+                    std::string spVal = GetSpecializedValueAsString(spLit->GetLiteralType(), spVal64);
+                    fprintf(fp, "        assert(param%d == %s);\n", static_cast<int>(i), spVal.c_str());
+                    ReleaseAssert(operand->IsElidedFromBytecodeStruct());
+                }
+
+                if (operand->IsElidedFromBytecodeStruct())
+                {
+                    continue;
+                }
+
                 std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
                 fprintf(fp, "        using StorageTypeForOperand%d = %s;\n", static_cast<int>(i), tyName.c_str());
                 fprintf(fp, "        auto originalVal%d = ", static_cast<int>(i));
@@ -682,7 +781,6 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 }
                 else if (operand->GetKind() == BcOperandKind::Constant)
                 {
-
                     fprintf(fp, "crtp->InsertConstantIntoTable(param%d)", static_cast<int>(i));
                 }
                 else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
@@ -709,6 +807,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
                 std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
+                if (operand->IsElidedFromBytecodeStruct())
+                {
+                    continue;
+                }
                 size_t offset = operand->GetOffsetInBytecodeStruct();
                 fprintf(fp, "        UnalignedStore<StorageTypeForOperand%d>(base + %u, SafeIntegerCast<StorageTypeForOperand%d>(originalVal%d));\n", static_cast<int>(i), SafeIntegerCast<unsigned int>(offset), static_cast<int>(i), static_cast<int>(i));
             }

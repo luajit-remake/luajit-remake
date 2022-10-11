@@ -162,7 +162,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         {
             static_assert(std::is_integral_v<T>);
             ReleaseAssert(detail::DeegenBytecodeOperandIsLiteralType(m_operand.m_type));
-            return { .m_operand = { .m_kind = DeegenSpecializationKind::Literal, .m_value = static_cast<uint64_t>(val) }, .m_ord = m_ord };
+            uint64_t spVal64 = static_cast<uint64_t>(static_cast<std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>>(val));
+            return { .m_operand = { .m_kind = DeegenSpecializationKind::Literal, .m_value = spVal64 }, .m_ord = m_ord };
         }
 
         template<typename T>

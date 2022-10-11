@@ -29,7 +29,12 @@ DEEGEN_DEFINE_BYTECODE(Ret)
     );
     Result(NoOutput);
     Implementation(ReturnImpl);
-    // TODO: add specialization
+    Variant(Op("numRet").HasValue(0));
+    Variant(Op("numRet").HasValue(1));
+    Variant(Op("numRet").HasValue(2));
+    Variant(Op("numRet").HasValue(3));
+    Variant(Op("numRet").HasValue(4));
+    Variant(Op("numRet").HasValue(5));
     Variant();
 }
 
@@ -46,6 +51,11 @@ DEEGEN_DEFINE_BYTECODE(RetM)
     );
     Result(NoOutput);
     Implementation(ReturnAppendingVariadicResultsImpl);
+    Variant(Op("numRet").HasValue(0));
+    Variant(Op("numRet").HasValue(1));
+    Variant(Op("numRet").HasValue(2));
+    Variant(Op("numRet").HasValue(3));
+    Variant(Op("numRet").HasValue(4));
     Variant();
 }
 

@@ -258,6 +258,42 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
+    DeegenBytecodeOperandType GetLiteralType()
+    {
+        if (m_isSigned)
+        {
+            if (m_numBytes == 1)
+            {
+                return DeegenBytecodeOperandType::Int8;
+            }
+            else if (m_numBytes == 2)
+            {
+                return DeegenBytecodeOperandType::Int16;
+            }
+            else
+            {
+                ReleaseAssert(m_numBytes == 4);
+                return DeegenBytecodeOperandType::Int32;
+            }
+        }
+        else
+        {
+            if (m_numBytes == 1)
+            {
+                return DeegenBytecodeOperandType::UInt8;
+            }
+            else if (m_numBytes == 2)
+            {
+                return DeegenBytecodeOperandType::UInt16;
+            }
+            else
+            {
+                ReleaseAssert(m_numBytes == 4);
+                return DeegenBytecodeOperandType::UInt32;
+            }
+        }
+    }
+
     // The sign and width of this literal
     //
     bool m_isSigned;

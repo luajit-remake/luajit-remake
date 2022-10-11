@@ -99,7 +99,16 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes)
     );
     Result(NoOutput);
     Implementation(CallOperationImpl<passVariadicRes>);
-    // TODO: support specialization
+    for (uint32_t numArgs = 0; numArgs < 6; numArgs++)
+    {
+        for (int32_t numRets = -1; numRets < 4; numRets++)
+        {
+            Variant(
+                Op("numArgs").HasValue(numArgs),
+                Op("numRets").HasValue(numRets)
+            );
+        }
+    }
     Variant();
 }
 
