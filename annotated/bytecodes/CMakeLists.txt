@@ -30,6 +30,7 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
   table_variadic_put_by_seq.cpp
   iterative_for_loop.cpp
   iterative_for_loop_kv.cpp
+  tail_call_bytecodes.cpp
 )
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
