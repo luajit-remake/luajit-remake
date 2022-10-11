@@ -2377,85 +2377,88 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
     return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
 }
 
-inline GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsideringMetatable(TValue value)
+inline GetCallTargetConsideringMetatableResult GetCallMetamethodFromMetatable(UserHeapPointer<void> metatableMaybeNull)
 {
-    auto getCallMetamethod = [](UserHeapPointer<void> metatableMaybeNull) -> GetCallTargetConsideringMetatableResult
+    if (metatableMaybeNull.m_value == 0)
     {
-        if (metatableMaybeNull.m_value == 0)
-        {
-            return GetCallTargetConsideringMetatableResult {
-                .m_target = UserHeapPointer<FunctionObject>(),
-                .m_invokedThroughMetatable = false
-            };
-        }
-        assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
-        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
-        TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
-        if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function))
-        {
-            return GetCallTargetConsideringMetatableResult {
-                .m_target = target.AsPointer<FunctionObject>(),
-                .m_invokedThroughMetatable = true
-            };
-        }
-        else
-        {
-            return GetCallTargetConsideringMetatableResult {
-                .m_target = UserHeapPointer<FunctionObject>(),
-                .m_invokedThroughMetatable = false
-            };
-        }
-    };
+        return GetCallTargetConsideringMetatableResult {
+            .m_target = UserHeapPointer<FunctionObject>(),
+            .m_invokedThroughMetatable = false
+        };
+    }
+    assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
+    HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
+    TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
+    if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function))
+    {
+        return GetCallTargetConsideringMetatableResult {
+            .m_target = target.AsPointer<FunctionObject>(),
+            .m_invokedThroughMetatable = true
+        };
+    }
+    else
+    {
+        return GetCallTargetConsideringMetatableResult {
+            .m_target = UserHeapPointer<FunctionObject>(),
+            .m_invokedThroughMetatable = false
+        };
+    }
+}
 
-    if (likely(value.IsPointer()))
+inline GetCallTargetConsideringMetatableResult NO_INLINE WARN_UNUSED GetCallTargetConsideringMetatableSlowPath(TValue value)
+{
+    if (likely(value.Is<tHeapEntity>()))
     {
-        HeapEntityType ty = value.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
-        if (likely(ty == HeapEntityType::Function))
-        {
-            return GetCallTargetConsideringMetatableResult {
-                .m_target = value.AsPointer<FunctionObject>(),
-                .m_invokedThroughMetatable = false
-            };
-        }
+        HeapEntityType ty = value.GetHeapEntityType();
+        assert(ty != HeapEntityType::Function);
 
         if (likely(ty == HeapEntityType::Table))
         {
             HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
-            return getCallMetamethod(result.m_result);
+            return GetCallMetamethodFromMetatable(result.m_result);
         }
 
         if (ty == HeapEntityType::String)
         {
-            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForString);
+            return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForString);
         }
 
         if (ty == HeapEntityType::Thread)
         {
-            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
+            return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }
 
         // TODO: support USERDATA type
         ReleaseAssert(false && "unimplemented");
     }
 
-    if (value.IsMIV())
+    if (value.Is<tNil>())
     {
-        if (value.IsNil())
-        {
-            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
-        }
-        else
-        {
-            assert(value.AsMIV().IsBoolean());
-            return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
-        }
+        return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
+    }
+    else if (value.Is<tMIV>())
+    {
+        assert(value.Is<tBool>());
+        return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
     }
 
-    assert(value.IsDouble() || value.IsInt32());
-    return getCallMetamethod(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
+    assert(value.Is<tDouble>() || value.Is<tInt32>());
+    return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
+}
+
+inline GetCallTargetConsideringMetatableResult ALWAYS_INLINE WARN_UNUSED GetCallTargetConsideringMetatable(TValue value)
+{
+    if (likely(value.Is<tFunction>()))
+    {
+        return GetCallTargetConsideringMetatableResult {
+            .m_target = value.AsPointer<FunctionObject>(),
+            .m_invokedThroughMetatable = false
+        };
+    }
+    return GetCallTargetConsideringMetatableSlowPath(value);
 }
 
 // TableObjectIterator: the class used by Lua to iterate all key-value pairs in a table

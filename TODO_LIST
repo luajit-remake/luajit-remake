@@ -12,5 +12,3 @@ We probably shouldn't call memcpy/memmove, since it's in a .so thus an indirect 
 
 remove the 'used' attribute of the strength reduction rule symbol, so the implementations can be dropped
 
-split out the fast path in GetCallTargetConsideringMetatable
-
