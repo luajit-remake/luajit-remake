@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 
 # set the project name
 #
-project(toylang LANGUAGES C CXX ASM)
+project(ljr LANGUAGES C CXX ASM)
 
 # specify the C++ compiler
 #
@@ -155,7 +155,7 @@ endforeach()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories("${PROJECT_SOURCE_DIR}/common_utils")
-include_directories("${PROJECT_SOURCE_DIR}/toylang")
+include_directories("${PROJECT_SOURCE_DIR}/runtime")
 include_directories("${PROJECT_SOURCE_DIR}/deegen")
 
 add_subdirectory(common_utils)
@@ -172,7 +172,7 @@ add_library(deegen_fps_lib
   $<TARGET_OBJECTS:deegen_interpreter_fn_entry_logic>
 )
 
-add_subdirectory(toylang)
+add_subdirectory(runtime)
 
 # add the unit test executable
 #
@@ -201,7 +201,7 @@ set(UNIT_TEST_SRC
 set(UNIT_TEST_LINK_LIBRARIES
   gtest
   common_utils
-  toylang
+  runtime
   deegen_rt
   deegen_fps_lib
   deegen_user_builtin_lib
