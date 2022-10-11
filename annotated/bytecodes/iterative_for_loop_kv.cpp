@@ -119,7 +119,10 @@ DEEGEN_DEFINE_BYTECODE(KVLoopIter)
     );
     Result(ConditionalBranch);
     Implementation(KVLoopIterImpl);
-    Variant();
+    // LuaJIT frontend parser won't consider this bytecode unless numRets is 1 or 2, so no generalized variant needed
+    //
+    Variant(Op("numRets").HasValue(1));
+    Variant(Op("numRets").HasValue(2));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

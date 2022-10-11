@@ -113,7 +113,8 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     assert(base[num - 1].Is<tInt32>());
     int32_t nextSlotToConcat = base[num - 1].As<tInt32>();
     assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(num) - 2);
-    if (nextSlotToConcat == -1)
+    __builtin_assume(nextSlotToConcat < static_cast<int32_t>(num) - 2);
+    if (nextSlotToConcat < 0)
     {
         Return(curValue);
     }
@@ -243,6 +244,7 @@ DEEGEN_DEFINE_BYTECODE(Concat)
     );
     Result(BytecodeValue);
     Implementation(ConcatImpl);
+    Variant(Op("num").HasValue(2));
     Variant();
 }
 

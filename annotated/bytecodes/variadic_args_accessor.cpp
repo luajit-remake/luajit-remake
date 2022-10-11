@@ -69,6 +69,7 @@ DEEGEN_DEFINE_BYTECODE(GetVarArgsPrefix)
     );
     Result(NoOutput);
     Implementation(GetVarArgsPrefixImpl);
+    Variant(Op("numToPut").HasValue(1));
     Variant();
 }
 

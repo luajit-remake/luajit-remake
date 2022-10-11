@@ -53,6 +53,9 @@ DEEGEN_DEFINE_BYTECODE(ForLoopIter)
     );
     Result(ConditionalBranch);
     Implementation(ForLoopIterImpl);
+    Variant(Op("numRets").HasValue(1));
+    Variant(Op("numRets").HasValue(2));
+    Variant(Op("numRets").HasValue(3));
     Variant();
 }
 
