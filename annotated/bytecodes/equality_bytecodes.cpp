@@ -28,11 +28,25 @@ template<bool compareForNotEqual, bool shouldBranch>
 void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
 {
     bool result;
-    if (likely(lhs.Is<tDouble>() && rhs.Is<tDouble>()))
+    // This is slightly tricky. We check 'rhs' first because the variants are specializing on 'rhs'.
+    // Note that in theory, we could have made our TValue typecheck elimination supported "bitwise-equal" comparsion
+    // (to optimize the "lhs.m_value == rhs.m_value" check a few lines below based on known type information).
+    // If we had implemented that, then it would no longer matter whether we check 'lhs' first or 'rhs' first,
+    // as our TValue typecheck elimination would give us the same optimal result in both cases.
+    // However, we haven't implemented it yet, and even though it is not hard to implement it, for now let's just stay simple.
+    //
+    if (likely(rhs.Is<tDouble>()))
     {
-        bool isEqualAsDouble = UnsafeFloatEqual(lhs.As<tDouble>(), rhs.As<tDouble>());
-        result = isEqualAsDouble ^ compareForNotEqual;
-        goto end;
+        if (likely(lhs.Is<tDouble>()))
+        {
+            bool isEqualAsDouble = UnsafeFloatEqual(lhs.As<tDouble>(), rhs.As<tDouble>());
+            result = isEqualAsDouble ^ compareForNotEqual;
+            goto end;
+        }
+        else
+        {
+            goto not_equal;
+        }
     }
 
     if (lhs.m_value == rhs.m_value)
