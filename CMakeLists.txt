@@ -87,6 +87,7 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
 # it should be fine to assume the CPU supports them as they have been released for 10 years
 #
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mbmi ")
+SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mbmi ")
 
 # -rdynamic so symbols are exposed to generated code
 # 
