@@ -57,12 +57,23 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(Interpret
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
     Value* codeBlock = ifi->GetCodeBlock();
-    ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(ctx));
-    Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), codeBlock, { bytecodeValue }, "", targetBB);
-    LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
-    bv->setAlignment(Align(8));
-    ReleaseAssert(bv->getType() == GetUsageType(ctx));
-    return bv;
+    if (m_typeMask == x_typeSpeculationMaskFor<tNil>)
+    {
+        ReleaseAssert(bytecodeValue == nullptr);
+        Value* res = CreateLLVMConstantInt(ctx, TValue::Nil().m_value);
+        ReleaseAssert(res->getType() == GetUsageType(ctx));
+        return res;
+    }
+    else
+    {
+        ReleaseAssert(bytecodeValue != nullptr);
+        ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(ctx));
+        Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), codeBlock, { bytecodeValue }, "", targetBB);
+        LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
+        bv->setAlignment(Align(8));
+        ReleaseAssert(bv->getType() == GetUsageType(ctx));
+        return bv;
+    }
 }
 
 llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* /*targetBB*/ /*out*/, llvm::Value* bytecodeValue)

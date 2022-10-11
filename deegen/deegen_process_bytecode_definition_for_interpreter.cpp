@@ -706,25 +706,25 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 {
                     fprintf(fp, ", ");
                 }
+                std::string attr = "";
+                if (bytecodeVariantDef->m_list[i]->IsElidedFromBytecodeStruct())
+                {
+                    attr = "[[maybe_unused]] ";
+                }
                 if (bytecodeVariantDef->m_originalOperandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
                 {
                     if (bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::Slot)
                     {
-                        fprintf(fp, "Local param%d", static_cast<int>(i));
+                        fprintf(fp, "%sLocal param%d", attr.c_str(), static_cast<int>(i));
                     }
                     else
                     {
                         ReleaseAssert(bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::Constant);
-                        fprintf(fp, "TValue param%d", static_cast<int>(i));
+                        fprintf(fp, "%sTValue param%d", attr.c_str(), static_cast<int>(i));
                     }
                 }
                 else
                 {
-                    std::string attr = "";
-                    if (bytecodeVariantDef->m_list[i]->GetKind() == BcOperandKind::SpecializedLiteral)
-                    {
-                        attr = "[[maybe_unused]] ";
-                    }
                     fprintf(fp, "%s%s param%d", attr.c_str(), GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(), static_cast<int>(i));
                 }
             }

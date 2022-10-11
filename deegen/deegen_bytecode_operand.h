@@ -195,10 +195,17 @@ public:
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::Constant; }
 
+    virtual bool WARN_UNUSED IsElidedFromBytecodeStruct() override
+    {
+        // Since the 'nil' type has only one possible value, we can elide it from the bytecode struct
+        // Note that even though some other types have only one possible value as well (e.g., DoubleNaN), we only do this optimization for 'nil'
+        // as it is the important case (... == nil is pretty common) and the 'nil' constant is readily avaiable (thanks to the tag register).
+        //
+        return m_typeMask == x_typeSpeculationMaskFor<tNil>;
+    }
+
     virtual size_t WARN_UNUSED ValueFullByteLength() override
     {
-        // TODO: this can be improved: if the type is known to have only one value, the constant can be eliminated
-        //
         return 8;
     }
 
