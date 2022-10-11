@@ -7,6 +7,7 @@
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_ast_return.h"
 
+#include "llvm/Transforms/Utils/FunctionComparator.h"
 #include "llvm/Linker/Linker.h"
 
 namespace dast {
@@ -606,6 +607,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
     std::vector<std::unique_ptr<Module>> allBytecodeFunctions;
+    std::vector<std::string> allReturnContinuationNames;
 
     for (auto& bytecodeDef : defs)
     {
@@ -682,6 +684,15 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
             std::string variantMainFunctionName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get());
+            for (Function& func : *bytecodeImpl.get())
+            {
+                if (InterpreterBytecodeImplCreator::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
+                {
+                    ReleaseAssert(func.hasExternalLinkage());
+                    ReleaseAssert(!func.empty());
+                    allReturnContinuationNames.push_back(func.getName().str());
+                }
+            }
 
             finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(bytecodeImpl.get())));
             finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(bytecodeImpl.get())));
@@ -1059,6 +1070,102 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     }
 
     ValidateLLVMModule(module.get());
+
+    // Now, try to merge identical return continuations
+    // TODO: we can also merge identical bytecode main functions, but that would require a bit more work since:
+    // (1) We need to make sure that the InterpreterDispatchTableBuilder is aware of this and builds the correct dispatch table.
+    // (2) We want to handle the case where two functions are identical except that they store different return continuation
+    //     functions (which is a common pattern), in which case we likely still want to merge the function, but we will need to
+    //     do some transform so that the merged function picks up the correct return continuation based on the opcode.
+    // This would require some work, so we leave it to the future.
+    //
+    // For now, we simply use a n^2-comparison naive algorithm since performance should not matter here. This also allows us
+    // to have some redundancy to be extra certain that llvm::FunctionComparator exhibits sane behavior.
+    //
+    if (allReturnContinuationNames.size() > 0)
+    {
+        llvm::GlobalNumberState gns;
+        std::vector<std::vector<Function*>> equivGroups;
+        std::unordered_set<Function*> checkUnique;
+        for (std::string& fnName : allReturnContinuationNames)
+        {
+            Function* curFn = module->getFunction(fnName);
+            ReleaseAssert(curFn != nullptr);
+            ReleaseAssert(curFn->hasExternalLinkage());
+            ReleaseAssert(!curFn->empty());
+            ReleaseAssert(!checkUnique.count(curFn));
+            checkUnique.insert(curFn);
+
+            bool found = false;
+            for (auto& grp : equivGroups)
+            {
+                ReleaseAssert(grp.size() > 0);
+                Function* funcToCmp = grp[0];
+                if (FunctionComparator(curFn, funcToCmp, &gns).compare() == 0)
+                {
+                    found = true;
+                    for (size_t i = 1; i < grp.size(); i++)
+                    {
+                        Function* other = grp[i];
+                        ReleaseAssert(FunctionComparator(curFn, other, &gns).compare() == 0);
+                    }
+                    grp.push_back(curFn);
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                equivGroups.push_back({ curFn });
+            }
+        }
+
+        {
+            size_t totalCount = 0;
+            for (auto& eg : equivGroups)
+            {
+                totalCount += eg.size();
+            }
+            ReleaseAssert(totalCount == allReturnContinuationNames.size());
+        }
+
+        // Now, merge all the equivalence groups
+        //
+        std::vector<std::string> fnNamesExpectedToExist;
+        std::vector<std::string> fnNameExpectedToBeDeleted;
+        for (auto& grp : equivGroups)
+        {
+            ReleaseAssert(grp.size() > 0);
+            Function* fnToKeep = grp[0];
+            fnNamesExpectedToExist.push_back(fnToKeep->getName().str());
+
+            for (size_t i = 1; i < grp.size(); i++)
+            {
+                Function* fnToMerge = grp[i];
+                fnToMerge->replaceAllUsesWith(fnToKeep);
+                fnToMerge->deleteBody();
+                fnNameExpectedToBeDeleted.push_back(fnToMerge->getName().str());
+            }
+        }
+
+        RunLLVMDeadGlobalElimination(module.get());
+
+        // Assert everything is as expected
+        //
+        ValidateLLVMModule(module.get());
+        for (auto& fnName : fnNamesExpectedToExist)
+        {
+            Function* fn = module->getFunction(fnName);
+            ReleaseAssert(fn != nullptr);
+            ReleaseAssert(fn->hasExternalLinkage());
+            ReleaseAssert(!fn->empty());
+        }
+
+        for (auto& fnName : fnNameExpectedToBeDeleted)
+        {
+            ReleaseAssert(module->getNamedValue(fnName) == nullptr);
+        }
+    }
 
     // Just for sanity, assert again after linkage, that the linkage didn't add back
     // any of the bytecode definition symbols or the implementation functions

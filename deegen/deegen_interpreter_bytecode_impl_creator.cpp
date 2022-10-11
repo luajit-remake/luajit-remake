@@ -62,6 +62,23 @@ std::string WARN_UNUSED InterpreterBytecodeImplCreator::GetInterpreterBytecodeRe
     return GetInterpreterBytecodeFunctionCName(bytecodeDef) + "_retcont_" + std::to_string(rcOrd);
 }
 
+bool WARN_UNUSED InterpreterBytecodeImplCreator::IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName)
+{
+    std::string fnName = func->getName().str();
+    std::string expectedPrefix = bytecodeVariantMainFuncName + "_retcont_";
+    if (!fnName.starts_with(expectedPrefix))
+    {
+        return false;
+    }
+    fnName = fnName.substr(expectedPrefix.length());
+    ReleaseAssert(fnName.length() > 0);
+    for (size_t i = 0; i < fnName.length(); i++)
+    {
+        ReleaseAssert('0' <= fnName[i] && fnName[i] <= '9');
+    }
+    return true;
+}
+
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, bool isReturnContinuation)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)

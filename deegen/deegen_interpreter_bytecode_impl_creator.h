@@ -57,6 +57,7 @@ public:
 
     static std::string WARN_UNUSED GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef);
     static std::string WARN_UNUSED GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd);
+    static bool WARN_UNUSED IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName);
 
 private:
     BytecodeVariantDefinition* m_bytecodeDef;
