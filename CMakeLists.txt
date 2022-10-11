@@ -83,6 +83,11 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -pthread ")
 #
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
 
+# Assume BMI1 support. BMI1 is particularly useful for our boxing scheme
+# it should be fine to assume the CPU supports them as they have been released for 10 years
+#
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mbmi ")
+
 # -rdynamic so symbols are exposed to generated code
 # 
 #SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic ")
