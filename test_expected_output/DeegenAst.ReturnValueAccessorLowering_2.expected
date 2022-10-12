@@ -3,43 +3,39 @@ source_filename = "/home/u/project/annotated/unit_test/return_value_accessor_api
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-%0 = type { ptr addrspace(256), ptr, ptr, i32, i32 }
-%1 = type { %2, i8, i8, i32, ptr, ptr }
-%2 = type { i8, i8 }
-
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, i64 %7) #0 {
-  %9 = getelementptr %0, ptr %1, i64 -1, i32 1
-  %10 = load ptr, ptr %9, align 8, !tbaa !3
-  %11 = getelementptr inbounds %0, ptr %10, i64 -1
-  %12 = load ptr addrspace(256), ptr %11, align 8, !tbaa !9
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %12, align 4, !tbaa !10
-  %13 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %14 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
-  %15 = ptrtoint ptr %14 to i64
-  %16 = add i64 %15, %13
-  %17 = inttoptr i64 %16 to ptr
-  %18 = getelementptr %0, ptr %1, i64 -1, i32 3
-  %19 = load i32, ptr %18, align 8, !tbaa !12
-  %20 = getelementptr inbounds %1, ptr %17, i64 0, i32 4
-  %21 = load ptr, ptr %20, align 8, !tbaa !13
-  %22 = zext i32 %19 to i64
-  %23 = getelementptr inbounds i8, ptr %21, i64 %22
-  %24 = getelementptr inbounds i8, ptr %23, i64 2
-  %25 = load i32, ptr %24, align 1
-  %outputSlot = zext i32 %25 to i64
-  %26 = getelementptr inbounds i64, ptr %retStart, i64 1
-  %27 = load i64, ptr %26, align 8
-  %28 = getelementptr inbounds i64, ptr %10, i64 %outputSlot
-  store i64 %27, ptr %28, align 8
-  %29 = getelementptr inbounds i8, ptr %23, i64 6
-  %30 = load i16, ptr %29, align 1
-  %31 = zext i16 %30 to i64
-  %32 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %31
-  %33 = load ptr, ptr %32, align 8
-  musttail call ghccc void %33(ptr %0, ptr %10, ptr nonnull %29, ptr %17, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7) #1
+define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 {
+  %15 = getelementptr i8, ptr %1, i64 -24
+  %.val = load ptr, ptr %15, align 8, !tbaa !3
+  %16 = getelementptr i8, ptr %.val, i64 -32
+  %.val1 = load ptr addrspace(256), ptr %16, align 8, !tbaa !9
+  %.val1.val = load i32, ptr addrspace(256) %.val1, align 4, !tbaa !10
+  %17 = zext i32 %.val1.val to i64
+  %18 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
+  %19 = ptrtoint ptr %18 to i64
+  %20 = add i64 %19, %17
+  %21 = inttoptr i64 %20 to ptr
+  %22 = getelementptr i8, ptr %1, i64 -8
+  %.val2 = load i32, ptr %22, align 8, !tbaa !12
+  %23 = getelementptr i8, ptr %21, i64 8
+  %.val3 = load ptr, ptr %23, align 8, !tbaa !13
+  %24 = zext i32 %.val2 to i64
+  %25 = getelementptr inbounds i8, ptr %.val3, i64 %24
+  %26 = getelementptr inbounds i8, ptr %25, i64 2
+  %27 = load i32, ptr %26, align 1
+  %outputSlot = zext i32 %27 to i64
+  %28 = getelementptr inbounds i64, ptr %retStart, i64 1
+  %29 = load i64, ptr %28, align 8
+  %30 = getelementptr inbounds i64, ptr %.val, i64 %outputSlot
+  store i64 %29, ptr %30, align 8
+  %31 = getelementptr inbounds i8, ptr %25, i64 6
+  %32 = load i16, ptr %31, align 1
+  %33 = zext i16 %32 to i64
+  %34 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %33
+  %35 = load ptr, ptr %34, align 8
+  musttail call ghccc void %35(ptr %0, ptr %.val, ptr nonnull %31, ptr %21, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 

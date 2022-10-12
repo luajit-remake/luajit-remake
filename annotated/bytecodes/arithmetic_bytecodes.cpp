@@ -117,14 +117,21 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ArithmeticOperation, LuaMetamethodKind opKind)
     Variant(
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
+    ).QuickenByDefault(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
     );
     Variant(
-        Op("lhs").IsConstant<tDouble>(),
+        Op("lhs").IsConstant<tDoubleNotNaN>(),
         Op("rhs").IsBytecodeSlot()
+    ).QuickenByDefault(
+        Op("rhs").HasType<tDoubleNotNaN>()
     );
     Variant(
         Op("lhs").IsBytecodeSlot(),
-        Op("rhs").IsConstant<tDouble>()
+        Op("rhs").IsConstant<tDoubleNotNaN>()
+    ).QuickenByDefault(
+        Op("lhs").HasType<tDoubleNotNaN>()
     );
 }
 

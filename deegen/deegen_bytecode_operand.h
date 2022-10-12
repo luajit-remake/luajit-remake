@@ -69,11 +69,6 @@ public:
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(ValueFullByteLength() * 8));
     }
 
-    // Do custom transformation to the implementation function
-    //
-    virtual void TransformImplementationBeforeSimplificationPhase() {}
-    virtual void TransformImplementationAfterSimplificationPhase() {}
-
     size_t OperandOrdinal() const
     {
         ReleaseAssert(m_operandOrdinal != static_cast<size_t>(-1));
@@ -432,6 +427,37 @@ public:
     BcOperand* m_operandRangeLimit;
 };
 
+enum class BytecodeQuickeningKind
+{
+    // This variant is a normal variant
+    //
+    NoQuickening,
+    // This variant is used to implement default quickening assumptions
+    // That is, the logic of this variant is same as 'Quickened', except that it will never de-quicken itself.
+    //
+    LockedQuickening,
+    // This is the initial quickening state. The code is quickened to execute the first quickening variant, but if at runtime it encounters
+    // input that cannot be handled by the first quickening variant, it will quicken itself to a different quickened variant (transitions to 'Quickened') as necessary.
+    //
+    // This also imples that for best performance, the user should list the most probable quickening variant as the first quickening variant.
+    //
+    QuickeningSelector,
+    // This is a variant quickened for some specific quickening assumptions (other than the first one).
+    // When the quickening assumption check failed, it will de-quicken itself to the de-quickened variant.
+    //
+    Quickened,
+    // This means a quickening has happened but subsequently encountered unexpected input. It will never attempt to quicken itself to anything else.
+    // The logic of this variant is same as 'NoQuickening'.
+    //
+    Dequickened
+};
+
+struct BytecodeOperandQuickeningDescriptor
+{
+    size_t m_operandOrd;
+    TypeSpeculationMask m_speculatedMask;
+};
+
 class BytecodeVariantDefinition
 {
 public:
@@ -473,6 +499,13 @@ public:
 
     static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
 
+    bool HasQuickeningSlowPath()
+    {
+        return m_quickeningKind == BytecodeQuickeningKind::LockedQuickening ||
+               m_quickeningKind == BytecodeQuickeningKind::QuickeningSelector ||
+               m_quickeningKind == BytecodeQuickeningKind::Quickened;
+    }
+
     // For now we have a fixed 2-byte opcode header for simplicity
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
     //
@@ -494,6 +527,15 @@ public:
     bool m_hasConditionalBranchTarget;
     std::unique_ptr<BcOpSlot> m_outputOperand;
     std::unique_ptr<BcOpLiteral> m_condBrTarget;
+
+    BytecodeQuickeningKind m_quickeningKind;
+    // Populated if m_quickeningKind == LockedQuickening or Quickened or QuickeningSelector
+    // For QuickeningSelector, this holds the first quickening.
+    //
+    std::vector<BytecodeOperandQuickeningDescriptor> m_quickening;
+    // Populated if m_quickeningKind == QuickeningSelector, holds all except the first quickening
+    //
+    std::vector<std::vector<BytecodeOperandQuickeningDescriptor>> m_allOtherQuickenings;
 };
 
 }  // namespace dast

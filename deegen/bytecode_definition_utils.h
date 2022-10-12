@@ -20,6 +20,8 @@ enum class DeegenBytecodeOperandType
 
 enum class DeegenSpecializationKind : uint8_t
 {
+    // Must be first member
+    //
     NotSpecialized,
     Literal,
     SpeculatedTypeForOptimizer,
@@ -144,15 +146,69 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
     struct SpecializedVariant
     {
-        template<typename... Args>
-        consteval SpecializedVariant& Quickening(Args... /*args*/)
+        struct Quickening
         {
-            // TODO: append quickening variant
+            SpecializedOperand value[x_maxOperands];
+        };
+
+        template<typename... Args>
+        consteval SpecializedVariant& QuickenTo(Args... args)
+        {
+            ReleaseAssert(!m_hasQuickenByDefault && "this function call must not be used together with 'QuickeningByDefault'.");
+            AddNewQuickening(args...);
             return *this;
         }
 
+        template<typename... Args>
+        consteval SpecializedVariant& QuickenByDefault(Args... args)
+        {
+            ReleaseAssert(m_numQuickenings == 0 && "this function call must not be used together with 'QuickenTo'.");
+            m_hasQuickenByDefault = true;
+            AddNewQuickening(args...);
+            return *this;
+        }
+
+        bool m_hasQuickenByDefault;
+        size_t m_numQuickenings;
+        size_t m_numOperands;
+        DeegenBytecodeOperandType m_operandTypes[x_maxOperands];
         SpecializedOperand m_base[x_maxOperands];
-        SpecializedOperand m_quickenings[x_maxQuickenings][x_maxOperands];
+        Quickening m_quickenings[x_maxQuickenings];
+
+    private:
+        template<typename... Args>
+        consteval void AddNewQuickening(Args... args)
+        {
+            constexpr size_t n = sizeof...(Args);
+            std::array<SpecializedOperandRef, n> arr { args... };
+
+            for (size_t i = 0; i < n; i++)
+            {
+                for (size_t j = 0; j < i; j++)
+                {
+                    ReleaseAssert(arr[i].m_ord != arr[j].m_ord);
+                }
+            }
+
+            ReleaseAssert(m_numQuickenings < x_maxQuickenings);
+            Quickening& q = m_quickenings[m_numQuickenings];
+            m_numQuickenings++;
+
+            for (size_t i = 0; i < n; i++)
+            {
+                ReleaseAssert(arr[i].m_ord < m_numOperands);
+                ReleaseAssert(arr[i].m_operand.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                size_t ord = arr[i].m_ord;
+                DeegenBytecodeOperandType originalOperandType = m_operandTypes[ord];
+                ReleaseAssert(originalOperandType == DeegenBytecodeOperandType::BytecodeSlot || originalOperandType == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+                if (originalOperandType == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                {
+                    ReleaseAssert(m_base[ord].m_kind == DeegenSpecializationKind::BytecodeSlot);
+                }
+
+                q.value[ord] = arr[i].m_operand;
+            }
+        }
     };
 
     struct OperandRef
@@ -211,6 +267,12 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         ReleaseAssert(m_numVariants < x_maxVariants);
         SpecializedVariant& r = m_variants[m_numVariants];
         m_numVariants++;
+
+        r.m_numOperands = m_numOperands;
+        for (size_t i = 0; i < n; i++)
+        {
+            r.m_operandTypes[i] = m_operandTypes[i].m_type;
+        }
 
         for (size_t i = 0; i < n; i++)
         {

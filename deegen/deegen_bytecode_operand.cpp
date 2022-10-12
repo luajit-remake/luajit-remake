@@ -221,6 +221,19 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             }
 
             LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
+            bool hasDefaultQuickening = variantReader.GetValue<&Desc::SpecializedVariant::m_hasQuickenByDefault>();
+            size_t numQuickenings = variantReader.GetValue<&Desc::SpecializedVariant::m_numQuickenings>();
+            if (hasDefaultQuickening)
+            {
+                def->m_quickeningKind = BytecodeQuickeningKind::LockedQuickening;
+                ReleaseAssert(numQuickenings == 1);
+            }
+            else
+            {
+                def->m_quickeningKind = BytecodeQuickeningKind::NoQuickening;
+                ReleaseAssert(numQuickenings == 0);
+            }
+
             LLVMConstantArrayReader baseReader(module, variantReader.Get<&Desc::SpecializedVariant::m_base>());
             for (size_t opOrd = 0; opOrd < numOperands; opOrd++)
             {
@@ -331,6 +344,26 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             for (size_t i = 0; i < def->m_list.size(); i++)
             {
                 def->m_list[i]->SetOperandOrdinal(i);
+            }
+
+            if (def->m_quickeningKind == BytecodeQuickeningKind::LockedQuickening)
+            {
+                LLVMConstantArrayReader quickeningListReader(module, variantReader.Get<&Desc::SpecializedVariant::m_quickenings>());
+                LLVMConstantStructReader quickeningReaderTmp(module, quickeningListReader.Get<Desc::SpecializedVariant::Quickening>(0 /*ord*/));
+                LLVMConstantArrayReader quickeningReader(module, quickeningReaderTmp.Get<&Desc::SpecializedVariant::Quickening::value>());
+                for (size_t opOrd = 0; opOrd < numOperands; opOrd++)
+                {
+                    SpecializedOperand spOp = readSpecializedOperand(quickeningReader.Get<SpecializedOperand>(opOrd));
+                    if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
+                    {
+                        continue;
+                    }
+                    ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                    ReleaseAssert(def->m_list[opOrd]->GetKind() == BcOperandKind::Slot);
+                    TypeSpeculationMask specMask = SafeIntegerCast<TypeSpeculationMask>(spOp.m_value);
+                    def->m_quickening.push_back({ .m_operandOrd = opOrd, .m_speculatedMask = specMask });
+                }
+                ReleaseAssert(def->m_quickening.size() > 0);
             }
 
             listForCurrentBytecode.push_back(std::move(def));

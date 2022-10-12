@@ -1282,6 +1282,10 @@ struct LLVMRepeatedInliningInhibitor
             {
                 continue;
             }
+            if (func.empty())
+            {
+                continue;
+            }
             if (func.hasFnAttribute(Attribute::AttrKind::AlwaysInline))
             {
                 continue;

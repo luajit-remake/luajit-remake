@@ -255,6 +255,9 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ComparisonOperation, bool shouldBranch, Comparat
     Variant(
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
+    ).QuickenByDefault(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
     );
 }
 

@@ -33,7 +33,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
+    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
     return ifi.DoLowering();
 }
 
@@ -93,7 +93,7 @@ void TestModuleOneCase(Module* moduleIn,
     LLVMContext& ctx = module->getContext();
     Function* func = module->getFunction(expectedFnName);
     ReleaseAssert(func != nullptr);
-    ReleaseAssert(func->arg_size() == 10);
+    ReleaseAssert(func->arg_size() == 16);
     ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
     func->setCallingConv(CallingConv::C);
 
@@ -182,7 +182,7 @@ void TestModuleOneCase(Module* moduleIn,
                 {
                     ReleaseAssert(callee == nullptr);
                     ReleaseAssert(callInst->isMustTailCall());
-                    ReleaseAssert(callInst->arg_size() == 10);
+                    ReleaseAssert(callInst->arg_size() == 16);
                     callInst->setCallingConv(CallingConv::C);
                 }
             }

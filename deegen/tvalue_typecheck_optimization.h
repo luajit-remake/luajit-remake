@@ -176,6 +176,8 @@ public:
     void DoOptimization();
 
     static void DoOptimizationForBytecode(BytecodeVariantDefinition* bvd, llvm::Function* implFunction);
+    static void DoOptimizationForBytecodeQuickeningFastPath(BytecodeVariantDefinition* bvd, llvm::Function* implFunction);
+    static void DoOptimizationForBytecodeQuickeningSlowPath(BytecodeVariantDefinition* bvd, llvm::Function* implFunction);
 
 private:
     llvm::Function* m_targetFunction;
@@ -202,36 +204,34 @@ bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typ
 bool IsTValueTypeCheckStrengthReductionFunction(llvm::Function* func);
 DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, DesugaringLevel level);
 
-struct TValueOperandSpecialization
+struct TypecheckStrengthReductionCandidate;
+
+struct TypeCheckFunctionSelector
 {
-    TValueOperandSpecialization()
-        : m_provenType(x_typeSpeculationMaskFor<tTop>)
-        , m_speculatedType(x_typeSpeculationMaskFor<tTop>)
-    { }
+    TypeCheckFunctionSelector(llvm::Module* module);
+    ~TypeCheckFunctionSelector();
 
-    TValueOperandSpecialization(TypeSpeculationMask provenType)
-        : m_provenType(provenType)
-        , m_speculatedType(provenType)
+    struct QueryResult
     {
-        ReleaseAssert(provenType != 0);
-    }
+        enum Kind
+        {
+            NoSolutionFound,
+            TriviallyTrue,
+            TriviallyFalse,
+            CallFunction,
+            CallFunctionAndFlipResult
+        };
 
-    TValueOperandSpecialization(TypeSpeculationMask provenType, TypeSpeculationMask speculatedType)
-        : m_provenType(provenType)
-        , m_speculatedType(speculatedType)
-    {
-        ReleaseAssert((provenType & speculatedType) == speculatedType);
-        ReleaseAssert(provenType != 0 && speculatedType != 0);
-    }
+        Kind m_opKind;
+        llvm::Function* m_func;
+    };
 
-    bool IsTrivial()
-    {
-        return m_provenType == x_typeSpeculationMaskFor<tTop> && m_speculatedType == x_typeSpeculationMaskFor<tTop>;
-    }
+    QueryResult WARN_UNUSED Query(TypeSpeculationMask maskToCheck, TypeSpeculationMask preconditionMask);
 
-    TypeSpeculationMask m_provenType;
-    TypeSpeculationMask m_speculatedType;
+private:
+    std::pair<llvm::Function*, size_t /*cost*/> FindBestStrengthReduction(TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask);
+
+    std::unique_ptr<std::vector<TypecheckStrengthReductionCandidate>> m_candidateList;
 };
-
 
 }   // namespace dast

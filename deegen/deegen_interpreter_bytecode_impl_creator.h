@@ -13,11 +13,25 @@ public:
     //
     static std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl);
 
+    enum class ProcessKind
+    {
+        // This is the main entry of the bytecode variant
+        //
+        Main,
+        // This is a return continuation
+        // The return continuation additionally has access to 'TValue* retStart' and 'size_t numRets'
+        //
+        ReturnContinuation,
+        // This is a quickened bytecode slow path
+        //
+        QuickeningSlowPath
+    };
+
     // Prepare to create the interpreter function for 'impl'.
     // This function clones the module, so the original module is untouched.
     // The cloned module is owned by this class.
     //
-    InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, bool isReturnContinuation);
+    InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, ProcessKind processKind);
 
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
@@ -27,15 +41,15 @@ public:
     //
     void DoOptimization();
 
-    bool IsReturnContinuation() const { return m_isReturnContinuation; }
+    bool IsReturnContinuation() const { return m_processKind == ProcessKind::ReturnContinuation; }
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
     llvm::Module* GetModule() const { return m_module.get(); }
     llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtx); }
     llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBase); }
     llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecode); }
     llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlock); }
-    llvm::Value* GetRetStart() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_retStart); }
-    llvm::Value* GetNumRet() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_numRet); }
+    llvm::Value* GetRetStart() const { ReleaseAssert(IsReturnContinuation()); return m_valuePreserver.Get(x_retStart); }
+    llvm::Value* GetNumRet() const { ReleaseAssert(IsReturnContinuation()); return m_valuePreserver.Get(x_numRet); }
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
 
@@ -63,13 +77,15 @@ private:
     BytecodeVariantDefinition* m_bytecodeDef;
 
     std::unique_ptr<llvm::Module> m_module;
-    // The return continuation additionally has access to 'TValue* retStart' and 'size_t numRets'
-    //
-    bool m_isReturnContinuation;
+    ProcessKind m_processKind;
 
-    // If 'm_isReturnContinuation' is false, this vector holds the InterpreterBytecodeImplCreator for all the return continuations
+    // If m_processKind == Main, this vector holds the InterpreterBytecodeImplCreator for all the return continuations
     //
     std::vector<std::unique_ptr<InterpreterBytecodeImplCreator>> m_allRetConts;
+
+    // If m_processKind == Main and the bytecode is a quickening one, this holds the slow path
+    //
+    std::unique_ptr<InterpreterBytecodeImplCreator> m_quickeningSlowPath;
 
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;

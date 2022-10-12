@@ -50,7 +50,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     // TODO: add parameter attributes
     //
 
-    ReleaseAssert(func->arg_size() == 10);
+    ReleaseAssert(func->arg_size() == 16);
     Value* coroutineCtx = func->getArg(0);
     coroutineCtx->setName("coroCtx");
     Value* preFixupStackBase = func->getArg(1);

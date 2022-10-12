@@ -29,7 +29,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, false);
+    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
     std::unique_ptr<llvm::Module> res = ifi.DoLowering();
 
     std::string rcName = "__deegen_interpreter_op_test" + std::to_string(testcaseNum) + "_0_retcont_0";

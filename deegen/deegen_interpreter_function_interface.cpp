@@ -82,7 +82,37 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             // R15 [CC/MSABI callee saved]
             // Tag register 2
             //
-            llvm_type_of<uint64_t>(ctx)
+            llvm_type_of<uint64_t>(ctx),
+
+            // XMM1
+            // unused
+            //
+            llvm_type_of<double>(ctx),
+
+            // XMM2
+            // unused
+            //
+            llvm_type_of<double>(ctx),
+
+            // XMM3
+            // unused
+            //
+            llvm_type_of<double>(ctx),
+
+            // XMM4
+            // unused
+            //
+            llvm_type_of<double>(ctx),
+
+            // XMM5
+            // unused
+            //
+            llvm_type_of<double>(ctx),
+
+            // XMM6
+            // unused
+            //
+            llvm_type_of<double>(ctx)
         } /*params*/,
         false /*isVarArg*/);
 }
@@ -125,7 +155,14 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
             /*RDI*/ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            /*R15*/ func->getArg(9)
+            /*R15*/ func->getArg(9),
+            /*XMM 1-6*/
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx))
         },
         "" /*name*/,
         insertBefore);
@@ -163,7 +200,14 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
             /*RDI*/ numRets,
             /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            /*R15*/ func->getArg(9)
+            /*R15*/ func->getArg(9),
+            /*XMM 1-6*/
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx))
         },
         "" /*name*/,
         insertBefore);
@@ -208,7 +252,14 @@ void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePoint
             /*RDI*/ isMustTail64,
             /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            /*R15*/ func->getArg(9)
+            /*R15*/ func->getArg(9),
+            /*XMM 1-6*/
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx)),
+            UndefValue::get(llvm_type_of<double>(ctx))
         },
         "" /*name*/,
         insertBefore);

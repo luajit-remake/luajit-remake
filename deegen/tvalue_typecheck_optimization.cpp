@@ -785,6 +785,76 @@ static std::vector<TypecheckStrengthReductionCandidate> WARN_UNUSED ParseTypeche
     return result;
 }
 
+TypeCheckFunctionSelector::TypeCheckFunctionSelector(llvm::Module* module)
+{
+    m_candidateList = std::make_unique<std::vector<TypecheckStrengthReductionCandidate>>(ParseTypecheckStrengthReductionCandidateList(module));
+}
+
+TypeCheckFunctionSelector::~TypeCheckFunctionSelector() { }
+
+// This function only handles the case where the check cannot be reduced to false to true
+//
+std::pair<llvm::Function*, size_t /*cost*/> TypeCheckFunctionSelector::FindBestStrengthReduction(TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask)
+{
+    using namespace llvm;
+    ReleaseAssert((checkedMask & precondMask) == checkedMask);
+    ReleaseAssert(0 < checkedMask && checkedMask < precondMask);
+    size_t minimumCost = static_cast<size_t>(-1);
+    Function* result = nullptr;
+    for (TypecheckStrengthReductionCandidate& candidate : *m_candidateList.get())
+    {
+        if (candidate.CanBeUsedToImplement(checkedMask, precondMask))
+        {
+            if (candidate.m_estimatedCost < minimumCost)
+            {
+                minimumCost = candidate.m_estimatedCost;
+                result = candidate.m_func;
+            }
+        }
+    }
+    return std::make_pair(result, minimumCost);
+}
+
+TypeCheckFunctionSelector::QueryResult WARN_UNUSED TypeCheckFunctionSelector::Query(TypeSpeculationMask maskToCheck, TypeSpeculationMask preconditionMask)
+{
+    using namespace llvm;
+    maskToCheck &= preconditionMask;
+    if (maskToCheck == 0)
+    {
+        return { .m_opKind = QueryResult::TriviallyFalse, .m_func = nullptr };
+    }
+    else if (maskToCheck == preconditionMask)
+    {
+        return { .m_opKind = QueryResult::TriviallyTrue, .m_func = nullptr };
+    }
+    else
+    {
+        // Do strength reduction
+        // We have two strategies:
+        // 1. Find the best candidate for (checkedMask, provenPreconditionMask)
+        // 2. Find the best candidate for (checkedMask ^ provenPreconditionMask, provenPreconditionMask) and flip the result
+        //
+        std::pair<Function*, size_t> c1 = FindBestStrengthReduction(maskToCheck, preconditionMask);
+        std::pair<Function*, size_t> c2 = FindBestStrengthReduction(maskToCheck ^ preconditionMask, preconditionMask);
+
+        if (c1.second == static_cast<size_t>(-1) && c2.second == static_cast<size_t>(-1))
+        {
+            return { .m_opKind = QueryResult::NoSolutionFound, .m_func = nullptr };
+        }
+
+        if (c1.second <= c2.second)
+        {
+            ReleaseAssert(c1.first != nullptr);
+            return { .m_opKind = QueryResult::CallFunction, .m_func = c1.first };
+        }
+        else
+        {
+            ReleaseAssert(c2.first != nullptr);
+            return { .m_opKind = QueryResult::CallFunctionAndFlipResult, .m_func = c2.first };
+        }
+    }
+}
+
 void TValueTypecheckOptimizationPass::DoOptimization()
 {
     using namespace llvm;
@@ -798,29 +868,7 @@ void TValueTypecheckOptimizationPass::DoOptimization()
 
     LLVMContext& ctx = m_targetFunction->getContext();
 
-    std::vector<TypecheckStrengthReductionCandidate> allStrengthReductionCandidates = ParseTypecheckStrengthReductionCandidateList(m_targetFunction->getParent());
-
-    // This function only handles the case where the check cannot be reduced to false to true
-    //
-    auto findBestStrengthReduction = [&](TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask) -> std::pair<Function*, size_t /*cost*/>
-    {
-        ReleaseAssert((checkedMask & precondMask) == checkedMask);
-        ReleaseAssert(0 < checkedMask && checkedMask < precondMask);
-        size_t minimumCost = static_cast<size_t>(-1);
-        Function* result = nullptr;
-        for (TypecheckStrengthReductionCandidate& candidate : allStrengthReductionCandidates)
-        {
-            if (candidate.CanBeUsedToImplement(checkedMask, precondMask))
-            {
-                if (candidate.m_estimatedCost < minimumCost)
-                {
-                    minimumCost = candidate.m_estimatedCost;
-                    result = candidate.m_func;
-                }
-            }
-        }
-        return std::make_pair(result, minimumCost);
-    };
+    TypeCheckFunctionSelector tcFnSelector(m_targetFunction->getParent());
 
     // Do strength reduction on the TValue typechecks
     //
@@ -837,48 +885,48 @@ void TValueTypecheckOptimizationPass::DoOptimization()
         TypeSpeculationMask checkedMask;
         ReleaseAssert(IsTValueTypeCheckAPIFunction(callInst->getCalledFunction(), &checkedMask /*out*/));
 
-        checkedMask &= provenPreconditionMask;
-        if (checkedMask == 0)
+        TypeCheckFunctionSelector::QueryResult res = tcFnSelector.Query(checkedMask, provenPreconditionMask);
+
+        switch (res.m_opKind)
+        {
+        case TypeCheckFunctionSelector::QueryResult::NoSolutionFound:
+        {
+            ReleaseAssert(false);
+        }
+        case TypeCheckFunctionSelector::QueryResult::TriviallyFalse:
         {
             // Replace to false
             //
             ReplaceInstructionWithValue(callInst, CreateLLVMConstantInt<bool>(ctx, false));
+            break;
         }
-        else if (checkedMask == provenPreconditionMask)
+        case TypeCheckFunctionSelector::QueryResult::TriviallyTrue:
         {
             // Replace to true
             //
             ReplaceInstructionWithValue(callInst, CreateLLVMConstantInt<bool>(ctx, true));
+            break;
         }
-        else
+        case TypeCheckFunctionSelector::QueryResult::CallFunction:
         {
-            // Do strength reduction
-            // We have two strategies:
-            // 1. Find the best candidate for (checkedMask, provenPreconditionMask)
-            // 2. Find the best candidate for (checkedMask ^ provenPreconditionMask, provenPreconditionMask) and flip the result
-            //
-            std::pair<Function*, size_t> choice1 = findBestStrengthReduction(checkedMask, provenPreconditionMask);
-            std::pair<Function*, size_t> choice2 = findBestStrengthReduction(checkedMask ^ provenPreconditionMask, provenPreconditionMask);
-            if (choice1.second <= choice2.second)
-            {
-                Function* newCallee = choice1.first;
-                ReleaseAssert(newCallee != nullptr);
-                callInst->setCalledFunction(newCallee);
-            }
-            else
-            {
-                Function* newCallee = choice2.first;
-                ReleaseAssert(newCallee != nullptr);
-                callInst->setCalledFunction(newCallee);
-                // We cannot directly insert %1 = not %callInst and RAUW since that would replace the operand of our 'not' instruction
-                // So we create the 'not' instruction with a fake operand, then RAUW the callInst, then change the operand of 'not' to callInst
-                //
-                Instruction* xorInst = BinaryOperator::CreateXor(CreateLLVMConstantInt<bool>(ctx, true), CreateLLVMConstantInt<bool>(ctx, true));
-                xorInst->insertAfter(callInst);
-                callInst->replaceAllUsesWith(xorInst);
-                xorInst->setOperand(0, callInst);
-            }
+            ReleaseAssert(res.m_func != nullptr);
+            callInst->setCalledFunction(res.m_func);
+            break;
         }
+        case TypeCheckFunctionSelector::QueryResult::CallFunctionAndFlipResult:
+        {
+            ReleaseAssert(res.m_func != nullptr);
+            callInst->setCalledFunction(res.m_func);
+            // We cannot directly insert %1 = not %callInst and RAUW since that would replace the operand of our 'not' instruction
+            // So we create the 'not' instruction with a fake operand, then RAUW the callInst, then change the operand of 'not' to callInst
+            //
+            Instruction* xorInst = BinaryOperator::CreateXor(CreateLLVMConstantInt<bool>(ctx, true), CreateLLVMConstantInt<bool>(ctx, true));
+            xorInst->insertAfter(callInst);
+            callInst->replaceAllUsesWith(xorInst);
+            xorInst->setOperand(0, callInst);
+            break;
+        }
+        } /*switch opKind*/
     }
 
     // Replace instruction to constants
@@ -1008,6 +1056,100 @@ void TValueTypecheckOptimizationPass::DoOptimization()
     ValidateLLVMFunction(m_targetFunction);
 }
 
+static bool ShouldAddConstraintForTop(BytecodeVariantDefinition* bvd)
+{
+    // Even adding a constraint for 'tTop' can be helpful if the user code already contains redundant type checks
+    // But that could further blow up the total combinations, so we only do it if there are few operands
+    //
+    size_t totalTValueOperands = 0;
+    for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
+    {
+        if (operand->GetKind() == BcOperandKind::Constant || operand->GetKind() == BcOperandKind::Slot)
+        {
+            totalTValueOperands++;
+        }
+    }
+    return totalTValueOperands <= 3;
+}
+
+struct ConstraintAndOperandList
+{
+    std::unique_ptr<TValueTypecheckOptimizationPass::Constraint> m_constraint;
+    std::vector<uint32_t> m_operandList;
+};
+
+static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariantDefinition* bvd, bool forQuickeningFastPath)
+{
+    using AndConstraint = TValueTypecheckOptimizationPass::AndConstraint;
+    using LeafConstraint = TValueTypecheckOptimizationPass::LeafConstraint;
+
+    bool addConstraintForTop = ShouldAddConstraintForTop(bvd);
+
+    if (forQuickeningFastPath)
+    {
+        ReleaseAssert(bvd->m_quickeningKind == BytecodeQuickeningKind::LockedQuickening || bvd->m_quickeningKind == BytecodeQuickeningKind::Quickened || bvd->m_quickeningKind == BytecodeQuickeningKind::QuickeningSelector);
+    }
+
+    std::vector<uint32_t> operandList;
+    std::unique_ptr<AndConstraint> constraint = std::make_unique<AndConstraint>();
+    for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
+    {
+        if (operand->GetKind() != BcOperandKind::Constant && operand->GetKind() != BcOperandKind::Slot)
+        {
+            continue;
+        }
+
+        if (operand->GetKind() == BcOperandKind::Constant)
+        {
+            BcOpConstant* op = assert_cast<BcOpConstant*>(operand.get());
+            TypeSpeculationMask mask = op->m_typeMask;
+            if (addConstraintForTop || mask != x_typeSpeculationMaskFor<tTop>)
+            {
+                constraint->AddClause(std::make_unique<LeafConstraint>(op->OperandOrdinal(), mask /*allowedMask*/));
+                operandList.push_back(static_cast<uint32_t>(op->OperandOrdinal()));
+            }
+        }
+        else
+        {
+            ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
+            TypeSpeculationMask quickeningMask;
+            bool hasQuickeningData = false;
+
+            if (forQuickeningFastPath)
+            {
+                for (auto& quickeningInfo : bvd->m_quickening)
+                {
+                    if (quickeningInfo.m_operandOrd == operand->OperandOrdinal())
+                    {
+                        ReleaseAssert(!hasQuickeningData);
+                        hasQuickeningData = true;
+                        quickeningMask = quickeningInfo.m_speculatedMask;
+                        ReleaseAssert(0 < quickeningMask && quickeningMask < x_typeSpeculationMaskFor<tTop>);
+                    }
+                }
+            }
+
+            if (!hasQuickeningData)
+            {
+                if (addConstraintForTop)
+                {
+                    constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), x_typeSpeculationMaskFor<tTop> /*allowedMask*/));
+                    operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
+                }
+            }
+            else
+            {
+                constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), quickeningMask /*allowedMask*/));
+                operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
+            }
+        }
+    }
+
+    ConstraintAndOperandList r;
+    r.m_constraint = std::move(constraint);
+    r.m_operandList = operandList;
+    return r;
+}
 
 void TValueTypecheckOptimizationPass::DoOptimizationForBytecode(BytecodeVariantDefinition* bvd, llvm::Function* implFunction)
 {
@@ -1015,55 +1157,62 @@ void TValueTypecheckOptimizationPass::DoOptimizationForBytecode(BytecodeVariantD
     TValueTypecheckOptimizationPass pass;
     pass.SetTargetFunction(implFunction);
 
-    // Even adding a constraint for 'tTop' can be helpful if the user code already contains redundant type checks
-    // But that could further blow up the total combinations, so we only do it if there are few operands
+    ConstraintAndOperandList r = CreateBaseConstraint(bvd, false /*forQuickeningFastPath*/);
+    pass.SetOperandList(r.m_operandList);
+    pass.SetConstraint(std::move(r.m_constraint));
+
+    pass.Run();
+}
+
+void TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningFastPath(BytecodeVariantDefinition* bvd, llvm::Function* implFunction)
+{
+    using namespace llvm;
+    TValueTypecheckOptimizationPass pass;
+    pass.SetTargetFunction(implFunction);
+
+    ConstraintAndOperandList r = CreateBaseConstraint(bvd, true /*forQuickeningFastPath*/);
+    pass.SetOperandList(r.m_operandList);
+    pass.SetConstraint(std::move(r.m_constraint));
+
+    pass.Run();
+}
+
+void TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPath(BytecodeVariantDefinition* bvd, llvm::Function* implFunction)
+{
+    using namespace llvm;
+    TValueTypecheckOptimizationPass pass;
+    pass.SetTargetFunction(implFunction);
+
+    ConstraintAndOperandList b = CreateBaseConstraint(bvd, false /*forQuickeningFastPath*/);
+    ConstraintAndOperandList e = CreateBaseConstraint(bvd, true /*forQuickeningFastPath*/);
+
+    // Create joint condition 'b & !e'
     //
-    bool addConstraintForTop = false;
+    std::unique_ptr<AndConstraint> constraint = std::make_unique<AndConstraint>();
+    constraint->AddClause(std::move(b.m_constraint));
+
+    std::unique_ptr<NotConstraint> notE = std::make_unique<NotConstraint>(std::move(e.m_constraint));
+    constraint->AddClause(std::move(notE));
+
+    // The operand list of the joint condition should be the union of the two subconditions
+    //
+    std::set<uint32_t> allOperandOrdSet;
+    for (uint32_t v : b.m_operandList)
     {
-        size_t totalTValueOperands = 0;
-        for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
-        {
-            if (operand->GetKind() == BcOperandKind::Constant || operand->GetKind() == BcOperandKind::Slot)
-            {
-                totalTValueOperands++;
-            }
-        }
-        addConstraintForTop = (totalTValueOperands <= 3);
+        allOperandOrdSet.insert(v);
+    }
+    for (uint32_t v : e.m_operandList)
+    {
+        allOperandOrdSet.insert(v);
+    }
+    std::vector<uint32_t> allOperandOrds;
+    for (uint32_t v : allOperandOrdSet)
+    {
+        allOperandOrds.push_back(v);
     }
 
-    {
-        std::vector<uint32_t> operandList;
-        std::unique_ptr<AndConstraint> constraint = std::make_unique<AndConstraint>();
-        for (std::unique_ptr<BcOperand>& operand : bvd->m_list)
-        {
-            if (operand->GetKind() != BcOperandKind::Constant && operand->GetKind() != BcOperandKind::Slot)
-            {
-                continue;
-            }
-
-            if (operand->GetKind() == BcOperandKind::Constant)
-            {
-                BcOpConstant* op = assert_cast<BcOpConstant*>(operand.get());
-                TypeSpeculationMask mask = op->m_typeMask;
-                if (addConstraintForTop || mask != x_typeSpeculationMaskFor<tTop>)
-                {
-                    constraint->AddClause(std::make_unique<LeafConstraint>(op->OperandOrdinal(), mask /*allowedMask*/));
-                    operandList.push_back(static_cast<uint32_t>(op->OperandOrdinal()));
-                }
-            }
-            else
-            {
-                ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
-                if (addConstraintForTop)
-                {
-                    constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), x_typeSpeculationMaskFor<tTop> /*allowedMask*/));
-                    operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
-                }
-            }
-        }
-        pass.SetOperandList(operandList);
-        pass.SetConstraint(std::move(constraint));
-    }
+    pass.SetOperandList(allOperandOrds);
+    pass.SetConstraint(std::move(constraint));
 
     pass.Run();
 }

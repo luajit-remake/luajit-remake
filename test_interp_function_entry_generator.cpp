@@ -192,7 +192,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
     Function* func = module->getFunction(ifi.GetFunctionName());
     ReleaseAssert(func != nullptr);
     ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
-    ReleaseAssert(func->arg_size() == 10);
+    ReleaseAssert(func->arg_size() == 16);
     func->setCallingConv(CallingConv::C);
 
     for (BasicBlock& bb : *func)
@@ -206,7 +206,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
                 {
                     ReleaseAssert(callInst->getCalledFunction() == nullptr);
                     ReleaseAssert(callInst->isMustTailCall());
-                    ReleaseAssert(callInst->arg_size() == 10);
+                    ReleaseAssert(callInst->arg_size() == 16);
                     callInst->setCallingConv(CallingConv::C);
                 }
             }
