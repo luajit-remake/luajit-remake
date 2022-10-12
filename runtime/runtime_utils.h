@@ -697,17 +697,28 @@ inline double WARN_UNUSED ModulusWithLuaSemantics(double a, double b)
     return m;
 }
 
+struct DoBinaryOperationConsideringStringConversionResult
+{
+    bool success;
+    double result;
+};
+
 // Lua allows crazy things like "1 " + " 0xf " (which yields 16): string can be silently converted to number (ignoring whitespace) when
 // performing an arithmetic operation. This function does this job. 'func' must be a lambda (double, double) -> double
 //
-inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, LuaMetamethodKind opKind)
+inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE TryDoBinaryOperationConsideringStringConversion(TValue lhs, TValue rhs, LuaMetamethodKind opKind)
 {
-    double lhsNumber;
-    if (lhs.IsDouble())
+    if (likely(!lhs.Is<tString>() && !rhs.Is<tString>()))
     {
-        lhsNumber = lhs.AsDouble();
+        return { .success = false };
     }
-    else if (lhs.IsPointer() && lhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::String)
+
+    double lhsNumber;
+    if (lhs.Is<tDouble>())
+    {
+        lhsNumber = lhs.As<tDouble>();
+    }
+    else if (lhs.Is<tString>())
     {
         HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -717,20 +728,20 @@ inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringCo
         }
         else
         {
-            return {};
+            return { .success = false };
         }
     }
     else
     {
-        return {};
+        return { .success = false };
     }
 
     double rhsNumber;
-    if (rhs.IsDouble())
+    if (rhs.Is<tDouble>())
     {
-        rhsNumber = rhs.AsDouble();
+        rhsNumber = rhs.As<tDouble>();
     }
-    else if (rhs.IsPointer() && rhs.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::String)
+    else if (rhs.Is<tString>())
     {
         HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
@@ -740,12 +751,12 @@ inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringCo
         }
         else
         {
-            return {};
+            return { .success = false };
         }
     }
     else
     {
-        return {};
+        return { .success = false };
     }
 
     // This is fine: string to integer coercion is already slow enough..
@@ -754,17 +765,17 @@ inline std::optional<double> WARN_UNUSED TryDoBinaryOperationConsideringStringCo
     switch (opKind)
     {
     case LuaMetamethodKind::Add:
-        return lhsNumber + rhsNumber;
+        return { .success = true, .result = lhsNumber + rhsNumber };
     case LuaMetamethodKind::Sub:
-        return lhsNumber - rhsNumber;
+        return { .success = true, .result = lhsNumber - rhsNumber };
     case LuaMetamethodKind::Mul:
-        return lhsNumber * rhsNumber;
+        return { .success = true, .result = lhsNumber * rhsNumber };
     case LuaMetamethodKind::Div:
-        return lhsNumber / rhsNumber;
+        return { .success = true, .result = lhsNumber / rhsNumber };
     case LuaMetamethodKind::Mod:
-        return ModulusWithLuaSemantics(lhsNumber, rhsNumber);
+        return { .success = true, .result = ModulusWithLuaSemantics(lhsNumber, rhsNumber) };
     case LuaMetamethodKind::Pow:
-        return pow(lhsNumber, rhsNumber);
+        return { .success = true, .result = pow(lhsNumber, rhsNumber) };
     default:
         assert(false);
         __builtin_unreachable();

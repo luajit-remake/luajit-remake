@@ -57,7 +57,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(opKind), icInfo /*out*/);
                 metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(opKind).As<void>(), icInfo);
-                if (likely(!metamethod.IsNil()))
+                if (likely(!metamethod.Is<tNil>()))
                 {
                     goto do_metamethod_call;
                 }
@@ -67,10 +67,10 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         // Handle case that lhs/rhs are number or string that can be converted to number
         //
         {
-            std::optional<double> res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, opKind);
-            if (res)
+            DoBinaryOperationConsideringStringConversionResult res = TryDoBinaryOperationConsideringStringConversion(lhs, rhs, opKind);
+            if (unlikely(res.success))
             {
-                Return(TValue::CreateDouble(res.value()));
+                Return(TValue::Create<tDouble>(res.result));
             }
         }
 
@@ -79,7 +79,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         // TODO: this could have been better since we already know lhs is not a table with metatable
         //
         metamethod = GetMetamethodForBinaryArithmeticOperation(lhs, rhs, opKind);
-        if (metamethod.IsNil())
+        if (metamethod.Is<tNil>())
         {
             // TODO: make this error consistent with Lua
             //
