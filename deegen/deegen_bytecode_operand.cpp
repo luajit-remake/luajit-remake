@@ -221,9 +221,9 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             }
 
             LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
-            bool hasDefaultQuickening = variantReader.GetValue<&Desc::SpecializedVariant::m_hasQuickenByDefault>();
+            bool enableHCS = variantReader.GetValue<&Desc::SpecializedVariant::m_enableHCS>();
             size_t numQuickenings = variantReader.GetValue<&Desc::SpecializedVariant::m_numQuickenings>();
-            if (hasDefaultQuickening)
+            if (enableHCS)
             {
                 def->m_quickeningKind = BytecodeQuickeningKind::LockedQuickening;
                 ReleaseAssert(numQuickenings == 1);

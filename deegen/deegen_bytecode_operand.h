@@ -432,7 +432,7 @@ enum class BytecodeQuickeningKind
     // This variant is a normal variant
     //
     NoQuickening,
-    // This variant is used to implement default quickening assumptions
+    // This variant is used to implement default quickening assumptions (hot-cold splitting)
     // That is, the logic of this variant is same as 'Quickened', except that it will never de-quicken itself.
     //
     LockedQuickening,

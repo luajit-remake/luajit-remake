@@ -154,21 +154,21 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         template<typename... Args>
         consteval SpecializedVariant& QuickenTo(Args... args)
         {
-            ReleaseAssert(!m_hasQuickenByDefault && "this function call must not be used together with 'QuickeningByDefault'.");
+            ReleaseAssert(!m_enableHCS && "this function call must not be used together with 'EnableHotColdSplitting'.");
             AddNewQuickening(args...);
             return *this;
         }
 
         template<typename... Args>
-        consteval SpecializedVariant& QuickenByDefault(Args... args)
+        consteval SpecializedVariant& EnableHotColdSplitting(Args... args)
         {
             ReleaseAssert(m_numQuickenings == 0 && "this function call must not be used together with 'QuickenTo'.");
-            m_hasQuickenByDefault = true;
+            m_enableHCS = true;
             AddNewQuickening(args...);
             return *this;
         }
 
-        bool m_hasQuickenByDefault;
+        bool m_enableHCS;
         size_t m_numQuickenings;
         size_t m_numOperands;
         DeegenBytecodeOperandType m_operandTypes[x_maxOperands];
