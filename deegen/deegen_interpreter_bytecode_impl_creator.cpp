@@ -8,6 +8,7 @@
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_ast_simple_lowering_utils.h"
 #include "tag_register_optimization.h"
+#include "llvm_fcmp_extra_optimizations.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -609,6 +610,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // Run LLVM optimization pass
     //
     RunLLVMOptimizePass(m_module.get());
+
+    // Run our homebrewed simple rewrite passes (targetting some insufficiencies of LLVM's optimizations of FCmp) after the main LLVM optimization pass
+    //
+    DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
 
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: our caller will fix up the linkage for us.
