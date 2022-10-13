@@ -614,6 +614,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // Run our homebrewed simple rewrite passes (targetting some insufficiencies of LLVM's optimizations of FCmp) after the main LLVM optimization pass
     //
     DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
+    DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(m_module.get());
 
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: our caller will fix up the linkage for us.

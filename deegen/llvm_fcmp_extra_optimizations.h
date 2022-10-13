@@ -34,6 +34,7 @@ void DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(llvm::Module* module);
 // It turns out that the second fcmp must be in the following form in order to make the backend happy:
 // (1) The two operands must be in the same order as the first 'fcmp'
 // (2) The fcmp keyword must be a 'o' comparison, not a 'u' comparison
+// (3) The fcmp keyword must be a 'g' or 'ne' comparison, not a 'l' or 'eq' comparison
 // Only in that case can LLVM backend realize that it can omit the second 'ucomisd'. So we implement a pass to make that always the case.
 //
 // Note that another alternative is to identify the pattern and replace it with the following inline assembly:
