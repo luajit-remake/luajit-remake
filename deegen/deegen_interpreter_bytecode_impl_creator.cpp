@@ -638,6 +638,30 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     if (m_processKind == ProcessKind::Main)
     {
         // If we are the main function, we need to link in all the return continuations, and possibly the quickening slowpath
+        //
+
+        // Link in the quickening slow path if needed
+        // We link in the quickening slow path before the return continuations so that related code stay closer to each other.
+        // Though I guess the benefit of doing this is minimal, it doesn't hurt either, and it makes the assembly dump more readable..
+        //
+        ReleaseAssertIff(m_bytecodeDef->HasQuickeningSlowPath(), m_quickeningSlowPath.get() != nullptr);
+        if (m_bytecodeDef->HasQuickeningSlowPath())
+        {
+            std::unique_ptr<Module> spModule = m_quickeningSlowPath->DoOptimizationAndLowering();
+            std::string expectedSpName = m_quickeningSlowPath->m_resultFuncName;
+            ReleaseAssert(expectedSpName == GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName));
+            ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
+            ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
+
+            Linker linker(*m_module.get());
+            // linkInModule returns true on error
+            //
+            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+            ReleaseAssert(m_module->getFunction(expectedSpName) != nullptr);
+            ReleaseAssert(!m_module->getFunction(expectedSpName)->empty());
+        }
+
         // Note that some of the return continuations could be dead (due to optimizations), however, since return continuations
         // may arbitrarily call each other, we cannot know a return continuation is dead until we have linked in all the return continuations.
         // So first we need to link in all return continuations.
@@ -664,26 +688,6 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
             ReleaseAssert(m_module->getFunction(expectedRcName) != nullptr);
             ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
-        }
-
-        // Link in the quickening slow path if needed
-        //
-        ReleaseAssertIff(m_bytecodeDef->HasQuickeningSlowPath(), m_quickeningSlowPath.get() != nullptr);
-        if (m_bytecodeDef->HasQuickeningSlowPath())
-        {
-            std::unique_ptr<Module> spModule = m_quickeningSlowPath->DoOptimizationAndLowering();
-            std::string expectedSpName = m_quickeningSlowPath->m_resultFuncName;
-            ReleaseAssert(expectedSpName == GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName));
-            ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
-            ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
-
-            Linker linker(*m_module.get());
-            // linkInModule returns true on error
-            //
-            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
-
-            ReleaseAssert(m_module->getFunction(expectedSpName) != nullptr);
-            ReleaseAssert(!m_module->getFunction(expectedSpName)->empty());
         }
 
         // Now, having linked in all return continuations and the quickening slow path, we can strip dead return continuations by
