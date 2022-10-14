@@ -130,9 +130,13 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(EqualityOperation, bool compareForNotEqual, bool
     );
     Result(shouldBranch ? ConditionalBranch : BytecodeValue);
     Implementation(EqualityOperationImpl<compareForNotEqual, shouldBranch>);
+    // TODO: we need quickening since we want to dynamically specialize for double, not-double, and maybe table
     Variant(
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
+    ).EnableHotColdSplitting(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
     );
     Variant(
         Op("lhs").IsBytecodeSlot(),

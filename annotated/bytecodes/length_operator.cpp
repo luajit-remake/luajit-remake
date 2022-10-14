@@ -73,6 +73,7 @@ DEEGEN_DEFINE_BYTECODE(LengthOf)
     );
     Result(BytecodeValue);
     Implementation(LengthOperatorImpl);
+    // TODO: we need quickening since we want to dynamically specialize for tString and tTable
     Variant();
 }
 

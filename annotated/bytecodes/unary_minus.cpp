@@ -68,7 +68,7 @@ DEEGEN_DEFINE_BYTECODE(UnaryMinus)
     );
     Result(BytecodeValue);
     Implementation(UnaryMinusImpl);
-    Variant();
+    Variant().EnableHotColdSplitting(Op("input").HasType<tDouble>());
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

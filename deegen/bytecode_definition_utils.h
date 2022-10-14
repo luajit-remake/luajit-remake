@@ -152,8 +152,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         };
 
         template<typename... Args>
-        consteval SpecializedVariant& QuickenTo(Args... args)
+        consteval SpecializedVariant& AddQuickeningCandidate(Args... args)
         {
+            // TODO: this is not implemented yet..
+            //
             ReleaseAssert(!m_enableHCS && "this function call must not be used together with 'EnableHotColdSplitting'.");
             AddNewQuickening(args...);
             return *this;
@@ -162,7 +164,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         template<typename... Args>
         consteval SpecializedVariant& EnableHotColdSplitting(Args... args)
         {
-            ReleaseAssert(m_numQuickenings == 0 && "this function call must not be used together with 'QuickenTo'.");
+            ReleaseAssert(m_numQuickenings == 0 && "this function call must not be used together with 'AddQuickeningCandidate'.");
             m_enableHCS = true;
             AddNewQuickening(args...);
             return *this;
@@ -269,7 +271,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         m_numVariants++;
 
         r.m_numOperands = m_numOperands;
-        for (size_t i = 0; i < n; i++)
+        for (size_t i = 0; i < m_numOperands; i++)
         {
             r.m_operandTypes[i] = m_operandTypes[i].m_type;
         }
