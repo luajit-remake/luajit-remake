@@ -4,7 +4,6 @@
 # Only the CPP files to be compiled to LLVM IR are in this directory.
 #
 SET(DEEGEN_UNIT_TEST_IR_SOURCES
-  switch_case.cpp
   bytecode_definition_api.cpp
   llvm_constant_parser.cpp
   proven_type_specialization.cpp

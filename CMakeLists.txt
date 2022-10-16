@@ -186,7 +186,6 @@ set(UNIT_TEST_SRC
   test_object_array_part.cpp
   test_lua_programs.cpp
   test_table_object_iterator.cpp
-  test_annotation_switch_case.cpp
   test_dump_type_speculation.cpp
   test_llvm_constant_parser.cpp
   test_proven_type_specialization.cpp
