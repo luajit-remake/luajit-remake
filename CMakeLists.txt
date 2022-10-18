@@ -196,6 +196,8 @@ set(UNIT_TEST_SRC
   test_interp_function_entry_generator.cpp
   test_user_lib_func_lowering.cpp
   test_throw_error_api_lowering.cpp
+  test_inline_cache_api_parser.cpp
+  test_lambda_capture_parser.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES

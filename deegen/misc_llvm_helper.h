@@ -23,6 +23,7 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/IR/DebugInfo.h"
 
 #include "cxx_symbol_demangler.h"
 #include "deegen_desugaring_level.h"
