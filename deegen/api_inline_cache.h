@@ -6,7 +6,6 @@
 struct ICHandler;
 template<typename ICKeyType> struct ICHandlerKeyRef;
 
-ICHandler* WARN_UNUSED __attribute__((__nomerge__)) DeegenImpl_MakeIC_Start();
 template<typename ICKeyType> ICHandlerKeyRef<ICKeyType>* DeegenImpl_MakeIC_AddKey(ICHandler* ic, ICKeyType icKey);
 template<typename ICKeyType> void DeegenImpl_MakeIC_SetICKeyImpossibleValue(ICHandlerKeyRef<ICKeyType>* ickey, ICKeyType value);
 template<typename ResType> ResType DeegenImpl_MakeIC_SetMainLambda(ICHandler* ic, const void* cp, const void* fpp);

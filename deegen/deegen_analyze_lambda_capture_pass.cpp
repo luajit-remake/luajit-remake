@@ -70,7 +70,7 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
 
         bool m_populated;
         CaptureKind m_captureKind;
-        AllocaInst* m_localVarAlloca;
+        Value* m_value;
         size_t m_ordInParentCapture;
     };
 
@@ -168,7 +168,7 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
                 //
                 info[captureIdx].m_populated = true;
                 info[captureIdx].m_captureKind = CaptureKind::ByRefCaptureOfLocalVar;
-                info[captureIdx].m_localVarAlloca = cast<AllocaInst>(vo);
+                info[captureIdx].m_value = cast<AllocaInst>(vo);
                 continue;
             }
 
@@ -184,7 +184,7 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
                     //
                     info[captureIdx].m_populated = true;
                     info[captureIdx].m_captureKind = CaptureKind::ByValueCaptureOfLocalVar;
-                    info[captureIdx].m_localVarAlloca = cast<AllocaInst>(from);
+                    info[captureIdx].m_value = vo;
                     continue;
                 }
 
@@ -262,9 +262,13 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
                 // The IR did a memcpy to copy the contents of an alloca into the capture
                 // So this is a by-value capture of a local variable
                 //
+                // Unfortunately since the value is copied by a memcpy in the IR, which
+                // cannot be referenced, we need to manually create a load to indicate that value.
+                //
+                Value* val = new LoadInst(cast<AllocaInst>(vo)->getAllocatedType(), vo, "", callInst /*insertBefore*/);
                 info[captureIdx].m_populated = true;
                 info[captureIdx].m_captureKind = CaptureKind::ByValueCaptureOfLocalVar;
-                info[captureIdx].m_localVarAlloca = cast<AllocaInst>(vo);
+                info[captureIdx].m_value = val;
                 continue;
             }
 
@@ -349,7 +353,7 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
         annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(captureKind)));
         if (captureKind == CaptureKind::ByRefCaptureOfLocalVar || captureKind == CaptureKind::ByValueCaptureOfLocalVar)
         {
-            annotationFnArgs.push_back(info[i].m_localVarAlloca);
+            annotationFnArgs.push_back(info[i].m_value);
         }
         else
         {
@@ -382,6 +386,57 @@ void DeegenAnalyzeLambdaCapturePass::AddAnnotations(llvm::Module* module)
         }
     }
     ValidateLLVMModule(module);
+}
+
+void DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(llvm::Module* module)
+{
+    using namespace llvm;
+    std::unordered_set<Instruction*> instsToRemove;
+    for (Function& func : *module)
+    {
+        for (BasicBlock& bb : func)
+        {
+            for (Instruction& inst : bb)
+            {
+                CallInst* callInst = dyn_cast<CallInst>(&inst);
+                if (callInst != nullptr)
+                {
+                    Function* callee = callInst->getCalledFunction();
+                    if (callee != nullptr)
+                    {
+                        if (IsAnnotationFunction(callee->getName().str()))
+                        {
+                            ReleaseAssert(llvm_value_has_type<void>(callInst));
+                            ReleaseAssert(callInst->use_empty());
+                            ReleaseAssert(!instsToRemove.count(callInst));
+                            instsToRemove.insert(callInst);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (Instruction* inst : instsToRemove)
+    {
+        ReleaseAssert(inst->use_empty());
+        inst->eraseFromParent();
+    }
+
+    for (Function& func : *module)
+    {
+        if (IsAnnotationFunction(func.getName().str()))
+        {
+            ReleaseAssert(func.use_empty());
+        }
+    }
+
+    RunLLVMDeadGlobalElimination(module);
+
+    for (Function& func : *module)
+    {
+        ReleaseAssert(!IsAnnotationFunction(func.getName().str()));
+    }
 }
 
 }   // namespace dast

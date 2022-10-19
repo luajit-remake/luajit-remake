@@ -9,7 +9,7 @@
 
 using namespace llvm;
 using namespace dast;
-#if 0
+
 namespace {
 
 struct TestHelper
@@ -25,6 +25,7 @@ struct TestHelper
         // DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
     }
 
+#if 0
     void CheckIsExpected(std::string functionName, std::string suffix = "")
     {
         DesugarAndSimplifyLLVMModule(moduleHolder.get(), DesugarUpToExcluding(DesugaringLevel::PerFunctionSimplifyOnly));
@@ -33,6 +34,7 @@ struct TestHelper
         std::string dump = DumpLLVMModuleAsString(module.get());
         AssertIsExpectedOutput(dump, suffix);
     }
+#endif
 
     std::unique_ptr<LLVMContext> llvmCtxHolder;
     std::unique_ptr<Module> moduleHolder;
@@ -48,11 +50,14 @@ TEST(DeegenAst, InlineCacheAPIParser_1)
     Module* module = helper.moduleHolder.get();
 
     DeegenAnalyzeLambdaCapturePass::AddAnnotations(module);
-    module->dump();
-    // AstInlineCache::PreprocessModule(module);
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+    AstInlineCache::PreprocessModule(module);
+    DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(module);
+
+    // module->dump();
 
     // Function* targetFunction = module->getFunction(functionName);
     // ReleaseAssert(targetFunction != nullptr);
 
 }
-#endif
+

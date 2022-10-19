@@ -1,6 +1,9 @@
 #include "deegen_ast_inline_cache.h"
+#include "deegen_analyze_lambda_capture_pass.h"
 
 namespace dast {
+
+namespace {
 
 // Get the lambda function from the passed-in lambda_functor_member_pointer_pointer_v value
 //
@@ -34,11 +37,14 @@ static llvm::Function* WARN_UNUSED GetLambdaFunctionFromPtrPtr(llvm::Value* lamb
     return result;
 }
 
-constexpr const char* x_createIcInitPlaceholderFunctionPrefix = "__DeegenInternal_AstGetInlineCachePtr_IdentificationFunc_";
-constexpr const char* x_createIcBodyPlaceholderFunctionPrefix = "__DeegenInternal_AstCreateIC_IdentificationFunc_";
+constexpr const char* x_createIcInitPlaceholderFunctionPrefix = "__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_";
+constexpr const char* x_createIcBodyPlaceholderFunctionPrefix = "__DeegenInternal_AstIC_Body_IdentificationFunc_";
+constexpr const char* x_createIcRegisterEffectPlaceholderFunctionPrefix = "__DeegenInternal_AstIC_RegisterEffect_IdentificationFunc_";
 constexpr const char* x_icEffectPlaceholderFunctionPrefix = "__DeegenInternal_AstICEffect_IdentificationFunc_";
 constexpr const char* x_icBodyClosureWrapperFunctionPrefix = "__deegen_inline_cache_body_";
-// constexpr const char* x_icEffectClosureWrapperFunctionPrefix = "__deegen_inline_cache_effect_";
+constexpr const char* x_icEffectClosureWrapperFunctionPrefix = "__deegen_inline_cache_effect_";
+constexpr const char* x_decodeICStateToEffectLambdaCaptureFunctionPrefix = "__deegen_inline_cache_decode_ic_state_";
+constexpr const char* x_encodeICStateFunctionPrefix = "__deegen_inline_cache_encode_ic_state_";
 
 static std::string WARN_UNUSED GetFirstAvailableFunctionNameWithPrefix(llvm::Module* module, const std::string& prefix)
 {
@@ -54,55 +60,6 @@ static std::string WARN_UNUSED GetFirstAvailableFunctionNameWithPrefix(llvm::Mod
         suffixOrd++;
     }
     return decidedName;
-}
-
-static llvm::Function* WARN_UNUSED CreatePlaceholderFunctionForCreateICInit(llvm::Module* module)
-{
-    using namespace llvm;
-    LLVMContext& ctx = module->getContext();
-    std::string decidedName = GetFirstAvailableFunctionNameWithPrefix(module, x_createIcInitPlaceholderFunctionPrefix);
-    FunctionType* fty = FunctionType::get(llvm_type_of<void*>(ctx) /*result*/, { } /*args*/, false /*isVarArg*/);
-    Function* func = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, decidedName, module);
-    ReleaseAssert(func->getName().str() == decidedName);
-    func->addFnAttr(Attribute::AttrKind::NoUnwind);
-    return func;
-}
-
-static llvm::Function* WARN_UNUSED CreatePlaceholderFunctionForCreateICBody(llvm::Module* module, llvm::Type* keyType, std::vector<llvm::Type*> closureArgTypes, llvm::Type* resType)
-{
-    using namespace llvm;
-    LLVMContext& ctx = module->getContext();
-    std::string decidedName = GetFirstAvailableFunctionNameWithPrefix(module, x_createIcBodyPlaceholderFunctionPrefix);
-
-    std::vector<Type*> argTypes;
-    argTypes.push_back(keyType);
-    argTypes.push_back(keyType);
-    argTypes.push_back(llvm_type_of<void*>(ctx));
-    for (Type* t : closureArgTypes) { argTypes.push_back(t); }
-
-    FunctionType* fty = FunctionType::get(resType /*result*/, argTypes, false /*isVarArg*/);
-    Function* func = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, decidedName, module);
-    ReleaseAssert(func->getName().str() == decidedName);
-    func->addFnAttr(Attribute::AttrKind::NoUnwind);
-    return func;
-}
-
-static llvm::Function* WARN_UNUSED CreatePlaceholderFunctionForICEffect(llvm::Module* module, llvm::Type* resType)
-{
-    using namespace llvm;
-    LLVMContext& ctx = module->getContext();
-    std::string decidedName = GetFirstAvailableFunctionNameWithPrefix(module, x_icEffectPlaceholderFunctionPrefix);
-
-    std::vector<Type*> argTypes;
-    argTypes.push_back(llvm_type_of<void*>(ctx));
-    argTypes.push_back(llvm_type_of<void*>(ctx));
-    argTypes.push_back(llvm_type_of<void*>(ctx));
-
-    FunctionType* fty = FunctionType::get(resType /*result*/, argTypes, false /*isVarArg*/);
-    Function* func = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, decidedName, module);
-    ReleaseAssert(func->getName().str() == decidedName);
-    func->addFnAttr(Attribute::AttrKind::NoUnwind);
-    return func;
 }
 
 // This transform transforms a closure (a function with a capture) to a normal function call.
@@ -263,6 +220,281 @@ static RewriteClosureToFunctionCallResult WARN_UNUSED RewriteClosureToFunctionCa
     };
 }
 
+struct PreprocessIcEffectApiResult
+{
+    llvm::CallInst* m_annotationInst;
+    llvm::Function* m_annotationFn;
+    llvm::Function* m_effectWrapperFn;
+    std::vector<llvm::Value*> m_mainFunctionCapturedValues;
+};
+
+static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
+    llvm::Module* module,
+    llvm::CallInst* origin,
+    std::map<size_t /*ordInCaptureStruct*/, std::pair<DeegenAnalyzeLambdaCapturePass::CaptureKind, llvm::Value*>> icCaptureInfo)
+{
+    using namespace llvm;
+    using CaptureKind = DeegenAnalyzeLambdaCapturePass::CaptureKind;
+    LLVMContext& ctx = module->getContext();
+    ReleaseAssert(origin->arg_size() == 3);
+    Value* captureV = origin->getArgOperand(1);
+    ReleaseAssert(llvm_value_has_type<void*>(captureV));
+    ReleaseAssert(isa<AllocaInst>(captureV));
+    AllocaInst* capture = cast<AllocaInst>(captureV);
+    Value* lambdaPtrPtr = origin->getArgOperand(2);
+    ReleaseAssert(llvm_value_has_type<void*>(lambdaPtrPtr));
+    Function* lambda = GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
+
+    // Figure out the capture info of the effect lambda
+    //
+    CallInst* captureInfoCall = DeegenAnalyzeLambdaCapturePass::GetLambdaCaptureInfo(capture);
+    ReleaseAssert(captureInfoCall != nullptr);
+    ReleaseAssert(captureInfoCall->arg_size() % 3 == 1);
+
+    std::map<size_t /*ordInCaptureStruct*/, Value*> effectFnLocalCaptures;
+    std::map<size_t /*ordInCaptureStruct*/, std::pair<CaptureKind, uint64_t /*ordInClosureCaptureStruct*/>> effectFnParentCaptures;
+
+    for (uint32_t i = 1; i < captureInfoCall->arg_size(); i += 3)
+    {
+        Value* arg1 = captureInfoCall->getArgOperand(i);
+        Value* arg2 = captureInfoCall->getArgOperand(i + 1);
+        Value* arg3 = captureInfoCall->getArgOperand(i + 2);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(arg1));
+        ReleaseAssert(llvm_value_has_type<uint64_t>(arg2));
+        uint64_t ordInCaptureStruct = GetValueOfLLVMConstantInt<uint64_t>(arg1);
+        CaptureKind captureKind = GetValueOfLLVMConstantInt<CaptureKind>(arg2);
+        ReleaseAssert(captureKind < CaptureKind::Invalid);
+
+        ReleaseAssert(!effectFnLocalCaptures.count(ordInCaptureStruct));
+        ReleaseAssert(!effectFnParentCaptures.count(ordInCaptureStruct));
+
+        // The IC body lambda should be defined in the bytecode function, so it naturally should not
+        // have any capture of the "enclosing lambda"
+        //
+        if (captureKind == CaptureKind::ByRefCaptureOfLocalVar)
+        {
+            fprintf(stderr, "[ERROR] The IC effect lambda must capture values defined in the IC body lambda by value, not by reference!\n");
+            abort();
+        }
+        if (captureKind == CaptureKind::ByValueCaptureOfLocalVar)
+        {
+            effectFnLocalCaptures[ordInCaptureStruct] = arg3;
+        }
+        else
+        {
+            ReleaseAssert(llvm_value_has_type<uint64_t>(arg3));
+            uint64_t ordInParentCapture = GetValueOfLLVMConstantInt<uint64_t>(arg3);
+            effectFnParentCaptures[ordInCaptureStruct] = std::make_pair(captureKind, ordInParentCapture);
+        }
+    }
+
+    // Create the IC effect wrapper function
+    // It should take the IC state (containing all the values defined and captured in the IC body)
+    // and a list of parameters representing the list of values transitively captured in the main function
+    //
+    std::vector<Type*> icEffectWrapperFnArgTys;
+    icEffectWrapperFnArgTys.push_back(llvm_type_of<void*>(ctx));
+    std::vector<std::pair<size_t /*ordInCapture*/, Value*>> capturedValuesInMainFn;
+    for (auto& it : effectFnParentCaptures)
+    {
+        size_t ordInCaptureStruct = it.first;
+        CaptureKind ck = it.second.first;
+        size_t ordInParentCapture = it.second.second;
+
+        ReleaseAssert(icCaptureInfo.count(ordInParentCapture));
+        CaptureKind parentCk = icCaptureInfo[ordInParentCapture].first;
+        Value* parentCv = icCaptureInfo[ordInParentCapture].second;
+
+        switch (ck)
+        {
+        case CaptureKind::ByRefCaptureOfLocalVar:
+        case CaptureKind::ByValueCaptureOfLocalVar:
+        case CaptureKind::Invalid:
+        {
+            ReleaseAssert(false);
+        }
+        case CaptureKind::ByRefCaptureOfByValue:
+        case CaptureKind::ByValueCaptureOfByRef:
+        {
+            ReleaseAssertImp(ck == CaptureKind::ByRefCaptureOfByValue, parentCk == CaptureKind::ByValueCaptureOfLocalVar);
+            ReleaseAssertImp(ck == CaptureKind::ByValueCaptureOfByRef, parentCk == CaptureKind::ByRefCaptureOfLocalVar);
+            // There's no problem with supporting these two cases, but for now we choose
+            // to lock it down because these use cases don't make sense:
+            // (1) If the IC body is capturing some state by value (which means it's already const)
+            // what is the point of the IC effect lambda to capture this constant by reference?
+            // (2) Similarly, if the IC body is capturing some state by reference (which means either
+            // it's a large struct or the IC intends to change it), then the IC effect lambda
+            // should also capture it by reference, because the IC effect lambda is the only logic
+            // that is allowed to change its value.
+            //
+            // Also, locking them down removes some case-discussion to create our wrapper function.
+            //
+            fprintf(stderr, "If the IC effect lambda captures some value captured by the IC body lambda, "
+                            "the captures should either be both by value, or be both by reference! (see comment above)\n");
+            abort();
+        }
+        case CaptureKind::SameCaptureKindAsEnclosingLambda:
+        {
+            break;
+        }
+        } /* switch ck */
+        ReleaseAssert(ck == CaptureKind::SameCaptureKindAsEnclosingLambda);
+
+        if (parentCk == CaptureKind::ByRefCaptureOfLocalVar)
+        {
+            ReleaseAssert(isa<AllocaInst>(parentCv));
+        }
+        else
+        {
+            ReleaseAssert(parentCk == CaptureKind::ByValueCaptureOfLocalVar);
+        }
+
+        // Since the capture kind in the IC body lambda is the same as the IC effect lambda,
+        // there is no need to dereference any pointer to load the value. We are just passing the value around.
+        //
+        capturedValuesInMainFn.push_back(std::make_pair(ordInCaptureStruct, parentCv));
+        icEffectWrapperFnArgTys.push_back(parentCv->getType());
+    }
+
+    FunctionType* effectWrapperFnTy = FunctionType::get(origin->getType() /*result*/, icEffectWrapperFnArgTys, false /*isVarArg*/);
+    std::string effectWrapperFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icEffectClosureWrapperFunctionPrefix);
+    Function* effectWrapperFn = Function::Create(effectWrapperFnTy, GlobalValue::InternalLinkage, effectWrapperFnName, module);
+    ReleaseAssert(effectWrapperFn->getName().str() == effectWrapperFnName);
+    effectWrapperFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    CopyFunctionAttributes(effectWrapperFn, lambda);
+
+    // Create the body of the effect wrapper
+    // Basically what we need to do is to create the closure capture expected by the effect lambda, then call the effect lambda
+    //
+    BasicBlock* entryBlock = BasicBlock::Create(ctx, "", effectWrapperFn);
+    ReleaseAssert(isa<StructType>(capture->getAllocatedType()));
+    StructType* captureST = cast<StructType>(capture->getAllocatedType());
+    AllocaInst* ai = new AllocaInst(captureST, 0 /*addrSpace*/, "", entryBlock);
+
+    // Create a decode function placeholder to populate the IC state into the capture
+    // Future lowering logic will lower this call to concrete logic
+    //
+    std::vector<Value*> decoderFnArgs;
+    decoderFnArgs.push_back(ai);
+    decoderFnArgs.push_back(effectWrapperFn->getArg(0 /*icState*/));
+    for (auto& it : effectFnLocalCaptures)
+    {
+        size_t ordInCapture = it.first;
+        decoderFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, ordInCapture));
+    }
+    std::vector<Type*> decoderFnArgTys;
+    for (Value* val : decoderFnArgs)
+    {
+        decoderFnArgTys.push_back(val->getType());
+    }
+    FunctionType* decoderFnTy = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, decoderFnArgTys, false /*isVarArg*/);
+    std::string decoderFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_decodeICStateToEffectLambdaCaptureFunctionPrefix);
+    Function* decoderFn = Function::Create(decoderFnTy, GlobalValue::ExternalLinkage, decoderFnName, module);
+    ReleaseAssert(decoderFn->getName().str() == decoderFnName);
+    decoderFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    CallInst::Create(decoderFn, decoderFnArgs, "", entryBlock);
+
+    // Now, populate every value from the main function into the lambda
+    //
+    for (size_t i = 0; i < capturedValuesInMainFn.size(); i++)
+    {
+        size_t ordInStruct = capturedValuesInMainFn[i].first;
+        Value* src = effectWrapperFn->getArg(static_cast<uint32_t>(i + 1));
+        ReleaseAssert(ordInStruct < captureST->getNumElements());
+        ReleaseAssert(src->getType() == captureST->getElementType(static_cast<uint32_t>(ordInStruct)));
+        GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
+            captureST, ai,
+            {
+                CreateLLVMConstantInt<uint64_t>(ctx, 0),
+                // LLVM requires struct index to be 32-bit (other width won't work!), so this must be uint32_t
+                //
+                CreateLLVMConstantInt<uint32_t>(ctx, static_cast<uint32_t>(ordInStruct))
+            },
+            "", entryBlock);
+        new StoreInst(src, gep, entryBlock);
+    }
+
+    // At this stage we have the capture expected by the effect lambda, so we can call it now
+    //
+    ReleaseAssert(lambda->arg_size() == 1);
+    ReleaseAssert(llvm_value_has_type<void*>(lambda->getArg(0)));
+    ReleaseAssert(lambda->getReturnType() == effectWrapperFn->getReturnType());
+    CallInst* ci = CallInst::Create(lambda, { ai },  "", entryBlock);
+    if (llvm_value_has_type<void>(ci))
+    {
+        ReturnInst::Create(ctx, nullptr /*returnVoid*/, entryBlock);
+    }
+    else
+    {
+        ReturnInst::Create(ctx, ci, entryBlock);
+    }
+
+    ValidateLLVMFunction(effectWrapperFn);
+
+    // Create the placeholder for the IC state encoding function
+    //
+    std::vector<Type*> encoderFnArgTys;
+    encoderFnArgTys.push_back(llvm_type_of<void*>(ctx) /*out*/);
+    for (auto& it : effectFnLocalCaptures)
+    {
+        Value* val = it.second;
+        encoderFnArgTys.push_back(val->getType());
+    }
+    FunctionType* encoderFnTy = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, encoderFnArgTys, false /*isVarArgs*/);
+    std::string encoderFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_encodeICStateFunctionPrefix);
+    Function* encoderFn = Function::Create(encoderFnTy, GlobalValue::ExternalLinkage, encoderFnName, module);
+    ReleaseAssert(encoderFn->getName().str() == encoderFnName);
+    encoderFn->addFnAttr(Attribute::NoUnwind);
+
+    // Finally, rewrite the origin CallInst so all the information are conveyed
+    //
+    std::vector<Value*> annotationFnArgs;
+    annotationFnArgs.push_back(origin->getArgOperand(0) /*icPtr*/);
+    annotationFnArgs.push_back(capture);
+    annotationFnArgs.push_back(lambda);
+    annotationFnArgs.push_back(effectWrapperFn);
+    annotationFnArgs.push_back(decoderFn);
+    annotationFnArgs.push_back(encoderFn);
+    annotationFnArgs.push_back(CreateLLVMConstantInt(ctx, effectFnLocalCaptures.size()) /*numValuesInIcState*/);
+    for (auto& it : effectFnLocalCaptures)
+    {
+        Value* val = it.second;
+        annotationFnArgs.push_back(val);
+    }
+    std::vector<Type*> annotationFnArgTys;
+    for (Value* val : annotationFnArgs)
+    {
+        annotationFnArgTys.push_back(val->getType());
+    }
+    std::string annotationFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icEffectPlaceholderFunctionPrefix);
+    FunctionType* annotationFnTy = FunctionType::get(lambda->getReturnType(), annotationFnArgTys, false /*isVarArgs*/);
+    Function* annotationFn = Function::Create(annotationFnTy, GlobalValue::ExternalLinkage, annotationFnName, module);
+    ReleaseAssert(annotationFn->getName().str() == annotationFnName);
+    annotationFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    CallInst* replacement = CallInst::Create(annotationFn, annotationFnArgs, "", origin);
+    ReleaseAssert(replacement->getType() == origin->getType());
+    if (!llvm_value_has_type<void>(origin))
+    {
+        origin->replaceAllUsesWith(replacement);
+    }
+    ReleaseAssert(origin->use_empty());
+    origin->eraseFromParent();
+
+    ValidateLLVMFunction(replacement->getFunction());
+
+    // Construct the result
+    //
+    PreprocessIcEffectApiResult res;
+    res.m_annotationInst = replacement;
+    res.m_annotationFn = annotationFn;
+    res.m_effectWrapperFn = effectWrapperFn;
+    for (auto& it : capturedValuesInMainFn)
+    {
+        res.m_mainFunctionCapturedValues.push_back(it.second);
+    }
+    return res;
+}
+
 static void PreprocessCreateIcApi(llvm::CallInst* origin)
 {
     using namespace llvm;
@@ -316,7 +548,11 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         // Replace the callee by a unique function, to prevent the optimizer from merging calls
         // We already used '__nomerge__' attribute to prevent it from happening, but doesn't hurt to be 100% safe by just unique them here
         //
-        Function* uniqueInitFn = CreatePlaceholderFunctionForCreateICInit(module);
+        std::string icInitFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_createIcInitPlaceholderFunctionPrefix);
+        FunctionType* icInitFnTy = FunctionType::get(llvm_type_of<void*>(ctx) /*result*/, { } /*args*/, false /*isVarArg*/);
+        Function* uniqueInitFn = Function::Create(icInitFnTy, GlobalValue::LinkageTypes::ExternalLinkage, icInitFnName, module);
+        ReleaseAssert(uniqueInitFn->getName().str() == icInitFnName);
+        uniqueInitFn->addFnAttr(Attribute::AttrKind::NoUnwind);
         ReleaseAssert(def->getFunctionType() == uniqueInitFn->getFunctionType());
         def->setCalledFunction(uniqueInitFn);
     }
@@ -343,11 +579,15 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
             //
             CallInst* icApiCall = dyn_cast<CallInst>(usr);
             ReleaseAssert(icApiCall != nullptr);
+            Function* apiFn = icApiCall->getCalledFunction();
+            if (apiFn != nullptr && DeegenAnalyzeLambdaCapturePass::IsAnnotationFunction(apiFn->getName().str()))
+            {
+                continue;
+            }
 
             // We always pass 'ic' as the first parameter in all APIs, so we can simply assert it's the first param.
             //
             ReleaseAssert(&u == &icApiCall->getOperandUse(0));
-            Function* apiFn = icApiCall->getCalledFunction();
             ReleaseAssert(apiFn != nullptr);
             ReleaseAssert(IsCXXSymbol(apiFn->getName().str()));
             std::string symName = DemangleCXXSymbol(apiFn->getName().str());
@@ -428,6 +668,215 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     //
     origin->setArgOperand(1, UndefValue::get(llvm_type_of<void*>(ctx)));
 
+    ReleaseAssert(isa<StructType>(closureAlloca->getAllocatedType()));
+    StructType* closureAllocaST = cast<StructType>(closureAlloca->getAllocatedType());
+
+    // Now, the only CallInst use of 'closurePtr' should be the dummy call that conveys the lambda capture info,
+    // inserted by the AnalyzeLambdaCapture pass. Locate that call and retrieve the info.
+    //
+    using CaptureKind = DeegenAnalyzeLambdaCapturePass::CaptureKind;
+    CallInst* lambdaInfoDummyCall = DeegenAnalyzeLambdaCapturePass::GetLambdaCaptureInfo(closureAlloca);
+    ReleaseAssert(lambdaInfoDummyCall != nullptr);
+    ReleaseAssert(lambdaInfoDummyCall->arg_size() % 3 == 1);
+    ReleaseAssert(lambdaInfoDummyCall->getArgOperand(0) == closureAlloca);
+
+    std::map<size_t /*ordInCaptureStruct*/, std::pair<CaptureKind, Value*>> icCaptureInfo;
+    for (uint32_t i = 1; i < lambdaInfoDummyCall->arg_size(); i += 3)
+    {
+        Value* arg1 = lambdaInfoDummyCall->getArgOperand(i);
+        Value* arg2 = lambdaInfoDummyCall->getArgOperand(i + 1);
+        Value* arg3 = lambdaInfoDummyCall->getArgOperand(i + 2);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(arg1));
+        ReleaseAssert(llvm_value_has_type<uint64_t>(arg2));
+        uint64_t ordInCaptureStruct = GetValueOfLLVMConstantInt<uint64_t>(arg1);
+        CaptureKind captureKind = GetValueOfLLVMConstantInt<CaptureKind>(arg2);
+        ReleaseAssert(captureKind < CaptureKind::Invalid);
+
+        // The IC body lambda should be defined in the bytecode function, so it naturally should not
+        // have any capture of the "enclosing lambda"
+        //
+        if (captureKind != CaptureKind::ByValueCaptureOfLocalVar && captureKind != CaptureKind::ByRefCaptureOfLocalVar)
+        {
+            fprintf(stderr, "[ERROR] The IC body lambda should be defined in a function, not in another lambda!\n");
+            abort();
+        }
+
+        ReleaseAssert(ordInCaptureStruct < closureAllocaST->getStructNumElements());
+        if (captureKind == CaptureKind::ByValueCaptureOfLocalVar)
+        {
+            ReleaseAssert(arg3->getType() == closureAllocaST->getElementType(static_cast<uint32_t>(ordInCaptureStruct)));
+        }
+        else
+        {
+            ReleaseAssert(llvm_type_has_type<void*>(closureAllocaST->getElementType(static_cast<uint32_t>(ordInCaptureStruct))));
+        }
+
+        ReleaseAssert(!icCaptureInfo.count(ordInCaptureStruct));
+        icCaptureInfo[ordInCaptureStruct] = std::make_pair(captureKind, arg3);
+    }
+
+    // Having parsed the capture info, we can remove the dummy call
+    //
+    ReleaseAssert(lambdaInfoDummyCall->use_empty());
+    lambdaInfoDummyCall->eraseFromParent();
+    lambdaInfoDummyCall = nullptr;
+
+    // Now, preprocess the dependent IC API calls in the lambda body
+    // Currently the only API that we need to preprocess is the 'Effect' API call
+    //
+    // The rewrite looks like the following: before we have
+    //     function icEffect(%0) {
+    //         ...
+    //     }
+    //     /* IC body */
+    //     %capture = alloca ...
+    //     ... build capture ...
+    //     MarkICEffect(icEffect, capture)
+    //
+    // And we want to create a wrapper of 'icEffect' that is suitable for being called directly from the main function.
+    //
+    // Note that the capture can contains values that are defined in the IC body, or defined in the main function
+    // and transitively captured by the IC body.
+    // For the first kind, our protocol is that they should be treated as constants in future IC-hit executions.
+    // For the second kind, our protocol is that they should see the fresh value in future IC-hit executions.
+    //
+    // So we want to create a struct that contains only the constant part (which is effectively the state of an IC entry),
+    // and create the wrapper that creates the struct, and the wrapper that runs the IC effect function based on the
+    // struct and the main function state.
+    //
+    // To do this, we first figure out which captured values are from the IC body lambda, and which are from the main function.
+    // Then we create two declarations:
+    //    function encodeIcCapture(%icState, %allocas...)
+    // which parameters contains all the values captured in the IC body, and serializes them into the state of one IC entry.
+    //
+    // We create another function
+    //    function decodeICCapture(%originalCapture, %icState, %ord...)
+    // where 'icState' is the output of 'encodeIcCapture', 'originalCapture' is the original lambda capture, 'ord' is the
+    // list of element offsets that maps the values in 'icState' to 'originalCapture'. The function will read the state
+    // of the IC entry, and populate the lambda capture expected by the IC effect lambda.
+    //
+    // Then we add the following annotation: before 'MarkICEffect' we add
+    //     AnnotateICEffectCapture(%allocas...)
+    // future lowering will lower this call to the concrete logic that set up the IC entry.
+    //
+    // and before the IC body call in the main function we add
+    //     AnnotateICEffect(run_effect_wrapper, %ssa...)
+    // which tells us how to run each IC effect from the main function.
+    //
+    // The run_effect_wrapper will be a wrapper function:
+    //     function run_effect_wrapper(%icState, %valuesInMainFn)
+    //         %originalCapture = alloca ...
+    //         ... populate originalCapture using valuesInMainFn to populate the values defined in the main function...
+    //         # call decodeICCapture to populate the values defined in the IC body
+    //         call decodeICCapture(%originalCapture, %icState, %ord...)
+    //         # now we can call the original IC effect lambda. LLVM optimizer will inline it and clean up all the code.
+    //         %res = call icEffect(%originalCapture)
+    //
+
+    std::vector<CallInst*> effectCalls;
+    {
+        // First, find out the capture that corresponds to our ic pointer
+        //
+        size_t icPtrOrd = static_cast<size_t>(-1);
+        for (auto& it : icCaptureInfo)
+        {
+            size_t ord = it.first;
+            Value* val = it.second.second;
+            CaptureKind ck = it.second.first;
+            if (val == ic)
+            {
+                ReleaseAssert(icPtrOrd == static_cast<size_t>(-1));
+                icPtrOrd = ord;
+                ReleaseAssert(ck == CaptureKind::ByValueCaptureOfLocalVar);
+            }
+        }
+        if (icPtrOrd == static_cast<size_t>(-1))
+        {
+            fprintf(stderr, "Failed to locate IC pointer in the IC body. Did you forget to capture it, or captured it by reference?\n");
+            abort();
+        }
+
+        // Now, figure out all the IC::Effect calls
+        //
+        llvm::DataLayout dataLayout(module);
+        const llvm::StructLayout* closureAllocaSL = dataLayout.getStructLayout(closureAllocaST);
+        uint64_t icPtrOffsetBytesInCapture = closureAllocaSL->getElementOffset(static_cast<uint32_t>(icPtrOrd));
+
+        for (BasicBlock& bb : *lambdaFunc)
+        {
+            for (Instruction& inst : bb)
+            {
+                CallInst* ci = dyn_cast<CallInst>(&inst);
+                if (ci != nullptr)
+                {
+                    Function* callee = ci->getCalledFunction();
+                    if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                    {
+                        std::string symName = DemangleCXXSymbol(callee->getName().str());
+                        if (symName.find(" DeegenImpl_MakeIC_MarkEffect<") != std::string::npos)
+                        {
+                            ReleaseAssert(ci->arg_size() == 3);
+                            Value* val = ci->getArgOperand(0);
+                            ReleaseAssert(llvm_value_has_type<void*>(val));
+                            ReleaseAssert(isa<LoadInst>(val));
+                            LoadInst* li = cast<LoadInst>(val);
+                            Value* po = li->getPointerOperand();
+                            if (po == lambdaFunc->getArg(0))
+                            {
+                                ReleaseAssert(icPtrOffsetBytesInCapture == 0);
+                            }
+                            else
+                            {
+                                ReleaseAssert(isa<GetElementPtrInst>(po));
+                                GetElementPtrInst* gi = cast<GetElementPtrInst>(po);
+                                APInt offset(64 /*numBits*/, 0);
+                                ReleaseAssert(gi->accumulateConstantOffset(dataLayout, offset /*out*/));
+                                ReleaseAssert(offset.getZExtValue() == icPtrOffsetBytesInCapture);
+                            }
+                            ReleaseAssert(ci->getType() == origin->getType());
+                            effectCalls.push_back(ci);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Process each of the effect call found
+    //
+    for (CallInst* effectCall : effectCalls)
+    {
+        PreprocessIcEffectApiResult res = PreprocessIcEffectApi(module, effectCall, icCaptureInfo);
+
+        // Annotate the info of the IC effect in the main function
+        //
+        std::vector<Value*> icEffectAnnotationArgs;
+        icEffectAnnotationArgs.push_back(ic);
+        icEffectAnnotationArgs.push_back(res.m_annotationFn);
+        icEffectAnnotationArgs.push_back(res.m_effectWrapperFn);
+        for (Value* val : res.m_mainFunctionCapturedValues)
+        {
+            icEffectAnnotationArgs.push_back(val);
+        }
+        std::vector<Type*> icEffectAnnotationArgTys;
+        for (Value* val : icEffectAnnotationArgs)
+        {
+            icEffectAnnotationArgTys.push_back(val->getType());
+        }
+
+        FunctionType* icEffectAnnotationFty = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, icEffectAnnotationArgTys, false /*isVarArg*/);
+        std::string annotationFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_createIcRegisterEffectPlaceholderFunctionPrefix);
+        Function* icEffectAnnotationFn = Function::Create(icEffectAnnotationFty, GlobalValue::ExternalLinkage, annotationFnName, module);
+        ReleaseAssert(icEffectAnnotationFn->getName().str() == annotationFnName);
+        icEffectAnnotationFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+
+        CallInst::Create(icEffectAnnotationFn, icEffectAnnotationArgs, "", origin);
+    }
+
+    // Now, rewrite the IC body from a lambda to a normal function.
+    // The IC body is the slow path which probably won't be inlined. This rewrite reduces the overhead of this
+    // slowpath call and probably also reduces code size.
+    //
     std::string wrapperFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icBodyClosureWrapperFunctionPrefix);
     RewriteClosureToFunctionCallResult rr = RewriteClosureToFunctionCall(lambdaFunc, closureAlloca, wrapperFnName);
 
@@ -438,15 +887,28 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     Type* resType = origin->getType();
     ReleaseAssert(resType == lambdaFunc->getReturnType());
     ReleaseAssert(resType == closureWrapper->getReturnType());
-    Function* idFn = CreatePlaceholderFunctionForCreateICBody(module, icKey->getType(), closureArgTys, resType);
     CallInst* replacement;
     {
         std::vector<Value*> icBodyArgs;
+        icBodyArgs.push_back(ic);
         icBodyArgs.push_back(icKey);
         icBodyArgs.push_back(icKeyImpossibleValue);
         icBodyArgs.push_back(closureWrapper);
         for (Value* val : rr.m_args) { icBodyArgs.push_back(val); }
-        replacement = CallInst::Create(idFn, icBodyArgs, "", origin /*insertBefore*/);
+
+        std::vector<Type*> icBodyArgTys;
+        for (Value* val : icBodyArgs)
+        {
+            icBodyArgTys.push_back(val->getType());
+        }
+
+        FunctionType* icBodyAnnotationFty = FunctionType::get(resType, icBodyArgTys, false /*isVarArg*/);
+        std::string icBodyAnnotationFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_createIcBodyPlaceholderFunctionPrefix);
+        Function* icBodyAnnotationFn = Function::Create(icBodyAnnotationFty, GlobalValue::ExternalLinkage, icBodyAnnotationFnName, module);
+        ReleaseAssert(icBodyAnnotationFn->getName().str() == icBodyAnnotationFnName);
+        icBodyAnnotationFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+
+        replacement = CallInst::Create(icBodyAnnotationFn, icBodyArgs, "", origin /*insertBefore*/);
     }
 
     ReleaseAssert(replacement->getType() == origin->getType());
@@ -454,10 +916,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     {
         origin->replaceAllUsesWith(replacement);
     }
-    else
-    {
-        ReleaseAssert(origin->use_empty());
-    }
+    ReleaseAssert(origin->use_empty());
 
     // Remove all the API function calls as they have been processed by us and are no longer useful
     //
@@ -484,36 +943,12 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     ValidateLLVMFunction(originFn);
 }
 
-static void PreprocessIcEffectApi(llvm::Module* module, llvm::CallInst* origin)
-{
-    using namespace llvm;
-    ReleaseAssert(origin->arg_size() == 3);
-    Value* ic = origin->getArgOperand(0);
-    ReleaseAssert(llvm_value_has_type<void*>(ic));
-    Value* closurePtr = origin->getArgOperand(1);
-    ReleaseAssert(llvm_value_has_type<void*>(closurePtr));
-    Value* lambdaPtrPtr = origin->getArgOperand(2);
-    ReleaseAssert(llvm_value_has_type<void*>(lambdaPtrPtr));
-    Function* lambda = GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
-    Function* idFn = CreatePlaceholderFunctionForICEffect(module, origin->getType());
-    CallInst* replacement = CallInst::Create(idFn, { ic, closurePtr, lambda}, "", origin /*insertBefore*/);
-    ReleaseAssert(replacement->getType() == origin->getType());
-    if (!llvm_value_has_type<void>(replacement))
-    {
-        origin->replaceAllUsesWith(replacement);
-    }
-    else
-    {
-        ReleaseAssert(origin->use_empty());
-    }
-    origin->eraseFromParent();
-}
+}   // anonymous namespace
 
 void AstInlineCache::PreprocessModule(llvm::Module* module)
 {
     using namespace llvm;
     std::vector<CallInst*> createIcApis;
-    std::vector<CallInst*> icEffectApis;
     for (Function& func : *module)
     {
         for (BasicBlock& bb : func)
@@ -531,10 +966,6 @@ void AstInlineCache::PreprocessModule(llvm::Module* module)
                         {
                             createIcApis.push_back(callInst);
                         }
-                        else if (symName.find(" DeegenImpl_MakeIC_MarkEffect<") != std::string::npos)
-                        {
-                            icEffectApis.push_back(callInst);
-                        }
                     }
                 }
             }
@@ -546,14 +977,35 @@ void AstInlineCache::PreprocessModule(llvm::Module* module)
         PreprocessCreateIcApi(origin);
     }
 
-    for (CallInst* origin: icEffectApis)
-    {
-        PreprocessIcEffectApi(module, origin);
-    }
-
     ValidateLLVMModule(module);
 
     DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+
+    // Scan through the module again, just to make sure that all the APIs we want to process has been processed
+    //
+    for (Function& func : *module)
+    {
+        for (BasicBlock& bb : func)
+        {
+            for (Instruction& inst : bb)
+            {
+                CallInst* callInst = dyn_cast<CallInst>(&inst);
+                if (callInst != nullptr)
+                {
+                    Function* callee = callInst->getCalledFunction();
+                    if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                    {
+                        std::string symName = DemangleCXXSymbol(callee->getName().str());
+                        ReleaseAssert(symName.find(" DeegenImpl_MakeIC_SetMainLambda<") == std::string::npos);
+                        ReleaseAssert(symName.find(" DeegenImpl_MakeIC_MarkEffect<") == std::string::npos);
+                        ReleaseAssert(symName.find(" DeegenImpl_MakeIC_AddKey<") == std::string::npos);
+                        ReleaseAssert(symName.find(" DeegenImpl_MakeIC_SetICKeyImpossibleValue<") == std::string::npos);
+                        ReleaseAssert(symName != "MakeInlineCache()");
+                    }
+                }
+            }
+        }
+    }
 }
 
 #if 0

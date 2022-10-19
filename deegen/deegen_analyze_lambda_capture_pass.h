@@ -73,6 +73,31 @@ struct DeegenAnalyzeLambdaCapturePass
         return true;
     }
 
+    static llvm::CallInst* WARN_UNUSED GetLambdaCaptureInfo(llvm::AllocaInst* capture)
+    {
+        using namespace llvm;
+        CallInst* result = nullptr;
+        for (Use& u : capture->uses())
+        {
+            User* usr = u.getUser();
+            if (isa<CallInst>(usr))
+            {
+                CallInst* ci = cast<CallInst>(usr);
+                if (ci->getCalledFunction() != nullptr)
+                {
+                    if (IsAnnotationFunction(ci->getCalledFunction()->getName().str()))
+                    {
+                        ReleaseAssert(result == nullptr);
+                        result = ci;
+                        ReleaseAssert(&u == &result->getArgOperandUse(0 /*argOrd*/));
+                    }
+                }
+            }
+        }
+        ReleaseAssert(result != nullptr);
+        return result;
+    }
+
     static constexpr const char* x_annotationFnPrefix = "__deegen_analyzer_annotate_lambda_capture_info_";
 };
 

@@ -15,11 +15,11 @@ namespace {
 
 struct CaptureDesc
 {
-    CaptureDesc() : m_ordInCaptureStruct(static_cast<size_t>(-1)), m_captureKind(CaptureKind::Invalid), m_localVar(nullptr), m_ordInParent(static_cast<size_t>(-1)) { }
+    CaptureDesc() : m_ordInCaptureStruct(static_cast<size_t>(-1)), m_captureKind(CaptureKind::Invalid), m_value(nullptr), m_ordInParent(static_cast<size_t>(-1)) { }
 
     size_t m_ordInCaptureStruct;
     CaptureKind m_captureKind;
-    llvm::AllocaInst* m_localVar;
+    llvm::Value* m_value;
     size_t m_ordInParent;
 };
 
@@ -79,11 +79,15 @@ struct TestHelper
             desc.m_ordInCaptureStruct = ordInStruct;
             desc.m_captureKind = captureKind;
 
-            if (captureKind == CaptureKind::ByRefCaptureOfLocalVar || captureKind == CaptureKind::ByValueCaptureOfLocalVar)
+            if (captureKind == CaptureKind::ByRefCaptureOfLocalVar)
             {
                 ReleaseAssert(llvm_value_has_type<void*>(arg3));
                 ReleaseAssert(isa<AllocaInst>(arg3));
-                desc.m_localVar = cast<AllocaInst>(arg3);
+                desc.m_value = cast<AllocaInst>(arg3);
+            }
+            else if (captureKind == CaptureKind::ByValueCaptureOfLocalVar)
+            {
+                desc.m_value = arg3;
             }
             else
             {
