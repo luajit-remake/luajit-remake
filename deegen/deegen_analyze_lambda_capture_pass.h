@@ -16,8 +16,9 @@ namespace dast {
 //         The ord in the capture struct. Due to padding, some elements in the capture struct represent padding, thus will not show up
 //     CaptureKind captureKind:
 //         See enum 'CaptureKind'.
-//     ptr/i64 value:
-//         If 'captureKind' is a local var capture kind, this is a ptr parameter, which is the AllocaInst of the local variable.
+//     val/ptr/i64 value:
+//         If 'captureKind' is a local var by-value capture, this is the value of the capture.
+//         If 'captureKind' is a local var by-ref capture, this is a ptr, which is the AllocaInst of the local variable.
 //         Otherwise, this is a i64 parameter, which is the ordinal in the capture of the enclosing lambda.
 //
 struct DeegenAnalyzeLambdaCapturePass
@@ -35,7 +36,7 @@ struct DeegenAnalyzeLambdaCapturePass
         //
         ByValueCaptureOfByRef,
         // This is a capture that captures a capture of the enclosing lambda.
-        // The enclosing lambda captured some value by reference, while the current lambda captured that value by value
+        // The enclosing lambda captured some value by value, while the current lambda captured that value by reference
         //
         ByRefCaptureOfByValue,
         // This is a capture that captures a capture of the enclosing lambda.
