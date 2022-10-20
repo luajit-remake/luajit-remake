@@ -42,8 +42,6 @@ struct ICHandler
     template<typename LambdaType>
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Body(const LambdaType& lambda)
     {
-        static_assert(std::is_trivially_copy_constructible_v<LambdaType>, "The lambda may only capture trivially-copyable classes!");
-        static_assert(std::is_trivially_destructible_v<LambdaType>, "The lambda may not capture classes with non-trivial destructor!");
         using ResType = std::invoke_result_t<LambdaType>;
         static_assert(std::is_trivial_v<ResType>);
         return DeegenImpl_MakeIC_SetMainLambda<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
@@ -65,8 +63,6 @@ struct ICHandler
     template<typename LambdaType>
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Effect(const LambdaType& lambda)
     {
-        static_assert(std::is_trivially_copy_constructible_v<LambdaType>, "The lambda may only capture trivially-copyable classes!");
-        static_assert(std::is_trivially_destructible_v<LambdaType>, "The lambda may not capture classes with non-trivial destructor!");
         using ResType = std::invoke_result_t<LambdaType>;
         static_assert(std::is_trivial_v<ResType>);
         return DeegenImpl_MakeIC_MarkEffect<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));

@@ -1,0 +1,33 @@
+; ModuleID = 'extracted_ir'
+source_filename = "/home/u/project/annotated/unit_test/ic_api_sanity.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
+; Function Attrs: mustprogress nounwind uwtable
+define dso_local i32 @testfn1(i32 noundef %0) local_unnamed_addr #0 {
+  %2 = call noundef ptr @__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_0() #3
+  %3 = call i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr %2, i32 %0, i32 123, ptr nonnull @__deegen_inline_cache_body_0, ptr %2, i32 %0)
+  ret i32 %3
+}
+
+; Function Attrs: nounwind
+declare ptr @__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_0() local_unnamed_addr #1
+
+; Function Attrs: nounwind
+declare dso_local i32 @__deegen_inline_cache_body_0(ptr, i32) #2
+
+; Function Attrs: nounwind
+declare i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr, i32, i32, ptr, ptr, i32) local_unnamed_addr #1
+
+attributes #0 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { nomerge nounwind }
+
+!llvm.linker.options = !{}
+!llvm.module.flags = !{!0, !1}
+!llvm.ident = !{!2}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}

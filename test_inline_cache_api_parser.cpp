@@ -25,16 +25,12 @@ struct TestHelper
         // DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
     }
 
-#if 0
-    void CheckIsExpected(std::string functionName, std::string suffix = "")
+    void CheckIsExpected(llvm::Function* func, std::string suffix = "")
     {
-        DesugarAndSimplifyLLVMModule(moduleHolder.get(), DesugarUpToExcluding(DesugaringLevel::PerFunctionSimplifyOnly));
-
-        std::unique_ptr<Module> module = ExtractFunction(moduleHolder.get(), functionName, true /*ignoreLinkageIssues*/);
+        std::unique_ptr<Module> module = ExtractFunction(moduleHolder.get(), func->getName().str(), true /*ignoreLinkageIssues*/);
         std::string dump = DumpLLVMModuleAsString(module.get());
         AssertIsExpectedOutput(dump, suffix);
     }
-#endif
 
     std::unique_ptr<LLVMContext> llvmCtxHolder;
     std::unique_ptr<Module> moduleHolder;
@@ -53,11 +49,24 @@ TEST(DeegenAst, InlineCacheAPIParser_1)
     DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
     AstInlineCache::PreprocessModule(module);
     DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(module);
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
 
-    // module->dump();
+    Function* targetFunction = module->getFunction(functionName);
+    ReleaseAssert(targetFunction != nullptr);
+    std::vector<AstInlineCache> list = AstInlineCache::GetAllUseInFunction(targetFunction);
+    ReleaseAssert(list.size() == 1);
+    AstInlineCache& ic = list[0];
+    ReleaseAssert(ic.m_effects.size() == 1);
+    ReleaseAssert(ic.m_effectValues.size() == 1);
+    ReleaseAssert(ic.m_setUncacheableApiCalls.size() == 0);
+    ReleaseAssert(ic.m_icKeyImpossibleValueMaybeNull != nullptr);
+    ReleaseAssert(llvm_value_has_type<uint32_t>(ic.m_icKeyImpossibleValueMaybeNull));
+    ReleaseAssert(GetValueOfLLVMConstantInt<uint32_t>(ic.m_icKeyImpossibleValueMaybeNull) == 123);
 
-    // Function* targetFunction = module->getFunction(functionName);
-    // ReleaseAssert(targetFunction != nullptr);
+    ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
+    ic.m_effects[0].m_effectFnMain->setLinkage(GlobalValue::ExternalLinkage);
 
+    helper.CheckIsExpected(targetFunction, "mainFn");
+    helper.CheckIsExpected(ic.m_bodyFn, "icBody");
+    helper.CheckIsExpected(ic.m_effects[0].m_effectFnMain, "icEffectWrapper");
 }
-

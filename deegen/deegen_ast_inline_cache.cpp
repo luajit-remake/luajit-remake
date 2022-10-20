@@ -99,6 +99,10 @@ static RewriteClosureToFunctionCallResult WARN_UNUSED RewriteClosureToFunctionCa
     std::vector<std::function<void(Value* newAlloca, Value* arg, BasicBlock* bb)>> rewriteFns;
     std::vector<Value*> closureRewriteArgs;
 
+    // TODO: ideally we should identify word-sized structs which only element is a double, and pass them in FPR
+    // for less overhead (I believe if the struct is passed directly it's going to be in GPR but I'm not fully sure).
+    // However, currently we don't have such use case so we ignore it for now.
+    //
     for (Use& u : capture->uses())
     {
         User* usr = u.getUser();
@@ -140,6 +144,9 @@ static RewriteClosureToFunctionCallResult WARN_UNUSED RewriteClosureToFunctionCa
             ReleaseAssert(u.getOperandNo() == gep->getPointerOperandIndex());
             ReleaseAssert(gep->hasOneUse());
             User* gepUser = *gep->user_begin();
+            // TODO: this is incomplete. For struct >8 bytes LLVM may generate a memcpy, and we should handle this case for completeness
+            // However, we don't have this use case right now so we ignore it.
+            //
             ReleaseAssert(isa<StoreInst>(gepUser));
             StoreInst* si = cast<StoreInst>(gepUser);
             ReleaseAssert(si->getPointerOperand() == gep);
@@ -802,6 +809,26 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         const llvm::StructLayout* closureAllocaSL = dataLayout.getStructLayout(closureAllocaST);
         uint64_t icPtrOffsetBytesInCapture = closureAllocaSL->getElementOffset(static_cast<uint32_t>(icPtrOrd));
 
+        auto assertOperandIsIcPtr = [&dataLayout, lambdaFunc, icPtrOffsetBytesInCapture](Value* val)
+        {
+            ReleaseAssert(llvm_value_has_type<void*>(val));
+            ReleaseAssert(isa<LoadInst>(val));
+            LoadInst* li = cast<LoadInst>(val);
+            Value* po = li->getPointerOperand();
+            if (po == lambdaFunc->getArg(0))
+            {
+                ReleaseAssert(icPtrOffsetBytesInCapture == 0);
+            }
+            else
+            {
+                ReleaseAssert(isa<GetElementPtrInst>(po));
+                GetElementPtrInst* gi = cast<GetElementPtrInst>(po);
+                APInt offset(64 /*numBits*/, 0);
+                ReleaseAssert(gi->accumulateConstantOffset(dataLayout, offset /*out*/));
+                ReleaseAssert(offset.getZExtValue() == icPtrOffsetBytesInCapture);
+            }
+        };
+
         for (BasicBlock& bb : *lambdaFunc)
         {
             for (Instruction& inst : bb)
@@ -816,23 +843,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
                         if (symName.find(" DeegenImpl_MakeIC_MarkEffect<") != std::string::npos)
                         {
                             ReleaseAssert(ci->arg_size() == 3);
-                            Value* val = ci->getArgOperand(0);
-                            ReleaseAssert(llvm_value_has_type<void*>(val));
-                            ReleaseAssert(isa<LoadInst>(val));
-                            LoadInst* li = cast<LoadInst>(val);
-                            Value* po = li->getPointerOperand();
-                            if (po == lambdaFunc->getArg(0))
-                            {
-                                ReleaseAssert(icPtrOffsetBytesInCapture == 0);
-                            }
-                            else
-                            {
-                                ReleaseAssert(isa<GetElementPtrInst>(po));
-                                GetElementPtrInst* gi = cast<GetElementPtrInst>(po);
-                                APInt offset(64 /*numBits*/, 0);
-                                ReleaseAssert(gi->accumulateConstantOffset(dataLayout, offset /*out*/));
-                                ReleaseAssert(offset.getZExtValue() == icPtrOffsetBytesInCapture);
-                            }
+                            assertOperandIsIcPtr(ci->getArgOperand(0));
                             ReleaseAssert(ci->getType() == origin->getType());
                             effectCalls.push_back(ci);
                         }
@@ -1008,9 +1019,230 @@ void AstInlineCache::PreprocessModule(llvm::Module* module)
     }
 }
 
-#if 0
-AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* origin)
+static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* origin)
 {
+    using namespace llvm;
+    AstInlineCache r;
+    ReleaseAssert(origin->arg_size() >= 4);
+    ReleaseAssert(origin->getCalledFunction() != nullptr && origin->getCalledFunction()->getName().startswith(x_createIcBodyPlaceholderFunctionPrefix));
+    Value* ic = origin->getArgOperand(0);
+    CallInst* def = dyn_cast<CallInst>(ic);
+    ReleaseAssert(def != nullptr);
+    ReleaseAssert(def->getCalledFunction() != nullptr && def->getCalledFunction()->getName().startswith(x_createIcInitPlaceholderFunctionPrefix));
+    r.m_icPtrOrigin = def;
+    r.m_origin = origin;
+    r.m_icKey = origin->getArgOperand(1);
+
+    Value* icKeyImpossibleVal = origin->getArgOperand(2);
+    if (isa<UndefValue>(icKeyImpossibleVal))
+    {
+        r.m_icKeyImpossibleValueMaybeNull = nullptr;
+    }
+    else
+    {
+        ReleaseAssert(isa<Constant>(icKeyImpossibleVal));
+        r.m_icKeyImpossibleValueMaybeNull = cast<Constant>(icKeyImpossibleVal);
+        ReleaseAssert(r.m_icKeyImpossibleValueMaybeNull->getType() == r.m_icKey->getType());
+    }
+
+    r.m_bodyFn = dyn_cast<Function>(origin->getArgOperand(3));
+    ReleaseAssert(r.m_bodyFn != nullptr);
+
+    r.m_bodyFnIcPtrArgOrd = static_cast<uint32_t>(-1);
+    for (uint32_t i = 4; i < origin->arg_size(); i++)
+    {
+        Value* val = origin->getArgOperand(i);
+        r.m_bodyFnArgs.push_back(val);
+        if (val == ic)
+        {
+            ReleaseAssert(r.m_bodyFnIcPtrArgOrd == static_cast<uint32_t>(-1));
+            r.m_bodyFnIcPtrArgOrd = i - 4;
+        }
+    }
+    ReleaseAssert(r.m_bodyFnIcPtrArgOrd != static_cast<uint32_t>(-1));
+
+    // Parse out all information about the effects
+    //
+    std::vector<Instruction*> instructionsToRemove;
+    for (User* usr : ic->users())
+    {
+        ReleaseAssert(isa<CallInst>(usr));
+        CallInst* ci = cast<CallInst>(usr);
+        ReleaseAssert(ci->arg_size() > 0 && ci->getArgOperand(0) == ic);
+        if (ci == origin)
+        {
+            continue;
+        }
+        instructionsToRemove.push_back(ci);
+        ReleaseAssert(ci->getCalledFunction() != nullptr && ci->getCalledFunction()->getName().startswith(x_createIcRegisterEffectPlaceholderFunctionPrefix));
+        AstInlineCache::Effect e;
+        ReleaseAssert(ci->arg_size() >= 3);
+        e.m_effectFnMain = dyn_cast<Function>(ci->getArgOperand(2));
+        ReleaseAssert(e.m_effectFnMain != nullptr);
+        for (uint32_t i = 3; i < ci->arg_size(); i++)
+        {
+            e.m_effectFnMainArgs.push_back(ci->getArgOperand(i));
+        }
+        Function* annotationFn = dyn_cast<Function>(ci->getArgOperand(1));
+        ReleaseAssert(annotationFn != nullptr);
+        ReleaseAssert(annotationFn->hasNUses(2));
+        CallInst* target = nullptr;
+        {
+            Use& u1 = *annotationFn->use_begin();
+            Use& u2 = *(++annotationFn->use_begin());
+            User* usr1 = u1.getUser();
+            User* usr2 = u2.getUser();
+            ReleaseAssert(isa<CallInst>(usr1));
+            ReleaseAssert(isa<CallInst>(usr2));
+            CallInst* ci1 = cast<CallInst>(usr1);
+            CallInst* ci2 = cast<CallInst>(usr2);
+            if (ci1 == ci)
+            {
+                target = ci2;
+            }
+            else
+            {
+                target = ci1;
+            }
+        }
+        ReleaseAssert(target != nullptr && target != ci);
+        ReleaseAssert(target->getCalledFunction() == annotationFn);
+        e.m_origin = target;
+
+        ReleaseAssert(target->arg_size() >= 7);
+        e.m_effectFnBodyCapture = dyn_cast<AllocaInst>(target->getArgOperand(1));
+        ReleaseAssert(e.m_effectFnBodyCapture != nullptr);
+
+        e.m_effectFnBody = dyn_cast<Function>(target->getArgOperand(2));
+        ReleaseAssert(e.m_effectFnBody != nullptr);
+
+        Function* effectWrapperFn = dyn_cast<Function>(target->getArgOperand(3));
+        ReleaseAssert(effectWrapperFn != nullptr);
+        ReleaseAssert(effectWrapperFn == e.m_effectFnMain);
+
+        e.m_icStateDecoder = dyn_cast<Function>(target->getArgOperand(4));
+        ReleaseAssert(e.m_icStateDecoder != nullptr);
+        ReleaseAssert(e.m_icStateDecoder->getName().startswith(x_decodeICStateToEffectLambdaCaptureFunctionPrefix));
+
+        e.m_icStateEncoder = dyn_cast<Function>(target->getArgOperand(5));
+        ReleaseAssert(e.m_icStateEncoder != nullptr);
+        ReleaseAssert(e.m_icStateEncoder->getName().startswith(x_encodeICStateFunctionPrefix));
+
+        Value* numIcStateCapturesV = target->getArgOperand(6);
+        ReleaseAssert(isa<ConstantInt>(numIcStateCapturesV));
+        ReleaseAssert(llvm_value_has_type<uint64_t>(numIcStateCapturesV));
+        uint64_t numIcStateCaptures = GetValueOfLLVMConstantInt<uint64_t>(numIcStateCapturesV);
+        ReleaseAssert(target->arg_size() == 7 + numIcStateCaptures);
+        for (uint32_t i = 0; i < numIcStateCaptures; i++)
+        {
+            Value* icStateCapture = target->getArgOperand(7 + i);
+            e.m_icStateVals.push_back(icStateCapture);
+        }
+
+        ReleaseAssert(e.m_icStateEncoder->arg_size() == 1 + numIcStateCaptures);
+        ReleaseAssert(e.m_icStateDecoder->arg_size() == 2 + numIcStateCaptures);
+        for (uint32_t i = 0; i < numIcStateCaptures; i++)
+        {
+            ReleaseAssert(e.m_icStateEncoder->getArg(1 + i)->getType() == e.m_icStateVals[i]->getType());
+            ReleaseAssert(llvm_value_has_type<uint64_t>(e.m_icStateDecoder->getArg(2 + i)));
+        }
+
+        ReleaseAssert(e.m_icStateDecoder->hasNUses(2));
+        CallInst* decoderCall = nullptr;
+        {
+            Use& u1 = *e.m_icStateDecoder->use_begin();
+            Use& u2 = *(++e.m_icStateDecoder->use_begin());
+            User* usr1 = u1.getUser();
+            User* usr2 = u2.getUser();
+            ReleaseAssert(isa<CallInst>(usr1));
+            ReleaseAssert(isa<CallInst>(usr2));
+            CallInst* ci1 = cast<CallInst>(usr1);
+            CallInst* ci2 = cast<CallInst>(usr2);
+            if (ci1 == target)
+            {
+                decoderCall = ci2;
+            }
+            else
+            {
+                decoderCall = ci1;
+            }
+        }
+        ReleaseAssert(decoderCall != nullptr && decoderCall != target);
+        ReleaseAssert(decoderCall->getCalledFunction() == e.m_icStateDecoder);
+        ReleaseAssert(decoderCall->arg_size() == 2 + numIcStateCaptures);
+        for (uint32_t i = 0; i < numIcStateCaptures; i++)
+        {
+            Value* val = decoderCall->getArgOperand(2 + i);
+            ReleaseAssert(isa<ConstantInt>(val));
+            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
+            uint64_t ord = GetValueOfLLVMConstantInt<uint64_t>(val);
+            e.m_icStateOrdInEffectCapture.push_back(SafeIntegerCast<uint32_t>(ord));
+        }
+        e.m_decoderCall = decoderCall;
+
+        ReleaseAssert(e.m_icStateOrdInEffectCapture.size() == e.m_icStateVals.size());
+        ReleaseAssert(e.m_effectFnMain->getReturnType() == r.m_bodyFn->getReturnType());
+        ReleaseAssert(e.m_effectFnBody->getReturnType() == r.m_bodyFn->getReturnType());
+        ReleaseAssert(e.m_origin->getType() == r.m_bodyFn->getReturnType());
+        r.m_effects.push_back(e);
+    }
+
+    for (size_t i = 0; i < r.m_effects.size(); i++)
+    {
+        r.m_effects[i].m_effectOrdinal = i;
+    }
+
+    // Parse out all information about the other simple APIs
+    //
+    for (BasicBlock& bb : *r.m_bodyFn)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                Function* callee = callInst->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    std::string symName = DemangleCXXSymbol(callee->getName().str());
+                    if (symName.find(" DeegenImpl_MakeIC_MarkEffectValue<") != std::string::npos)
+                    {
+                        ReleaseAssert(callInst->arg_size() == 2);
+                        ReleaseAssert(callInst->getArgOperand(0) == r.m_bodyFn->getArg(r.m_bodyFnIcPtrArgOrd));
+                        ReleaseAssert(callInst->getType() == r.m_bodyFn->getReturnType());
+                        AstInlineCache::EffectValue e;
+                        e.m_effectValue = callInst->getArgOperand(1);
+                        ReleaseAssert(llvm_value_has_type<void*>(e.m_effectValue));
+                        e.m_origin = callInst;
+                        r.m_effectValues.push_back(e);
+                    }
+                    else if (symName.find("DeegenImpl_MakeIC_SetUncacheableForThisExecution(") != std::string::npos)
+                    {
+                        ReleaseAssert(callInst->arg_size() == 1);
+                        ReleaseAssert(callInst->getArgOperand(0) == r.m_bodyFn->getArg(r.m_bodyFnIcPtrArgOrd));
+                        r.m_setUncacheableApiCalls.push_back(callInst);
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        std::unordered_set<Instruction*> checkUnique;
+        for (Instruction* i : instructionsToRemove)
+        {
+            ReleaseAssert(!checkUnique.count(i));
+            checkUnique.insert(i);
+        }
+    }
+
+    for (Instruction* i : instructionsToRemove)
+    {
+        ReleaseAssert(i->use_empty());
+        i->eraseFromParent();
+    }
+
+    return r;
 }
 
 std::vector<AstInlineCache> WARN_UNUSED AstInlineCache::GetAllUseInFunction(llvm::Function* func)
@@ -1038,7 +1270,9 @@ std::vector<AstInlineCache> WARN_UNUSED AstInlineCache::GetAllUseInFunction(llvm
     std::vector<AstInlineCache> res;
     for (CallInst* ci : allUses)
     {
-        res.push_back()
+        res.push_back(AstInlineCacheParseOneUse(ci));
+    }
+    return res;
 }
-#endif
+
 }   // namespace dast
