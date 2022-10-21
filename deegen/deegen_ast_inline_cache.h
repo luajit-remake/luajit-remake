@@ -7,13 +7,18 @@
 
 namespace dast {
 
-struct AstInlineCache
+class AstInlineCache
 {
+public:
     struct Effect
     {
         // The place in the IC body where this effect is called
         //
         llvm::CallInst* m_origin;
+
+        // The IC pointer in the IC body
+        //
+        llvm::Value* m_icPtr;
 
         // The wrapped effect function that is callable from the main function
         //
@@ -37,25 +42,25 @@ struct AstInlineCache
         //
         std::vector<llvm::Value*> m_icStateVals;
 
-        // The effect lambda's struct element ordinal of each IC state value
-        // This vector must have same length as m_icStateVals
-        //
-        std::vector<uint32_t> m_icStateOrdInEffectCapture;
-        llvm::CallInst* m_decoderCall;
-
         // Each 'Effect' in the IC cache has an unique ordinal
         //
         size_t m_effectOrdinal;
     };
 
-    struct EffectValue
-    {
-        llvm::CallInst* m_origin;
-        llvm::Value* m_effectValue;
-    };
-
     static void PreprocessModule(llvm::Module* module);
     static std::vector<AstInlineCache> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
+
+    // This lowers everything except the 'MakeInlineCache()' call (the m_icPtrOrigin, which returns the IC pointer)
+    // This is because we need global information (the full layout of the bytecode metadata struct) to figure out
+    // the IC pointer for this IC. Fortunately, this design also makes unit testing easier.
+    //
+    void DoLoweringForInterpreter();
+
+    size_t GetInterpreterIcStateSizeBytes()
+    {
+        ReleaseAssert(m_interpreterIcStateSizeBytes != static_cast<size_t>(-1));
+        return m_interpreterIcStateSizeBytes;
+    }
 
     // The CallInst that retrieves the IC pointer in the main function
     //
@@ -72,6 +77,9 @@ struct AstInlineCache
     // The arg ordinal of the body function that passes over the IC pointer
     //
     uint32_t m_bodyFnIcPtrArgOrd;
+    // The arg ordinal of the body function that passes over the current IC key
+    //
+    uint32_t m_bodyFnIcKeyArgOrd;
     // The key and impossible value (if no impossible value is specified, the field is nullptr)
     //
     llvm::Value* m_icKey;
@@ -81,8 +89,11 @@ struct AstInlineCache
     std::vector<Effect> m_effects;
     // The list of other misc API calls used in this IC
     //
-    std::vector<EffectValue> m_effectValues;
     std::vector<llvm::CallInst*> m_setUncacheableApiCalls;
+
+    // This is populated by 'DoLoweringForInterpreter'
+    //
+    size_t m_interpreterIcStateSizeBytes;
 };
 
 }   // namespace dast

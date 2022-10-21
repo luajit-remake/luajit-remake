@@ -3,7 +3,8 @@ source_filename = "/home/u/project/annotated/unit_test/ic_api_sanity.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
 
-%class.anon.0 = type { i32, i32 }
+%class.anon.0 = type { i32, i32, i32 }
+%class.anon.1 = type { i32 }
 
 ; Function Attrs: argmemonly mustprogress nocallback nofree nosync nounwind willreturn
 declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) #0
@@ -12,57 +13,70 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) #0
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture) #0
 
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
-declare dso_local noundef i32 @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv"(ptr noundef nonnull align 4 dereferenceable(8)) #1 align 2
+declare dso_local noundef i32 @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv"(ptr noundef nonnull align 4 dereferenceable(12)) #1 align 2
 
-declare dso_local noundef i32 @_Z33DeegenImpl_MakeIC_MarkEffectValueIjET_P9ICHandlerRKS0_(ptr noundef, ptr noundef nonnull align 4 dereferenceable(4)) local_unnamed_addr #2
-
-; Function Attrs: nounwind
-declare dso_local i32 @__deegen_inline_cache_effect_0(ptr, i32) #3
+; Function Attrs: inlinehint mustprogress nounwind uwtable
+declare dso_local noundef i32 @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv"(ptr noundef nonnull align 4 dereferenceable(4)) #1 align 2
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_decode_ic_state_0(ptr, ptr, i64) #4
+declare dso_local i32 @__deegen_inline_cache_effect_0(ptr, i32, i32) #2
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_encode_ic_state_0(ptr, i32) #4
+declare void @__deegen_inline_cache_decode_ic_state_0(ptr, ptr) #3
 
 ; Function Attrs: nounwind
-declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr, ptr, ptr, ptr, ptr, ptr, i64, i32) #4
+declare void @__deegen_inline_cache_encode_ic_state_0(ptr, i32) #3
 
 ; Function Attrs: nounwind
-define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1) #3 {
-  %3 = alloca %class.anon.0, align 4
-  %4 = alloca i32, align 4
-  %5 = icmp ult i32 %1, 100
-  br i1 %5, label %6, label %10
+declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr, ptr, ptr, ptr, ptr, ptr, i64, i32) #3
 
-6:                                                ; preds = %2
-  %7 = add i32 %1, 200
-  call void @llvm.lifetime.start.p0(i64 8, ptr nonnull %3) #4
-  store i32 %1, ptr %3, align 4, !tbaa !3
-  %8 = getelementptr inbounds %class.anon.0, ptr %3, i64 0, i32 1
-  store i32 %7, ptr %8, align 4, !tbaa !8
-  %9 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr %0, ptr nonnull %3, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv", ptr nonnull @__deegen_inline_cache_effect_0, ptr nonnull @__deegen_inline_cache_decode_ic_state_0, ptr nonnull @__deegen_inline_cache_encode_ic_state_0, i64 1, i32 %7)
-  call void @llvm.lifetime.end.p0(i64 8, ptr nonnull %3) #4
-  br label %"_ZZ7testfn1ENK3$_0clEv.exit"
+; Function Attrs: nounwind
+declare dso_local i32 @__deegen_inline_cache_effect_1(ptr, i32) #2
 
-10:                                               ; preds = %2
-  call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %4) #4
-  %11 = add i32 %1, -50
-  store i32 %11, ptr %4, align 4, !tbaa !9
-  %12 = call noundef i32 @_Z33DeegenImpl_MakeIC_MarkEffectValueIjET_P9ICHandlerRKS0_(ptr noundef %0, ptr noundef nonnull align 4 dereferenceable(4) %4) #4
-  call void @llvm.lifetime.end.p0(i64 4, ptr nonnull %4) #4
-  br label %"_ZZ7testfn1ENK3$_0clEv.exit"
+; Function Attrs: nounwind
+declare void @__deegen_inline_cache_decode_ic_state_1(ptr) #3
 
-"_ZZ7testfn1ENK3$_0clEv.exit":                    ; preds = %10, %6
-  %.0.i = phi i32 [ %9, %6 ], [ %12, %10 ]
-  ret i32 %.0.i
+; Function Attrs: nounwind
+declare void @__deegen_inline_cache_encode_ic_state_1(ptr) #3
+
+; Function Attrs: nounwind
+declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr, ptr, ptr, ptr, ptr, ptr, i64) #3
+
+; Function Attrs: nounwind
+define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #2 {
+  %4 = alloca %class.anon.0, align 4
+  %5 = alloca %class.anon.1, align 4
+  %6 = icmp ult i32 %2, 100
+  br i1 %6, label %7, label %12
+
+7:                                                ; preds = %3
+  %8 = add i32 %1, 200
+  call void @llvm.lifetime.start.p0(i64 12, ptr nonnull %4) #3
+  store i32 %2, ptr %4, align 4, !tbaa !3
+  %9 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 1
+  store i32 %8, ptr %9, align 4, !tbaa !8
+  %10 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 2
+  store i32 %1, ptr %10, align 4, !tbaa !9
+  %11 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr %0, ptr nonnull %4, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv", ptr nonnull @__deegen_inline_cache_effect_0, ptr nonnull @__deegen_inline_cache_decode_ic_state_0, ptr nonnull @__deegen_inline_cache_encode_ic_state_0, i64 1, i32 %8)
+  call void @llvm.lifetime.end.p0(i64 12, ptr nonnull %4) #3
+  br label %__deegen_inline_cache_body_0_tmp.exit
+
+12:                                               ; preds = %3
+  call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %5) #3
+  store i32 %2, ptr %5, align 4, !tbaa !10
+  %13 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr %0, ptr nonnull %5, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv", ptr nonnull @__deegen_inline_cache_effect_1, ptr nonnull @__deegen_inline_cache_decode_ic_state_1, ptr nonnull @__deegen_inline_cache_encode_ic_state_1, i64 0)
+  call void @llvm.lifetime.end.p0(i64 4, ptr nonnull %5) #3
+  br label %__deegen_inline_cache_body_0_tmp.exit
+
+__deegen_inline_cache_body_0_tmp.exit:            ; preds = %12, %7
+  %.0.i.i = phi i32 [ %11, %7 ], [ %13, %12 ]
+  ret i32 %.0.i.i
 }
 
 attributes #0 = { argmemonly mustprogress nocallback nofree nosync nounwind willreturn }
 attributes #1 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #2 = { "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #3 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #4 = { nounwind }
+attributes #2 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
@@ -72,9 +86,11 @@ attributes #4 = { nounwind }
 !1 = !{i32 7, !"uwtable", i32 2}
 !2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
 !3 = !{!4, !5, i64 0}
-!4 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE_", !5, i64 0, !5, i64 4}
+!4 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE_", !5, i64 0, !5, i64 4, !5, i64 8}
 !5 = !{!"int", !6, i64 0}
 !6 = !{!"omnipotent char", !7, i64 0}
 !7 = !{!"Simple C++ TBAA"}
 !8 = !{!4, !5, i64 4}
-!9 = !{!5, !5, i64 0}
+!9 = !{!4, !5, i64 8}
+!10 = !{!11, !5, i64 0}
+!11 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE0_", !5, i64 0}

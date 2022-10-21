@@ -141,7 +141,6 @@ static ModulePassManager BuildModuleSimplificationPassesForDesugaring()
 // we removed the following passes:
 //   1. All the loop transformation passes
 //   2. LibCallsShrinkWrapPass
-//   3. MemCpyOptPass
 // We made the changes because our purpose is simplification. We do not want to prematurely lower the abstractions,
 // because we will do some transformations by ourselves. We will run the full optimization pass in the end anyway.
 //
@@ -171,6 +170,7 @@ static FunctionPassManager BuildFunctionSimplificationPipelineForDesugaring()
     FPM.addPass(JumpThreadingPass());
     FPM.addPass(CorrelatedValuePropagationPass());
     FPM.addPass(ADCEPass());
+    FPM.addPass(MemCpyOptPass());
     FPM.addPass(DSEPass());
     FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
                                     .convertSwitchRangeToICmp(true)

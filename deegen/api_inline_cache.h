@@ -57,7 +57,7 @@ struct ICHandler
     }
 
     // Can only be used in the main lambda.
-    // At most one Effect/EffectValue may be executed in every possible execution path.
+    // At most one 'Effect' call may be executed in every possible execution path.
     // Creates an IC entry with the given lambda.
     //
     template<typename LambdaType>
@@ -66,17 +66,6 @@ struct ICHandler
         using ResType = std::invoke_result_t<LambdaType>;
         static_assert(std::is_trivial_v<ResType>);
         return DeegenImpl_MakeIC_MarkEffect<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
-    }
-
-    // Can only be used in the main lambda.
-    // At most one Effect/EffectValue may be executed in every possible execution path.
-    // Creates an IC entry with no custom logic, simply return the value.
-    //
-    template<typename ResType>
-    ResType ALWAYS_INLINE EffectValue(const ResType& v)
-    {
-        static_assert(std::is_trivial_v<ResType>);
-        return DeegenImpl_MakeIC_MarkEffectValue<ResType>(this, v);
     }
 };
 

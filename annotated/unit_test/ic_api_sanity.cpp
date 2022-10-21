@@ -1,21 +1,23 @@
 #include "deegen_api.h"
 #include "api_inline_cache.h"
 
-extern "C" uint32_t testfn1(uint32_t key)
+extern "C" uint32_t testfn1(uint32_t key, uint32_t k2)
 {
     ICHandler* ic = MakeInlineCache();
     ic->AddKey(key).SetImpossibleValue(123);
-    return ic->Body([ic, key]() -> uint32_t {
+    return ic->Body([ic, key, k2]() -> uint32_t {
         if (key < 100)
         {
-            uint32_t key2 = key + 200;
-            return ic->Effect([key, key2] {
-                return key + key2;
+            uint32_t k3 = k2 + 200;
+            return ic->Effect([key, k3, k2] {
+                return key + k3 + k2;
             });
         }
         else
         {
-            return ic->EffectValue(key - 50);
+            return ic->Effect([key] {
+                return key;
+            });
         }
     });
 }

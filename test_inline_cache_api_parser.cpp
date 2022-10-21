@@ -20,9 +20,6 @@ struct TestHelper
         LLVMContext& ctx = *llvmCtxHolder.get();
 
         moduleHolder = GetDeegenUnitTestLLVMIR(ctx, fileName);
-        // Module* module = moduleHolder.get();
-
-        // DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
     }
 
     void CheckIsExpected(llvm::Function* func, std::string suffix = "")
@@ -46,18 +43,17 @@ TEST(DeegenAst, InlineCacheAPIParser_1)
     Module* module = helper.moduleHolder.get();
 
     DeegenAnalyzeLambdaCapturePass::AddAnnotations(module);
-    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
     AstInlineCache::PreprocessModule(module);
     DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(module);
-    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
     Function* targetFunction = module->getFunction(functionName);
     ReleaseAssert(targetFunction != nullptr);
     std::vector<AstInlineCache> list = AstInlineCache::GetAllUseInFunction(targetFunction);
     ReleaseAssert(list.size() == 1);
     AstInlineCache& ic = list[0];
-    ReleaseAssert(ic.m_effects.size() == 1);
-    ReleaseAssert(ic.m_effectValues.size() == 1);
+    ReleaseAssert(ic.m_effects.size() == 2);
     ReleaseAssert(ic.m_setUncacheableApiCalls.size() == 0);
     ReleaseAssert(ic.m_icKeyImpossibleValueMaybeNull != nullptr);
     ReleaseAssert(llvm_value_has_type<uint32_t>(ic.m_icKeyImpossibleValueMaybeNull));
@@ -65,8 +61,10 @@ TEST(DeegenAst, InlineCacheAPIParser_1)
 
     ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
     ic.m_effects[0].m_effectFnMain->setLinkage(GlobalValue::ExternalLinkage);
+    ic.m_effects[1].m_effectFnMain->setLinkage(GlobalValue::ExternalLinkage);
 
     helper.CheckIsExpected(targetFunction, "mainFn");
     helper.CheckIsExpected(ic.m_bodyFn, "icBody");
-    helper.CheckIsExpected(ic.m_effects[0].m_effectFnMain, "icEffectWrapper");
+    helper.CheckIsExpected(ic.m_effects[0].m_effectFnMain, "icEffectWrapper0");
+    helper.CheckIsExpected(ic.m_effects[1].m_effectFnMain, "icEffectWrapper1");
 }

@@ -1038,6 +1038,14 @@ inline void AssertInstructionIsFollowedByUnreachable(llvm::Instruction* inst)
     ReleaseAssert(nextInst->getNextNode() == nullptr);
 }
 
+inline llvm::Function* GetLLVMIntrinsicMemcpyFn(llvm::Module* module, llvm::Type* sizeType)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    ReleaseAssert(llvm_type_has_type<uint64_t>(sizeType) || llvm_type_has_type<uint32_t>(sizeType));
+    return Intrinsic::getDeclaration(module, Intrinsic::memcpy, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), sizeType });
+}
+
 inline llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
@@ -1045,9 +1053,29 @@ inline llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value
     ReleaseAssert(llvm_value_has_type<void*>(dst));
     ReleaseAssert(llvm_value_has_type<void*>(src));
     ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
-    Function* memcpyFunc = Intrinsic::getDeclaration(module, Intrinsic::memcpy, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), bytesToCopy->getType() /*sizeType*/ });
-    CallInst* result = CallInst::Create(memcpyFunc, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertBefore);
+    Function* fn = GetLLVMIntrinsicMemcpyFn(module, bytesToCopy->getType());
+    CallInst* result = CallInst::Create(fn, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertBefore);
     return result;
+}
+
+inline llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(dst));
+    ReleaseAssert(llvm_value_has_type<void*>(src));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
+    Function* fn = GetLLVMIntrinsicMemcpyFn(module, bytesToCopy->getType());
+    CallInst* result = CallInst::Create(fn, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertAtEnd);
+    return result;
+}
+
+inline llvm::Function* GetLLVMIntrinsicMemmoveFn(llvm::Module* module, llvm::Type* sizeType)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    ReleaseAssert(llvm_type_has_type<uint64_t>(sizeType) || llvm_type_has_type<uint32_t>(sizeType));
+    return Intrinsic::getDeclaration(module, Intrinsic::memmove, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), sizeType /*sizeType*/ });
 }
 
 inline llvm::CallInst* EmitLLVMIntrinsicMemmove(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::Instruction* insertBefore)
@@ -1057,8 +1085,20 @@ inline llvm::CallInst* EmitLLVMIntrinsicMemmove(llvm::Module* module, llvm::Valu
     ReleaseAssert(llvm_value_has_type<void*>(dst));
     ReleaseAssert(llvm_value_has_type<void*>(src));
     ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
-    Function* memmoveFunc = Intrinsic::getDeclaration(module, Intrinsic::memmove, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), bytesToCopy->getType() /*sizeType*/ });
+    Function* memmoveFunc = GetLLVMIntrinsicMemmoveFn(module, bytesToCopy->getType());
     CallInst* result = CallInst::Create(memmoveFunc, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertBefore);
+    return result;
+}
+
+inline llvm::CallInst* EmitLLVMIntrinsicMemmove(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(dst));
+    ReleaseAssert(llvm_value_has_type<void*>(src));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
+    Function* memmoveFunc = GetLLVMIntrinsicMemmoveFn(module, bytesToCopy->getType());
+    CallInst* result = CallInst::Create(memmoveFunc, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertAtEnd);
     return result;
 }
 

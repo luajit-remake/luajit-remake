@@ -202,6 +202,11 @@ static RewriteClosureToFunctionCallResult WARN_UNUSED RewriteClosureToFunctionCa
     }
 
     ValidateLLVMFunction(wrapper);
+    if (lambda->hasFnAttribute(Attribute::AttrKind::NoInline))
+    {
+        lambda->removeFnAttr(Attribute::AttrKind::NoInline);
+        wrapper->addFnAttr(Attribute::AttrKind::NoInline);
+    }
     lambda->addFnAttr(Attribute::AttrKind::AlwaysInline);
 
     instructionToRemove.push_back(capture);
@@ -382,12 +387,18 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     // Future lowering logic will lower this call to concrete logic
     //
     std::vector<Value*> decoderFnArgs;
-    decoderFnArgs.push_back(ai);
     decoderFnArgs.push_back(effectWrapperFn->getArg(0 /*icState*/));
     for (auto& it : effectFnLocalCaptures)
     {
         size_t ordInCapture = it.first;
-        decoderFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, ordInCapture));
+        GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
+            captureST, ai,
+            {
+                CreateLLVMConstantInt<uint64_t>(ctx, 0),
+                CreateLLVMConstantInt<uint32_t>(ctx, SafeIntegerCast<uint32_t>(ordInCapture))
+            },
+            "", entryBlock);
+        decoderFnArgs.push_back(gep);
     }
     std::vector<Type*> decoderFnArgTys;
     for (Value* val : decoderFnArgs)
@@ -889,15 +900,72 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     // slowpath call and probably also reduces code size.
     //
     std::string wrapperFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icBodyClosureWrapperFunctionPrefix);
-    RewriteClosureToFunctionCallResult rr = RewriteClosureToFunctionCall(lambdaFunc, closureAlloca, wrapperFnName);
+    // Unfortunately this wrapper alone is not enough, because we must additionally
+    // make sure that the icKey is passed to the function (even if the user logic does not use it,
+    // we need to use it to generate the IC entry). This is why the function name right now has an additional "_tmp"
+    //
+    RewriteClosureToFunctionCallResult rr = RewriteClosureToFunctionCall(lambdaFunc, closureAlloca, wrapperFnName + "_tmp");
+
+    Function* closureWrapperImpl = rr.m_newFunc;
+    rr.m_newFunc = nullptr;
+    Type* resType = origin->getType();
+    ReleaseAssert(resType == lambdaFunc->getReturnType());
+    ReleaseAssert(resType == closureWrapperImpl->getReturnType());
+
+    bool isIcKeyAlreadyPassedToBody = false;
+    for (Value* val : rr.m_args)
+    {
+        if (val == icKey)
+        {
+            isIcKeyAlreadyPassedToBody = true;
+        }
+    }
+
+    Function* closureWrapper;
+    {
+        std::vector<Type*> tys;
+        for (Value* val : rr.m_args) { tys.push_back(val->getType()); }
+        if (!isIcKeyAlreadyPassedToBody)
+        {
+            tys.push_back(icKey->getType());
+        }
+        FunctionType* closureWrapperFty = FunctionType::get(resType, tys, false /*isVarArg*/);
+        closureWrapper = Function::Create(closureWrapperFty, GlobalValue::InternalLinkage, wrapperFnName, module);
+        ReleaseAssert(closureWrapper->getName() == wrapperFnName);
+        CopyFunctionAttributes(closureWrapper, closureWrapperImpl);
+        closureWrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
+
+        BasicBlock* bb = BasicBlock::Create(ctx, "", closureWrapper);
+        std::vector<Value*> args;
+        for (uint32_t i = 0; i < rr.m_args.size(); i++)
+        {
+            args.push_back(closureWrapper->getArg(i));
+        }
+        CallInst* callInst = CallInst::Create(closureWrapperImpl, args, "", bb);
+        if (llvm_value_has_type<void>(callInst))
+        {
+            ReturnInst::Create(ctx, nullptr /*returnVoid*/, bb);
+        }
+        else
+        {
+            ReturnInst::Create(ctx, callInst, bb);
+        }
+        if (closureWrapperImpl->hasFnAttribute(Attribute::AttrKind::NoInline))
+        {
+            closureWrapperImpl->removeFnAttr(Attribute::AttrKind::NoInline);
+            closureWrapper->addFnAttr(Attribute::AttrKind::NoInline);
+        }
+        closureWrapperImpl->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        ValidateLLVMFunction(closureWrapper);
+    }
+
+    if (!isIcKeyAlreadyPassedToBody)
+    {
+        rr.m_args.push_back(icKey);
+    }
 
     std::vector<Type*> closureArgTys;
     for (Value* val : rr.m_args) { closureArgTys.push_back(val->getType()); }
-
-    Function* closureWrapper = rr.m_newFunc;
-    Type* resType = origin->getType();
-    ReleaseAssert(resType == lambdaFunc->getReturnType());
-    ReleaseAssert(resType == closureWrapper->getReturnType());
     CallInst* replacement;
     {
         std::vector<Value*> icBodyArgs;
@@ -1029,6 +1097,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
     CallInst* def = dyn_cast<CallInst>(ic);
     ReleaseAssert(def != nullptr);
     ReleaseAssert(def->getCalledFunction() != nullptr && def->getCalledFunction()->getName().startswith(x_createIcInitPlaceholderFunctionPrefix));
+    r.m_interpreterIcStateSizeBytes = static_cast<size_t>(-1);
     r.m_icPtrOrigin = def;
     r.m_origin = origin;
     r.m_icKey = origin->getArgOperand(1);
@@ -1049,6 +1118,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
     ReleaseAssert(r.m_bodyFn != nullptr);
 
     r.m_bodyFnIcPtrArgOrd = static_cast<uint32_t>(-1);
+    r.m_bodyFnIcKeyArgOrd = static_cast<uint32_t>(-1);
     for (uint32_t i = 4; i < origin->arg_size(); i++)
     {
         Value* val = origin->getArgOperand(i);
@@ -1058,8 +1128,13 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
             ReleaseAssert(r.m_bodyFnIcPtrArgOrd == static_cast<uint32_t>(-1));
             r.m_bodyFnIcPtrArgOrd = i - 4;
         }
+        if (val == r.m_icKey && r.m_bodyFnIcKeyArgOrd == static_cast<uint32_t>(-1))
+        {
+            r.m_bodyFnIcKeyArgOrd = i - 4;
+        }
     }
     ReleaseAssert(r.m_bodyFnIcPtrArgOrd != static_cast<uint32_t>(-1));
+    ReleaseAssert(r.m_bodyFnIcKeyArgOrd != static_cast<uint32_t>(-1));
 
     // Parse out all information about the effects
     //
@@ -1110,6 +1185,11 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         e.m_origin = target;
 
         ReleaseAssert(target->arg_size() >= 7);
+        e.m_icPtr = target->getArgOperand(0);
+        ReleaseAssert(llvm_value_has_type<void*>(e.m_icPtr));
+        ReleaseAssert(isa<Argument>(e.m_icPtr));
+        ReleaseAssert(cast<Argument>(e.m_icPtr)->getArgNo() == r.m_bodyFnIcPtrArgOrd);
+
         e.m_effectFnBodyCapture = dyn_cast<AllocaInst>(target->getArgOperand(1));
         ReleaseAssert(e.m_effectFnBodyCapture != nullptr);
 
@@ -1140,11 +1220,11 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         }
 
         ReleaseAssert(e.m_icStateEncoder->arg_size() == 1 + numIcStateCaptures);
-        ReleaseAssert(e.m_icStateDecoder->arg_size() == 2 + numIcStateCaptures);
+        ReleaseAssert(e.m_icStateDecoder->arg_size() == 1 + numIcStateCaptures);
         for (uint32_t i = 0; i < numIcStateCaptures; i++)
         {
             ReleaseAssert(e.m_icStateEncoder->getArg(1 + i)->getType() == e.m_icStateVals[i]->getType());
-            ReleaseAssert(llvm_value_has_type<uint64_t>(e.m_icStateDecoder->getArg(2 + i)));
+            ReleaseAssert(llvm_value_has_type<void*>(e.m_icStateDecoder->getArg(1 + i)));
         }
 
         ReleaseAssert(e.m_icStateDecoder->hasNUses(2));
@@ -1169,18 +1249,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         }
         ReleaseAssert(decoderCall != nullptr && decoderCall != target);
         ReleaseAssert(decoderCall->getCalledFunction() == e.m_icStateDecoder);
-        ReleaseAssert(decoderCall->arg_size() == 2 + numIcStateCaptures);
-        for (uint32_t i = 0; i < numIcStateCaptures; i++)
-        {
-            Value* val = decoderCall->getArgOperand(2 + i);
-            ReleaseAssert(isa<ConstantInt>(val));
-            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
-            uint64_t ord = GetValueOfLLVMConstantInt<uint64_t>(val);
-            e.m_icStateOrdInEffectCapture.push_back(SafeIntegerCast<uint32_t>(ord));
-        }
-        e.m_decoderCall = decoderCall;
 
-        ReleaseAssert(e.m_icStateOrdInEffectCapture.size() == e.m_icStateVals.size());
         ReleaseAssert(e.m_effectFnMain->getReturnType() == r.m_bodyFn->getReturnType());
         ReleaseAssert(e.m_effectFnBody->getReturnType() == r.m_bodyFn->getReturnType());
         ReleaseAssert(e.m_origin->getType() == r.m_bodyFn->getReturnType());
@@ -1205,18 +1274,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
                 if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
                 {
                     std::string symName = DemangleCXXSymbol(callee->getName().str());
-                    if (symName.find(" DeegenImpl_MakeIC_MarkEffectValue<") != std::string::npos)
-                    {
-                        ReleaseAssert(callInst->arg_size() == 2);
-                        ReleaseAssert(callInst->getArgOperand(0) == r.m_bodyFn->getArg(r.m_bodyFnIcPtrArgOrd));
-                        ReleaseAssert(callInst->getType() == r.m_bodyFn->getReturnType());
-                        AstInlineCache::EffectValue e;
-                        e.m_effectValue = callInst->getArgOperand(1);
-                        ReleaseAssert(llvm_value_has_type<void*>(e.m_effectValue));
-                        e.m_origin = callInst;
-                        r.m_effectValues.push_back(e);
-                    }
-                    else if (symName.find("DeegenImpl_MakeIC_SetUncacheableForThisExecution(") != std::string::npos)
+                    if (symName.find("DeegenImpl_MakeIC_SetUncacheableForThisExecution(") != std::string::npos)
                     {
                         ReleaseAssert(callInst->arg_size() == 1);
                         ReleaseAssert(callInst->getArgOperand(0) == r.m_bodyFn->getArg(r.m_bodyFnIcPtrArgOrd));
@@ -1273,6 +1331,331 @@ std::vector<AstInlineCache> WARN_UNUSED AstInlineCache::GetAllUseInFunction(llvm
         res.push_back(AstInlineCacheParseOneUse(ci));
     }
     return res;
+}
+
+void AstInlineCache::DoLoweringForInterpreter()
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_origin->getContext();
+    Module* module = m_origin->getModule();
+
+    // The metadata header:
+    //     KeyType icValue
+    //     uint8_t icEffectKind
+    //
+    // icEffectKind:
+    //     1. When no impossible value is given, an invalid icEffectKind indicates no IC entry
+    //     2. When there is only one possible effect kind, and the impossible value is given (so effect kind is not
+    //     used to distinguish a nonexistent IC), we can omit it from the IC
+    //
+    // The main function logic basically looks like the following:
+    // if (key == icValue) {
+    //     switch (icEffectKind) {
+    //     ...
+    //     }
+    // } else {
+    //     RunIcBody(...)
+    // }
+    //
+
+    Value* icPtr = m_icPtrOrigin;
+    Function* mainFn = m_icPtrOrigin->getFunction();
+    bool hasImpossibleValue = (m_icKeyImpossibleValueMaybeNull != nullptr);
+    ReleaseAssert(m_icKey->getType()->isIntegerTy());
+    size_t icKeyBytes = m_icKey->getType()->getIntegerBitWidth() / 8;
+
+    size_t numEffectKinds = m_effects.size();
+    ReleaseAssert(numEffectKinds > 0 && numEffectKinds < 254);
+
+    bool canElideEffectKind = (numEffectKinds == 1) && hasImpossibleValue;
+
+    // Load the IC entry header and compare 'key == cachedIcKey'
+    //
+    Value* icValEqual;
+    {
+        Value* cachedIcVal = new LoadInst(m_icKey->getType(), icPtr, "", false /*isVolatile*/, Align(1), m_origin);
+        icValEqual = new ICmpInst(m_origin, CmpInst::Predicate::ICMP_EQ, cachedIcVal, m_icKey);
+    }
+
+    Value* icEffectKind = nullptr;
+    if (!canElideEffectKind)
+    {
+        GetElementPtrInst* icEffectKindAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icKeyBytes) }, "", m_origin);
+        icEffectKind = new LoadInst(llvm_type_of<uint8_t>(ctx), icEffectKindAddr, "", false /*isVolatile*/, Align(1), m_origin);
+    }
+
+    size_t icStateOffset = icKeyBytes + (canElideEffectKind ? 0 : 1);
+
+    // Generate the if-then-else branch, the then-branch is the fast path (IC hit), the else-branch is the slow path (IC miss)
+    //
+    Function* expectIntrin = Intrinsic::getDeclaration(module, Intrinsic::expect, { Type::getInt1Ty(ctx) });
+    CallInst::Create(expectIntrin, { icValEqual, CreateLLVMConstantInt<bool>(ctx, true) }, "", m_origin);
+    Instruction* thenBlockTerminator = nullptr;
+    Instruction* elseBlockTerminator = nullptr;
+    SplitBlockAndInsertIfThenElse(icValEqual, m_origin /*splitBefore*/, &thenBlockTerminator /*out*/, &elseBlockTerminator /*out*/);
+    ReleaseAssert(thenBlockTerminator != nullptr && elseBlockTerminator != nullptr);
+    BasicBlock* icCacheHitBlock = thenBlockTerminator->getParent();
+    BasicBlock* callIcBodyBlock = elseBlockTerminator->getParent();
+    BasicBlock* joinBlock = m_origin->getParent();
+
+    std::vector<BasicBlock*> effectCaseBBList;
+    if (!canElideEffectKind)
+    {
+        // For the then-block, we need to create a switch case that calls each effect based on the effect kind
+        //
+        thenBlockTerminator->eraseFromParent();
+        thenBlockTerminator = nullptr;
+
+        // If no impossible value is specified, the default switch case clause should point to the slowpath since an invalid
+        // effect kind indicates that the IC entry does not exist.
+        // Otherwise, since the IC key will be set to the impossible value to indicate that the IC entry doesn't exist,
+        // when we reach here, the icEffectKind must indicate a valid IC effect kind, so the default clause should be unreachable.
+        //
+        BasicBlock* defaultClause;
+        if (hasImpossibleValue)
+        {
+            defaultClause = BasicBlock::Create(ctx, "", mainFn);
+            new UnreachableInst(ctx, defaultClause);
+        }
+        else
+        {
+            defaultClause = callIcBodyBlock;
+        }
+
+        SwitchInst* switchInst = SwitchInst::Create(icEffectKind, defaultClause, static_cast<uint32_t>(numEffectKinds) /*caseToReserve*/, icCacheHitBlock);
+        for (size_t i = 0; i < numEffectKinds; i++)
+        {
+            BasicBlock* bb = BasicBlock::Create(ctx, "", mainFn, joinBlock /*insertBefore*/);
+            BranchInst::Create(joinBlock, bb);
+            effectCaseBBList.push_back(bb);
+            switchInst->addCase(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(i)), bb);
+        }
+    }
+    else
+    {
+        ReleaseAssert(numEffectKinds == 1);
+        effectCaseBBList.push_back(icCacheHitBlock);
+    }
+    ReleaseAssert(effectCaseBBList.size() == numEffectKinds);
+
+    std::vector<Value*> effectCaseResultList;
+    effectCaseResultList.resize(effectCaseBBList.size(), nullptr);
+
+    size_t maxIcStateSize = 0;
+
+    // Now, generate logic for each effect kind
+    //
+    for (Effect& e : m_effects)
+    {
+        {
+            // Generate the logic in the main function, which is simply calling the wrapped effect fn
+            //
+            ReleaseAssert(e.m_effectOrdinal < effectCaseBBList.size());
+            BasicBlock* bb = effectCaseBBList[e.m_effectOrdinal];
+            ReleaseAssert(bb->getInstList().size() == 1);
+            Instruction* lastInst = bb->getTerminator();
+            std::vector<Value*> args;
+            args.push_back(m_icPtrOrigin);
+            for (Value* val : e.m_effectFnMainArgs) { args.push_back(val); }
+            Value* effectResult = CallInst::Create(e.m_effectFnMain, args, "", lastInst /*insertBefore*/);
+            ReleaseAssert(effectCaseResultList[e.m_effectOrdinal] == nullptr);
+            effectCaseResultList[e.m_effectOrdinal] = effectResult;
+        }
+
+        // Generate the implementation of the IC state encoder and decoder
+        // For now, the IC state is simply a packed struct (i.e., ignores alignment requirement) of all the captured members
+        // and we encode/decode by generating memcpy to copy the values in/out and let LLVM handle all the optimizations.
+        //
+        size_t numElementsInIcState = e.m_icStateVals.size();
+        size_t icStateSize;
+        {
+            // Generate the implementation of the IC state encoder
+            // The prototype of the encoder is 'void* dst' followed by all the values of the IC state.
+            //
+            Function* target = e.m_icStateEncoder;
+            ReleaseAssert(target->arg_size() == 1 + numElementsInIcState);
+            ReleaseAssert(target->empty());
+            target->setLinkage(GlobalValue::InternalLinkage);
+            CopyFunctionAttributes(target, mainFn);
+            target->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            BasicBlock* bb = BasicBlock::Create(ctx, "", target);
+
+            Value* encoderIcPtr = target->getArg(0);
+
+            std::vector<AllocaInst*> allocas;
+            for (size_t i = 0; i < numElementsInIcState; i++)
+            {
+                allocas.push_back(new AllocaInst(e.m_icStateVals[i]->getType(), 0 /*addrSpace*/, "", bb));
+            }
+
+            Value* icState = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), encoderIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icStateOffset) }, "", bb);
+
+            for (uint32_t i = 0; i < numElementsInIcState; i++)
+            {
+                Value* src = target->getArg(1 + i);
+                ReleaseAssert(src->getType() == e.m_icStateVals[i]->getType());
+                new StoreInst(src, allocas[i], bb);
+            }
+
+            size_t curIcOffset = 0;
+            DataLayout dataLayout(module);
+            for (size_t i = 0; i < numElementsInIcState; i++)
+            {
+                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icState, { CreateLLVMConstantInt<uint64_t>(ctx, curIcOffset) }, "", bb);
+                // Calling 'getTypeStoreSize' is likely incorrect, because the store size does not consider the tail padding,
+                // but the Clang frontend is already implicitly generating memcpy that copies the tail padding.
+                //
+                size_t typeSize = dataLayout.getTypeAllocSize(e.m_icStateVals[i]->getType());
+                EmitLLVMIntrinsicMemcpy(module, gep /*dst*/, allocas[i] /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, typeSize), bb);
+                curIcOffset += typeSize;
+            }
+            ReturnInst::Create(ctx, nullptr /*returnVoid*/, bb);
+            ValidateLLVMFunction(target);
+            icStateSize = curIcOffset;
+        }
+
+        {
+            // Generate the implementation of the IC state decoder
+            // The prototype of the decoder is 'void* src' followed by a list of void* pointers,
+            // which are the destinations to decode each member into.
+            //
+            Function* target = e.m_icStateDecoder;
+            ReleaseAssert(target->arg_size() == 1 + numElementsInIcState);
+            ReleaseAssert(target->empty());
+            target->setLinkage(GlobalValue::InternalLinkage);
+            CopyFunctionAttributes(target, mainFn);
+            target->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            BasicBlock* bb = BasicBlock::Create(ctx, "", target);
+
+            Value* decoderIcPtr = target->getArg(0);
+            Value* icState = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), decoderIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icStateOffset) }, "", bb);
+
+            size_t curIcOffset = 0;
+            DataLayout dataLayout(module);
+            for (uint32_t i = 0; i < numElementsInIcState; i++)
+            {
+                Value* dst = target->getArg(1 + i);
+                ReleaseAssert(llvm_value_has_type<void*>(dst));
+                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icState, { CreateLLVMConstantInt<uint64_t>(ctx, curIcOffset) }, "", bb);
+                size_t typeSize = dataLayout.getTypeAllocSize(e.m_icStateVals[i]->getType());
+                EmitLLVMIntrinsicMemcpy(module, dst, gep /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, typeSize), bb);
+                curIcOffset += typeSize;
+            }
+            ReturnInst::Create(ctx, nullptr /*returnVoid*/, bb);
+            ValidateLLVMFunction(target);
+            ReleaseAssert(icStateSize == curIcOffset);
+        }
+
+        {
+            // Generate the logic in the IC body that creates the IC state
+            // Basically we need to create the IC state, then invoke the IC effect lambda
+            //
+            Instruction* insertBefore = e.m_origin;
+            Value* bodyIcPtr = e.m_icPtr;
+            // For the interpreter, since by design we only have space for one IC entry,
+            // currently the policy is that the new IC entry will always overwrite the old IC entry.
+            //
+            // Write the IC key
+            //
+            {
+                ReleaseAssert(m_bodyFnIcKeyArgOrd < m_bodyFn->arg_size());
+                Value* icKeyToWrite = m_bodyFn->getArg(m_bodyFnIcKeyArgOrd);
+                ReleaseAssert(icKeyToWrite->getType() == m_icKey->getType());
+                new StoreInst(icKeyToWrite, bodyIcPtr, false /*isVolatile*/, Align(1), insertBefore);
+            }
+            // Write the effect ordinal (if it is not elided)
+            //
+            if (!canElideEffectKind)
+            {
+                Value* effectKindToWrite = CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(e.m_effectOrdinal));
+                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bodyIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icKeyBytes) }, "", insertBefore);
+                new StoreInst(effectKindToWrite, gep, false /*isVolatile*/, Align(1), insertBefore);
+            }
+            // Write the IC state
+            {
+                std::vector<Value*> args;
+                args.push_back(bodyIcPtr);
+                for (Value* val : e.m_icStateVals)
+                {
+                    args.push_back(val);
+                }
+                CallInst* writeIcStateInst = CallInst::Create(e.m_icStateEncoder, args, "", insertBefore);
+                ReleaseAssert(llvm_value_has_type<void>(writeIcStateInst));
+            }
+            // Replace the annotation dummy call by the actual call that executes the IC effect logic
+            //
+            ReleaseAssert(e.m_effectFnBody->arg_size() == 1);
+            CallInst* replacement = CallInst::Create(e.m_effectFnBody, { e.m_effectFnBodyCapture }, "", insertBefore);
+            ReleaseAssert(replacement->getType() == e.m_origin->getType());
+            if (!llvm_value_has_type<void>(replacement))
+            {
+                e.m_origin->replaceAllUsesWith(replacement);
+            }
+            ReleaseAssert(e.m_origin->use_empty());
+            e.m_origin->eraseFromParent();
+        }
+
+        // Set up the always_inline attribute for the effect functions
+        //
+        ReleaseAssert(!e.m_effectFnBody->hasFnAttribute(Attribute::AttrKind::NoInline));
+        e.m_effectFnBody->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        e.m_effectFnBody->setLinkage(GlobalValue::InternalLinkage);
+
+        ReleaseAssert(!e.m_effectFnMain->hasFnAttribute(Attribute::AttrKind::NoInline));
+        e.m_effectFnMain->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        e.m_effectFnMain->setLinkage(GlobalValue::InternalLinkage);
+
+        // Update the maximum IC state size (note that this is the state size, so it does not include the size for the header part)
+        //
+        maxIcStateSize = std::max(maxIcStateSize, icStateSize);
+    }
+
+    // TODO: lower the setUncachable API and any other misc API we will need
+    //
+    ReleaseAssert(m_setUncacheableApiCalls.size() == 0 && "unimplemented");
+
+    Value* callIcBodyBlockRes;
+    // Create the slow path logic, which should simply call the IC body
+    //
+    {
+        ReleaseAssert(callIcBodyBlock->getInstList().size() == 1);
+        Instruction* insertBefore = callIcBodyBlock->getTerminator();
+        callIcBodyBlockRes = CallInst::Create(m_bodyFn, m_bodyFnArgs, "", insertBefore);
+    }
+
+    // Create the join BB logic: a PHI node that joins all the results together
+    //
+    {
+        ReleaseAssert(callIcBodyBlockRes->getType() == m_origin->getType());
+        for (Value* val : effectCaseResultList)
+        {
+            ReleaseAssert(val != nullptr);
+            ReleaseAssert(val->getType() == m_origin->getType());
+        }
+
+        ReleaseAssert(m_origin == &joinBlock->getInstList().front());
+        PHINode* phi = PHINode::Create(m_origin->getType(), static_cast<uint32_t>(numEffectKinds + 1) /*anticipatedCases*/, "", m_origin);
+        phi->addIncoming(callIcBodyBlockRes, callIcBodyBlock);
+        ReleaseAssert(effectCaseBBList.size() == numEffectKinds);
+        ReleaseAssert(effectCaseResultList.size() == numEffectKinds);
+        for (size_t i = 0; i < numEffectKinds; i++)
+        {
+            phi->addIncoming(effectCaseResultList[i], effectCaseBBList[i]);
+        }
+
+        ReleaseAssert(phi->getType() == m_origin->getType());
+        if (!llvm_value_has_type<void>(phi))
+        {
+            m_origin->replaceAllUsesWith(phi);
+        }
+        ReleaseAssert(m_origin->use_empty());
+        m_origin->eraseFromParent();
+    }
+
+    m_interpreterIcStateSizeBytes = icStateOffset + maxIcStateSize;
+
+    ValidateLLVMFunction(mainFn);
+    ValidateLLVMFunction(m_bodyFn);
 }
 
 }   // namespace dast
