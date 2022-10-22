@@ -33,7 +33,11 @@ TEST(DeegenAst, InlineCacheAPILowering_1)
     list[0].DoLoweringForInterpreter();
     DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
-    ReleaseAssert(list[0].m_interpreterIcStateSizeBytes == 9);
+    BytecodeMetadataStructBase::StructInfo icStateInfo = list[0].m_icStruct->FinalizeStructAndAssignOffsets();
+    ReleaseAssert(icStateInfo.alignment == 1);
+    ReleaseAssert(icStateInfo.allocSize == 9);
+
+    list[0].m_icStruct->LowerAll(module);
 
     uint8_t ptrBuffer[100];
     memset(ptrBuffer, 0xcd, 100);

@@ -1218,6 +1218,22 @@ inline bool AddUsedAttributeToGlobalValue(llvm::GlobalValue* globalVal)
     return true;
 }
 
+inline std::string WARN_UNUSED GetFirstAvailableFunctionNameWithPrefix(llvm::Module* module, const std::string& prefix)
+{
+    std::string decidedName;
+    size_t suffixOrd = 0;
+    while (true)
+    {
+        decidedName = prefix + std::to_string(suffixOrd);
+        if (module->getNamedValue(decidedName) == nullptr)
+        {
+            break;
+        }
+        suffixOrd++;
+    }
+    return decidedName;
+}
+
 // It seems like the LLVM inlining pass does not run to fixpoint.
 // That is, if the LLVM inlining pass is executed repeatedly,
 // more and more callees can get inlined, causing undesirable code bloat.

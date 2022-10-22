@@ -4,6 +4,7 @@
 #include "misc_llvm_helper.h"
 #include "cxx_symbol_demangler.h"
 #include "api_inline_cache.h"
+#include "deegen_bytecode_metadata.h"
 
 namespace dast {
 
@@ -51,16 +52,12 @@ public:
     static std::vector<AstInlineCache> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
     // This lowers everything except the 'MakeInlineCache()' call (the m_icPtrOrigin, which returns the IC pointer)
-    // This is because we need global information (the full layout of the bytecode metadata struct) to figure out
-    // the IC pointer for this IC. Fortunately, this design also makes unit testing easier.
+    // The main motivation is to separate the IC lowering logic and the interpreter-specific logic. Such design also
+    // makes unit testing easier.
+    //
+    // This function also populates 'm_icStruct', the state definition of this IC.
     //
     void DoLoweringForInterpreter();
-
-    size_t GetInterpreterIcStateSizeBytes()
-    {
-        ReleaseAssert(m_interpreterIcStateSizeBytes != static_cast<size_t>(-1));
-        return m_interpreterIcStateSizeBytes;
-    }
 
     // The CallInst that retrieves the IC pointer in the main function
     //
@@ -83,7 +80,7 @@ public:
     // The key and impossible value (if no impossible value is specified, the field is nullptr)
     //
     llvm::Value* m_icKey;
-    llvm::Constant* m_icKeyImpossibleValueMaybeNull;
+    llvm::ConstantInt* m_icKeyImpossibleValueMaybeNull;
     // The list of effect lambdas of this IC
     //
     std::vector<Effect> m_effects;
@@ -92,8 +89,9 @@ public:
     std::vector<llvm::CallInst*> m_setUncacheableApiCalls;
 
     // This is populated by 'DoLoweringForInterpreter'
+    // The IC state definition
     //
-    size_t m_interpreterIcStateSizeBytes;
+    std::unique_ptr<BytecodeMetadataStructBase> m_icStruct;
 };
 
 }   // namespace dast

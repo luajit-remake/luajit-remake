@@ -46,22 +46,6 @@ constexpr const char* x_icEffectClosureWrapperFunctionPrefix = "__deegen_inline_
 constexpr const char* x_decodeICStateToEffectLambdaCaptureFunctionPrefix = "__deegen_inline_cache_decode_ic_state_";
 constexpr const char* x_encodeICStateFunctionPrefix = "__deegen_inline_cache_encode_ic_state_";
 
-static std::string WARN_UNUSED GetFirstAvailableFunctionNameWithPrefix(llvm::Module* module, const std::string& prefix)
-{
-    std::string decidedName;
-    size_t suffixOrd = 0;
-    while (true)
-    {
-        decidedName = prefix + std::to_string(suffixOrd);
-        if (module->getNamedValue(decidedName) == nullptr)
-        {
-            break;
-        }
-        suffixOrd++;
-    }
-    return decidedName;
-}
-
 // This transform transforms a closure (a function with a capture) to a normal function call.
 //
 // The transform looks like the following: before transform we have IR
@@ -1097,7 +1081,6 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
     CallInst* def = dyn_cast<CallInst>(ic);
     ReleaseAssert(def != nullptr);
     ReleaseAssert(def->getCalledFunction() != nullptr && def->getCalledFunction()->getName().startswith(x_createIcInitPlaceholderFunctionPrefix));
-    r.m_interpreterIcStateSizeBytes = static_cast<size_t>(-1);
     r.m_icPtrOrigin = def;
     r.m_origin = origin;
     r.m_icKey = origin->getArgOperand(1);
@@ -1109,8 +1092,8 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
     }
     else
     {
-        ReleaseAssert(isa<Constant>(icKeyImpossibleVal));
-        r.m_icKeyImpossibleValueMaybeNull = cast<Constant>(icKeyImpossibleVal);
+        ReleaseAssert(isa<ConstantInt>(icKeyImpossibleVal));
+        r.m_icKeyImpossibleValueMaybeNull = cast<ConstantInt>(icKeyImpossibleVal);
         ReleaseAssert(r.m_icKeyImpossibleValueMaybeNull->getType() == r.m_icKey->getType());
     }
 
@@ -1358,6 +1341,8 @@ void AstInlineCache::DoLoweringForInterpreter()
     // }
     //
 
+    std::unique_ptr<BytecodeMetadataStruct> ms = std::make_unique<BytecodeMetadataStruct>();
+
     Value* icPtr = m_icPtrOrigin;
     Function* mainFn = m_icPtrOrigin->getFunction();
     bool hasImpossibleValue = (m_icKeyImpossibleValueMaybeNull != nullptr);
@@ -1369,22 +1354,47 @@ void AstInlineCache::DoLoweringForInterpreter()
 
     bool canElideEffectKind = (numEffectKinds == 1) && hasImpossibleValue;
 
+    BytecodeMetadataElement* ms_cachedIcVal = ms->AddElement(1 /*alignment*/, icKeyBytes);
+    if (hasImpossibleValue)
+    {
+        ms_cachedIcVal->SetInitValueCI(m_icKeyImpossibleValueMaybeNull);
+    }
+
     // Load the IC entry header and compare 'key == cachedIcKey'
     //
     Value* icValEqual;
     {
-        Value* cachedIcVal = new LoadInst(m_icKey->getType(), icPtr, "", false /*isVolatile*/, Align(1), m_origin);
+        Value* addr = ms_cachedIcVal->EmitGetAddress(module, icPtr, m_origin);
+        Value* cachedIcVal = new LoadInst(m_icKey->getType(), addr, "", false /*isVolatile*/, Align(1), m_origin);
         icValEqual = new ICmpInst(m_origin, CmpInst::Predicate::ICMP_EQ, cachedIcVal, m_icKey);
     }
+
+    BytecodeMetadataElement* ms_effectKind = nullptr;
+    std::vector<BytecodeMetadataStruct*> ms_effects;
+    if (!canElideEffectKind)
+    {
+        BytecodeMetadataTaggedUnion* tu = ms->AddTaggedUnion();
+        ms_effectKind = tu->GetTag();
+        for (size_t i = 0; i < m_effects.size(); i++)
+        {
+            auto [caseOrd, caseStruct] = tu->AddNewCase();
+            ReleaseAssert(caseOrd == i);
+            ms_effects.push_back(caseStruct);
+        }
+    }
+    else
+    {
+        ReleaseAssert(m_effects.size() == 1);
+        ms_effects.push_back(ms->AddStruct());
+    }
+    ReleaseAssert(ms_effects.size() == m_effects.size());
 
     Value* icEffectKind = nullptr;
     if (!canElideEffectKind)
     {
-        GetElementPtrInst* icEffectKindAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icKeyBytes) }, "", m_origin);
+        Value* icEffectKindAddr = ms_effectKind->EmitGetAddress(module, icPtr, m_origin);
         icEffectKind = new LoadInst(llvm_type_of<uint8_t>(ctx), icEffectKindAddr, "", false /*isVolatile*/, Align(1), m_origin);
     }
-
-    size_t icStateOffset = icKeyBytes + (canElideEffectKind ? 0 : 1);
 
     // Generate the if-then-else branch, the then-branch is the fast path (IC hit), the else-branch is the slow path (IC miss)
     //
@@ -1441,8 +1451,6 @@ void AstInlineCache::DoLoweringForInterpreter()
     std::vector<Value*> effectCaseResultList;
     effectCaseResultList.resize(effectCaseBBList.size(), nullptr);
 
-    size_t maxIcStateSize = 0;
-
     // Now, generate logic for each effect kind
     //
     for (Effect& e : m_effects)
@@ -1467,7 +1475,25 @@ void AstInlineCache::DoLoweringForInterpreter()
         // and we encode/decode by generating memcpy to copy the values in/out and let LLVM handle all the optimizations.
         //
         size_t numElementsInIcState = e.m_icStateVals.size();
-        size_t icStateSize;
+        std::vector<BytecodeMetadataElement*> ms_icStates;
+
+        {
+            // Set up the struct to hold the captured state of this effect
+            //
+            DataLayout dataLayout(module);
+            BytecodeMetadataStruct* bms = ms_effects[e.m_effectOrdinal];
+            for (size_t i = 0; i < numElementsInIcState; i++)
+            {
+                Type* icStateType = e.m_icStateVals[i]->getType();
+                // Calling 'getTypeStoreSize' is likely incorrect, because the store size does not consider the tail padding,
+                // but the Clang frontend is already implicitly generating memcpy that copies the tail padding.
+                //
+                size_t typeSize = dataLayout.getTypeAllocSize(icStateType);
+                ms_icStates.push_back(bms->AddElement(1 /*alignment*/, typeSize));
+            }
+            ReleaseAssert(ms_icStates.size() == numElementsInIcState);
+        }
+
         {
             // Generate the implementation of the IC state encoder
             // The prototype of the encoder is 'void* dst' followed by all the values of the IC state.
@@ -1488,30 +1514,21 @@ void AstInlineCache::DoLoweringForInterpreter()
                 allocas.push_back(new AllocaInst(e.m_icStateVals[i]->getType(), 0 /*addrSpace*/, "", bb));
             }
 
-            Value* icState = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), encoderIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icStateOffset) }, "", bb);
-
             for (uint32_t i = 0; i < numElementsInIcState; i++)
             {
+                Type* icStateType = e.m_icStateVals[i]->getType();
                 Value* src = target->getArg(1 + i);
-                ReleaseAssert(src->getType() == e.m_icStateVals[i]->getType());
+                ReleaseAssert(src->getType() == icStateType);
                 new StoreInst(src, allocas[i], bb);
             }
 
-            size_t curIcOffset = 0;
-            DataLayout dataLayout(module);
             for (size_t i = 0; i < numElementsInIcState; i++)
             {
-                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icState, { CreateLLVMConstantInt<uint64_t>(ctx, curIcOffset) }, "", bb);
-                // Calling 'getTypeStoreSize' is likely incorrect, because the store size does not consider the tail padding,
-                // but the Clang frontend is already implicitly generating memcpy that copies the tail padding.
-                //
-                size_t typeSize = dataLayout.getTypeAllocSize(e.m_icStateVals[i]->getType());
-                EmitLLVMIntrinsicMemcpy(module, gep /*dst*/, allocas[i] /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, typeSize), bb);
-                curIcOffset += typeSize;
+                Value* addr = ms_icStates[i]->EmitGetAddress(module, encoderIcPtr, bb);
+                EmitLLVMIntrinsicMemcpy(module, addr /*dst*/, allocas[i] /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, ms_icStates[i]->GetSize()), bb);
             }
             ReturnInst::Create(ctx, nullptr /*returnVoid*/, bb);
             ValidateLLVMFunction(target);
-            icStateSize = curIcOffset;
         }
 
         {
@@ -1528,22 +1545,16 @@ void AstInlineCache::DoLoweringForInterpreter()
             BasicBlock* bb = BasicBlock::Create(ctx, "", target);
 
             Value* decoderIcPtr = target->getArg(0);
-            Value* icState = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), decoderIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icStateOffset) }, "", bb);
 
-            size_t curIcOffset = 0;
-            DataLayout dataLayout(module);
             for (uint32_t i = 0; i < numElementsInIcState; i++)
             {
                 Value* dst = target->getArg(1 + i);
                 ReleaseAssert(llvm_value_has_type<void*>(dst));
-                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icState, { CreateLLVMConstantInt<uint64_t>(ctx, curIcOffset) }, "", bb);
-                size_t typeSize = dataLayout.getTypeAllocSize(e.m_icStateVals[i]->getType());
-                EmitLLVMIntrinsicMemcpy(module, dst, gep /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, typeSize), bb);
-                curIcOffset += typeSize;
+                Value* addr = ms_icStates[i]->EmitGetAddress(module, decoderIcPtr, bb);
+                EmitLLVMIntrinsicMemcpy(module, dst, addr /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, ms_icStates[i]->GetSize()), bb);
             }
             ReturnInst::Create(ctx, nullptr /*returnVoid*/, bb);
             ValidateLLVMFunction(target);
-            ReleaseAssert(icStateSize == curIcOffset);
         }
 
         {
@@ -1561,15 +1572,16 @@ void AstInlineCache::DoLoweringForInterpreter()
                 ReleaseAssert(m_bodyFnIcKeyArgOrd < m_bodyFn->arg_size());
                 Value* icKeyToWrite = m_bodyFn->getArg(m_bodyFnIcKeyArgOrd);
                 ReleaseAssert(icKeyToWrite->getType() == m_icKey->getType());
-                new StoreInst(icKeyToWrite, bodyIcPtr, false /*isVolatile*/, Align(1), insertBefore);
+                Value* addr = ms_cachedIcVal->EmitGetAddress(module, bodyIcPtr, insertBefore);
+                new StoreInst(icKeyToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), insertBefore);
             }
             // Write the effect ordinal (if it is not elided)
             //
             if (!canElideEffectKind)
             {
                 Value* effectKindToWrite = CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(e.m_effectOrdinal));
-                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bodyIcPtr, { CreateLLVMConstantInt<uint64_t>(ctx, icKeyBytes) }, "", insertBefore);
-                new StoreInst(effectKindToWrite, gep, false /*isVolatile*/, Align(1), insertBefore);
+                Value* addr = ms_effectKind->EmitGetAddress(module, bodyIcPtr, insertBefore);
+                new StoreInst(effectKindToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), insertBefore);
             }
             // Write the IC state
             {
@@ -1604,10 +1616,6 @@ void AstInlineCache::DoLoweringForInterpreter()
         ReleaseAssert(!e.m_effectFnMain->hasFnAttribute(Attribute::AttrKind::NoInline));
         e.m_effectFnMain->addFnAttr(Attribute::AttrKind::AlwaysInline);
         e.m_effectFnMain->setLinkage(GlobalValue::InternalLinkage);
-
-        // Update the maximum IC state size (note that this is the state size, so it does not include the size for the header part)
-        //
-        maxIcStateSize = std::max(maxIcStateSize, icStateSize);
     }
 
     // TODO: lower the setUncachable API and any other misc API we will need
@@ -1652,7 +1660,7 @@ void AstInlineCache::DoLoweringForInterpreter()
         m_origin->eraseFromParent();
     }
 
-    m_interpreterIcStateSizeBytes = icStateOffset + maxIcStateSize;
+    m_icStruct = std::move(ms);
 
     ValidateLLVMFunction(mainFn);
     ValidateLLVMFunction(m_bodyFn);
