@@ -918,6 +918,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         ReleaseAssert(closureWrapper->getName() == wrapperFnName);
         CopyFunctionAttributes(closureWrapper, closureWrapperImpl);
         closureWrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
+        closureWrapper->setDSOLocal(true);
 
         BasicBlock* bb = BasicBlock::Create(ctx, "", closureWrapper);
         std::vector<Value*> args;
@@ -1007,6 +1008,14 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
 }
 
 }   // anonymous namespace
+
+bool WARN_UNUSED AstInlineCache::IsIcPtrGetterFunctionCall(llvm::CallInst* inst)
+{
+    using namespace llvm;
+    Function* fn = inst->getCalledFunction();
+    if (fn == nullptr) { return false; }
+    return fn->getName().startswith(x_createIcInitPlaceholderFunctionPrefix);
+}
 
 void AstInlineCache::PreprocessModule(llvm::Module* module)
 {
@@ -1320,7 +1329,11 @@ void AstInlineCache::DoLoweringForInterpreter()
 {
     using namespace llvm;
     LLVMContext& ctx = m_origin->getContext();
-    Module* module = m_origin->getModule();
+    ReleaseAssert(m_origin->getParent() != nullptr);
+    Function* mainFn = m_origin->getParent()->getParent();
+    ReleaseAssert(mainFn != nullptr);
+    Module* module = mainFn->getParent();
+    ReleaseAssert(module != nullptr);
 
     // The metadata header:
     //     KeyType icValue
@@ -1344,7 +1357,7 @@ void AstInlineCache::DoLoweringForInterpreter()
     std::unique_ptr<BytecodeMetadataStruct> ms = std::make_unique<BytecodeMetadataStruct>();
 
     Value* icPtr = m_icPtrOrigin;
-    Function* mainFn = m_icPtrOrigin->getFunction();
+    ReleaseAssert(m_icPtrOrigin->getFunction() == mainFn);
     bool hasImpossibleValue = (m_icKeyImpossibleValueMaybeNull != nullptr);
     ReleaseAssert(m_icKey->getType()->isIntegerTy());
     size_t icKeyBytes = m_icKey->getType()->getIntegerBitWidth() / 8;
@@ -1399,7 +1412,7 @@ void AstInlineCache::DoLoweringForInterpreter()
     // Generate the if-then-else branch, the then-branch is the fast path (IC hit), the else-branch is the slow path (IC miss)
     //
     Function* expectIntrin = Intrinsic::getDeclaration(module, Intrinsic::expect, { Type::getInt1Ty(ctx) });
-    CallInst::Create(expectIntrin, { icValEqual, CreateLLVMConstantInt<bool>(ctx, true) }, "", m_origin);
+    icValEqual = CallInst::Create(expectIntrin, { icValEqual, CreateLLVMConstantInt<bool>(ctx, true) }, "", m_origin);
     Instruction* thenBlockTerminator = nullptr;
     Instruction* elseBlockTerminator = nullptr;
     SplitBlockAndInsertIfThenElse(icValEqual, m_origin /*splitBefore*/, &thenBlockTerminator /*out*/, &elseBlockTerminator /*out*/);
@@ -1448,8 +1461,13 @@ void AstInlineCache::DoLoweringForInterpreter()
     }
     ReleaseAssert(effectCaseBBList.size() == numEffectKinds);
 
-    std::vector<Value*> effectCaseResultList;
-    effectCaseResultList.resize(effectCaseBBList.size(), nullptr);
+    // All we conceptually want to do is to create a PHI in the join BB that joins the results of all the cases together.
+    // However, the result type can be an aggregate type, and it turns out that LLVM generates miserable code for PHI node with aggregate type
+    // as for some reason, the optimizer is unable to decompose the aggregate-typed PHI into scalar-valued PHIs.
+    // After some more investigation, it turns out that the right thing to do is to simply create an alloca, and let LLVM's SROA pass to
+    // decompose the alloca and create decomposed PHI nodes for us.
+    //
+    AllocaInst* icResultAlloca = new AllocaInst(m_origin->getType(), 0 /*addrSpace*/, "", &mainFn->getEntryBlock().front() /*insertBefore*/);
 
     // Now, generate logic for each effect kind
     //
@@ -1461,13 +1479,12 @@ void AstInlineCache::DoLoweringForInterpreter()
             ReleaseAssert(e.m_effectOrdinal < effectCaseBBList.size());
             BasicBlock* bb = effectCaseBBList[e.m_effectOrdinal];
             ReleaseAssert(bb->getInstList().size() == 1);
-            Instruction* lastInst = bb->getTerminator();
+            Instruction* insertBefore = bb->getTerminator();
             std::vector<Value*> args;
             args.push_back(m_icPtrOrigin);
             for (Value* val : e.m_effectFnMainArgs) { args.push_back(val); }
-            Value* effectResult = CallInst::Create(e.m_effectFnMain, args, "", lastInst /*insertBefore*/);
-            ReleaseAssert(effectCaseResultList[e.m_effectOrdinal] == nullptr);
-            effectCaseResultList[e.m_effectOrdinal] = effectResult;
+            Value* effectResult = CallInst::Create(e.m_effectFnMain, args, "", insertBefore);
+            new StoreInst(effectResult, icResultAlloca, insertBefore);
         }
 
         // Generate the implementation of the IC state encoder and decoder
@@ -1622,39 +1639,22 @@ void AstInlineCache::DoLoweringForInterpreter()
     //
     ReleaseAssert(m_setUncacheableApiCalls.size() == 0 && "unimplemented");
 
-    Value* callIcBodyBlockRes;
     // Create the slow path logic, which should simply call the IC body
     //
     {
         ReleaseAssert(callIcBodyBlock->getInstList().size() == 1);
         Instruction* insertBefore = callIcBodyBlock->getTerminator();
-        callIcBodyBlockRes = CallInst::Create(m_bodyFn, m_bodyFnArgs, "", insertBefore);
+        Value* slowPathRes = CallInst::Create(m_bodyFn, m_bodyFnArgs, "", insertBefore);
+        new StoreInst(slowPathRes, icResultAlloca, insertBefore);
     }
 
-    // Create the join BB logic: a PHI node that joins all the results together
+    // Create the join BB logic: load from 'icResultAlloca' to get the final result
     //
     {
-        ReleaseAssert(callIcBodyBlockRes->getType() == m_origin->getType());
-        for (Value* val : effectCaseResultList)
+        Value* icResult = new LoadInst(m_origin->getType(), icResultAlloca, "", m_origin);
+        if (!llvm_value_has_type<void>(icResult))
         {
-            ReleaseAssert(val != nullptr);
-            ReleaseAssert(val->getType() == m_origin->getType());
-        }
-
-        ReleaseAssert(m_origin == &joinBlock->getInstList().front());
-        PHINode* phi = PHINode::Create(m_origin->getType(), static_cast<uint32_t>(numEffectKinds + 1) /*anticipatedCases*/, "", m_origin);
-        phi->addIncoming(callIcBodyBlockRes, callIcBodyBlock);
-        ReleaseAssert(effectCaseBBList.size() == numEffectKinds);
-        ReleaseAssert(effectCaseResultList.size() == numEffectKinds);
-        for (size_t i = 0; i < numEffectKinds; i++)
-        {
-            phi->addIncoming(effectCaseResultList[i], effectCaseBBList[i]);
-        }
-
-        ReleaseAssert(phi->getType() == m_origin->getType());
-        if (!llvm_value_has_type<void>(phi))
-        {
-            m_origin->replaceAllUsesWith(phi);
+            m_origin->replaceAllUsesWith(icResult);
         }
         ReleaseAssert(m_origin->use_empty());
         m_origin->eraseFromParent();

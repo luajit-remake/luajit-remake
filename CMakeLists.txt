@@ -173,6 +173,8 @@ add_library(deegen_fps_lib
   $<TARGET_OBJECTS:deegen_interpreter_fn_entry_logic>
 )
 
+add_subdirectory(drt)
+
 add_subdirectory(runtime)
 
 # add the unit test executable
@@ -206,6 +208,7 @@ set(UNIT_TEST_LINK_LIBRARIES
   common_utils
   runtime
   deegen_rt
+  deegen_utils
   deegen_fps_lib
   deegen_user_builtin_lib
   deegen_unit_test_ir

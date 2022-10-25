@@ -149,10 +149,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
     TestAssert(module["FunctionPrototypes"].size() > 0);
     for (auto& j : module["FunctionPrototypes"])
     {
-        UnlinkedCodeBlock* ucb = new UnlinkedCodeBlock;
-        ucb->m_defaultGlobalObject = globalObject.As();
-        ucb->m_rareGOtoCBMap = nullptr;
-        ucb->m_parent = nullptr;
+        UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, globalObject.As());
 
         ucb->m_numFixedArguments = JSONCheckedGet<uint32_t>(j, "NumFixedParams");
         ucb->m_hasVariadicArguments = JSONCheckedGet<bool>(j, "TakesVarArg");
@@ -1480,8 +1477,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
         ucb->m_bytecode = bytecodeData.first;
         ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
-        ucb->m_bytecodeMetadataLength = 0;
+        ucb->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
         ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, globalObject);
+        const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
+        assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
+        memcpy(ucb->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
         r->m_unlinkedCodeBlocks.push_back(ucb);
 
         /*

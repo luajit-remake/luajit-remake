@@ -74,6 +74,9 @@ public:
     static bool WARN_UNUSED IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName);
 
 private:
+    void CreateWrapperFunction();
+    void LowerGetBytecodeMetadataPtrAPI();
+
     BytecodeVariantDefinition* m_bytecodeDef;
 
     std::unique_ptr<llvm::Module> m_module;
@@ -94,6 +97,8 @@ private:
     //
     std::string m_resultFuncName;
 
+    std::vector<std::string> m_icBodyNames;
+
     LLVMValuePreserver m_valuePreserver;
     bool m_generated;
 
@@ -105,6 +110,7 @@ private:
     static constexpr const char* x_numRet = "numRet";
     static constexpr const char* x_outputSlot = "outputSlot";
     static constexpr const char* x_condBrDest = "condBrDest";
+    static constexpr const char* x_metadataPtr = "metadataPtr";
 };
 
 }   // namespace dast

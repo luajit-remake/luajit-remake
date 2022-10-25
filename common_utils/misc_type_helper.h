@@ -331,3 +331,145 @@ struct tuple_append_element_impl<U, std::tuple<Args...>> {
 
 template<typename T, typename U>
 using tuple_append_element_t = typename tuple_append_element_impl<U, T>::type;
+
+template<typename... T>
+using tuple_cat_t = decltype(std::tuple_cat(std::declval<T>()...));
+
+namespace detail {
+
+template<typename F, typename... T>
+struct CheckFirstTypeUniqueImpl
+{
+    template<typename... Res>
+    static consteval bool has_true(Res... args)
+    {
+        return (false || ... || args);
+    }
+
+    static constexpr bool value = !has_true(std::is_same_v<F, T>...);
+};
+
+// bool b, size_t k, typename F, typename... T:
+// The first k types of 'F, T...' that are yet to unique
+// The remaining types are the types that have been uniqued
+// b must equal FirstTypeUnique<F, T...>
+//
+// Under this invariant, the transfer logic should be:
+// 1. If b == true, transfer to FirstTypeUnique<T..., F>, k - 1, T..., F
+// 2. If b == false, transfer to FirstTypeUnique<T...>, k - 1, T...
+//
+template<bool b, size_t k, typename F, typename... T>
+struct RemoveRedundantTypeImpl
+{
+    static_assert(b && k > 0);  // otherwise should have been specialized
+    static constexpr bool b2 = CheckFirstTypeUniqueImpl<T..., F>::value;
+    using type = typename RemoveRedundantTypeImpl<b2, k - 1, T..., F>::type;
+};
+
+template<size_t k, typename F, typename... T>
+struct RemoveRedundantTypeImpl<false, k, F, T...>
+{
+    static_assert(k > 0);   // otherwise should have been specialized
+    static constexpr bool b2 = CheckFirstTypeUniqueImpl<T...>::value;
+    using type = typename RemoveRedundantTypeImpl<b2, k - 1, T...>::type;
+};
+
+template<typename F, typename... T>
+struct RemoveRedundantTypeImpl<true, 0, F, T...>
+{
+    static_assert(is_typelist_pairwise_distinct<F, T...>);
+    using type = std::tuple<F, T...>;
+};
+
+template<typename F, typename... T>
+struct RemoveRedundantTypeImpl<false, 0, F, T...>
+{
+    static_assert(type_dependent_false<F>::value, "This case should never happen");
+};
+
+// 'RemoveRedundantTypeImpl' keeps the last occurance of each type, which can be counter-intuitive
+// To fix this,  we revert the type sequence before feeding into RemoveRedundantTypeImpl, and revert it back afterwards
+// so that the first occurance of each type is retained
+//
+template<typename... T>
+struct RevertTypeSequenceImpl
+{
+    static_assert(sizeof...(T) == 0);   // otherwise should have been specialized
+    using type = std::tuple<>;
+};
+
+template<typename F, typename... T>
+struct RevertTypeSequenceImpl<F, T...>
+{
+    using type = tuple_append_element_t<typename RevertTypeSequenceImpl<T...>::type, F>;
+};
+
+template<typename T>
+struct ReverseTupleOrderImpl;
+
+template<typename... T>
+struct ReverseTupleOrderImpl<std::tuple<T...>>
+{
+    using type = typename RevertTypeSequenceImpl<T...>::type;
+};
+
+template<typename T>
+struct DeduplicateTupleTypeImplImpl;
+
+template<typename... T>
+struct DeduplicateTupleTypeImplImpl<std::tuple<T...>>
+{
+    using type = typename RemoveRedundantTypeImpl<CheckFirstTypeUniqueImpl<T...>::value, sizeof...(T), T...>::type;
+};
+
+template<typename T>
+struct DeduplicateTupleTypeImpl
+{
+    using type = typename DeduplicateTupleTypeImplImpl<T>::type;
+};
+
+// 'RemoveRedundantTypeImpl' cannot handle the empty tuple case unfortunately, so work around it
+//
+template<>
+struct DeduplicateTupleTypeImpl<std::tuple<>>
+{
+    using type = std::tuple<>;
+};
+
+}   // namespace detail
+
+template<typename T>
+using reverse_tuple_element_order_t = typename detail::ReverseTupleOrderImpl<T>::type;
+
+// Given a tuple type T, deduplicate its element types, so that only the first occurance of each element type is kept.
+// The order of the tuple is retained other than the removed elements.
+//
+template<typename T>
+using deduplicate_tuple_element_types_t = reverse_tuple_element_order_t<typename detail::DeduplicateTupleTypeImpl<reverse_tuple_element_order_t<T>>::type>;
+
+template<typename T>
+struct deduplicate_tuple
+{
+    using DeduplicatedTy = deduplicate_tuple_element_types_t<T>;
+    static constexpr size_t numElements = std::tuple_size_v<DeduplicatedTy>;
+
+    template<size_t ord, typename U>
+    static consteval size_t FindOrdInDeduplicatedTuple()
+    {
+        static_assert(ord < numElements);
+        if constexpr(std::is_same_v<U, std::tuple_element_t<ord, DeduplicatedTy>>)
+        {
+            return ord;
+        }
+        else
+        {
+            return FindOrdInDeduplicatedTuple<ord + 1, U>();
+        }
+    }
+
+    template<typename U>
+    static constexpr size_t typeOrdinal = FindOrdInDeduplicatedTuple<0, U>();
+
+    template<size_t ord>
+    static constexpr size_t remapOrdinal = typeOrdinal<std::tuple_element_t<ord, T>>;
+};

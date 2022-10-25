@@ -112,7 +112,7 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
     }
     else
     {
-        Value* offset64 = CreateLLVMConstantInt<uint64_t>(ctx, ifi->GetBytecodeDef()->m_bytecodeStructLength);
+        Value* offset64 = CreateLLVMConstantInt<uint64_t>(ctx, ifi->GetBytecodeDef()->GetBytecodeStructLength());
         bytecodeTarget = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCurBytecode(), { offset64 }, "", m_origin /*insertBefore*/);
     }
     ReleaseAssert(llvm_value_has_type<void*>(bytecodeTarget));

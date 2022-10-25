@@ -48,7 +48,14 @@ public:
         size_t m_effectOrdinal;
     };
 
+    static bool WARN_UNUSED IsIcPtrGetterFunctionCall(llvm::CallInst* inst);
+
     static void PreprocessModule(llvm::Module* module);
+
+    // Parse out all the inline caches defined in the given function
+    // Note that unlike many GetAllUseInFunction() in other classes, this GetAllUseInFunction() is not idempotent.
+    // That is, it can be only called once on each function.
+    //
     static std::vector<AstInlineCache> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
     // This lowers everything except the 'MakeInlineCache()' call (the m_icPtrOrigin, which returns the IC pointer)
@@ -91,7 +98,7 @@ public:
     // This is populated by 'DoLoweringForInterpreter'
     // The IC state definition
     //
-    std::unique_ptr<BytecodeMetadataStructBase> m_icStruct;
+    std::unique_ptr<BytecodeMetadataStruct> m_icStruct;
 };
 
 }   // namespace dast

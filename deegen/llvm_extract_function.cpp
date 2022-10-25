@@ -22,6 +22,17 @@ std::unique_ptr<llvm::Module> WARN_UNUSED ExtractFunctions(llvm::Module* moduleI
     std::unique_ptr<Module> moduleHolder = CloneModule(*moduleInput);
     Module* module = moduleHolder.get();
 
+    {
+        // Sanity check that the names in functionNameList are distinct
+        //
+        std::unordered_set<std::string> checkUnique;
+        for (const std::string& s : functionNameList)
+        {
+            ReleaseAssert(!checkUnique.count(s));
+            checkUnique.insert(s);
+        }
+    }
+
     // For each global variable, if the global variable is not a constant,
     // the definition (address storing the value of the global variable) resides in the host process!
     // We must make this global variable a declaration (instead of a definition),

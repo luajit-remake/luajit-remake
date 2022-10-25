@@ -43,7 +43,7 @@ struct ICHandler
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Body(const LambdaType& lambda)
     {
         using ResType = std::invoke_result_t<LambdaType>;
-        static_assert(std::is_trivial_v<ResType>);
+        // static_assert(std::is_trivially_copyable_v<ResType>);
         return DeegenImpl_MakeIC_SetMainLambda<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
     }
 
@@ -64,7 +64,7 @@ struct ICHandler
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Effect(const LambdaType& lambda)
     {
         using ResType = std::invoke_result_t<LambdaType>;
-        static_assert(std::is_trivial_v<ResType>);
+        // static_assert(std::is_trivially_copyable_v<ResType>);
         return DeegenImpl_MakeIC_MarkEffect<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
     }
 };

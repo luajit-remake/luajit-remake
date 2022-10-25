@@ -3,6 +3,7 @@
 #include "common_utils.h"
 #include "heap_ptr_utils.h"
 #include "tvalue.h"
+#include "deegen_metadata_utils.h"
 
 namespace DeegenBytecodeBuilder
 {
@@ -136,10 +137,27 @@ struct ForbidUninitialized
     T m_value;
 };
 
+struct MetadataFieldPatchRecord
+{
+    uint32_t bytecodeOffset;
+    uint16_t typeOrd;
+    uint16_t index;
+};
+
+// Returns the length of the metadata part, which should also be the trailing array size of the code block
+//
+uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList);
+
+class BytecodeBuilder;
+
+template<typename MetadataTypeListInfo>
 class BytecodeBuilderBase
 {
     MAKE_NONCOPYABLE(BytecodeBuilderBase);
     MAKE_NONMOVABLE(BytecodeBuilderBase);
+
+    static constexpr size_t x_numBytecodeMetadataKinds = MetadataTypeListInfo::numElements;
+
 public:
     friend class BranchTargetPopulator;
 
@@ -147,6 +165,12 @@ public:
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
     {
+        if (!m_metadataFieldPatched)
+        {
+            m_metadataFieldPatched = true;
+            PatchMetadataFields();
+        }
+
         size_t len = GetCurLength();
         // Add a few bytes so that tentative decoding of the next bytecode won't segfault..
         //
@@ -167,6 +191,21 @@ public:
         return std::make_pair(tab, len);
     }
 
+    uint32_t GetBytecodeMetadataTotalLength()
+    {
+        if (!m_metadataFieldPatched)
+        {
+            m_metadataFieldPatched = true;
+            PatchMetadataFields();
+        }
+        return m_bytecodeMetadataLength;
+    }
+
+    const std::array<uint16_t, x_numBytecodeMetadataKinds>& GetBytecodeMetadataUseCountArray()
+    {
+        return m_bytecodeMetadataCnt;
+    }
+
     size_t GetCurLength()
     {
         return static_cast<size_t>(m_bufferCur - m_bufferBegin);
@@ -179,6 +218,8 @@ protected:
         m_bufferBegin = new uint8_t[initialSize];
         m_bufferCur = m_bufferBegin;
         m_bufferEnd = m_bufferBegin + initialSize;
+        for (size_t i = 0; i < m_bytecodeMetadataCnt.size(); i++) { m_bytecodeMetadataCnt[i] = 0; }
+        m_metadataFieldPatched = false;
     }
 
     ~BytecodeBuilderBase()
@@ -244,6 +285,21 @@ protected:
         return -static_cast<int64_t>(constantTableOrd) - 1;
     }
 
+    template<typename MetadataType>
+    void RegisterMetadataField(uint8_t* ptr)
+    {
+        constexpr size_t typeOrd = MetadataTypeListInfo::template typeOrdinal<MetadataType>;
+        static_assert(typeOrd < x_numBytecodeMetadataKinds);
+        uint16_t index = m_bytecodeMetadataCnt[typeOrd];
+        ReleaseAssert(index < std::numeric_limits<uint16_t>::max());
+        m_bytecodeMetadataCnt[typeOrd]++;
+        m_metadataFieldPatchRecords.push_back({
+            .bytecodeOffset = SafeIntegerCast<uint32_t>(ptr - m_bufferBegin),
+            .typeOrd = SafeIntegerCast<uint16_t>(typeOrd),
+            .index = index
+        });
+    }
+
 private:
     void CopyAndReverseConstantTable(RestrictPtr<uint64_t> dst /*out*/, RestrictPtr<uint64_t> src, size_t len)
     {
@@ -251,6 +307,15 @@ private:
         {
             dst[i] = src[len - i - 1];
         }
+    }
+
+    void PatchMetadataFields()
+    {
+        // This is lame: due to header file dependency issues, this implementation has to sit in a CPP file..
+        // So we are assuming that our template parameter 'MetadataTypeListInfo' is just the BytecodeMetadataTypeListInfo
+        // define in bytecode_builder.h, but we cannot assert it. Honestly this is fragile, but let's go with it for now.
+        //
+        m_bytecodeMetadataLength = PatchBytecodeMetadataFields(m_bufferBegin, m_bytecodeMetadataCnt.data(), m_metadataFieldPatchRecords);
     }
 
     uint8_t* m_bufferBegin;
@@ -261,6 +326,12 @@ private:
     // TODO: We probably don't want to use std::unordered_map since it's so poorly implemented.. but let's stay simple for now
     //
     std::unordered_map<uint64_t, uint64_t> m_constantTableLocationMap;
+
+    std::array<uint16_t, x_numBytecodeMetadataKinds> m_bytecodeMetadataCnt;
+
+    bool m_metadataFieldPatched;
+    uint32_t m_bytecodeMetadataLength;
+    std::vector<MetadataFieldPatchRecord> m_metadataFieldPatchRecords;
 };
 
 class BranchTargetPopulator
@@ -272,7 +343,8 @@ public:
         : m_fillOffset(fillOffset), m_bytecodeBaseOffset(bytecodeBaseOffset)
     { }
 
-    void PopulateBranchTarget(BytecodeBuilderBase& builder, uint64_t bytecodeLoc)
+    template<typename CRTP>
+    void PopulateBranchTarget(BytecodeBuilderBase<CRTP>& builder, uint64_t bytecodeLoc)
     {
         assert(m_fillOffset != static_cast<uint64_t>(-1));
         assert(bytecodeLoc < builder.GetCurLength());

@@ -6,6 +6,8 @@
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_ast_return.h"
+#include "deegen_analyze_lambda_capture_pass.h"
+#include "deegen_ast_inline_cache.h"
 
 #include "llvm/Transforms/Utils/FunctionComparator.h"
 #include "llvm/Linker/Linker.h"
@@ -601,8 +603,20 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     AnonymousFile hdrOut;
     FILE* fp = hdrOut.GetFStream("w");
 
+    AnonymousFile hdrPreheader;
+    FILE* preFp = hdrPreheader.GetFStream("w");
+
+    // The lambda capture analyze pass must be called first before ANY transformation is performed
+    //
+    DeegenAnalyzeLambdaCapturePass::AddAnnotations(module.get());
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
+    AstInlineCache::PreprocessModule(module.get());
     AstMakeCall::PreprocessModule(module.get());
+
+    // After all the preprocessing stage, the lambda capture analyze results are no longer useful. Remove them now.
+    //
+    DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(module.get());
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
     std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
@@ -672,6 +686,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             fprintf(fp, "private:\n");
         }
 
+        std::vector<std::string> allBytecodeMetadataDefinitionNames;
+
         int currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
@@ -699,6 +715,49 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             allBytecodeFunctions.push_back(std::move(bytecodeImpl));
             cdeclNameForVariants.push_back(variantMainFunctionName);
 
+            // If this variant has metadata, it's time to generate the corresponding definition now
+            //
+            BytecodeMetadataStruct* bms = bytecodeVariantDef->m_bytecodeMetadataMaybeNull.get();
+            std::string bmsClassName;
+            if (bms != nullptr)
+            {
+                BytecodeMetadataStructBase::StructInfo bmsInfo = bytecodeVariantDef->GetMetadataStructInfo();
+
+                bmsClassName = "GeneratedDeegenBytecodeMetadata_" + bytecodeVariantDef->m_bytecodeName + "_" + std::to_string(bytecodeVariantDef->m_variantOrd);
+                allBytecodeMetadataDefinitionNames.push_back(bmsClassName);
+                fprintf(preFp, "using %s = DeegenMetadata<\n", bmsClassName.c_str());
+                fprintf(preFp, "    %d /*alignment*/,\n", SafeIntegerCast<int>(bmsInfo.alignment));
+                fprintf(preFp, "    %d /*size*/,\n", SafeIntegerCast<int>(bmsInfo.allocSize));
+
+                std::vector<BytecodeMetadataElement*> initInfo = bms->CollectInitializationInfo();
+                fprintf(preFp, "    MakeNTTPTuple(");
+                std::vector<std::pair<size_t /*offset*/, std::vector<uint8_t> /*initVal*/>> initVals;
+                for (BytecodeMetadataElement* e : initInfo)
+                {
+                    ReleaseAssert(e->HasInitValue());
+                    initVals.push_back(std::make_pair(e->GetStructOffset(), e->GetInitValue()));
+                }
+                std::sort(initVals.begin(), initVals.end());
+                for (size_t i = 0; i < initVals.size(); i++)
+                {
+                    size_t offset = initVals[i].first;
+                    std::vector<uint8_t>& val = initVals[i].second;
+                    if (i > 0) { fprintf(preFp, ","); }
+                    fprintf(preFp, "\n        DeegenMetadataInitRecord<%d> { .offset = %d, .initData = { ", SafeIntegerCast<int>(val.size()), SafeIntegerCast<int>(offset));
+                    for (size_t k = 0; k < val.size(); k++)
+                    {
+                        uint8_t v = val[k];
+                        if (k > 0) { fprintf(preFp, ", "); }
+                        fprintf(preFp, "%d", static_cast<int>(v));
+                    }
+                    fprintf(preFp, " } }");
+                }
+                fprintf(preFp, ")\n");
+                fprintf(preFp, ">;\n\n");
+            }
+
+            // Generate the implementation that emits the bytecode
+            //
             fprintf(fp, "    %s DeegenCreateImpl%u(", bytecodeBuilderFunctionReturnType.c_str(), SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             for (size_t i = 0; i < bytecodeVariantDef->m_originalOperandTypes.size(); i++)
             {
@@ -807,7 +866,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 fprintf(fp, "        static_assert(std::is_signed_v<StorageTypeForOperand%d> == std::is_signed_v<decltype(originalVal%d)>);\n", static_cast<int>(i), static_cast<int>(i));
             }
 
-            fprintf(fp, "        uint8_t* base = crtp->Reserve(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+            fprintf(fp, "        uint8_t* base = crtp->Reserve(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
 
             int numBitsInOpcodeField = static_cast<int>(BytecodeVariantDefinition::x_opcodeSizeBytes) * 8;
             if (BytecodeVariantDefinition::x_opcodeSizeBytes < 8) {
@@ -834,16 +893,26 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, SafeIntegerCast<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
             }
 
+            ReleaseAssertIff(bms == nullptr, bytecodeVariantDef->m_metadataPtrOffset.get() == nullptr);
+            if (bms != nullptr)
+            {
+                size_t offset = bytecodeVariantDef->m_metadataPtrOffset->GetOffsetInBytecodeStruct();
+                ReleaseAssert(bytecodeVariantDef->m_metadataPtrOffset->GetKind() == BcOperandKind::Literal);
+                ReleaseAssert(bytecodeVariantDef->m_metadataPtrOffset->GetSizeInBytecodeStruct() == 4);
+                ReleaseAssert(bmsClassName != "");
+                fprintf(fp, "        crtp->template RegisterMetadataField<%s>(base + %u);\n", bmsClassName.c_str(), SafeIntegerCast<unsigned int>(offset));
+            }
+
             if (bytecodeVariantDef->m_hasConditionalBranchTarget)
             {
                 size_t offset = bytecodeVariantDef->m_condBrTarget->GetOffsetInBytecodeStruct();
                 fprintf(fp, "        size_t curBytecodeOffset = crtp->GetCurLength();\n");
-                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
                 fprintf(fp, "        return BranchTargetPopulator(curBytecodeOffset + %u /*fillOffset*/, curBytecodeOffset /*bytecodeBaseOffset*/);\n", SafeIntegerCast<unsigned int>(offset));
             }
             else
             {
-                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->m_bytecodeStructLength));
+                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
                 fprintf(fp, "        return;\n");
             }
 
@@ -851,6 +920,16 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             currentBytecodeVariantOrdinal++;
         }
+        // Emit out the bytecode metadata type list for this bytecode
+        //
+        fprintf(preFp, "using %s_BytecodeMetadataInfo = std::tuple<", generatedClassName.c_str());
+        for (size_t i = 0; i < allBytecodeMetadataDefinitionNames.size(); i++)
+        {
+            if (i > 0) { fprintf(preFp, ", "); }
+            fprintf(preFp, "%s", allBytecodeMetadataDefinitionNames[i].c_str());
+        }
+        fprintf(preFp, ">;\n\n");
+
         fprintf(fp, "};\n\n");
 
         ReleaseAssert(currentBytecodeVariantOrdinal == static_cast<int>(bytecodeDef.size()));
@@ -1181,8 +1260,9 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
     finalRes.m_processedModule = std::move(module);
 
+    fclose(preFp);
     fclose(fp);
-    finalRes.m_generatedHeaderFile = hdrOut.GetFileContents();
+    finalRes.m_generatedHeaderFile = hdrPreheader.GetFileContents() + hdrOut.GetFileContents();
     return finalRes;
 }
 

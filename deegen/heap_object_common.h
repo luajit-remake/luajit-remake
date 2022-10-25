@@ -19,6 +19,7 @@
     LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST                                              \
   , (ArraySparseMap,                ArraySparseMap,                 HOI_USR_HEAP)       \
   , (Upvalue,                       Upvalue,                        HOI_USR_HEAP)       \
+  , (UnlinkedCodeBlock,             UnlinkedCodeBlock,              HOI_SYS_HEAP)       \
   , (ExecutableCode,                ExecutableCode,                 HOI_SYS_HEAP)       \
   , (Structure,                     Structure,                      HOI_SYS_HEAP)       \
   , (StructureAnchorHashTable,      StructureAnchorHashTable,       HOI_SYS_HEAP)       \

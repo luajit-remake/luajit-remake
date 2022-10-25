@@ -1442,6 +1442,26 @@ struct LLVMRepeatedInliningInhibitor
         ReleaseAssert(module->getNamedValue(x_magic_global_name) == nullptr);
     }
 
+    // Remove the specified function from the list, so it gets one more chance to be inlined
+    //
+    static void GiveOneMoreChance(llvm::Function* func)
+    {
+        using namespace llvm;
+        Module* module = func->getParent();
+        ReleaseAssert(module != nullptr);
+        std::string fnName = func->getName().str();
+        LLVMRepeatedInliningInhibitor rii(module);
+        // This is a bit lame and fragile but the logic of PrepareForDCE() just suits our purpose
+        //
+        rii.PrepareForDCE();
+        if (rii.m_list.count(fnName))
+        {
+            rii.m_list.erase(rii.m_list.find(fnName));
+        }
+        ReleaseAssert(!rii.m_list.count(fnName));
+        rii.RestoreAfterDCE();
+    }
+
     static constexpr const char* x_magic_global_name = "__deegen_llvm_repeated_inlining_inhibitor_recorder";
 
 private:

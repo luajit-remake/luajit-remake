@@ -161,6 +161,29 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
             StoreInst* si = cast<StoreInst>(inst);
             ReleaseAssert(si->getPointerOperand() == gep);
             Value* vo = si->getValueOperand();
+
+            // Handle an edge case first: if a boolean value is captured, since boolean has type i1 but is stored in i8,
+            // Clang would generate the following IR:
+            //     %0 = .. load original i8 value ..
+            //     %1 = trunc i8 %0 to i1
+            //     %2 = zext i1 %1 to i8
+            //     store %2 into closure
+            //
+            // So intead of checking %2, we want to backtrack to %0 and check %0.
+            //
+            if (isa<ZExtInst>(vo))
+            {
+                ZExtInst* zext = cast<ZExtInst>(vo);
+                ReleaseAssert(llvm_type_has_type<bool>(zext->getSrcTy()));
+                ReleaseAssert(llvm_type_has_type<uint8_t>(zext->getDestTy()));
+                TruncInst* truncInst = dyn_cast<TruncInst>(zext->getOperand(0));
+                ReleaseAssert(truncInst != nullptr);
+                ReleaseAssert(llvm_type_has_type<uint8_t>(truncInst->getSrcTy()));
+                ReleaseAssert(llvm_type_has_type<bool>(truncInst->getDestTy()));
+                vo = truncInst->getOperand(0);
+                ReleaseAssert(llvm_value_has_type<uint8_t>(vo));
+            }
+
             if (isa<AllocaInst>(vo))
             {
                 // The IR is storing the address of an alloca into the captured state

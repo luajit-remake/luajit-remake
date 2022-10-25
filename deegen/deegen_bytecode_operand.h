@@ -3,6 +3,7 @@
 #include "misc_llvm_helper.h"
 
 #include "bytecode_definition_utils.h"
+#include "deegen_bytecode_metadata.h"
 
 namespace dast {
 
@@ -463,6 +464,8 @@ class BytecodeVariantDefinition
 public:
     void SetMaxOperandWidthBytes(size_t maxWidthBytes)
     {
+        ReleaseAssert(!m_hasDecidedOperandWidth);
+        m_hasDecidedOperandWidth = true;
         size_t currentOffset = x_opcodeSizeBytes;
         auto update = [&](BcOperand* operand)
         {
@@ -506,6 +509,50 @@ public:
                m_quickeningKind == BytecodeQuickeningKind::Quickened;
     }
 
+    void AddBytecodeMetadata(std::unique_ptr<BytecodeMetadataStruct> s)
+    {
+        if (m_bytecodeMetadataMaybeNull.get() == nullptr)
+        {
+            m_bytecodeMetadataMaybeNull = std::make_unique<BytecodeMetadataStruct>();
+        }
+        m_bytecodeMetadataMaybeNull->AddStruct(std::move(s));
+    }
+
+    bool IsBytecodeStructLengthFinalized() { return m_bytecodeStructLengthFinalized; }
+    void FinalizeBytecodeStructLength()
+    {
+        ReleaseAssert(m_hasDecidedOperandWidth);
+        ReleaseAssert(!m_bytecodeStructLengthFinalized);
+        m_bytecodeStructLengthFinalized = true;
+        if (m_bytecodeMetadataMaybeNull.get() != nullptr)
+        {
+            ReleaseAssert(m_metadataPtrOffset.get() == nullptr);
+            m_metadataPtrOffset = std::make_unique<BcOpLiteral>("bytecodeMetadata", false /*isSigned*/, 4 /*numBytes*/);
+            m_metadataPtrOffset->AssignOrChangeBytecodeStructOffsetAndSize(m_bytecodeStructLength, 4 /*size*/);
+            m_bytecodeStructLength += 4;
+        }
+        ReleaseAssertIff(m_bytecodeMetadataMaybeNull.get() == nullptr, m_metadataPtrOffset.get() == nullptr);
+    }
+
+    size_t GetBytecodeStructLength()
+    {
+        ReleaseAssert(m_bytecodeStructLengthFinalized);
+        return m_bytecodeStructLength;
+    }
+
+    void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)
+    {
+        ReleaseAssert(!m_metadataStructInfoAssigned);
+        m_metadataStructInfoAssigned = true;
+        m_metadataStructInfo = info;
+    }
+
+    BytecodeMetadataStructBase::StructInfo GetMetadataStructInfo()
+    {
+        ReleaseAssert(m_metadataStructInfoAssigned);
+        return m_metadataStructInfo;
+    }
+
     // For now we have a fixed 2-byte opcode header for simplicity
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
     //
@@ -521,12 +568,21 @@ public:
     std::vector<std::string> m_opNames;
     std::vector<DeegenBytecodeOperandType> m_originalOperandTypes;
     std::vector<std::unique_ptr<BcOperand>> m_list;
-    size_t m_bytecodeStructLength;
+
+    bool m_hasDecidedOperandWidth;
+    bool m_bytecodeStructLengthFinalized;
 
     bool m_hasOutputValue;
     bool m_hasConditionalBranchTarget;
     std::unique_ptr<BcOpSlot> m_outputOperand;
     std::unique_ptr<BcOpLiteral> m_condBrTarget;
+    std::unique_ptr<BcOpLiteral> m_metadataPtrOffset;
+
+    bool m_metadataStructInfoAssigned;
+
+    // If this is not null, it means that this variant has bytecode metadata, which is described by this field
+    //
+    std::unique_ptr<BytecodeMetadataStruct> m_bytecodeMetadataMaybeNull;
 
     BytecodeQuickeningKind m_quickeningKind;
     // Populated if m_quickeningKind == LockedQuickening or Quickened or QuickeningSelector
@@ -536,6 +592,10 @@ public:
     // Populated if m_quickeningKind == QuickeningSelector, holds all except the first quickening
     //
     std::vector<std::vector<BytecodeOperandQuickeningDescriptor>> m_allOtherQuickenings;
+
+private:
+    size_t m_bytecodeStructLength;
+    BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 };
 
 }  // namespace dast

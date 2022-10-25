@@ -1,4 +1,4 @@
-add_library(deegen_rt 
+add_library(deegen_utils 
   type_speculation_printer.cpp
   llvm_ir_cleanup_pass.cpp
   llvm_extract_function.cpp
@@ -43,7 +43,7 @@ add_executable(fps
 target_link_libraries(fps PUBLIC
   -Wl,--start-group
   common_utils
-  deegen_rt
+  deegen_utils
   deegen_common_snippet_ir
   -Wl,--end-group
   ${LLVM_EXTRA_LINK_LIBRARIES} 

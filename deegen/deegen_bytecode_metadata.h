@@ -126,6 +126,8 @@ public:
     //
     virtual std::vector<BytecodeMetadataElement*> CollectAllElements() const = 0;
 
+    virtual std::vector<BytecodeMetadataElement*> CollectInitializationInfo() const = 0;
+
     struct StructInfo
     {
         // The alignment of this struct
@@ -165,6 +167,18 @@ public:
         return { m_element.get() };
     }
 
+    virtual std::vector<BytecodeMetadataElement*> CollectInitializationInfo() const override
+    {
+        if (m_element->HasInitValue())
+        {
+            return { m_element.get() };
+        }
+        else
+        {
+            return { };
+        }
+    }
+
     BytecodeMetadataElement* GetElement() const { return m_element.get(); }
 
 private:
@@ -189,9 +203,24 @@ public:
         return res;
     }
 
+    virtual std::vector<BytecodeMetadataElement*> CollectInitializationInfo() const override
+    {
+        std::vector<BytecodeMetadataElement*> res;
+        for (auto& it : m_members)
+        {
+            std::vector<BytecodeMetadataElement*> other = it->CollectInitializationInfo();
+            for (BytecodeMetadataElement* e : other) { res.push_back(e); }
+        }
+        return res;
+    }
+
     BytecodeMetadataElement* WARN_UNUSED AddElement(size_t alignment, size_t size)
     {
-        std::unique_ptr<BytecodeMetadataElement> e = std::make_unique<BytecodeMetadataElement>(alignment, size);
+        return AddElement(std::make_unique<BytecodeMetadataElement>(alignment, size));
+    }
+
+    BytecodeMetadataElement* AddElement(std::unique_ptr<BytecodeMetadataElement> e)
+    {
         BytecodeMetadataElement* res = e.get();
         AddStructElementImpl(std::make_unique<BytecodeMetadataStructElement>(std::move(e)));
         return res;
@@ -199,18 +228,18 @@ public:
 
     BytecodeMetadataStruct* WARN_UNUSED AddStruct()
     {
-        std::unique_ptr<BytecodeMetadataStruct> e = std::make_unique<BytecodeMetadataStruct>();
-        BytecodeMetadataStruct* res = e.get();
-        AddStructElementImpl(std::move(e));
+        return AddStruct(std::make_unique<BytecodeMetadataStruct>());
+    }
+
+    BytecodeMetadataStruct* AddStruct(std::unique_ptr<BytecodeMetadataStruct> s)
+    {
+        BytecodeMetadataStruct* res = s.get();
+        AddStructElementImpl(std::move(s));
         return res;
     }
 
     BytecodeMetadataTaggedUnion* WARN_UNUSED AddTaggedUnion();
-
-    void AddStructElementImpl(std::unique_ptr<BytecodeMetadataStructBase> e)
-    {
-        m_members.push_back(std::move(e));
-    }
+    BytecodeMetadataTaggedUnion* AddTaggedUnion(std::unique_ptr<BytecodeMetadataTaggedUnion> tu);
 
     std::vector<BytecodeMetadataStructBase*> WARN_UNUSED GetMembers() const
     {
@@ -226,6 +255,11 @@ public:
     }
 
 private:
+    void AddStructElementImpl(std::unique_ptr<BytecodeMetadataStructBase> e)
+    {
+        m_members.push_back(std::move(e));
+    }
+
     std::vector<std::unique_ptr<BytecodeMetadataStructBase>> m_members;
 };
 
@@ -254,6 +288,26 @@ public:
             for (BytecodeMetadataElement* e : other) { res.push_back(e); }
         }
         return res;
+    }
+
+    virtual std::vector<BytecodeMetadataElement*> CollectInitializationInfo() const override
+    {
+        for (auto& it : m_members)
+        {
+            // Union members should not have any initializer since it doesn't make sense
+            //
+            std::vector<BytecodeMetadataElement*> tmp = it->CollectInitializationInfo();
+            ReleaseAssert(tmp.empty());
+        }
+
+        if (m_tag->HasInitValue())
+        {
+            return { m_tag.get() };
+        }
+        else
+        {
+            return { };
+        }
     }
 
     void SetTagMayHaveInvalidValue(bool value) { m_tagMayHaveInvalidValue = value; }
@@ -285,12 +339,16 @@ private:
     std::vector<std::unique_ptr<BytecodeMetadataStruct>> m_members;
 };
 
+inline BytecodeMetadataTaggedUnion* BytecodeMetadataStruct::AddTaggedUnion(std::unique_ptr<BytecodeMetadataTaggedUnion> tu)
+{
+    BytecodeMetadataTaggedUnion* res = tu.get();
+    AddStructElementImpl(std::move(tu));
+    return res;
+}
+
 inline BytecodeMetadataTaggedUnion* WARN_UNUSED BytecodeMetadataStruct::AddTaggedUnion()
 {
-    std::unique_ptr<BytecodeMetadataTaggedUnion> e = std::make_unique<BytecodeMetadataTaggedUnion>();
-    BytecodeMetadataTaggedUnion* res = e.get();
-    AddStructElementImpl(std::move(e));
-    return res;
+    return AddTaggedUnion(std::make_unique<BytecodeMetadataTaggedUnion>());
 }
 
 }   // namespace dast

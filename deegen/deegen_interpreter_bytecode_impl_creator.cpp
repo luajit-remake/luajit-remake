@@ -9,6 +9,7 @@
 #include "deegen_ast_simple_lowering_utils.h"
 #include "tag_register_optimization.h"
 #include "llvm_fcmp_extra_optimizations.h"
+#include "deegen_ast_inline_cache.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -137,6 +138,25 @@ static std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> GetQuick
     return res;
 }
 
+constexpr const char* x_get_bytecode_metadata_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodeMetadataPtrPlaceholder";
+
+static llvm::Function* CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(llvm::Module* module)
+{
+    using namespace llvm;
+    std::string fnName = x_get_bytecode_metadata_ptr_placeholder_fn_name;
+    Function* f = module->getFunction(fnName);
+    if (f != nullptr)
+    {
+        ReleaseAssert(f->empty() && f->arg_size() == 0 && llvm_type_has_type<void*>(f->getReturnType()));
+        return f;
+    }
+    ReleaseAssert(module->getNamedValue(fnName) == nullptr);
+    FunctionType* fty = FunctionType::get(llvm_type_of<void*>(module->getContext()), { }, false /*isVarArg*/);
+    f = Function::Create(fty, GlobalValue::ExternalLinkage, fnName, module);
+    ReleaseAssert(f->getName() == fnName);
+    return f;
+}
+
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, ProcessKind processKind)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
@@ -159,8 +179,6 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         fprintf(stderr, "The implementation function of the bytecode (or any of its return continuation) must be marked 'static'!\n");
         abort();
     }
-
-    LLVMContext& ctx = m_module->getContext();
 
     // For m_processKind != Main, our caller should have set up the desired function name for us
     // Otherwise, we should rename by ourselves.
@@ -253,15 +271,100 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     //
     ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
 
-    // Before changing 'm_impl' back to internal linkage, run the general inlining pass to
-    // inline general (non-API) functions into 'm_impl' and canonicalize it
-    // (if we change it to internal linkage now, it will be dead and get removed)
+    // Run the general inlining pass to inline general (non-API) functions into 'm_impl' and canonicalize it
+    // Note that we cannot change 'm_impl' back to internal linkage right now, as otherwise it will be dead and get removed
     //
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::InlineGeneralFunctions);
     ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
 
-    // Now change the linkage back to internal and create the wrapper function
+    // Handle inline caching APIs
     //
+    if (m_processKind == ProcessKind::Main)
+    {
+        std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(m_impl);
+        for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
+        {
+            AstInlineCache& ic = allIcUses[icOrd];
+
+            // Lower the inline caching APIs
+            //
+            ic.DoLoweringForInterpreter();
+
+            // Append required data into the bytecode metadata struct
+            //
+            bytecodeDef->AddBytecodeMetadata(std::move(ic.m_icStruct));
+
+            // Note that AstInlineCache::DoLoweringForInterpreter by design does not lower the GetIcPtr calls
+            // (and we cannot lower them at this stage because the relavent interpreter context isn't available yet).
+            // Therefore, here we only change the dummy function name to a special one, so we can locate them and lower them later.
+            //
+            CallInst* icPtrGetter = ic.m_icPtrOrigin;
+            ReleaseAssert(icPtrGetter->arg_size() == 0 && llvm_value_has_type<void*>(icPtrGetter));
+            ReleaseAssert(AstInlineCache::IsIcPtrGetterFunctionCall(icPtrGetter));
+            Function* replacementFn = CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(m_module.get());
+            icPtrGetter->setCalledFunction(replacementFn);
+
+            // Rename and record the IC body name. If LLVM chooses to not inline it, we need to extract it as well.
+            // Note that we don't need to do anything to the IC effect functions, since they have been marked always_inline
+            //
+            std::string icBodyNewName = m_resultFuncName + "_icbody_" + std::to_string(icOrd);
+            ReleaseAssert(m_module->getNamedValue(icBodyNewName) == nullptr);
+            ic.m_bodyFn->setName(icBodyNewName);
+            ReleaseAssert(ic.m_bodyFn->getName() == icBodyNewName);
+            ReleaseAssert(ic.m_bodyFn->getLinkage() == GlobalValue::InternalLinkage);
+            m_icBodyNames.push_back(icBodyNewName);
+
+            // This is lame: PreserveMost somehow also preserves rax and rdx so it generates buggy code whenever the function has return values...
+            // TODO: We should try to fix it in LLVM since we do want the code to be less intrusive in caller side..
+            //
+#if 0
+            // Change the calling convention of the IC body to PreserveMost, since it's the slow path and we want it to be less intrusive
+            //
+            ic.m_bodyFn->setCallingConv(CallingConv::PreserveMost);
+            for (User* usr : ic.m_bodyFn->users())
+            {
+                CallInst* callInst = dyn_cast<CallInst>(usr);
+                if (callInst != nullptr)
+                {
+                    ReleaseAssert(callInst->getCalledFunction() == ic.m_bodyFn);
+                    callInst->setCallingConv(CallingConv::PreserveMost);
+                }
+            }
+#endif
+
+            // Also, we need to give it one more chance to inline, because previously when the inline pass was run,
+            // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.
+            //
+            LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
+        }
+    }
+    else if (m_processKind == ProcessKind::ReturnContinuation)
+    {
+        // Inline caching API is not allowed in return continuations
+        //
+        ReleaseAssert(AstInlineCache::GetAllUseInFunction(m_impl).size() == 0);
+    }
+    else
+    {
+        ReleaseAssert(m_processKind == ProcessKind::QuickeningSlowPath);
+        // TODO FIXME: for now we simply fail if inline caching API is used, but this is unreasonable.
+        // Instead, we should lower them to a naive implementation (i.e., no inline caching actually happens)
+        //
+        ReleaseAssert(AstInlineCache::GetAllUseInFunction(m_impl).size() == 0);
+    }
+}
+
+void InterpreterBytecodeImplCreator::CreateWrapperFunction()
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_module->getContext();
+
+    ReleaseAssert(m_wrapper == nullptr);
+
+    // Create the wrapper function
+    // We can also change the linkage of 'm_impl' back to internal now, since the wrapper function will keep it alive
+    //
+    ReleaseAssert(m_impl->hasExternalLinkage());
     m_impl->setLinkage(GlobalValue::InternalLinkage);
     m_wrapper = InterpreterFunctionInterface::CreateFunction(m_module.get(), m_resultFuncName);
     ReleaseAssert(m_wrapper->arg_size() == 16);
@@ -370,6 +473,17 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         ReleaseAssert(llvm_value_has_type<int32_t>(condBrTarget));
         m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
         condBrTarget->setName(x_condBrDest);
+    }
+
+    ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
+    if (m_bytecodeDef->m_metadataPtrOffset.get() != nullptr)
+    {
+        Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
+        ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
+        Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
+        GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);
+        m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
+        metadataPtr->setName(x_metadataPtr);
     }
 
     std::vector<Value*> usageValues;
@@ -489,7 +603,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
             ReleaseAssert(callee != nullptr && callee->arg_size() == 1 && llvm_value_has_type<uint64_t>(callee->getArg(0)) && llvm_type_has_type<bool>(callee->getReturnType()));
             CallInst* checkPassed = CallInst::Create(callee, { usageValues[operandOrd] }, "", currentBlock);
             ReleaseAssert(llvm_value_has_type<bool>(checkPassed));
-            CallInst::Create(expectIntrin, { checkPassed, CreateLLVMConstantInt<bool>(ctx, true) }, "", currentBlock);
+            checkPassed = CallInst::Create(expectIntrin, { checkPassed, CreateLLVMConstantInt<bool>(ctx, true) }, "", currentBlock);
 
             BasicBlock* newBB = BasicBlock::Create(ctx, "", m_wrapper);
             BranchInst::Create(newBB /*ifTrue*/, slowpathBB /*ifFalse*/, checkPassed /*cond*/, currentBlock);
@@ -553,11 +667,72 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     }
 }
 
+void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
+{
+    using namespace llvm;
+    Function* fn = m_module->getFunction(x_get_bytecode_metadata_ptr_placeholder_fn_name);
+    if (fn != nullptr)
+    {
+        std::unordered_set<CallInst*> instructionToReplace;
+        for (Use& u : fn->uses())
+        {
+            User* usr = u.getUser();
+            ReleaseAssert(isa<CallInst>(usr));
+            CallInst* ci = cast<CallInst>(usr);
+            ReleaseAssert(&u == &ci->getCalledOperandUse());
+            ReleaseAssert(llvm_value_has_type<void*>(ci));
+            ReleaseAssert(!instructionToReplace.count(ci));
+            instructionToReplace.insert(ci);
+        }
+        if (!instructionToReplace.empty())
+        {
+            Value* mdPtr = m_valuePreserver.Get(x_metadataPtr);
+            ReleaseAssert(llvm_value_has_type<void*>(mdPtr));
+            for (CallInst* ci : instructionToReplace)
+            {
+                ReleaseAssert(ci->getParent() != nullptr);
+                ReleaseAssert(ci->getParent()->getParent() == m_wrapper);
+                ci->replaceAllUsesWith(mdPtr);
+                ci->eraseFromParent();
+            }
+        }
+        ReleaseAssert(fn->use_empty());
+    }
+}
+
 std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
 {
     using namespace llvm;
     ReleaseAssert(!m_generated);
     m_generated = true;
+
+    // This is a bit tricky. We relying on the fact that the Main processor is executed before the other processors,
+    // and that whether or not the bytecode metadata exists depends solely on the logic of the Main processor.
+    // We probably should refactor it so that it's less tricky. But let's stay with it for now.
+    //
+    if (m_processKind == ProcessKind::Main)
+    {
+        m_bytecodeDef->FinalizeBytecodeStructLength();
+        if (m_bytecodeDef->m_bytecodeMetadataMaybeNull.get() != nullptr)
+        {
+            BytecodeMetadataStruct::StructInfo info = m_bytecodeDef->m_bytecodeMetadataMaybeNull->FinalizeStructAndAssignOffsets();
+            m_bytecodeDef->AssignMetadataStructInfo(info);
+        }
+    }
+
+    // Having decided the final bytecode metadata struct layout, we can lower all the metadata struct element getters
+    // Again, this relies on the fact that the metadata struct layout is solely determined by the Main processor
+    //
+    if (m_bytecodeDef->m_bytecodeMetadataMaybeNull.get() != nullptr)
+    {
+        ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
+        m_bytecodeDef->m_bytecodeMetadataMaybeNull->LowerAll(m_module.get());
+    }
+
+    // Create the wrapper function 'm_wrapper'
+    //
+    CreateWrapperFunction();
+    ReleaseAssert(m_wrapper != nullptr);
 
     // Inline 'm_impl' into 'm_wrapper'
     //
@@ -569,6 +744,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     m_impl->setLinkage(GlobalValue::InternalLinkage);
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
+    RunLLVMDeadGlobalElimination(m_module.get());
     m_impl = nullptr;
 
     m_valuePreserver.RefreshAfterTransform();
@@ -579,6 +755,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     AstMakeCall::LowerForInterpreter(this, m_wrapper);
     AstReturnValueAccessor::LowerForInterpreter(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
+    LowerGetBytecodeMetadataPtrAPI();
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
@@ -625,11 +802,30 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         func.setComdat(nullptr);
     }
 
-    // Sanity check that 'm_wrapper' is there, and extract it
+    // Sanity check that 'm_wrapper' is there
     //
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
     ReleaseAssert(!m_wrapper->empty());
-    m_module = ExtractFunction(m_module.get(), m_resultFuncName);
+
+    // Extract the functions. We need to extract 'm_wrapper' and any IC body functions that didn't get inlined
+    //
+    {
+        std::vector<std::string> extractTargets;
+        extractTargets.push_back(m_resultFuncName);
+        for (auto& icBodyFnName : m_icBodyNames)
+        {
+            if (m_module->getFunction(icBodyFnName) != nullptr)
+            {
+                extractTargets.push_back(icBodyFnName);
+            }
+            else
+            {
+                ReleaseAssert(m_module->getNamedValue(icBodyFnName) == nullptr);
+            }
+        }
+        m_module = ExtractFunctions(m_module.get(), extractTargets);
+    }
+
     // After the extract, 'm_wrapper' is invalidated since a new module is returned. Refresh its value.
     //
     m_wrapper = m_module->getFunction(m_resultFuncName);

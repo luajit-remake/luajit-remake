@@ -273,11 +273,33 @@ public:
     uint64_t m_bytecodeMetadata[0];
 };
 
+// This is just x_num_bytecode_metadata_struct_kinds
+// However, unfortunately we have to make it a extern const here due to header file dependency issue...
+//
+extern const size_t x_num_bytecode_metadata_struct_kinds_;
+
 // This uniquely corresponds to a piece of source code that defines a function
 //
-class UnlinkedCodeBlock
+class UnlinkedCodeBlock : public SystemHeapGcObjectHeader
 {
 public:
+    static UnlinkedCodeBlock* WARN_UNUSED Create(VM* vm, HeapPtr<TableObject> globalObject)
+    {
+        size_t sizeToAllocate = RoundUpToMultipleOf<8>(GetTrailingArrayOffset() + x_num_bytecode_metadata_struct_kinds_ * sizeof(uint16_t));
+        uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
+        UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(addressBegin);
+        SystemHeapGcObjectHeader::Populate(ucb);
+        ucb->m_defaultGlobalObject = globalObject;
+        ucb->m_rareGOtoCBMap = nullptr;
+        ucb->m_parent = nullptr;
+        return ucb;
+    }
+
+    static constexpr size_t GetTrailingArrayOffset()
+    {
+        return offsetof_member_v<&UnlinkedCodeBlock::m_bytecodeMetadataUseCounts>;
+    }
+
     // This is for the new interpreter. We should remove the above functions after we port everything to the new interpreter
     //
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, UnlinkedCodeBlock>>>
@@ -311,6 +333,9 @@ public:
         }
     }
 
+    bool m_hasVariadicArguments;
+    uint32_t m_numFixedArguments;
+
     UserHeapPointer<TableObject> m_defaultGlobalObject;
     CodeBlock* m_defaultCodeBlock;
     using RareGlobalObjectToCodeBlockMap = std::unordered_map<int64_t, CodeBlock*>;
@@ -321,13 +346,15 @@ public:
     uint64_t* m_cstTable;
     UnlinkedCodeBlock* m_parent;
 
-    uint32_t m_cstTableLength;
     uint32_t m_bytecodeLength;
+    uint32_t m_cstTableLength;
     uint32_t m_numUpvalues;
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;
-    uint32_t m_numFixedArguments;
-    bool m_hasVariadicArguments;
+
+    // The actual length of this trailing array is always x_num_bytecode_metadata_struct_kinds_
+    //
+    uint16_t m_bytecodeMetadataUseCounts[0];
 };
 
 class FunctionObject;

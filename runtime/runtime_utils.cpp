@@ -5,6 +5,9 @@
 
 #include "generated/get_guest_language_function_interpreter_entry_point.h"
 #include "json_utils.h"
+#include "bytecode_builder.h"
+
+const size_t x_num_bytecode_metadata_struct_kinds_ = x_num_bytecode_metadata_struct_kinds;
 
 TValue WARN_UNUSED MakeErrorMessage(const char* msg)
 {
@@ -97,6 +100,11 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     cb->m_baselineCodeBlock = nullptr;
     cb->m_floCodeBlock = nullptr;
     cb->m_owner = ucb;
+
+    ForEachBytecodeMetadata(cb, []<typename T>(T* md) ALWAYS_INLINE {
+        md->Init();
+    });
+
     return cb;
 }
 
