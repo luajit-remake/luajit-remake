@@ -3,7 +3,7 @@
 #include "deegen_api.h"
 #include "annotated/unit_test/unit_test_ir_accessor.h"
 
-#include "lambda_parser.h"
+#include "misc_llvm_helper.h"
 #include "runtime_utils.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
@@ -12,13 +12,13 @@
 
 #include "test_util_llvm_jit.h"
 
-using namespace llvm;
 using namespace dast;
 
 namespace {
 
 std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, size_t testcaseNum)
 {
+    using namespace llvm;
     std::unique_ptr<Module> module = GetDeegenUnitTestLLVMIR(ctx, "make_call_api_lowering");
 
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
@@ -68,7 +68,7 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64
     }
 }
 
-void TestModuleOneCase(Module* moduleIn,
+void TestModuleOneCase(llvm::Module* moduleIn,
                        size_t testcaseNum,
                        size_t numVarArgs, // # varargs in caller's vararg region
                        size_t numLocals, // # locals in caller's stack frame
@@ -82,6 +82,7 @@ void TestModuleOneCase(Module* moduleIn,
                        // 0 = arg range, otherwise it is the value ordinal
                        const std::vector<int>& expectedArgComposition)
 {
+    using namespace llvm;
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
@@ -401,6 +402,7 @@ void TestModule(size_t testcaseNum,
                 const std::vector<int>& expectedArgComposition,
                 size_t numCycles = 1)
 {
+    using namespace llvm;
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
