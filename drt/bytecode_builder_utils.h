@@ -3,7 +3,7 @@
 #include "common_utils.h"
 #include "heap_ptr_utils.h"
 #include "tvalue.h"
-#include "deegen_metadata_utils.h"
+#include "deegen_metadata_accessor.h"
 
 namespace DeegenBytecodeBuilder
 {

@@ -76,6 +76,5 @@ add_custom_command(
 
 add_library(deegen_interpreter_fn_entry_logic OBJECT
   ${deegen_interpreter_function_entry_sources}
-  deegen_internal_enter_exit_vm.s
 )
 

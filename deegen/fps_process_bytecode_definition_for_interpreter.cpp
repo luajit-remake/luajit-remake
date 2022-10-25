@@ -45,7 +45,7 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     TransactionalOutputFile hdrOutFile(cl_headerOutputFilename);
     FPS_EmitHeaderFileCommonHeader(hdrOutFile.fp());
 
-    fprintf(hdrOutFile.fp(), "#include \"deegen/bytecode_builder_utils.h\"\n\n");
+    fprintf(hdrOutFile.fp(), "#include \"drt/bytecode_builder_utils.h\"\n\n");
     fprintf(hdrOutFile.fp(), "namespace DeegenBytecodeBuilder {\n\n");
     hdrOutFile.write(result.m_generatedHeaderFile);
     fprintf(hdrOutFile.fp(), "\n} /*namespace DeegenBytecodeBuilder*/\n");
@@ -85,7 +85,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     TransactionalOutputFile hdrOutFile(cl_headerOutputFilename);
     FPS_EmitHeaderFileCommonHeader(hdrOutFile.fp());
 
-    fprintf(hdrOutFile.fp(), "#include \"deegen/bytecode_builder_utils.h\"\n\n");
+    fprintf(hdrOutFile.fp(), "#include \"drt/bytecode_builder_utils.h\"\n\n");
     for (json& j : jlist)
     {
         std::string includeName = JSONCheckedGet<std::string>(j, "header-name");
@@ -144,7 +144,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     fprintf(cppOutFile.fp(), "#pragma clang diagnostic push\n");
     fprintf(cppOutFile.fp(), "#pragma clang diagnostic ignored \"-Wreserved-identifier\"\n");
 
-    fprintf(cppOutFile.fp(), "#include \"deegen/bytecode_builder.h\"\n\n");
+    fprintf(cppOutFile.fp(), "#include \"drt/bytecode_builder.h\"\n\n");
 
     size_t totalSize = 0;
     for (json& j : jlist)

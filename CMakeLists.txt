@@ -158,6 +158,7 @@ include_directories(${PROJECT_SOURCE_DIR})
 include_directories("${PROJECT_SOURCE_DIR}/common_utils")
 include_directories("${PROJECT_SOURCE_DIR}/runtime")
 include_directories("${PROJECT_SOURCE_DIR}/deegen")
+include_directories("${PROJECT_SOURCE_DIR}/drt")
 
 add_subdirectory(common_utils)
 

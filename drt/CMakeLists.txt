@@ -1,5 +1,6 @@
 add_library(deegen_rt 
 	bytecode_builder.cpp
+	deegen_internal_enter_exit_vm.s
 )
 
 add_dependencies(deegen_rt 
