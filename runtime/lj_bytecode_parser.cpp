@@ -1478,10 +1478,14 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         ucb->m_bytecode = bytecodeData.first;
         ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
         ucb->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
-        ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, globalObject);
         const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
         assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
         memcpy(ucb->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
+
+        // CodeBlock::Create must be called after populated everything (including the metadata counts) in ucb
+        //
+        ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, globalObject);
+
         r->m_unlinkedCodeBlocks.push_back(ucb);
 
         /*
