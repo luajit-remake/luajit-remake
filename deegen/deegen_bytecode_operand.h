@@ -2,7 +2,7 @@
 
 #include "misc_llvm_helper.h"
 
-#include "bytecode_definition_utils.h"
+#include "api_define_bytecode.h"
 #include "deegen_bytecode_metadata.h"
 
 namespace dast {

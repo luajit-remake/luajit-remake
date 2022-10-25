@@ -1,4 +1,4 @@
-#include "bytecode_definition_utils.h"
+#include "api_define_bytecode.h"
 #include "deegen_api.h"
 
 static void NO_RETURN BytecodeMovImpl(TValue input)

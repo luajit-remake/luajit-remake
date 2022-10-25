@@ -2,7 +2,7 @@
 
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
-#include "bytecode_definition_utils.h"
+#include "api_define_bytecode.h"
 #include "runtime_utils.h"
 
 namespace dast {

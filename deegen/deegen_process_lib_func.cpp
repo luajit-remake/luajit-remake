@@ -1,6 +1,6 @@
 #include "deegen_process_lib_func.h"
 #include "deegen_interpreter_function_interface.h"
-#include "deegen_def_lib_func_api.h"
+#include "api_define_lib_function.h"
 #include "deegen_ast_throw_error.h"
 #include "runtime_utils.h"
 

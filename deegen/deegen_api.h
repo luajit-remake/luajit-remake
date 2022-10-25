@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tvalue.h"
-#include "deegen_def_lib_func_api.h"
+#include "api_define_lib_function.h"
 
 class CodeBlock;
 

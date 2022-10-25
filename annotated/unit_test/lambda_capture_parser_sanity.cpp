@@ -1,5 +1,5 @@
 #include "common.h"
-#include "api_preserve_lambda_helper.h"
+#include "deegen_preserve_lambda_helper.h"
 
 struct TestStruct1
 {
