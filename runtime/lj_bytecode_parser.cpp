@@ -183,7 +183,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
         std::vector<TValue> numberCstList;
         TestAssert(j.count("NumberConstants") && j["NumberConstants"].is_array());
-        size_t numNumberConstants = j["NumberConstants"].size();
+        [[maybe_unused]] size_t numNumberConstants = j["NumberConstants"].size();
         {
             for (auto& c : j["NumberConstants"])
             {
@@ -213,7 +213,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         }
 
         TestAssert(j.count("ObjectConstants") && j["ObjectConstants"].is_array());
-        size_t numObjectConstants = j["ObjectConstants"].size();
+        [[maybe_unused]] size_t numObjectConstants = j["ObjectConstants"].size();
         std::vector<TValue> objectCstList;
         {
             for (auto& c : j["ObjectConstants"])
@@ -519,7 +519,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             auto& curBytecode = *it;
             TestAssert(JSONCheckedGet<std::string>(curBytecode, "OpCode") == "ITERC" || JSONCheckedGet<std::string>(curBytecode, "OpCode") == "ITERN");
             TestAssert(curBytecode.count("OpData") && curBytecode["OpData"].is_array() && curBytecode["OpData"].size() > 0);
-            int32_t curBase = getIntValue(curBytecode["OpData"][0]);
+            [[maybe_unused]] int32_t curBase = getIntValue(curBytecode["OpData"][0]);
 
             it++;
             TestAssert(it < bytecodeList.end());
@@ -533,7 +533,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
             // The 'ITERL' bytecode should have the same base as the ITERC/ITERN bytecode
             //
-            int32_t base = getIntValue(nextBytecode["OpData"][0]);
+            [[maybe_unused]] int32_t base = getIntValue(nextBytecode["OpData"][0]);
             TestAssert(base == curBase);
 
             int32_t jumpTargetOffset = getIntValue(nextBytecode["OpData"][1]);
