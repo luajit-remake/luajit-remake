@@ -804,4 +804,9 @@ TEST(LuaTest, putbyval_metatable)
     RunSimpleLuaTest("luatests/putbyval_metatable.lua.json");
 }
 
+TEST(LuaTest, GlobalGetInterpreterIC)
+{
+    RunSimpleLuaTest("luatests/globalget_interpreter_ic.lua.json");
+}
+
 }   // anonymous namespace

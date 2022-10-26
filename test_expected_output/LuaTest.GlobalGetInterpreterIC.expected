@@ -1,0 +1,38 @@
+-- test 1 --
+nil
+nil
+1
+1
+xx
+xx
+nil
+nil
+-- test 2 --
+nil
+nil
+in metamethod	gb2
+233
+in metamethod	gb2
+233
+in metamethod2	gb2
+345
+in metamethod2	gb2
+345
+yy
+yy
+in metamethod2	gb2
+345
+in metamethod2	gb2
+345
+aa
+aa
+in metamethod2	gb2
+345
+in metamethod2	gb2
+345
+nil
+nil
+zz
+zz
+nil
+nil
