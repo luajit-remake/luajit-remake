@@ -24,16 +24,16 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
         {
             int32_t slot = icInfo.m_slot;
-            return ic->Effect([ic, base, slot, mayHaveMetatable] {
-                ic->SpecializeFullCoverage(mayHaveMetatable, false, true);
+            return ic->Effect([base, slot, mayHaveMetatable] {
+                IcSpecializeValueFullCoverage(mayHaveMetatable, false, true);
                 return std::make_pair(TCGet(base->m_inlineStorage[slot]), mayHaveMetatable);
             });
         }
         else if (icInfo.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
         {
             int32_t slot = icInfo.m_slot;
-            return ic->Effect([ic, base, slot, mayHaveMetatable] {
-                ic->SpecializeFullCoverage(mayHaveMetatable, false, true);
+            return ic->Effect([base, slot, mayHaveMetatable] {
+                IcSpecializeValueFullCoverage(mayHaveMetatable, false, true);
                 return std::make_pair(base->m_butterfly->GetNamedProperty(slot), mayHaveMetatable);
             });
         }

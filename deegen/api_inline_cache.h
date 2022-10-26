@@ -68,35 +68,6 @@ struct ICHandler
         // static_assert(std::is_trivially_copyable_v<ResType>);
         return DeegenImpl_MakeIC_MarkEffect<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
     }
-
-    // May only be used inside the effect lambda.
-    // Generate specialization for 'capture' == each 'value', and the default generic fallback
-    // for the case that 'capture' is not among the specialized 'value' list.
-    //
-    // For example, if some int value is specialized for '0' and '1', then three effect lambdas
-    // will be generated: one for the == 0 case, one for the == 1 case, and one for the generic case.
-    //
-    // If this is called multiple times (on different captured values), all those specializations will
-    // compose as a Cartesian product.
-    //
-    template<typename T, typename... Ts>
-    void ALWAYS_INLINE Specialize(const T& capture, Ts... values)
-    {
-        static_assert(sizeof...(Ts) > 0, "You need to provide at least one specialization value.");
-        static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
-        DeegenImpl_MakeIC_SpecializeIcEffect(false /*isFullCoverage*/, capture, static_cast<T>(values)...);
-    }
-
-    // Similar to 'Specialize', except that the default generic fallback is not generated.
-    // That is, if at runtime the value of 'capture' is not among the list of values, the behavior is undefined.
-    //
-    template<typename T, typename... Ts>
-    void ALWAYS_INLINE SpecializeFullCoverage(const T& capture, Ts... values)
-    {
-        static_assert(sizeof...(Ts) > 1, "If you do SpecializeFullCoverage, you should provide at least 2 specialization values (if you only provide one value, then you are effectively saying it's already known as a constant!)");
-        static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
-        DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, capture, static_cast<T>(values)...);
-    }
 };
 
 // Create an inline cache.
@@ -104,3 +75,32 @@ struct ICHandler
 // (e.g., you cannot do 'if (...) { ic->AddKey(...) }'), otherwise the behavior is undefined.
 //
 ICHandler* WARN_UNUSED __attribute__((__nomerge__)) MakeInlineCache();
+
+// May only be used inside the effect lambda.
+// Generate specialization for 'capture' == each 'value', and the default generic fallback
+// for the case that 'capture' is not among the specialized 'value' list.
+//
+// For example, if some int value is specialized for '0' and '1', then three effect lambdas
+// will be generated: one for the == 0 case, one for the == 1 case, and one for the generic case.
+//
+// If this is called multiple times (on different captured values), all those specializations will
+// compose as a Cartesian product.
+//
+template<typename T, typename... Ts>
+void ALWAYS_INLINE IcSpecializeValue(const T& capture, Ts... values)
+{
+    static_assert(sizeof...(Ts) > 0, "You need to provide at least one specialization value.");
+    static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
+    DeegenImpl_MakeIC_SpecializeIcEffect(false /*isFullCoverage*/, capture, static_cast<T>(values)...);
+}
+
+// Similar to 'IcSpecializeValue', except that the default generic fallback is not generated.
+// That is, if at runtime the value of 'capture' is not among the list of values, the behavior is undefined.
+//
+template<typename T, typename... Ts>
+void ALWAYS_INLINE IcSpecializeValueFullCoverage(const T& capture, Ts... values)
+{
+    static_assert(sizeof...(Ts) > 1, "If you do SpecializeFullCoverage, you should provide at least 2 specialization values (if you only provide one value, then you are effectively saying it's already known as a constant!)");
+    static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
+    DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, capture, static_cast<T>(values)...);
+}
