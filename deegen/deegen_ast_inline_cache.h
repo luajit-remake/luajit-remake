@@ -13,6 +13,19 @@ class AstInlineCache
 public:
     struct Effect
     {
+        struct SpecializationInfo
+        {
+            // The LLVM value in the body function that is being specialized
+            //
+            llvm::Value* m_valueInBodyFn;
+            // Whether this specialization is full coverage
+            //
+            bool m_isFullCoverage;
+            // The list of each specialization
+            //
+            std::vector<llvm::Constant*> m_specializations;
+        };
+
         // The place in the IC body where this effect is called
         //
         llvm::CallInst* m_origin;
@@ -21,9 +34,13 @@ public:
         //
         llvm::Value* m_icPtr;
 
-        // The wrapped effect function that is callable from the main function
+        // The list of specializations
         //
-        llvm::Function* m_effectFnMain;
+        std::vector<SpecializationInfo> m_specializations;
+
+        // The list of wrapped effect function that is callable from the main function
+        //
+        std::vector<llvm::Function*> m_effectFnMain;
 
         // The captures of 'm_effectFnMain' in the main function
         //
@@ -43,9 +60,11 @@ public:
         //
         std::vector<llvm::Value*> m_icStateVals;
 
-        // Each 'Effect' in the IC cache has an unique ordinal
+        // The effect functions in this effect should occupy ordinal [m_effectStartOrdinal, m_effectStartOrdinal + m_effectFnMain.size())
         //
-        size_t m_effectOrdinal;
+        size_t m_effectStartOrdinal;
+
+        size_t m_ordinalInEffectArray;
     };
 
     static bool WARN_UNUSED IsIcPtrGetterFunctionCall(llvm::CallInst* inst);
@@ -91,6 +110,7 @@ public:
     // The list of effect lambdas of this IC
     //
     std::vector<Effect> m_effects;
+    size_t m_totalEffectKinds;
     // The list of other misc API calls used in this IC
     //
     std::vector<llvm::CallInst*> m_setUncacheableApiCalls;

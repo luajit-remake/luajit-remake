@@ -19,31 +19,31 @@ declare dso_local noundef i32 @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv"(ptr noundef
 declare dso_local noundef i32 @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv"(ptr noundef nonnull align 4 dereferenceable(4)) #1 align 2
 
 ; Function Attrs: nounwind
-declare dso_local i32 @__deegen_inline_cache_effect_0(ptr, i32, i32) #2
+declare void @__deegen_inline_cache_decode_ic_state_0(ptr, ptr) #2
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_decode_ic_state_0(ptr, ptr) #3
+declare dso_local i32 @__deegen_inline_cache_effect_0(ptr, i32, i32) #3
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_encode_ic_state_0(ptr, i32) #3
+declare void @__deegen_inline_cache_encode_ic_state_0(ptr, i32) #2
 
 ; Function Attrs: nounwind
-declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr, ptr, ptr, ptr, ptr, ptr, i64, i32) #3
+declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr, ptr, ptr, i64, i64, ptr, ptr, ptr, i64, i32) #2
 
 ; Function Attrs: nounwind
-declare dso_local i32 @__deegen_inline_cache_effect_1(ptr, i32) #2
+declare void @__deegen_inline_cache_decode_ic_state_1(ptr) #2
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_decode_ic_state_1(ptr) #3
+declare dso_local i32 @__deegen_inline_cache_effect_1(ptr, i32) #3
 
 ; Function Attrs: nounwind
-declare void @__deegen_inline_cache_encode_ic_state_1(ptr) #3
+declare void @__deegen_inline_cache_encode_ic_state_1(ptr) #2
 
 ; Function Attrs: nounwind
-declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr, ptr, ptr, ptr, ptr, ptr, i64) #3
+declare i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr, ptr, ptr, i64, i64, ptr, ptr, ptr, i64) #2
 
 ; Function Attrs: nounwind
-define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #2 {
+define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #3 {
   %4 = alloca %class.anon.0, align 4
   %5 = alloca %class.anon.1, align 4
   %6 = icmp ult i32 %2, 100
@@ -51,21 +51,21 @@ define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #2 {
 
 7:                                                ; preds = %3
   %8 = add i32 %1, 200
-  call void @llvm.lifetime.start.p0(i64 12, ptr nonnull %4) #3
+  call void @llvm.lifetime.start.p0(i64 12, ptr nonnull %4) #2
   store i32 %2, ptr %4, align 4, !tbaa !3
   %9 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 1
   store i32 %8, ptr %9, align 4, !tbaa !8
   %10 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 2
   store i32 %1, ptr %10, align 4, !tbaa !9
-  %11 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr %0, ptr nonnull %4, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv", ptr nonnull @__deegen_inline_cache_effect_0, ptr nonnull @__deegen_inline_cache_decode_ic_state_0, ptr nonnull @__deegen_inline_cache_encode_ic_state_0, i64 1, i32 %8)
-  call void @llvm.lifetime.end.p0(i64 12, ptr nonnull %4) #3
+  %11 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr %0, ptr nonnull %4, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv", i64 0, i64 1, ptr nonnull @__deegen_inline_cache_effect_0, ptr nonnull @__deegen_inline_cache_decode_ic_state_0, ptr nonnull @__deegen_inline_cache_encode_ic_state_0, i64 1, i32 %8)
+  call void @llvm.lifetime.end.p0(i64 12, ptr nonnull %4) #2
   br label %__deegen_inline_cache_body_0_tmp.exit
 
 12:                                               ; preds = %3
-  call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %5) #3
+  call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %5) #2
   store i32 %2, ptr %5, align 4, !tbaa !10
-  %13 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr %0, ptr nonnull %5, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv", ptr nonnull @__deegen_inline_cache_effect_1, ptr nonnull @__deegen_inline_cache_decode_ic_state_1, ptr nonnull @__deegen_inline_cache_encode_ic_state_1, i64 0)
-  call void @llvm.lifetime.end.p0(i64 4, ptr nonnull %5) #3
+  %13 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr %0, ptr nonnull %5, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv", i64 0, i64 1, ptr nonnull @__deegen_inline_cache_effect_1, ptr nonnull @__deegen_inline_cache_decode_ic_state_1, ptr nonnull @__deegen_inline_cache_encode_ic_state_1, i64 0)
+  call void @llvm.lifetime.end.p0(i64 4, ptr nonnull %5) #2
   br label %__deegen_inline_cache_body_0_tmp.exit
 
 __deegen_inline_cache_body_0_tmp.exit:            ; preds = %12, %7
@@ -75,8 +75,8 @@ __deegen_inline_cache_body_0_tmp.exit:            ; preds = %12, %7
 
 attributes #0 = { argmemonly mustprogress nocallback nofree nosync nounwind willreturn }
 attributes #1 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #2 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #3 = { nounwind }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}

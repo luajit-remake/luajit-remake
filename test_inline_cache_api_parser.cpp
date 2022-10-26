@@ -60,11 +60,13 @@ TEST(DeegenAst, InlineCacheAPIParser_1)
     ReleaseAssert(GetValueOfLLVMConstantInt<uint32_t>(ic.m_icKeyImpossibleValueMaybeNull) == 123);
 
     ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
-    ic.m_effects[0].m_effectFnMain->setLinkage(GlobalValue::ExternalLinkage);
-    ic.m_effects[1].m_effectFnMain->setLinkage(GlobalValue::ExternalLinkage);
+    ReleaseAssert(ic.m_effects[0].m_effectFnMain.size() == 1);
+    ic.m_effects[0].m_effectFnMain[0]->setLinkage(GlobalValue::ExternalLinkage);
+    ReleaseAssert(ic.m_effects[1].m_effectFnMain.size() == 1);
+    ic.m_effects[1].m_effectFnMain[0]->setLinkage(GlobalValue::ExternalLinkage);
 
     helper.CheckIsExpected(targetFunction, "mainFn");
     helper.CheckIsExpected(ic.m_bodyFn, "icBody");
-    helper.CheckIsExpected(ic.m_effects[0].m_effectFnMain, "icEffectWrapper0");
-    helper.CheckIsExpected(ic.m_effects[1].m_effectFnMain, "icEffectWrapper1");
+    helper.CheckIsExpected(ic.m_effects[0].m_effectFnMain[0], "icEffectWrapper0");
+    helper.CheckIsExpected(ic.m_effects[1].m_effectFnMain[0], "icEffectWrapper1");
 }

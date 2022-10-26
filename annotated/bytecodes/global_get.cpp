@@ -16,7 +16,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
     HeapPtr<TableObject> base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();
-    ic->AddKey(base->m_hiddenClass.m_value).SetImpossibleValue(0);
+    ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
     auto [result, mayHaveMt] = ic->Body([ic, base, index]() -> std::pair<TValue, bool> {
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(base, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
@@ -24,34 +24,18 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
         {
             int32_t slot = icInfo.m_slot;
-            if (mayHaveMetatable)
-            {
-                return ic->Effect([base, slot] {
-                    return std::make_pair(TCGet(base->m_inlineStorage[slot]), true);
-                });
-            }
-            else
-            {
-                return ic->Effect([base, slot] {
-                    return std::make_pair(TCGet(base->m_inlineStorage[slot]), false);
-                });
-            }
+            return ic->Effect([ic, base, slot, mayHaveMetatable] {
+                ic->SpecializeFullCoverage(mayHaveMetatable, false, true);
+                return std::make_pair(TCGet(base->m_inlineStorage[slot]), mayHaveMetatable);
+            });
         }
         else if (icInfo.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
         {
             int32_t slot = icInfo.m_slot;
-            if (mayHaveMetatable)
-            {
-                return ic->Effect([base, slot] {
-                    return std::make_pair(base->m_butterfly->GetNamedProperty(slot), true);
-                });
-            }
-            else
-            {
-                return ic->Effect([base, slot] {
-                    return std::make_pair(base->m_butterfly->GetNamedProperty(slot), false);
-                });
-            }
+            return ic->Effect([ic, base, slot, mayHaveMetatable] {
+                ic->SpecializeFullCoverage(mayHaveMetatable, false, true);
+                return std::make_pair(base->m_butterfly->GetNamedProperty(slot), mayHaveMetatable);
+            });
         }
         else
         {

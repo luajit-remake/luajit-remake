@@ -220,7 +220,6 @@ struct PreprocessIcEffectApiResult
 {
     llvm::CallInst* m_annotationInst;
     llvm::Function* m_annotationFn;
-    llvm::Function* m_effectWrapperFn;
     std::vector<llvm::Value*> m_mainFunctionCapturedValues;
 };
 
@@ -284,7 +283,198 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
         }
     }
 
-    // Create the IC effect wrapper function
+    // Now, parse out the specialization info of the effect lambda
+    //
+    struct EffectSpecializationInfo
+    {
+        CallInst* m_origin;
+        size_t m_ordInCaptureStruct;
+        bool m_isFullCoverage;
+        std::vector<Constant*> m_specializationValues;
+        Value* m_valueInBodyFn;
+    };
+
+    ReleaseAssert(isa<StructType>(capture->getAllocatedType()));
+    StructType* captureST = cast<StructType>(capture->getAllocatedType());
+
+    std::vector<size_t> byteOffsetOfCapturedValueInCaptureStruct;
+    {
+        DataLayout dataLayout(module);
+        const StructLayout* captureSTSL = dataLayout.getStructLayout(captureST);
+        for (uint32_t i = 0; i < captureST->getNumElements(); i++)
+        {
+            uint64_t offset = captureSTSL->getElementOffset(i);
+            byteOffsetOfCapturedValueInCaptureStruct.push_back(offset);
+        }
+    }
+
+    std::unordered_map<size_t /*offset*/, size_t /*ord*/> capturedValueOffsetToOrdinalMap;
+    for (size_t i = 0; i < byteOffsetOfCapturedValueInCaptureStruct.size(); i++)
+    {
+        size_t offset = byteOffsetOfCapturedValueInCaptureStruct[i];
+        // I don't know if this might actually happen in LLVM (maybe it will only happen with no_unique_address attr?)..
+        // But let's just assert this for sanity.
+        //
+        if (capturedValueOffsetToOrdinalMap.count(offset))
+        {
+            fprintf(stderr, "[ERROR] IC lambda capture contains two elements at the same offset %u!", static_cast<unsigned int>(offset));
+            abort();
+        }
+        capturedValueOffsetToOrdinalMap[offset] = i;
+    }
+
+    std::vector<EffectSpecializationInfo> allEffectSpecializationInfo;
+    ReleaseAssert(lambda->arg_size() == 1);
+    for (BasicBlock& bb : *lambda)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* ci = dyn_cast<CallInst>(&inst);
+            if (ci != nullptr)
+            {
+                Function* callee = ci->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    if (DemangleCXXSymbol(callee->getName().str()).find(" DeegenImpl_MakeIC_SpecializeIcEffect<") != std::string::npos)
+                    {
+                        EffectSpecializationInfo esi;
+                        ReleaseAssert(ci->arg_size() > 2);
+                        esi.m_origin = ci;
+                        esi.m_isFullCoverage = GetValueOfLLVMConstantInt<bool>(ci->getArgOperand(0));
+                        Value* capturedValueAddr = ci->getArgOperand(1);
+                        ReleaseAssert(llvm_value_has_type<void*>(capturedValueAddr));
+                        size_t offsetInCapture;
+                        if (capturedValueAddr == lambda->getArg(0))
+                        {
+                            offsetInCapture = 0;
+                        }
+                        else
+                        {
+                            ReleaseAssert(isa<GetElementPtrInst>(capturedValueAddr));
+                            GetElementPtrInst* gep = cast<GetElementPtrInst>(capturedValueAddr);
+                            ReleaseAssert(gep->getPointerOperand() == lambda->getArg(0));
+                            DataLayout dataLayout(module);
+                            APInt offsetAP(64 /*numBits*/, 0);
+                            ReleaseAssert(gep->accumulateConstantOffset(dataLayout, offsetAP /*out*/));
+                            uint64_t offset = offsetAP.getZExtValue();
+                            ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset));
+                            offsetInCapture = capturedValueOffsetToOrdinalMap[offset];
+                        }
+                        esi.m_ordInCaptureStruct = offsetInCapture;
+
+                        std::unordered_set<Constant*> checkUnique;
+                        for (uint32_t i = 2; i < ci->arg_size(); i++)
+                        {
+                            Value* arg = ci->getArgOperand(i);
+                            if (!isa<Constant>(arg))
+                            {
+                                fprintf(stderr, "[ERROR] IC effect specialization list contains non-constant value!\n");
+                                abort();
+                            }
+                            Constant* cst = cast<Constant>(arg);
+                            // In LLVM constants are hash-consed, so pointer comparison is fine
+                            //
+                            if (checkUnique.count(cst))
+                            {
+                                fprintf(stderr, "[ERROR] IC effect specialization list contains duplicated elements!\n");
+                                abort();
+                            }
+                            checkUnique.insert(cst);
+                            esi.m_specializationValues.push_back(cst);
+                            ReleaseAssert(cst->getType() == esi.m_specializationValues[0]->getType());
+                        }
+                        ReleaseAssert(esi.m_specializationValues.size() > 0);
+
+                        if (!effectFnLocalCaptures.count(offsetInCapture))
+                        {
+                            fprintf(stderr, "[ERROR] IC effect specialization must specialize on a IC state constant (a variable defined in IC body), not a fresh value!\n");
+                            abort();
+                        }
+
+                        esi.m_valueInBodyFn = effectFnLocalCaptures[offsetInCapture];
+                        if (!llvm_value_has_type<bool>(esi.m_specializationValues[0]))
+                        {
+                            ReleaseAssert(esi.m_valueInBodyFn->getType() == esi.m_specializationValues[0]->getType());
+                        }
+                        else
+                        {
+                            ReleaseAssert(llvm_value_has_type<uint8_t>(esi.m_valueInBodyFn));
+                            // For boolean, the only specialization that makes sense is SpecializeFullCoverage(false, true)
+                            //
+                            if (esi.m_specializationValues.size() != 2)
+                            {
+                                fprintf(stderr, "[ERROR] If you specialize a boolean in IC effect, the only sensible specialization is to specialize both false and true!\n");
+                                abort();
+                            }
+                            if (!esi.m_isFullCoverage)
+                            {
+                                fprintf(stderr, "[ERROR] If you specialize a boolean in IC effect, the only sensible specialization is to specialize full coverage!\n");
+                                abort();
+                            }
+                        }
+                        allEffectSpecializationInfo.push_back(esi);
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        std::unordered_set<size_t> checkUnique;
+        for (auto& it : allEffectSpecializationInfo)
+        {
+            if (checkUnique.count(it.m_ordInCaptureStruct))
+            {
+                fprintf(stderr, "[ERROR] Cannot use IC effect specialization API on the same capture twice!\n");
+                abort();
+            }
+            checkUnique.insert(it.m_ordInCaptureStruct);
+        }
+    }
+
+    for (auto& it : allEffectSpecializationInfo)
+    {
+        CallInst* ci = it.m_origin;
+        ReleaseAssert(ci->use_empty());
+        ci->eraseFromParent();
+        it.m_origin = nullptr;
+    }
+
+    // If the effect specialization has full coverage (i.e., the value of the capture is guaranteed to be among
+    // the specialization list), then we do not need to store the value into the IC state.
+    //
+    // Otherwise, since the value needs to be stored into the IC state for the generic fallback case (i.e., not in
+    // the specialization list) anyway, we will simply unconditionally store it into the IC state (which is also
+    // faster than doing a branch check and conditionally store it, since it is only a simple store instruction).
+    //
+    // The IC state decoder logic will also unconditionally decode the state. However, in the IC effect wrapper,
+    // if the value is specialized to a constant, we will manually do a constant store afterwards. This is sufficient
+    // to let LLVM know that the previous decoding load is a dead load and optimize it out.
+    //
+    for (auto& it : allEffectSpecializationInfo)
+    {
+        ReleaseAssert(effectFnLocalCaptures.count(it.m_ordInCaptureStruct));
+        if (it.m_isFullCoverage)
+        {
+            effectFnLocalCaptures.erase(effectFnLocalCaptures.find(it.m_ordInCaptureStruct));
+        }
+    }
+
+    size_t numSpecializations = 1;
+    for (auto& it : allEffectSpecializationInfo)
+    {
+        size_t cnt = it.m_specializationValues.size() + (it.m_isFullCoverage ? 0 : 1);
+        numSpecializations *= cnt;
+    }
+    // Just a sanity check, the limit is kind of arbitrary, but having 50 specializations seems crazy enough already..
+    //
+    if (numSpecializations > 50)
+    {
+        fprintf(stderr, "[ERROR] IC effect has too many (%u) specializations!\n", static_cast<unsigned int>(numSpecializations));
+        abort();
+    }
+
+    // Figure out the function prototype for the effect wrappers.
     // It should take the IC state (containing all the values defined and captured in the IC body)
     // and a list of parameters representing the list of values transitively captured in the main function
     //
@@ -353,85 +543,160 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     }
 
     FunctionType* effectWrapperFnTy = FunctionType::get(origin->getType() /*result*/, icEffectWrapperFnArgTys, false /*isVarArg*/);
-    std::string effectWrapperFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icEffectClosureWrapperFunctionPrefix);
-    Function* effectWrapperFn = Function::Create(effectWrapperFnTy, GlobalValue::InternalLinkage, effectWrapperFnName, module);
-    ReleaseAssert(effectWrapperFn->getName().str() == effectWrapperFnName);
-    effectWrapperFn->addFnAttr(Attribute::AttrKind::NoUnwind);
-    CopyFunctionAttributes(effectWrapperFn, lambda);
 
-    // Create the body of the effect wrapper
-    // Basically what we need to do is to create the closure capture expected by the effect lambda, then call the effect lambda
-    //
-    BasicBlock* entryBlock = BasicBlock::Create(ctx, "", effectWrapperFn);
-    ReleaseAssert(isa<StructType>(capture->getAllocatedType()));
-    StructType* captureST = cast<StructType>(capture->getAllocatedType());
-    AllocaInst* ai = new AllocaInst(captureST, 0 /*addrSpace*/, "", entryBlock);
-
-    // Create a decode function placeholder to populate the IC state into the capture
+    // Create the function prototype for the decoder function
     // Future lowering logic will lower this call to concrete logic
     //
-    std::vector<Value*> decoderFnArgs;
-    decoderFnArgs.push_back(effectWrapperFn->getArg(0 /*icState*/));
-    for (auto& it : effectFnLocalCaptures)
+    Function* decoderFn = nullptr;
     {
-        size_t ordInCapture = it.first;
-        GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
-            captureST, ai,
-            {
-                CreateLLVMConstantInt<uint64_t>(ctx, 0),
-                CreateLLVMConstantInt<uint32_t>(ctx, SafeIntegerCast<uint32_t>(ordInCapture))
-            },
-            "", entryBlock);
-        decoderFnArgs.push_back(gep);
+        std::vector<Type*> decoderFnArgTys;
+        // First arg: icState
+        //
+        decoderFnArgTys.push_back(llvm_type_of<void*>(ctx));
+        // Followed by a void* for each local capture: the destination address to fill
+        //
+        for (auto& it : effectFnLocalCaptures)
+        {
+            decoderFnArgTys.push_back(llvm_type_of<void*>(ctx));
+            std::ignore = it;
+        }
+        FunctionType* decoderFnTy = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, decoderFnArgTys, false /*isVarArg*/);
+        std::string decoderFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_decodeICStateToEffectLambdaCaptureFunctionPrefix);
+        decoderFn = Function::Create(decoderFnTy, GlobalValue::ExternalLinkage, decoderFnName, module);
+        ReleaseAssert(decoderFn->getName().str() == decoderFnName);
+        decoderFn->addFnAttr(Attribute::AttrKind::NoUnwind);
     }
-    std::vector<Type*> decoderFnArgTys;
-    for (Value* val : decoderFnArgs)
-    {
-        decoderFnArgTys.push_back(val->getType());
-    }
-    FunctionType* decoderFnTy = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, decoderFnArgTys, false /*isVarArg*/);
-    std::string decoderFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_decodeICStateToEffectLambdaCaptureFunctionPrefix);
-    Function* decoderFn = Function::Create(decoderFnTy, GlobalValue::ExternalLinkage, decoderFnName, module);
-    ReleaseAssert(decoderFn->getName().str() == decoderFnName);
-    decoderFn->addFnAttr(Attribute::AttrKind::NoUnwind);
-    CallInst::Create(decoderFn, decoderFnArgs, "", entryBlock);
+    ReleaseAssert(decoderFn != nullptr);
 
-    // Now, populate every value from the main function into the lambda
+    // Create the IC effect wrapper function for each specialization
+    // (however, note that they all share the same IC state decoder)
     //
-    for (size_t i = 0; i < capturedValuesInMainFn.size(); i++)
+    std::vector<Function*> allEffectSpecializationFns;
+    for (size_t specializationOrd = 0; specializationOrd < numSpecializations; specializationOrd++)
     {
-        size_t ordInStruct = capturedValuesInMainFn[i].first;
-        Value* src = effectWrapperFn->getArg(static_cast<uint32_t>(i + 1));
-        ReleaseAssert(ordInStruct < captureST->getNumElements());
-        ReleaseAssert(src->getType() == captureST->getElementType(static_cast<uint32_t>(ordInStruct)));
-        GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
-            captureST, ai,
+        // A vector of the same length as 'allEffectSpecializationInfo'
+        // If a value is nullptr, it means the specialization for this capture is the fallback generic case
+        //
+        std::vector<Constant*> specializationValue;
+        {
+            // DEVNOTE: this mapping computation from ordinal to specialization configuration below
+            // must agree with the computation in CreateEffectOrdinalGetterFn
+            //
+            size_t tmp = specializationOrd;
+            for (auto& it : allEffectSpecializationInfo)
             {
-                CreateLLVMConstantInt<uint64_t>(ctx, 0),
-                // LLVM requires struct index to be 32-bit (other width won't work!), so this must be uint32_t
+                size_t cnt = it.m_specializationValues.size() + (it.m_isFullCoverage ? 0 : 1);
+                size_t option = tmp % cnt;
+                tmp /= cnt;
+                if (option < it.m_specializationValues.size())
+                {
+                    specializationValue.push_back(it.m_specializationValues[option]);
+                }
+                else
+                {
+                    ReleaseAssert(!it.m_isFullCoverage);
+                    specializationValue.push_back(nullptr);
+                }
+            }
+        }
+
+        std::string effectWrapperFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_icEffectClosureWrapperFunctionPrefix);
+        Function* effectWrapperFn = Function::Create(effectWrapperFnTy, GlobalValue::InternalLinkage, effectWrapperFnName, module);
+        ReleaseAssert(effectWrapperFn->getName().str() == effectWrapperFnName);
+        effectWrapperFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+        CopyFunctionAttributes(effectWrapperFn, lambda);
+
+        // Create the body of the effect wrapper
+        // Basically what we need to do is to create the closure capture expected by the effect lambda, then call the effect lambda
+        //
+        BasicBlock* entryBlock = BasicBlock::Create(ctx, "", effectWrapperFn);
+        AllocaInst* ai = new AllocaInst(captureST, 0 /*addrSpace*/, "", entryBlock);
+
+        // Call the decode function placeholder to populate the IC state into the capture
+        //
+        std::vector<Value*> decoderFnArgs;
+        decoderFnArgs.push_back(effectWrapperFn->getArg(0 /*icState*/));
+        for (auto& it : effectFnLocalCaptures)
+        {
+            size_t ordInCapture = it.first;
+            GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
+                captureST, ai,
+                {
+                    CreateLLVMConstantInt<uint64_t>(ctx, 0),
+                    CreateLLVMConstantInt<uint32_t>(ctx, SafeIntegerCast<uint32_t>(ordInCapture))
+                },
+                "", entryBlock);
+            decoderFnArgs.push_back(gep);
+        }
+        CallInst::Create(decoderFn, decoderFnArgs, "", entryBlock);
+
+        // Now, populate every value from the main function into the lambda capture
+        //
+        for (size_t i = 0; i < capturedValuesInMainFn.size(); i++)
+        {
+            size_t ordInStruct = capturedValuesInMainFn[i].first;
+            Value* src = effectWrapperFn->getArg(static_cast<uint32_t>(i + 1));
+            ReleaseAssert(ordInStruct < captureST->getNumElements());
+            ReleaseAssert(src->getType() == captureST->getElementType(static_cast<uint32_t>(ordInStruct)));
+            GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
+                captureST, ai,
+                {
+                    CreateLLVMConstantInt<uint64_t>(ctx, 0),
+                    // LLVM requires struct index to be 32-bit (other width won't work!), so this must be uint32_t
+                    //
+                    CreateLLVMConstantInt<uint32_t>(ctx, static_cast<uint32_t>(ordInStruct))
+                },
+                "", entryBlock);
+            new StoreInst(src, gep, entryBlock);
+        }
+
+        // Finally, populate the specialized constant into the capture
+        // This is sufficient to let LLVM know that the previous loads and stores in decoderFn are dead and optimize them out
+        //
+        ReleaseAssert(specializationValue.size() == allEffectSpecializationInfo.size());
+        for (size_t i = 0; i < specializationValue.size(); i++)
+        {
+            if (specializationValue[i] == nullptr)
+            {
+                // This capture is not specialized in this specialization, decoderFn has filled the correct value for us.
                 //
-                CreateLLVMConstantInt<uint32_t>(ctx, static_cast<uint32_t>(ordInStruct))
-            },
-            "", entryBlock);
-        new StoreInst(src, gep, entryBlock);
-    }
+                continue;
+            }
+            GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(
+                captureST, ai,
+                {
+                    CreateLLVMConstantInt<uint64_t>(ctx, 0),
+                    CreateLLVMConstantInt<uint32_t>(ctx, static_cast<uint32_t>(allEffectSpecializationInfo[i].m_ordInCaptureStruct))
+                },
+                "", entryBlock);
 
-    // At this stage we have the capture expected by the effect lambda, so we can call it now
-    //
-    ReleaseAssert(lambda->arg_size() == 1);
-    ReleaseAssert(llvm_value_has_type<void*>(lambda->getArg(0)));
-    ReleaseAssert(lambda->getReturnType() == effectWrapperFn->getReturnType());
-    CallInst* ci = CallInst::Create(lambda, { ai },  "", entryBlock);
-    if (llvm_value_has_type<void>(ci))
-    {
-        ReturnInst::Create(ctx, nullptr /*returnVoid*/, entryBlock);
-    }
-    else
-    {
-        ReturnInst::Create(ctx, ci, entryBlock);
-    }
+            Value* valToStore = specializationValue[i];
+            if (llvm_value_has_type<bool>(specializationValue[i]))
+            {
+                valToStore = new ZExtInst(valToStore, llvm_type_of<uint8_t>(ctx), "", entryBlock);
+            }
+            new StoreInst(valToStore, gep, entryBlock);
+        }
 
-    ValidateLLVMFunction(effectWrapperFn);
+        // At this stage we have the capture expected by the effect lambda, so we can call it now
+        //
+        ReleaseAssert(lambda->arg_size() == 1);
+        ReleaseAssert(llvm_value_has_type<void*>(lambda->getArg(0)));
+        ReleaseAssert(lambda->getReturnType() == effectWrapperFn->getReturnType());
+        CallInst* ci = CallInst::Create(lambda, { ai }, "", entryBlock);
+        if (llvm_value_has_type<void>(ci))
+        {
+            ReturnInst::Create(ctx, nullptr /*returnVoid*/, entryBlock);
+        }
+        else
+        {
+            ReturnInst::Create(ctx, ci, entryBlock);
+        }
+
+        ValidateLLVMFunction(effectWrapperFn);
+
+        allEffectSpecializationFns.push_back(effectWrapperFn);
+    }
 
     // Create the placeholder for the IC state encoding function
     //
@@ -454,15 +719,31 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     annotationFnArgs.push_back(origin->getArgOperand(0) /*icPtr*/);
     annotationFnArgs.push_back(capture);
     annotationFnArgs.push_back(lambda);
-    annotationFnArgs.push_back(effectWrapperFn);
+    annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, allEffectSpecializationInfo.size()));
+    for (auto& it : allEffectSpecializationInfo)
+    {
+        annotationFnArgs.push_back(CreateLLVMConstantInt<bool>(ctx, it.m_isFullCoverage));
+        annotationFnArgs.push_back(it.m_valueInBodyFn);
+        annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, it.m_specializationValues.size()));
+        for (Constant* cst : it.m_specializationValues)
+        {
+            annotationFnArgs.push_back(cst);
+        }
+    }
+    annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, allEffectSpecializationFns.size()));
+    for (Function* effectWrapperFn : allEffectSpecializationFns)
+    {
+        annotationFnArgs.push_back(effectWrapperFn);
+    }
     annotationFnArgs.push_back(decoderFn);
     annotationFnArgs.push_back(encoderFn);
-    annotationFnArgs.push_back(CreateLLVMConstantInt(ctx, effectFnLocalCaptures.size()) /*numValuesInIcState*/);
+    annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, effectFnLocalCaptures.size()) /*numValuesInIcState*/);
     for (auto& it : effectFnLocalCaptures)
     {
         Value* val = it.second;
         annotationFnArgs.push_back(val);
     }
+
     std::vector<Type*> annotationFnArgTys;
     for (Value* val : annotationFnArgs)
     {
@@ -489,7 +770,6 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     PreprocessIcEffectApiResult res;
     res.m_annotationInst = replacement;
     res.m_annotationFn = annotationFn;
-    res.m_effectWrapperFn = effectWrapperFn;
     for (auto& it : capturedValuesInMainFn)
     {
         res.m_mainFunctionCapturedValues.push_back(it.second);
@@ -859,7 +1139,6 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         std::vector<Value*> icEffectAnnotationArgs;
         icEffectAnnotationArgs.push_back(ic);
         icEffectAnnotationArgs.push_back(res.m_annotationFn);
-        icEffectAnnotationArgs.push_back(res.m_effectWrapperFn);
         for (Value* val : res.m_mainFunctionCapturedValues)
         {
             icEffectAnnotationArgs.push_back(val);
@@ -1130,11 +1409,36 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
 
     // Parse out all information about the effects
     //
-    std::vector<Instruction*> instructionsToRemove;
-    for (User* usr : ic->users())
+    std::vector<CallInst*> allIcApiCallsInMainFn;
     {
-        ReleaseAssert(isa<CallInst>(usr));
-        CallInst* ci = cast<CallInst>(usr);
+        std::unordered_set<User*> uniqueIcUsers;
+        for (User* usr : ic->users())
+        {
+            uniqueIcUsers.insert(usr);
+        }
+        // Always sort the calls by function name, so that our processing result is deterministic
+        // All the function names should be different because we have uniqued them in the preprocessing step
+        //
+        std::map<std::string /*fnName*/, CallInst*> sortedCIs;
+        for (User* usr : uniqueIcUsers)
+        {
+            ReleaseAssert(isa<CallInst>(usr));
+            CallInst* ci = cast<CallInst>(usr);
+            Function* callee = ci->getCalledFunction();
+            ReleaseAssert(callee != nullptr);
+            std::string calleeName = callee->getName().str();
+            ReleaseAssert(!sortedCIs.count(calleeName));
+            sortedCIs[calleeName] = ci;
+        }
+        for (auto& it : sortedCIs)
+        {
+            allIcApiCallsInMainFn.push_back(it.second);
+        }
+    }
+
+    std::vector<Instruction*> instructionsToRemove;
+    for (CallInst* ci : allIcApiCallsInMainFn)
+    {
         ReleaseAssert(ci->arg_size() > 0 && ci->getArgOperand(0) == ic);
         if (ci == origin)
         {
@@ -1143,13 +1447,12 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         instructionsToRemove.push_back(ci);
         ReleaseAssert(ci->getCalledFunction() != nullptr && ci->getCalledFunction()->getName().startswith(x_createIcRegisterEffectPlaceholderFunctionPrefix));
         AstInlineCache::Effect e;
-        ReleaseAssert(ci->arg_size() >= 3);
-        e.m_effectFnMain = dyn_cast<Function>(ci->getArgOperand(2));
-        ReleaseAssert(e.m_effectFnMain != nullptr);
-        for (uint32_t i = 3; i < ci->arg_size(); i++)
+        ReleaseAssert(ci->arg_size() >= 2);
+        for (uint32_t i = 2; i < ci->arg_size(); i++)
         {
             e.m_effectFnMainArgs.push_back(ci->getArgOperand(i));
         }
+
         Function* annotationFn = dyn_cast<Function>(ci->getArgOperand(1));
         ReleaseAssert(annotationFn != nullptr);
         ReleaseAssert(annotationFn->hasNUses(2));
@@ -1176,7 +1479,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         ReleaseAssert(target->getCalledFunction() == annotationFn);
         e.m_origin = target;
 
-        ReleaseAssert(target->arg_size() >= 7);
+        ReleaseAssert(target->arg_size() >= 9);
         e.m_icPtr = target->getArgOperand(0);
         ReleaseAssert(llvm_value_has_type<void*>(e.m_icPtr));
         ReleaseAssert(isa<Argument>(e.m_icPtr));
@@ -1188,28 +1491,85 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         e.m_effectFnBody = dyn_cast<Function>(target->getArgOperand(2));
         ReleaseAssert(e.m_effectFnBody != nullptr);
 
-        Function* effectWrapperFn = dyn_cast<Function>(target->getArgOperand(3));
-        ReleaseAssert(effectWrapperFn != nullptr);
-        ReleaseAssert(effectWrapperFn == e.m_effectFnMain);
+        size_t numSpecializationInfo = GetValueOfLLVMConstantInt<uint64_t>(target->getArgOperand(3));
+        uint32_t curArgOrd = 4;
+        size_t expectedNumEffectFns = 1;
+        for (size_t k = 0; k < numSpecializationInfo; k++)
+        {
+            ReleaseAssert(target->arg_size() > curArgOrd + 2);
+            AstInlineCache::Effect::SpecializationInfo spInfo;
+            spInfo.m_isFullCoverage = GetValueOfLLVMConstantInt<bool>(target->getArgOperand(curArgOrd));
+            curArgOrd++;
+            spInfo.m_valueInBodyFn = target->getArgOperand(curArgOrd);
+            curArgOrd++;
+            size_t numSpecializations = GetValueOfLLVMConstantInt<uint64_t>(target->getArgOperand(curArgOrd));
+            curArgOrd++;
+            ReleaseAssert(target->arg_size() >= curArgOrd + numSpecializations);
+            for (size_t i = 0; i < numSpecializations; i++)
+            {
+                Value* val = target->getArgOperand(curArgOrd);
+                curArgOrd++;
+                ReleaseAssert(isa<Constant>(val));
+                spInfo.m_specializations.push_back(cast<Constant>(val));
+            }
 
-        e.m_icStateDecoder = dyn_cast<Function>(target->getArgOperand(4));
+            ReleaseAssert(spInfo.m_specializations.size() > 0);
+            for (Constant* cst : spInfo.m_specializations)
+            {
+                if (!llvm_value_has_type<bool>(cst))
+                {
+                    ReleaseAssert(cst->getType() == spInfo.m_valueInBodyFn->getType());
+                }
+                else
+                {
+                    ReleaseAssert(llvm_value_has_type<uint8_t>(spInfo.m_valueInBodyFn));
+                }
+            }
+            expectedNumEffectFns *= spInfo.m_specializations.size() + (spInfo.m_isFullCoverage ? 0 : 1);
+            e.m_specializations.push_back(spInfo);
+        }
+
+        ReleaseAssert(curArgOrd < target->arg_size());
+        size_t numEffectFns = GetValueOfLLVMConstantInt<uint64_t>(target->getArgOperand(curArgOrd));
+        curArgOrd++;
+        ReleaseAssert(curArgOrd + numEffectFns <= target->arg_size());
+        ReleaseAssert(numEffectFns == expectedNumEffectFns);
+        ReleaseAssert(numEffectFns > 0);
+        for (size_t i = 0; i < numEffectFns; i++)
+        {
+            Value* val = target->getArgOperand(curArgOrd);
+            curArgOrd++;
+            ReleaseAssert(isa<Function>(val));
+            Function* effectFn = cast<Function>(val);
+            e.m_effectFnMain.push_back(effectFn);
+        }
+
+        ReleaseAssert(curArgOrd + 2 < target->arg_size());
+        e.m_icStateDecoder = dyn_cast<Function>(target->getArgOperand(curArgOrd));
+        curArgOrd++;
         ReleaseAssert(e.m_icStateDecoder != nullptr);
         ReleaseAssert(e.m_icStateDecoder->getName().startswith(x_decodeICStateToEffectLambdaCaptureFunctionPrefix));
 
-        e.m_icStateEncoder = dyn_cast<Function>(target->getArgOperand(5));
+        e.m_icStateEncoder = dyn_cast<Function>(target->getArgOperand(curArgOrd));
+        curArgOrd++;
         ReleaseAssert(e.m_icStateEncoder != nullptr);
         ReleaseAssert(e.m_icStateEncoder->getName().startswith(x_encodeICStateFunctionPrefix));
 
-        Value* numIcStateCapturesV = target->getArgOperand(6);
+        Value* numIcStateCapturesV = target->getArgOperand(curArgOrd);
+        curArgOrd++;
         ReleaseAssert(isa<ConstantInt>(numIcStateCapturesV));
         ReleaseAssert(llvm_value_has_type<uint64_t>(numIcStateCapturesV));
         uint64_t numIcStateCaptures = GetValueOfLLVMConstantInt<uint64_t>(numIcStateCapturesV);
-        ReleaseAssert(target->arg_size() == 7 + numIcStateCaptures);
+
+        ReleaseAssert(curArgOrd + numIcStateCaptures == target->arg_size());
         for (uint32_t i = 0; i < numIcStateCaptures; i++)
         {
-            Value* icStateCapture = target->getArgOperand(7 + i);
+            Value* icStateCapture = target->getArgOperand(curArgOrd);
+            curArgOrd++;
             e.m_icStateVals.push_back(icStateCapture);
         }
+
+        ReleaseAssert(curArgOrd == target->arg_size());
 
         ReleaseAssert(e.m_icStateEncoder->arg_size() == 1 + numIcStateCaptures);
         ReleaseAssert(e.m_icStateDecoder->arg_size() == 1 + numIcStateCaptures);
@@ -1219,38 +1579,27 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
             ReleaseAssert(llvm_value_has_type<void*>(e.m_icStateDecoder->getArg(1 + i)));
         }
 
-        ReleaseAssert(e.m_icStateDecoder->hasNUses(2));
-        CallInst* decoderCall = nullptr;
+        for (Function* effectFn : e.m_effectFnMain)
         {
-            Use& u1 = *e.m_icStateDecoder->use_begin();
-            Use& u2 = *(++e.m_icStateDecoder->use_begin());
-            User* usr1 = u1.getUser();
-            User* usr2 = u2.getUser();
-            ReleaseAssert(isa<CallInst>(usr1));
-            ReleaseAssert(isa<CallInst>(usr2));
-            CallInst* ci1 = cast<CallInst>(usr1);
-            CallInst* ci2 = cast<CallInst>(usr2);
-            if (ci1 == target)
-            {
-                decoderCall = ci2;
-            }
-            else
-            {
-                decoderCall = ci1;
-            }
+            ReleaseAssert(effectFn->getReturnType() == r.m_bodyFn->getReturnType());
         }
-        ReleaseAssert(decoderCall != nullptr && decoderCall != target);
-        ReleaseAssert(decoderCall->getCalledFunction() == e.m_icStateDecoder);
-
-        ReleaseAssert(e.m_effectFnMain->getReturnType() == r.m_bodyFn->getReturnType());
         ReleaseAssert(e.m_effectFnBody->getReturnType() == r.m_bodyFn->getReturnType());
         ReleaseAssert(e.m_origin->getType() == r.m_bodyFn->getReturnType());
         r.m_effects.push_back(e);
     }
 
+    size_t totalEffectFns = 0;
+    for (auto& it : r.m_effects)
+    {
+        it.m_effectStartOrdinal = totalEffectFns;
+        totalEffectFns += it.m_effectFnMain.size();
+    }
+    ReleaseAssert(totalEffectFns < 250);
+    r.m_totalEffectKinds = totalEffectFns;
+
     for (size_t i = 0; i < r.m_effects.size(); i++)
     {
-        r.m_effects[i].m_effectOrdinal = i;
+        r.m_effects[i].m_ordinalInEffectArray = i;
     }
 
     // Parse out all information about the other simple APIs
@@ -1325,6 +1674,103 @@ std::vector<AstInlineCache> WARN_UNUSED AstInlineCache::GetAllUseInFunction(llvm
     return res;
 }
 
+static llvm::Function* WARN_UNUSED CreateEffectOrdinalGetterFn(
+    llvm::Module* module,
+    llvm::Function* fnToCopyAttributeFrom,
+    const std::vector<AstInlineCache::Effect::SpecializationInfo>& spList,
+    size_t startOrd)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    std::string fnName = GetFirstAvailableFunctionNameWithPrefix(module, "__deegen_compute_ic_effect_ord_");
+    std::vector<Type*> argTys;
+    for (const auto& it : spList)
+    {
+        argTys.push_back(it.m_valueInBodyFn->getType());
+    }
+    FunctionType* fty = FunctionType::get(llvm_type_of<uint8_t>(ctx) /*result*/, argTys, false /*isVarArg*/);
+    Function* fn = Function::Create(fty, GlobalValue::InternalLinkage, fnName, module);
+    ReleaseAssert(fn->getName().str() == fnName);
+    fn->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    fn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    CopyFunctionAttributes(fn, fnToCopyAttributeFrom);
+
+    BasicBlock* allocaBlock = BasicBlock::Create(ctx, "", fn);
+    BasicBlock* curBlock = BasicBlock::Create(ctx, "", fn);
+    Instruction* allocaInsertionPoint = BranchInst::Create(curBlock, allocaBlock);
+
+    std::vector<AllocaInst*> spOrdValues;
+    for (uint32_t i = 0; i < spList.size(); i++)
+    {
+        AllocaInst* spOrd = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", allocaInsertionPoint);
+        spOrdValues.push_back(spOrd);
+
+        ReleaseAssert(curBlock->empty());
+
+        BasicBlock* joinBlock = BasicBlock::Create(ctx, "", fn);
+        BasicBlock* defaultBlock = BasicBlock::Create(ctx, "", fn);
+        if (spList[i].m_isFullCoverage)
+        {
+            new UnreachableInst(ctx, defaultBlock);
+        }
+        else
+        {
+            new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(spList[i].m_specializations.size())), spOrd, defaultBlock);
+            BranchInst::Create(joinBlock, defaultBlock);
+        }
+
+        Value* switchValue = fn->getArg(i);
+        ReleaseAssert(spList[i].m_specializations.size() > 0);
+        if (llvm_value_has_type<bool>(spList[i].m_specializations[0]))
+        {
+            ReleaseAssert(llvm_value_has_type<uint8_t>(switchValue));
+            switchValue = new TruncInst(switchValue, llvm_type_of<bool>(ctx), "", curBlock);
+        }
+        SwitchInst* si = SwitchInst::Create(switchValue, defaultBlock, static_cast<uint32_t>(spList[i].m_specializations.size()) /*numCasesHint*/, curBlock);
+        for (size_t k = 0; k < spList[i].m_specializations.size(); k++)
+        {
+            BasicBlock* dst = BasicBlock::Create(ctx, "", fn, defaultBlock /*insertBefore*/);
+            new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(k)), spOrd, dst);
+            BranchInst::Create(joinBlock, dst);
+
+            ReleaseAssert(spList[i].m_specializations[k]->getType() == switchValue->getType());
+            ConstantInt* csi = dyn_cast<ConstantInt>(spList[i].m_specializations[k]);
+            ReleaseAssert(csi != nullptr);
+            si->addCase(csi, dst);
+        }
+
+        curBlock = joinBlock;
+    }
+
+    std::vector<size_t> spOrdWeights;
+    size_t curWeight = 1;
+    for (size_t i = 0; i < spList.size(); i++)
+    {
+        size_t cnt = spList[i].m_specializations.size() + (spList[i].m_isFullCoverage ? 0 : 1);
+        spOrdWeights.push_back(curWeight);
+        curWeight *= cnt;
+    }
+
+    ReleaseAssert(curBlock->empty());
+    UnreachableInst* dummy = new UnreachableInst(ctx, curBlock);
+    Value* sum = CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(startOrd));
+
+    ReleaseAssert(spOrdWeights.size() == spList.size());
+    ReleaseAssert(spOrdValues.size() == spList.size());
+    for (size_t i = 0; i < spList.size(); i++)
+    {
+        Value* val = new LoadInst(llvm_type_of<uint8_t>(ctx), spOrdValues[i], "", dummy);
+        uint8_t weight = SafeIntegerCast<uint8_t>(spOrdWeights[i]);
+        Value* thisTerm = CreateUnsignedMulNoOverflow(val, CreateLLVMConstantInt<uint8_t>(ctx, weight), dummy);
+        sum = CreateUnsignedAddNoOverflow(sum, thisTerm, dummy);
+    }
+    ReturnInst::Create(ctx, sum, dummy);
+    dummy->eraseFromParent();
+
+    ValidateLLVMFunction(fn);
+    return fn;
+}
+
 void AstInlineCache::DoLoweringForInterpreter()
 {
     using namespace llvm;
@@ -1362,10 +1808,9 @@ void AstInlineCache::DoLoweringForInterpreter()
     ReleaseAssert(m_icKey->getType()->isIntegerTy());
     size_t icKeyBytes = m_icKey->getType()->getIntegerBitWidth() / 8;
 
-    size_t numEffectKinds = m_effects.size();
-    ReleaseAssert(numEffectKinds > 0 && numEffectKinds < 254);
+    ReleaseAssert(m_totalEffectKinds > 0 && m_totalEffectKinds < 254);
 
-    bool canElideEffectKind = (numEffectKinds == 1) && hasImpossibleValue;
+    bool canElideEffectKind = (m_totalEffectKinds == 1) && hasImpossibleValue;
 
     BytecodeMetadataElement* ms_cachedIcVal = ms->AddElement(1 /*alignment*/, icKeyBytes);
     if (hasImpossibleValue)
@@ -1445,8 +1890,8 @@ void AstInlineCache::DoLoweringForInterpreter()
             defaultClause = callIcBodyBlock;
         }
 
-        SwitchInst* switchInst = SwitchInst::Create(icEffectKind, defaultClause, static_cast<uint32_t>(numEffectKinds) /*caseToReserve*/, icCacheHitBlock);
-        for (size_t i = 0; i < numEffectKinds; i++)
+        SwitchInst* switchInst = SwitchInst::Create(icEffectKind, defaultClause, static_cast<uint32_t>(m_totalEffectKinds) /*caseToReserve*/, icCacheHitBlock);
+        for (size_t i = 0; i < m_totalEffectKinds; i++)
         {
             BasicBlock* bb = BasicBlock::Create(ctx, "", mainFn, joinBlock /*insertBefore*/);
             BranchInst::Create(joinBlock, bb);
@@ -1456,10 +1901,10 @@ void AstInlineCache::DoLoweringForInterpreter()
     }
     else
     {
-        ReleaseAssert(numEffectKinds == 1);
+        ReleaseAssert(m_totalEffectKinds == 1);
         effectCaseBBList.push_back(icCacheHitBlock);
     }
-    ReleaseAssert(effectCaseBBList.size() == numEffectKinds);
+    ReleaseAssert(effectCaseBBList.size() == m_totalEffectKinds);
 
     // All we conceptually want to do is to create a PHI in the join BB that joins the results of all the cases together.
     // However, the result type can be an aggregate type, and it turns out that LLVM generates miserable code for PHI node with aggregate type
@@ -1473,17 +1918,19 @@ void AstInlineCache::DoLoweringForInterpreter()
     //
     for (Effect& e : m_effects)
     {
+        // Generate the logic in the main function for each specialization, which is simply calling the wrapped effect fn
+        //
+        for (size_t i = 0; i < e.m_effectFnMain.size(); i++)
         {
-            // Generate the logic in the main function, which is simply calling the wrapped effect fn
-            //
-            ReleaseAssert(e.m_effectOrdinal < effectCaseBBList.size());
-            BasicBlock* bb = effectCaseBBList[e.m_effectOrdinal];
+            size_t effectOrd = e.m_effectStartOrdinal + i;
+            ReleaseAssert(effectOrd < effectCaseBBList.size());
+            BasicBlock* bb = effectCaseBBList[effectOrd];
             ReleaseAssert(bb->getInstList().size() == 1);
             Instruction* insertBefore = bb->getTerminator();
             std::vector<Value*> args;
             args.push_back(m_icPtrOrigin);
             for (Value* val : e.m_effectFnMainArgs) { args.push_back(val); }
-            Value* effectResult = CallInst::Create(e.m_effectFnMain, args, "", insertBefore);
+            Value* effectResult = CallInst::Create(e.m_effectFnMain[i], args, "", insertBefore);
             new StoreInst(effectResult, icResultAlloca, insertBefore);
         }
 
@@ -1498,7 +1945,7 @@ void AstInlineCache::DoLoweringForInterpreter()
             // Set up the struct to hold the captured state of this effect
             //
             DataLayout dataLayout(module);
-            BytecodeMetadataStruct* bms = ms_effects[e.m_effectOrdinal];
+            BytecodeMetadataStruct* bms = ms_effects[e.m_ordinalInEffectArray];
             for (size_t i = 0; i < numElementsInIcState; i++)
             {
                 Type* icStateType = e.m_icStateVals[i]->getType();
@@ -1596,7 +2043,14 @@ void AstInlineCache::DoLoweringForInterpreter()
             //
             if (!canElideEffectKind)
             {
-                Value* effectKindToWrite = CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(e.m_effectOrdinal));
+                Function* effectOrdinalGetterFn = CreateEffectOrdinalGetterFn(module, m_bodyFn /*functionToCopyAttrFrom*/, e.m_specializations, e.m_effectStartOrdinal);
+                std::vector<Value*> args;
+                for (auto& it : e.m_specializations)
+                {
+                    args.push_back(it.m_valueInBodyFn);
+                }
+                Value* effectKindToWrite = CallInst::Create(effectOrdinalGetterFn, args, "", insertBefore);
+                ReleaseAssert(llvm_value_has_type<uint8_t>(effectKindToWrite));
                 Value* addr = ms_effectKind->EmitGetAddress(module, bodyIcPtr, insertBefore);
                 new StoreInst(effectKindToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), insertBefore);
             }
@@ -1630,9 +2084,12 @@ void AstInlineCache::DoLoweringForInterpreter()
         e.m_effectFnBody->addFnAttr(Attribute::AttrKind::AlwaysInline);
         e.m_effectFnBody->setLinkage(GlobalValue::InternalLinkage);
 
-        ReleaseAssert(!e.m_effectFnMain->hasFnAttribute(Attribute::AttrKind::NoInline));
-        e.m_effectFnMain->addFnAttr(Attribute::AttrKind::AlwaysInline);
-        e.m_effectFnMain->setLinkage(GlobalValue::InternalLinkage);
+        for (Function* effectFn : e.m_effectFnMain)
+        {
+            ReleaseAssert(!effectFn->hasFnAttribute(Attribute::AttrKind::NoInline));
+            effectFn->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            effectFn->setLinkage(GlobalValue::InternalLinkage);
+        }
     }
 
     // TODO: lower the setUncachable API and any other misc API we will need

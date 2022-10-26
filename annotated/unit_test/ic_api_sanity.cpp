@@ -4,7 +4,7 @@
 extern "C" uint32_t testfn1(uint32_t key, uint32_t k2)
 {
     ICHandler* ic = MakeInlineCache();
-    ic->AddKey(key).SetImpossibleValue(123);
+    ic->AddKey(key).SpecifyImpossibleValue(123);
     return ic->Body([ic, key, k2]() -> uint32_t {
         if (key < 100)
         {
