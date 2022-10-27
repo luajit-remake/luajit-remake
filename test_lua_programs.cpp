@@ -809,4 +809,9 @@ TEST(LuaTest, GlobalGetInterpreterIC)
     RunSimpleLuaTest("luatests/globalget_interpreter_ic.lua.json");
 }
 
+TEST(LuaTest, TableGetByIdInterpreterIC)
+{
+    RunSimpleLuaTest("luatests/table_getbyid_interpreter_ic.lua.json");
+}
+
 }   // anonymous namespace

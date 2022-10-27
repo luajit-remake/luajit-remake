@@ -12,7 +12,7 @@ template<typename ResType> ResType DeegenImpl_MakeIC_SetMainLambda(ICHandler* ic
 template<typename ResType> ResType DeegenImpl_MakeIC_MarkEffect(ICHandler* ic, const void* cp, const void* fpp);
 template<typename ResType> ResType DeegenImpl_MakeIC_MarkEffectValue(ICHandler* ic, const ResType& value);
 void DeegenImpl_MakeIC_SetUncacheableForThisExecution(ICHandler* ic);
-template<typename ICCaptureType, typename... Rest> void DeegenImpl_MakeIC_SpecializeIcEffect(bool isFullCoverage, const ICCaptureType& capture, Rest... values);
+template<typename ICCaptureType, typename... Rest> void DeegenImpl_MakeIC_SpecializeIcEffect(bool isFullCoverage, const ICCaptureType* capture, Rest... values);
 
 template<typename ICKeyType>
 struct ICHandlerKeyRef
@@ -90,8 +90,16 @@ template<typename T, typename... Ts>
 void ALWAYS_INLINE IcSpecializeValue(const T& capture, Ts... values)
 {
     static_assert(sizeof...(Ts) > 0, "You need to provide at least one specialization value.");
-    static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
-    DeegenImpl_MakeIC_SpecializeIcEffect(false /*isFullCoverage*/, capture, static_cast<T>(values)...);
+    static_assert(std::is_integral_v<T> || std::is_enum_v<T>, "Currently only specializing integer or boolean types is supported!");
+    if constexpr(std::is_integral_v<T>)
+    {
+        DeegenImpl_MakeIC_SpecializeIcEffect(false /*isFullCoverage*/, &capture, static_cast<T>(values)...);
+    }
+    else
+    {
+        using U = std::underlying_type_t<T>;
+        DeegenImpl_MakeIC_SpecializeIcEffect(false /*isFullCoverage*/, reinterpret_cast<const U*>(&capture), static_cast<U>(values)...);
+    }
 }
 
 // Similar to 'IcSpecializeValue', except that the default generic fallback is not generated.
@@ -101,6 +109,14 @@ template<typename T, typename... Ts>
 void ALWAYS_INLINE IcSpecializeValueFullCoverage(const T& capture, Ts... values)
 {
     static_assert(sizeof...(Ts) > 1, "If you do SpecializeFullCoverage, you should provide at least 2 specialization values (if you only provide one value, then you are effectively saying it's already known as a constant!)");
-    static_assert(std::is_integral_v<T>, "Currently only specializing integer or boolean types is supported!");
-    DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, capture, static_cast<T>(values)...);
+    static_assert(std::is_integral_v<T>|| std::is_enum_v<T>, "Currently only specializing integer or boolean types is supported!");
+    if constexpr(std::is_integral_v<T>)
+    {
+        DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, &capture, static_cast<T>(values)...);
+    }
+    else
+    {
+        using U = std::underlying_type_t<T>;
+        DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, reinterpret_cast<const U*>(&capture), static_cast<U>(values)...);
+    }
 }

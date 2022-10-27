@@ -363,7 +363,7 @@ public:
     static constexpr uint32_t x_stringStructure = 0x8;
     // Common object header
     //
-    uint32_t m_structure;           // always x_StringStructure
+    uint32_t m_hiddenClass;         // always x_StringStructure
     HeapEntityType m_type;          // always TypeEnumForHeapObject<HeapString>
     GcCellState m_cellState;
 
@@ -387,7 +387,7 @@ public:
 
     void PopulateHeader(StringLengthAndHash slah)
     {
-        m_structure = x_stringStructure;
+        m_hiddenClass = x_stringStructure;
         m_type = TypeEnumForHeapObject<HeapString>;
         m_cellState = x_defaultCellState;
 

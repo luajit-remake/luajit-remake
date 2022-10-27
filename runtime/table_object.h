@@ -34,7 +34,7 @@ public:
         ArraySparseMap* r = TranslateToRawPointer(vm, hp);
         ConstructInPlace(r);
         UserHeapGcObjectHeader::Populate(r);
-        r->m_structure = ArraySparseMap::x_hiddenClassForArraySparseMap;
+        r->m_hiddenClass = ArraySparseMap::x_hiddenClassForArraySparseMap;
         r->m_hashMask = 1;
         r->m_elementCount = 0;
         r->m_hashTable = new HashTableEntry[2];
@@ -49,7 +49,7 @@ public:
         ArraySparseMap* r = TranslateToRawPointer(vm, hp);
         ConstructInPlace(r);
         UserHeapGcObjectHeader::Populate(r);
-        r->m_structure = ArraySparseMap::x_hiddenClassForArraySparseMap;
+        r->m_hiddenClass = ArraySparseMap::x_hiddenClassForArraySparseMap;
         r->m_hashMask = m_hashMask;
         r->m_elementCount = m_elementCount;
         r->m_hashTable = new HashTableEntry[m_hashMask + 1];

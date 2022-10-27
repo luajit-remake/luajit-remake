@@ -1,5 +1,6 @@
 #include "api_define_bytecode.h"
 #include "deegen_api.h"
+#include "api_inline_cache.h"
 
 #include "runtime_utils.h"
 
@@ -8,62 +9,155 @@ static void NO_RETURN TableGetByIdMetamethodCallContinuation(TValue /*base*/, TV
     Return(GetReturnValue(0));
 }
 
+enum class TableGetByIdIcResultKind
+{
+    NotTable,           // The base object is not a table
+    MayHaveMetatable,   // The base object is a table that may have metatable
+    NoMetatable         // The base object is a table that is guaranteed to have no metatable
+};
+
 static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
-
     TValue metamethod;
-    while (true)
+
+    // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
+    // As long as we know it's a heap entity, we can get its hidden class which the IC caches on.
+    //
+    if (likely(base.Is<tHeapEntity>()))
     {
-        if (unlikely(!base.Is<tTable>()))
+        HeapPtr<UserHeapGcObjectHeader> heapEntity = base.As<tHeapEntity>();
+        ICHandler* ic = MakeInlineCache();
+        ic->AddKey(heapEntity->m_hiddenClass).SpecifyImpossibleValue(0);
+
+        using ResKind = TableGetByIdIcResultKind;
+        auto [result, resultKind] = ic->Body([ic, heapEntity, index]() -> std::pair<TValue, ResKind>
+        {
+            // If the heapEntity isn't a table, there's nothing we can do here
+            //
+            if (unlikely(heapEntity->m_type != HeapEntityType::Table))
+            {
+                return std::make_pair(TValue(), ResKind::NotTable);
+            }
+
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(reinterpret_cast<HeapPtr<TableObject>>(heapEntity), UserHeapPointer<HeapString> { index }, icInfo /*out*/);
+            ResKind resKind = icInfo.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
+            switch (icInfo.m_icKind)
+            {
+            case GetByIdICInfo::ICKind::UncachableDictionary:
+            {
+                assert(false && "unimplemented");
+                __builtin_unreachable();
+            }
+            case GetByIdICInfo::ICKind::MustBeNil:
+            {
+                return ic->Effect([resKind] {
+                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    return std::make_pair(TValue::Create<tNil>(), resKind);
+                });
+            }
+            case GetByIdICInfo::ICKind::MustBeNilButUncacheable:
+            {
+                return std::make_pair(TValue::Create<tNil>(), resKind);
+            }
+            case GetByIdICInfo::ICKind::InlinedStorage:
+            {
+                int32_t slot = icInfo.m_slot;
+                return ic->Effect([heapEntity, slot, resKind] {
+                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    TValue res = TCGet(reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_inlineStorage[slot]);
+                    return std::make_pair(res, resKind);
+                });
+            }
+            case GetByIdICInfo::ICKind::OutlinedStorage:
+            {
+                int32_t slot = icInfo.m_slot;
+                return ic->Effect([heapEntity, slot, resKind] {
+                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    TValue res = reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_butterfly->GetNamedProperty(slot);
+                    return std::make_pair(res, resKind);
+                });
+            }
+            }   /* switch icKind */
+        });
+
+        if (likely(resultKind == ResKind::NoMetatable))
+        {
+            Return(result);
+        }
+
+        if (unlikely(resultKind == ResKind::NotTable))
         {
             goto not_table_object;
         }
 
+        assert(resultKind == ResKind::MayHaveMetatable);
+        if (likely(!result.Is<tNil>()))
         {
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
-            TValue result = TableObject::GetById(tableObj, index, icInfo);
-
-            if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
-            {
-                TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
-                if (gmr.m_result.m_value != 0)
-                {
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-                    if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
-                    {
-                        metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
-                        if (!metamethod.Is<tNil>())
-                        {
-                            goto handle_metamethod;
-                        }
-                    }
-                }
-            }
             Return(result);
         }
+        goto check_metatable_for_table_object;
+    }
+    else
+    {
+        goto not_table_object;
+    }
+
+check_metatable_for_table_object:
+    {
+        TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
+        if (gmr.m_result.m_value != 0)
+        {
+            HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+            if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+            {
+                metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                if (!metamethod.Is<tNil>())
+                {
+                    goto handle_metamethod;
+                }
+            }
+        }
+        Return(TValue::Create<tNil>());
+    }
 
 not_table_object:
-        metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
-        if (metamethod.Is<tNil>())
-        {
-            ThrowError("bad type for TableGetById");
-        }
+    metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
+    if (metamethod.Is<tNil>())
+    {
+        ThrowError("bad type for TableGetById");
+    }
 
 handle_metamethod:
-        // If 'metamethod' is a function, we should invoke the metamethod
-        //
-        if (likely(metamethod.Is<tFunction>()))
-        {
-            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByIdMetamethodCallContinuation);
-        }
+    // If 'metamethod' is a function, we should invoke the metamethod
+    //
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByIdMetamethodCallContinuation);
+    }
 
-        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
-        //
-        base = metamethod;
+    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+    //
+    base = metamethod;
+
+    if (unlikely(!base.Is<tTable>()))
+    {
+        goto not_table_object;
+    }
+
+    {
+        HeapPtr<TableObject> tableObj = base.As<tTable>();
+        GetByIdICInfo icInfo;
+        TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
+        TValue result = TableObject::GetById(tableObj, index, icInfo);
+
+        if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+        {
+            goto check_metatable_for_table_object;
+        }
+        Return(result);
     }
 }
 

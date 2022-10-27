@@ -497,14 +497,14 @@ struct tHeapEntity
         return v.IsPointer();
     }
 
-    static TValue encode(HeapPtr<void> v)
+    static TValue encode(HeapPtr<UserHeapGcObjectHeader> v)
     {
-        return TValue::CreatePointer(UserHeapPointer<void> { v });
+        return TValue::CreatePointer(UserHeapPointer<UserHeapGcObjectHeader> { v });
     }
 
-    static HeapPtr<void> decode(TValue v)
+    static HeapPtr<UserHeapGcObjectHeader> decode(TValue v)
     {
-        return v.AsPointer().As();
+        return v.AsPointer().As<UserHeapGcObjectHeader>();
     }
 };
 

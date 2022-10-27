@@ -117,26 +117,26 @@ enum class GcCellState: uint8_t
 static constexpr GcCellState x_defaultCellState = GcCellState::White;
 
 // All objects in the user heap must share the following 8-byte header:
-//   SystemHeapPtr<void> m_structure
+//   SystemHeapPtr<void> m_hiddenClass
 //   uint8_t m_type
 //   uint8_t m_cellState    // reserved for GC
 //   uint16_t m_opaque
 //
-// Note that m_structure must encompass at least the information of m_type (that is,
-// different m_type must correspond to different m_structure)
+// Note that m_hiddenClass must encompass at least the information of m_type (that is,
+// different m_type must correspond to different m_hiddenClass)
 //
-// One can think of m_structure as what determines everything needed to interpret an
+// One can think of m_hiddenClass as what determines everything needed to interpret an
 // object's bit representation. 'm_type' (and potentially info stored in 'm_opaque') are
-// only caches of information in m_structure, so that accessing them doesn't need a dereference.
+// only caches of information in m_hiddenClass, so that accessing them doesn't need a dereference.
 //
-// Since 'm_structure' usually have different pointer types for different kinds of objects,
+// Since 'm_hiddenClass' usually have different pointer types for different kinds of objects,
 // and different kinds of objects also use m_opaque differently, this class is not inherited by
 // the object classes. Instead, the object classes are responsible to make sure that the layout matches.
 //
 class UserHeapGcObjectHeader
 {
 public:
-    uint32_t m_structure;
+    uint32_t m_hiddenClass;
     HeapEntityType m_type;
     GcCellState m_cellState;     // reserved for GC
 
