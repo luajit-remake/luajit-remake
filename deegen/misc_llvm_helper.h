@@ -1566,4 +1566,19 @@ inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
     ValidateLLVMModule(module);
 }
 
+// In unit tests, sometimes we simply assert on the whole content of the LLVM module
+// However, Clang-generated modules contain a 'llvm.ident' metadata string which identifies the Clang version.
+// We don't want to make test fail if we use a slightly different Clang version, so this funcion strips the
+// 'llvm.ident'. It should only be used by unit tests.
+//
+inline void TestOnly_StripLLVMIdentMetadata(llvm::Module* module)
+{
+    using namespace llvm;
+    NamedMDNode* mdNode = module->getNamedMetadata("llvm.ident");
+    if (mdNode != nullptr)
+    {
+        module->eraseNamedMetadata(mdNode);
+    }
+}
+
 }   // namespace dast

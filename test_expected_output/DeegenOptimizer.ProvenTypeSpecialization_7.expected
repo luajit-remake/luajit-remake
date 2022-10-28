@@ -1,7 +1,7 @@
 ; ModuleID = 'extracted_ir'
 source_filename = "/home/u/project/annotated/unit_test/proven_type_specialization.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
+target triple = "x86_64-unknown-linux-gnu"
 
 @.str = private unnamed_addr constant [14 x i8] c"cannot handle\00", align 1
 
@@ -43,8 +43,6 @@ attributes #3 = { noreturn nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
-!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}

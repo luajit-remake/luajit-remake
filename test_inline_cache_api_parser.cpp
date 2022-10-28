@@ -25,6 +25,7 @@ struct TestHelper
     void CheckIsExpected(llvm::Function* func, std::string suffix = "")
     {
         std::unique_ptr<Module> module = ExtractFunction(moduleHolder.get(), func->getName().str(), true /*ignoreLinkageIssues*/);
+        TestOnly_StripLLVMIdentMetadata(module.get());
         std::string dump = DumpLLVMModuleAsString(module.get());
         AssertIsExpectedOutput(dump, suffix);
     }

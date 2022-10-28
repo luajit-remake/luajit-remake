@@ -29,6 +29,7 @@ struct TestHelper
         DesugarAndSimplifyLLVMModule(moduleHolder.get(), DesugarUpToExcluding(DesugaringLevel::TypeSpecialization));
 
         std::unique_ptr<Module> module = ExtractFunction(moduleHolder.get(), functionName);
+        TestOnly_StripLLVMIdentMetadata(module.get());
         std::string dump = DumpLLVMModuleAsString(module.get());
         AssertIsExpectedOutput(dump, suffix);
     }

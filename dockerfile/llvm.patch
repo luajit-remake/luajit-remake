@@ -1,0 +1,35 @@
+diff --git a/llvm/lib/Target/X86/X86CallingConv.td b/llvm/lib/Target/X86/X86CallingConv.td
+index 4dd8a6cdd..5a2c1fa5d 100644
+--- a/llvm/lib/Target/X86/X86CallingConv.td
++++ b/llvm/lib/Target/X86/X86CallingConv.td
+@@ -705,9 +705,9 @@ def CC_X86_64_GHC : CallingConv<[
+   // Promote i8/i16/i32 arguments to i64.
+   CCIfType<[i8, i16, i32], CCPromoteToType<i64>>,
+ 
+-  // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, SpLim
++  // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, SpLim, RCX, RDX, R10, R11
+   CCIfType<[i64],
+-            CCAssignToReg<[R13, RBP, R12, RBX, R14, RSI, RDI, R8, R9, R15]>>,
++            CCAssignToReg<[R13, RBP, R12, RBX, R14, RSI, RDI, R8, R9, R15, RCX, RDX, R10, R11]>>,
+ 
+   // Pass in STG registers: F1, F2, F3, F4, D1, D2
+   CCIfType<[f32, f64, v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
+@@ -1154,14 +1154,14 @@ def CSR_64_CXX_TLS_Darwin_PE : CalleeSavedRegs<(add RBP)>;
+ // CSRs that are handled explicitly via copies.
+ def CSR_64_CXX_TLS_Darwin_ViaCopy : CalleeSavedRegs<(sub CSR_64_TLS_Darwin, RBP)>;
+ 
+-// All GPRs - except r11
+-def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RAX, RCX, RDX, RSI, RDI,
++// All GPRs - except r11, rax and rdx
++def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RCX, RSI, RDI,
+                                               R8, R9, R10)>;
+ 
+ // All registers - except r11
+-def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
++def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs, RAX, RDX,
+                                                  (sequence "XMM%u", 0, 15))>;
+-def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
++def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs, RAX, RDX,
+                                                  (sequence "YMM%u", 0, 15))>;
+ 
+ def CSR_64_MostRegs : CalleeSavedRegs<(add RBX, RCX, RDX, RSI, RDI, R8, R9, R10,

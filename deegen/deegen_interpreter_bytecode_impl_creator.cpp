@@ -314,10 +314,6 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
             ReleaseAssert(ic.m_bodyFn->getLinkage() == GlobalValue::InternalLinkage);
             m_icBodyNames.push_back(icBodyNewName);
 
-            // This is lame: PreserveMost somehow also preserves rax and rdx so it generates buggy code whenever the function has return values...
-            // TODO: We should try to fix it in LLVM since we do want the code to be less intrusive in caller side..
-            //
-#if 0
             // Change the calling convention of the IC body to PreserveMost, since it's the slow path and we want it to be less intrusive
             //
             ic.m_bodyFn->setCallingConv(CallingConv::PreserveMost);
@@ -330,7 +326,6 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
                     callInst->setCallingConv(CallingConv::PreserveMost);
                 }
             }
-#endif
 
             // Also, we need to give it one more chance to inline, because previously when the inline pass was run,
             // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.

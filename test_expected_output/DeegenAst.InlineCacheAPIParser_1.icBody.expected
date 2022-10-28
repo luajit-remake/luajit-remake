@@ -1,7 +1,7 @@
 ; ModuleID = 'extracted_ir'
 source_filename = "/home/u/project/annotated/unit_test/ic_api_sanity.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
+target triple = "x86_64-unknown-linux-gnu"
 
 %class.anon.0 = type { i32, i32, i32 }
 %class.anon.1 = type { i32 }
@@ -52,18 +52,18 @@ define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #3 {
 7:                                                ; preds = %3
   %8 = add i32 %1, 200
   call void @llvm.lifetime.start.p0(i64 12, ptr nonnull %4) #2
-  store i32 %2, ptr %4, align 4, !tbaa !3
+  store i32 %2, ptr %4, align 4, !tbaa !2
   %9 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 1
-  store i32 %8, ptr %9, align 4, !tbaa !8
+  store i32 %8, ptr %9, align 4, !tbaa !7
   %10 = getelementptr inbounds %class.anon.0, ptr %4, i64 0, i32 2
-  store i32 %1, ptr %10, align 4, !tbaa !9
+  store i32 %1, ptr %10, align 4, !tbaa !8
   %11 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_0(ptr %0, ptr nonnull %4, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE_clEv", i64 0, i64 1, ptr nonnull @__deegen_inline_cache_effect_0, ptr nonnull @__deegen_inline_cache_decode_ic_state_0, ptr nonnull @__deegen_inline_cache_encode_ic_state_0, i64 1, i32 %8)
   call void @llvm.lifetime.end.p0(i64 12, ptr nonnull %4) #2
   br label %__deegen_inline_cache_body_0_tmp.exit
 
 12:                                               ; preds = %3
   call void @llvm.lifetime.start.p0(i64 4, ptr nonnull %5) #2
-  store i32 %2, ptr %5, align 4, !tbaa !10
+  store i32 %2, ptr %5, align 4, !tbaa !9
   %13 = call i32 @__DeegenInternal_AstICEffect_IdentificationFunc_1(ptr %0, ptr nonnull %5, ptr nonnull @"_ZZZ7testfn1ENK3$_0clEvENKUlvE0_clEv", i64 0, i64 1, ptr nonnull @__deegen_inline_cache_effect_1, ptr nonnull @__deegen_inline_cache_decode_ic_state_1, ptr nonnull @__deegen_inline_cache_encode_ic_state_1, i64 0)
   call void @llvm.lifetime.end.p0(i64 4, ptr nonnull %5) #2
   br label %__deegen_inline_cache_body_0_tmp.exit
@@ -80,17 +80,15 @@ attributes #3 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
-!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!3 = !{!4, !5, i64 0}
-!4 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE_", !5, i64 0, !5, i64 4, !5, i64 8}
-!5 = !{!"int", !6, i64 0}
-!6 = !{!"omnipotent char", !7, i64 0}
-!7 = !{!"Simple C++ TBAA"}
-!8 = !{!4, !5, i64 4}
-!9 = !{!4, !5, i64 8}
-!10 = !{!11, !5, i64 0}
-!11 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE0_", !5, i64 0}
+!2 = !{!3, !4, i64 0}
+!3 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE_", !4, i64 0, !4, i64 4, !4, i64 8}
+!4 = !{!"int", !5, i64 0}
+!5 = !{!"omnipotent char", !6, i64 0}
+!6 = !{!"Simple C++ TBAA"}
+!7 = !{!3, !4, i64 4}
+!8 = !{!3, !4, i64 8}
+!9 = !{!10, !4, i64 0}
+!10 = !{!"_ZTSZZ7testfn1ENK3$_0clEvEUlvE0_", !4, i64 0}

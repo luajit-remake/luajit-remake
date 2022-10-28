@@ -13,6 +13,7 @@ TEST(DeegenCommonSnippet, Sanity)
     std::unique_ptr<LLVMContext> llvmCtxHolder = std::make_unique<LLVMContext>();
     LLVMContext& ctx = *llvmCtxHolder.get();
     std::unique_ptr<Module> module = GetDeegenCommonSnippetLLVMIR(ctx, "GetCodeBlockFromStackBase", 0 /*expectedKind = snippet*/);
+    TestOnly_StripLLVMIdentMetadata(module.get());
 
     std::string dump = DumpLLVMModuleAsString(module.get());
     AssertIsExpectedOutput(dump);

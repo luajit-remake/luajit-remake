@@ -36,7 +36,9 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     Function* rcFunc = res->getFunction(rcName);
     ReleaseAssert(rcFunc != nullptr);
 
-    return ExtractFunction(res.get(), rcName);
+    std::unique_ptr<Module> m = ExtractFunction(res.get(), rcName);
+    TestOnly_StripLLVMIdentMetadata(m.get());
+    return m;
 }
 
 }   // anonymous namespace

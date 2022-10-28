@@ -1,11 +1,11 @@
 ; ModuleID = 'extracted_ir'
 source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-pc-linux-gnu"
+target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
 define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn5(ptr %0, ptr %1, ptr %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, i64 %9, double %10, double %11, double %12, double %13, double %14, double %15) local_unnamed_addr #0 {
-  %.val.val = load i64, ptr %1, align 8, !tbaa.struct !3
+  %.val.val = load i64, ptr %1, align 8, !tbaa.struct !2
   %17 = inttoptr i64 %.val.val to ptr
   musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr %0, ptr nonnull %1, ptr %17, ptr undef, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef)
   ret void
@@ -19,13 +19,11 @@ attributes #1 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2, !2, !2, !2, !2, !2}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
-!2 = !{!"Ubuntu clang version 15.0.0-++20220905103059+4ba6a9c9f65b-1~exp1~20220905103153.49"}
-!3 = !{i64 0, i64 8, !4}
-!4 = !{!5, !5, i64 0}
-!5 = !{!"long", !6, i64 0}
-!6 = !{!"omnipotent char", !7, i64 0}
-!7 = !{!"Simple C++ TBAA"}
+!2 = !{i64 0, i64 8, !3}
+!3 = !{!4, !4, i64 0}
+!4 = !{!"long", !5, i64 0}
+!5 = !{!"omnipotent char", !6, i64 0}
+!6 = !{!"Simple C++ TBAA"}

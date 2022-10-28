@@ -10,11 +10,32 @@ path = os.path.realpath(__file__)
 base_dir = os.path.dirname(path)
 script_name = os.path.basename(__file__)
 
+# The version used to tag the image, in the form of major.minor.build
+# Every time the image is updated, a new version must be assigned!
+#
+docker_image_version_major = "0"
+docker_image_version_minor = "0"
+docker_image_version_build = "1"
+
+# The DockerHub username that hosts the image 
+#
+docker_hub_username = "haoranxu510"
+
+# The name of the Docker image
+#
+docker_image_name = "ljr-build"
+
+docker_image_tag = "v%s.%s.%s" % (docker_image_version_major, docker_image_version_minor, docker_image_version_build)
+
 def PrintUsageGeneralAndDie():
     print('Usage: %s <update-docker|env|make> [args...]' % (script_name))
     print('Options:')
     print('    update-docker:')
-    print("        Update the build environment after you modify 'dockerfile/Dockerfile'.")
+    print("        Update the build environment for local testing after you modify 'dockerfile/Dockerfile'. You should modify '%s' to assign it a new image version." % (script_name))
+    print('    push-docker:')
+    print("        Push the updated build environment (created by update-docker) to Docker Hub.")
+    print('    pull-docker:')
+    print("        Pull the build environment from Docker Hub.")
     print('    env: ')
     print('        Launch an interactive shell in the build environment.')
     print('    make: ')
@@ -46,53 +67,109 @@ def CreateDirIfNotExist(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
-if (len(sys.argv) < 2):
-    PrintUsageGeneralAndDie()
+def CheckRemoteTagExists():
+    r = os.system("docker manifest inspect %s/%s:%s >/dev/null 2>&1" % (docker_hub_username, docker_image_name, docker_image_tag))
+    if (r != 0):
+        return False
+    else:
+        return True
 
-op = sys.argv[1]
-
-if (op != 'update-docker' and op != 'env' and op != 'make'):
-    print('Unknown operation "%s".' % op)
-    PrintUsageGeneralAndDie()
-
-if (op == 'env'):
-    cmd = "docker run -it -e CC='clang' -e CXX='clang++' -v %s:/home/u/project --workdir='/home/u/project' %s:latest" % (base_dir, script_name)
-    r = os.system(cmd)
-    sys.exit(r)
-
-def BuildOrUpdateDockerImage():
+def CheckLocalTagExists():
+    r = os.system('docker inspect --type=image %s:%s >/dev/null 2>&1' % (docker_image_name, docker_image_tag))
+    if (r != 0):
+        return False
+    else:
+        return True
+        
+def PushImageToRemoteAndDie():
+    if (CheckRemoteTagExists()):
+        print("[ERROR] Tag %s already existed on remote! Please update the version before pushing!" % docker_image_tag)
+        sys.exit(1)
+    
+    if (not CheckLocalTagExists()):
+        print("[ERROR] Local tag %s does not exist! Did you use update-docker to build the image?" % docker_image_tag)
+        sys.exit(1)
+        
+    r = os.system("docker image tag %s:%s %s/%s:%s" % (docker_image_name, docker_image_tag, docker_hub_username, docker_image_name, docker_image_tag))
+    assert(r == 0)
+    
+    r = os.system("docker push %s/%s:%s" % (docker_hub_username, docker_image_name, docker_image_tag))
+    assert(r == 0)
+    
+    sys.exit(0)
+    
+def PullImageFromRemote():
+    r = os.system("docker pull %s/%s:%s" % (docker_hub_username, docker_image_name, docker_image_tag))
+    if (r != 0):
+        print("[ERROR] Failed to pull image %s/%s:%s from remote." % (docker_hub_username, docker_image_name, docker_image_tag))
+        sys.exit(r)
+    
+    r = os.system("docker image tag %s/%s:%s %s:%s " % (docker_hub_username, docker_image_name, docker_image_tag, docker_image_name, docker_image_tag))
+    assert(r == 0)
+    
+def PullImageFromRemoteIfNeeded():
+    if (not CheckLocalTagExists()):
+        print('Build environment docker image %s:%s does not exist locally. Pulling from remote, this may take a while...' % (docker_image_name, docker_image_tag))
+        PullImageFromRemote()
+        
+def UpdateImageAndDie():
+    if (CheckRemoteTagExists()):
+        print("[ERROR] Tag %s already existed on remote! If you intend to update the image, assign a new image version in '%s' script. If you intend to pull the image from remote, use pull-docker." % (docker_image_tag, script_name))
+        sys.exit(1)
+        
     docker_dir = os.path.join(base_dir, 'dockerfile')
     if not os.path.exists(os.path.join(docker_dir, 'Dockerfile')):
         print('[ERROR] Dockerfile not found!')
         sys.exit(1)
-    cmd = 'docker build --tag %s:latest %s' % (script_name, docker_dir)
+        
+    cmd = 'docker build --tag %s:%s %s' % (docker_image_name, docker_image_tag, docker_dir)
     r = os.system(cmd)
     if (r != 0):
         print('[ERROR] Failed to build docker image, exit code = %d' % r)
         sys.exit(r)
-    
+        
     CreateDirIfNotExist(os.path.join(base_dir, 'shared_libs'))
     all_shared_libs = [
 #        '/lib/x86_64-linux-gnu/libtinfo.so.5'
     ]
     for shared_lib in all_shared_libs:
-        cmd = 'docker run -v%s:/home/u/project %s:latest cp %s /home/u/project/shared_libs' % (base_dir, script_name, shared_lib)
+        cmd = 'docker run -v%s:/home/u/project %s:%s cp %s /home/u/project/shared_libs' % (base_dir, docker_image_name, docker_image_tag, shared_lib)
         r = os.system(cmd)
         if (r != 0):
             print('[ERROR] Failed to copy shared library %s, exit code = %d' % (shared_lib, r))
             sys.exit(r)
-
-if (op == 'update-docker'):
-    BuildOrUpdateDockerImage();
+            
+    print("Build successful. You may test this image locally, and when you are satisfied, use push-docker to push the image to remote.")
     sys.exit(0)
-
-r = os.system('docker inspect --type=image %s:latest >/dev/null 2>&1' % (script_name))
-if (r != 0):
-    print("Docker image '%s:latest' does not exist." % (script_name))
-    print('Building docker image, this may take a while...')
-    BuildOrUpdateDockerImage();
-    print('Docker image successfully built.')
     
+if (len(sys.argv) < 2):
+    PrintUsageGeneralAndDie()
+
+op = sys.argv[1]
+
+if (op != 'update-docker' and op != "push-docker" and op != "pull-docker" and op != 'env' and op != 'make'):
+    print('Unknown operation "%s".' % op)
+    PrintUsageGeneralAndDie()
+
+if (op == 'env'):
+    PullImageFromRemoteIfNeeded()
+        
+    cmd = "docker run -it -e CC='clang' -e CXX='clang++' -v %s:/home/u/project --workdir='/home/u/project' %s:%s" % (base_dir, docker_image_name, docker_image_tag)
+    r = os.system(cmd)
+    sys.exit(r)
+
+if (op == "push-docker"):
+    PushImageToRemoteAndDie()
+    assert(False)
+    
+if (op == "pull-docker"):
+    PullImageFromRemote()
+    sys.exit(0)
+    
+if (op == 'update-docker'):
+    UpdateImageAndDie();
+    assert(False)
+
 if (op == 'make'):
     if (len(sys.argv) < 3 or len(sys.argv) > 4):
         PrintUsageMakeAndDie()
@@ -112,7 +189,12 @@ if (op == 'make'):
         dirname = GetBuildDirFlavor(target)
         print('Removing directory: %s' % dirname)
         shutil.rmtree(dirname)
+        dirname = GetGeneratedDirFlavor(target)
+        print('Removing directory: %s' % dirname)
+        shutil.rmtree(dirname)
         sys.exit(0)
+    
+    PullImageFromRemoteIfNeeded()
     
     CreateDirIfNotExist(GetBuildDir())
     CreateDirIfNotExist(GetCCacheDir())
@@ -121,7 +203,7 @@ if (op == 'make'):
     CreateDirIfNotExist(GetGeneratedDirFlavor(target))
     CreateDirIfNotExist(os.path.join(GetGeneratedDirFlavor(target), 'generated'))
     
-    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, script_name, target, target.upper())
+    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, docker_image_name, docker_image_tag, target, target.upper())
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
@@ -141,7 +223,7 @@ if (op == 'make'):
             if (num_cpus > 4):
                 parallelism = num_cpus - 2
         option = ("-j%s" % str(parallelism))
-    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:latest bash -c 'cd project/build/%s && ninja %s'" % (base_dir, script_name, target, option)
+    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project/build/%s && ninja %s'" % (base_dir, docker_image_name, docker_image_tag, target, option)
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
