@@ -20,7 +20,10 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
-    TValue metamethod;
+    enum {
+        SlowPathNotTableObject,
+        SlowPathCheckMetatable
+    } slowpathKind;
 
     // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
     // As long as we know it's a heap entity, we can get its hidden class which the IC caches on.
@@ -90,7 +93,8 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 
         if (unlikely(resultKind == ResKind::NotTable))
         {
-            goto not_table_object;
+            slowpathKind = SlowPathNotTableObject;
+            goto slowpath;
         }
 
         assert(resultKind == ResKind::MayHaveMetatable);
@@ -98,67 +102,79 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
         {
             Return(result);
         }
-        goto check_metatable_for_table_object;
+        slowpathKind = SlowPathCheckMetatable;
+        goto slowpath;
     }
     else
     {
-        goto not_table_object;
+        slowpathKind = SlowPathNotTableObject;
+        goto slowpath;
     }
+
+slowpath:
+    EnterSlowPath([base, index, slowpathKind]() mutable {
+        TValue metamethod;
+
+        switch (slowpathKind) {
+        case SlowPathNotTableObject: goto not_table_object;
+        case SlowPathCheckMetatable: goto check_metatable_for_table_object;
+        }   /* switch slowpathKind */
 
 check_metatable_for_table_object:
-    {
-        TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
-        if (gmr.m_result.m_value != 0)
         {
-            HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-            if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+            TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
+            if (gmr.m_result.m_value != 0)
             {
-                metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
-                if (!metamethod.Is<tNil>())
+                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
                 {
-                    goto handle_metamethod;
+                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+                    if (!metamethod.Is<tNil>())
+                    {
+                        goto handle_metamethod;
+                    }
                 }
             }
+            Return(TValue::Create<tNil>());
         }
-        Return(TValue::Create<tNil>());
-    }
 
 not_table_object:
-    metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
-    if (metamethod.Is<tNil>())
-    {
-        ThrowError("bad type for TableGetById");
-    }
+        metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
+        if (metamethod.Is<tNil>())
+        {
+            ThrowError("bad type for TableGetById");
+        }
 
 handle_metamethod:
-    // If 'metamethod' is a function, we should invoke the metamethod
-    //
-    if (likely(metamethod.Is<tFunction>()))
-    {
-        MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByIdMetamethodCallContinuation);
-    }
-
-    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
-    //
-    base = metamethod;
-
-    if (unlikely(!base.Is<tTable>()))
-    {
-        goto not_table_object;
-    }
-
-    {
-        HeapPtr<TableObject> tableObj = base.As<tTable>();
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
-        TValue result = TableObject::GetById(tableObj, index, icInfo);
-
-        if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+        // If 'metamethod' is a function, we should invoke the metamethod
+        //
+        if (likely(metamethod.Is<tFunction>()))
         {
-            goto check_metatable_for_table_object;
+            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tString>(index), TableGetByIdMetamethodCallContinuation);
         }
-        Return(result);
-    }
+
+        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+        //
+        base = metamethod;
+
+        if (unlikely(!base.Is<tTable>()))
+        {
+            goto not_table_object;
+        }
+
+        {
+            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            GetByIdICInfo icInfo;
+            TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
+            TValue result = TableObject::GetById(tableObj, index, icInfo);
+
+            if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+            {
+                goto check_metatable_for_table_object;
+            }
+            Return(result);
+        }
+    });
 }
 
 DEEGEN_DEFINE_BYTECODE(TableGetById)
