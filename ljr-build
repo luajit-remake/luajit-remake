@@ -10,7 +10,7 @@ path = os.path.realpath(__file__)
 base_dir = os.path.dirname(path)
 script_name = os.path.basename(__file__)
 
-# The version used to tag the image, in the form of major.minor.build
+# The version used to tag the build environment docker image, in the form of major.minor.build
 # Every time the image is updated, a new version must be assigned!
 #
 docker_image_version_major = "0"
@@ -28,18 +28,18 @@ docker_image_name = "ljr-build"
 docker_image_tag = "v%s.%s.%s" % (docker_image_version_major, docker_image_version_minor, docker_image_version_build)
 
 def PrintUsageGeneralAndDie():
-    print('Usage: %s <update-docker|env|make> [args...]' % (script_name))
+    print('Usage: %s <make|env|update-docker|push-docker|pull-docker> [args...]' % (script_name))
     print('Options:')
+    print('    make: ')
+    print('        Execute the build process.')
+    print('    env: ')
+    print('        Launch an interactive shell in the build environment.')
     print('    update-docker:')
     print("        Update the build environment for local testing after you modify 'dockerfile/Dockerfile'. You should modify '%s' to assign it a new image version." % (script_name))
     print('    push-docker:')
-    print("        Push the updated build environment (created by update-docker) to Docker Hub.")
+    print("        Push the updated build environment (created by update-docker) to Docker Hub. Once pushed, the image associated with this tag becomes immutable.")
     print('    pull-docker:')
     print("        Pull the build environment from Docker Hub.")
-    print('    env: ')
-    print('        Launch an interactive shell in the build environment.')
-    print('    make: ')
-    print('        Execute the build process.')
     sys.exit(1)
 
 def PrintUsageMakeAndDie():
