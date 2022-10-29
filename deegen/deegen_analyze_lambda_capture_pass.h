@@ -99,6 +99,10 @@ struct DeegenAnalyzeLambdaCapturePass
         return result;
     }
 
+    // Get the lambda function from the passed-in lambda_functor_member_pointer_pointer_v value
+    //
+    static llvm::Function* WARN_UNUSED GetLambdaFunctionFromPtrPtr(llvm::Value* lambdaPtrPtr);
+
     static constexpr const char* x_annotationFnPrefix = "__deegen_analyzer_annotate_lambda_capture_info_";
 };
 

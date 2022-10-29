@@ -2,6 +2,36 @@
 
 namespace dast {
 
+llvm::Function* WARN_UNUSED DeegenAnalyzeLambdaCapturePass::GetLambdaFunctionFromPtrPtr(llvm::Value* lambdaPtrPtr)
+{
+    using namespace llvm;
+    LLVMContext& ctx = lambdaPtrPtr->getContext();
+    GlobalVariable* gv = dyn_cast<GlobalVariable>(lambdaPtrPtr);
+    ReleaseAssert(gv != nullptr);
+    ReleaseAssert(gv->isConstant());
+    Constant* iv =  gv->getInitializer();
+    ConstantStruct* ivs = dyn_cast<ConstantStruct>(iv);
+    ReleaseAssert(ivs != nullptr);
+    StructType* cstType = dyn_cast<StructType>(ivs->getType());
+    ReleaseAssert(cstType != nullptr);
+    ReleaseAssert(cstType->getNumElements() == 2);
+    ReleaseAssert(cstType->getStructElementType(0) == Type::getInt64Ty(ctx));
+    ReleaseAssert(cstType->getStructElementType(1) == Type::getInt64Ty(ctx));
+
+    Constant* v1 = ivs->getAggregateElement(1);
+    ReleaseAssert(v1->isZeroValue());
+
+    Constant* v0 = ivs->getAggregateElement(static_cast<unsigned int>(0));
+    ConstantExpr* expr = dyn_cast<ConstantExpr>(v0);
+    ReleaseAssert(expr != nullptr);
+    ReleaseAssert(expr->getOpcode() == Instruction::PtrToInt);
+    ReleaseAssert(expr->getNumOperands() == 1);
+    Constant* x = expr->getOperand(0);
+    Function* result = dyn_cast<Function>(x);
+    ReleaseAssert(result != nullptr);
+    return result;
+}
+
 static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
 {
     using namespace llvm;

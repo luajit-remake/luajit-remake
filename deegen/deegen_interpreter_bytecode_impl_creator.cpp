@@ -10,6 +10,7 @@
 #include "tag_register_optimization.h"
 #include "llvm_fcmp_extra_optimizations.h"
 #include "deegen_ast_inline_cache.h"
+#include "deegen_ast_slow_path.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -94,11 +95,9 @@ static std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> GetQuick
     // currently tightly coupled with our value-passing convention of InterpreterFunctionInterface..
     //
     // The already-decoded args will be passed to the continuation using registers in the following order.
-    // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
-    // in the hope that it can reduce the likelihood of register shuffling when making C calls.
     //
-    std::vector<uint64_t> gprList { 8 /*R9*/, 7 /*R8*/, 5 /*RSI*/, 6 /*RDI*/ };
-    std::vector<uint64_t> fprList { 10 /*XMM1*/, 11 /*XMM2*/, 12 /*XMM3*/, 13 /*XMM4*/, 14 /*XMM5*/, 15 /*XMM6*/ };
+    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecode();
+    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecode();
 
     // We will use pop_back for simplicity, so reverse the vector now
     //
@@ -190,6 +189,10 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         ReleaseAssert(m_module->getNamedValue(implFuncName) == nullptr);
         m_impl->setName(implFuncName);
     }
+    else if (m_processKind == ProcessKind::SlowPath)
+    {
+        m_resultFuncName = AstSlowPath::GetPostProcessSlowPathFunctionNameForInterpreter(m_impl);
+    }
     else
     {
         std::string implFuncName = m_impl->getName().str();
@@ -205,21 +208,62 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         // Find all the return continuations, give each of them a unique name, and create the declarations.
         // This is necessary for us to later link them together.
         //
-        ReturnContinuationFinder rcFinder(m_impl);
-        std::vector<Function*> rcList;
-        rcList.resize(rcFinder.m_count, nullptr);
-        ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
-        for (auto& it : rcFinder.m_labelMap)
+        // Note that if we have slow paths (created by EnterSlowPath API), we also need to recursively search for return
+        // continuations in each slow path. So find all the slow path functions first.
+        //
+        std::vector<AstSlowPath> slowPaths = AstSlowPath::GetAllUseInFunction(m_impl);
+
+        // Note that LLVM optimizer in theory may tail-duplicate those slow path calls,
+        // so we need to de-duplicate the functions here
+        //
+        std::unordered_set<Function*> slowPathFns;
+        for (AstSlowPath& slowPath : slowPaths)
         {
-            ReleaseAssert(it.second < rcList.size());
-            Function* rc = it.first;
-            std::string rcFinalName = GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, it.second);
-            std::string rcImplName = rcFinalName + "_impl";
-            ReleaseAssert(m_module->getNamedValue(rcImplName) == nullptr);
-            rc->setName(rcImplName);
-            ReleaseAssert(rcList[it.second] == nullptr);
-            rcList[it.second] = rc;
-            ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
+            slowPathFns.insert(slowPath.GetImplFunction());
+        }
+
+        std::unordered_set<Function*> allReturnContFns;
+        auto scanForReturnContinuations = [&allReturnContFns](Function* func)
+        {
+            ReturnContinuationFinder rcFinder(func);
+            ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
+            for (auto& it : rcFinder.m_labelMap)
+            {
+                Function* rc = it.first;
+                allReturnContFns.insert(rc);
+            }
+        };
+
+        scanForReturnContinuations(m_impl);
+        for (Function* fn : slowPathFns)
+        {
+            scanForReturnContinuations(fn);
+        }
+
+        // Sort the return continuations by their original name for determinism
+        //
+        std::map<std::string /*fnName*/, Function*> sortedReturnContFns;
+        for (Function* fn : allReturnContFns)
+        {
+            std::string fnName = fn->getName().str();
+            ReleaseAssert(!sortedReturnContFns.count(fnName));
+            sortedReturnContFns[fnName] = fn;
+        }
+
+        std::vector<Function*> rcList;
+        {
+            size_t rcOrd = 0;
+            for (auto& it : sortedReturnContFns)
+            {
+                Function* rc = it.second;
+                rcList.push_back(rc);
+                std::string rcFinalName = GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, rcOrd);
+                std::string rcImplName = rcFinalName + "_impl";
+                ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
+                ReleaseAssert(m_module->getNamedValue(rcImplName) == nullptr);
+                rc->setName(rcImplName);
+                rcOrd++;
+            }
         }
 
         // After all the renaming and function declarations, create the InterpreterBytecodeImplCreator class so we can process each of the return continuation later
@@ -250,6 +294,27 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
             //
             m_impl->setName(oldName);
             ReleaseAssert(m_impl->getName().str() == oldName);
+        }
+
+        // Process the slow paths if any.
+        //
+        if (slowPaths.size() > 0)
+        {
+            // Sort all the functions by function name and process them in sorted order for determinism
+            //
+            std::map<std::string /*fnName*/, Function*> sortedFns;
+            for (Function* fn : slowPathFns)
+            {
+                std::string fnName = fn->getName().str();
+                ReleaseAssert(!sortedFns.count(fnName));
+                sortedFns[fnName] = fn;
+            }
+
+            for (auto& it : sortedFns)
+            {
+                Function* implFn = it.second;
+                m_slowPaths.push_back(std::make_unique<InterpreterBytecodeImplCreator>(m_bytecodeDef, implFn, ProcessKind::SlowPath));
+            }
         }
     }
 
@@ -333,9 +398,9 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
             LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
         }
     }
-    else if (m_processKind == ProcessKind::ReturnContinuation)
+    else if (m_processKind == ProcessKind::ReturnContinuation || m_processKind == ProcessKind::SlowPath)
     {
-        // Inline caching API is not allowed in return continuations
+        // Inline caching API is not allowed in return continuations or in manual slow paths
         //
         ReleaseAssert(AstInlineCache::GetAllUseInFunction(m_impl).size() == 0);
     }
@@ -369,7 +434,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     //
     m_wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
     m_wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
-    if (m_processKind == ProcessKind::QuickeningSlowPath)
+    if (m_processKind == ProcessKind::QuickeningSlowPath || m_processKind == ProcessKind::SlowPath)
     {
         m_wrapper->addFnAttr(Attribute::AttrKind::NoInline);
     }
@@ -442,15 +507,18 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::vector<Value*> opcodeValues;
-    for (auto& operand : m_bytecodeDef->m_list)
+    if (m_processKind != ProcessKind::SlowPath)
     {
-        if (alreadyDecodedArgs.count(operand->OperandOrdinal()))
+        for (auto& operand : m_bytecodeDef->m_list)
         {
-            opcodeValues.push_back(nullptr);
-        }
-        else
-        {
-            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
+            if (alreadyDecodedArgs.count(operand->OperandOrdinal()))
+            {
+                opcodeValues.push_back(nullptr);
+            }
+            else
+            {
+                opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
+            }
         }
     }
 
@@ -482,6 +550,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::vector<Value*> usageValues;
+    if (m_processKind != ProcessKind::SlowPath)
     {
         size_t ord = 0;
         for (auto& operand : m_bytecodeDef->m_list)
@@ -518,6 +587,10 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
             ord++;
         }
         ReleaseAssert(ord == opcodeValues.size() && ord == usageValues.size());
+    }
+    else
+    {
+        usageValues = AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(m_impl, currentBlock);
     }
 
     {
@@ -655,10 +728,17 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     {
         TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPath(m_bytecodeDef, m_impl);
     }
+    else if (m_processKind == ProcessKind::ReturnContinuation)
+    {
+        TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
+    }
     else
     {
-        ReleaseAssert(m_processKind == ProcessKind::ReturnContinuation);
-        TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
+        // For slow path, since we are currently not decoding the bytecode operands, we have no type information
+        // I think this should be fine since it's already the slow path, but maybe we can also provide the
+        // decoded bytecode operands to user so they can use it if desired?
+        //
+        ReleaseAssert(m_processKind == ProcessKind::SlowPath);
     }
 }
 
@@ -751,6 +831,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     AstReturnValueAccessor::LowerForInterpreter(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
     LowerGetBytecodeMetadataPtrAPI();
+    AstSlowPath::LowerAllForInterpreter(this, m_wrapper);
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
@@ -881,8 +962,26 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
         }
 
-        // Now, having linked in all return continuations and the quickening slow path, we can strip dead return continuations by
-        // changing the linkage of all return continuations to internal and run the DCE pass.
+        // Similarly, some slow paths could be dead. But we need to link in everything first.
+        //
+        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
+        {
+            std::unique_ptr<Module> spModule = m_slowPaths[slowPathOrd]->DoOptimizationAndLowering();
+            std::string expectedFnName = m_slowPaths[slowPathOrd]->m_resultFuncName;
+            ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
+            ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
+
+            Linker linker(*m_module.get());
+            // linkInModule returns true on error
+            //
+            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+            ReleaseAssert(m_module->getFunction(expectedFnName) != nullptr);
+            ReleaseAssert(!m_module->getFunction(expectedFnName)->empty());
+        }
+
+        // Now, having linked in everything, we can strip dead return continuations and slow paths by
+        // changing the linkage of those functions to internal and run the DCE pass.
         //
         for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
         {
@@ -893,6 +992,17 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             ReleaseAssert(func->hasExternalLinkage());
             func->setLinkage(GlobalValue::InternalLinkage);
         }
+
+        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
+        {
+            std::string spName = m_slowPaths[slowPathOrd]->m_resultFuncName;
+            Function* func = m_module->getFunction(spName);
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(!func->empty());
+            ReleaseAssert(func->hasExternalLinkage());
+            func->setLinkage(GlobalValue::InternalLinkage);
+        }
+
         RunLLVMDeadGlobalElimination(m_module.get());
 
         // In theory it's fine to leave them with internal linkage now, since they are exclusively
@@ -912,6 +1022,35 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             {
                 ReleaseAssert(m_module->getNamedValue(rcName) == nullptr);
             }
+        }
+
+        // Additionally, for slow paths, the function names are not unique across translational units.
+        // So at this stage, we will rename them and give each of the survived slow path a unique name
+        //
+        std::vector<Function*> survivedSlowPathFns;
+        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
+        {
+            std::string spName = m_slowPaths[slowPathOrd]->m_resultFuncName;
+            Function* func = m_module->getFunction(spName);
+            if (func != nullptr)
+            {
+                ReleaseAssert(func->hasInternalLinkage());
+                func->setLinkage(GlobalValue::ExternalLinkage);
+                survivedSlowPathFns.push_back(func);
+            }
+            else
+            {
+                ReleaseAssert(m_module->getNamedValue(spName) == nullptr);
+            }
+        }
+
+        for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
+        {
+            Function* func = survivedSlowPathFns[ord];
+            std::string newFnName = m_resultFuncName + "_slow_path_" + std::to_string(ord);
+            ReleaseAssert(m_module->getNamedValue(newFnName) == nullptr);
+            func->setName(newFnName);
+            ReleaseAssert(func->getName() == newFnName);
         }
     }
     else

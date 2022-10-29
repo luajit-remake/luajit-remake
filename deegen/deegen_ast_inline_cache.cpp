@@ -1,41 +1,10 @@
 #include "deegen_ast_inline_cache.h"
 #include "deegen_analyze_lambda_capture_pass.h"
+#include "deegen_rewrite_closure_call.h"
 
 namespace dast {
 
 namespace {
-
-// Get the lambda function from the passed-in lambda_functor_member_pointer_pointer_v value
-//
-static llvm::Function* WARN_UNUSED GetLambdaFunctionFromPtrPtr(llvm::Value* lambdaPtrPtr)
-{
-    using namespace llvm;
-    LLVMContext& ctx = lambdaPtrPtr->getContext();
-    GlobalVariable* gv = dyn_cast<GlobalVariable>(lambdaPtrPtr);
-    ReleaseAssert(gv != nullptr);
-    ReleaseAssert(gv->isConstant());
-    Constant* iv =  gv->getInitializer();
-    ConstantStruct* ivs = dyn_cast<ConstantStruct>(iv);
-    ReleaseAssert(ivs != nullptr);
-    StructType* cstType = dyn_cast<StructType>(ivs->getType());
-    ReleaseAssert(cstType != nullptr);
-    ReleaseAssert(cstType->getNumElements() == 2);
-    ReleaseAssert(cstType->getStructElementType(0) == Type::getInt64Ty(ctx));
-    ReleaseAssert(cstType->getStructElementType(1) == Type::getInt64Ty(ctx));
-
-    Constant* v1 = ivs->getAggregateElement(1);
-    ReleaseAssert(v1->isZeroValue());
-
-    Constant* v0 = ivs->getAggregateElement(static_cast<unsigned int>(0));
-    ConstantExpr* expr = dyn_cast<ConstantExpr>(v0);
-    ReleaseAssert(expr != nullptr);
-    ReleaseAssert(expr->getOpcode() == Instruction::PtrToInt);
-    ReleaseAssert(expr->getNumOperands() == 1);
-    Constant* x = expr->getOperand(0);
-    Function* result = dyn_cast<Function>(x);
-    ReleaseAssert(result != nullptr);
-    return result;
-}
 
 constexpr const char* x_createIcInitPlaceholderFunctionPrefix = "__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_";
 constexpr const char* x_createIcBodyPlaceholderFunctionPrefix = "__DeegenInternal_AstIC_Body_IdentificationFunc_";
@@ -45,176 +14,6 @@ constexpr const char* x_icBodyClosureWrapperFunctionPrefix = "__deegen_inline_ca
 constexpr const char* x_icEffectClosureWrapperFunctionPrefix = "__deegen_inline_cache_effect_";
 constexpr const char* x_decodeICStateToEffectLambdaCaptureFunctionPrefix = "__deegen_inline_cache_decode_ic_state_";
 constexpr const char* x_encodeICStateFunctionPrefix = "__deegen_inline_cache_encode_ic_state_";
-
-// This transform transforms a closure (a function with a capture) to a normal function call.
-//
-// The transform looks like the following: before transform we have IR
-//    %capture = alloca ...
-//    ... populate capture ...
-//    # the call to the closure would be %lambda(%capture)
-//
-// and we transform it to:
-//    function lambda_wrapper(all args stored to capture)
-//        %capture = alloca ...
-//        ... populate capture ...
-//        return %lambda(%capture)
-//
-//    # now the call to the closure would be %lambda_wrapper(%args...)
-//    # where args is the return value of this function
-//
-// This function expects that the only uses of 'capture' are the instructions that fill its value
-//
-struct RewriteClosureToFunctionCallResult
-{
-    llvm::Function* m_newFunc;
-    std::vector<llvm::Value*> m_args;
-};
-
-static RewriteClosureToFunctionCallResult WARN_UNUSED RewriteClosureToFunctionCall(llvm::Function* lambda, llvm::AllocaInst* capture, const std::string& newFnName)
-{
-    using namespace llvm;
-    Module* module = lambda->getParent();
-    LLVMContext& ctx = module->getContext();
-
-    ReleaseAssert(lambda->arg_size() == 1);
-    ReleaseAssert(llvm_value_has_type<void*>(lambda->getArg(0)));
-
-    std::vector<Instruction*> instructionToRemove;
-    std::vector<std::function<void(Value* newAlloca, Value* arg, BasicBlock* bb)>> rewriteFns;
-    std::vector<Value*> closureRewriteArgs;
-
-    // TODO: ideally we should identify word-sized structs which only element is a double, and pass them in FPR
-    // for less overhead (I believe if the struct is passed directly it's going to be in GPR but I'm not fully sure).
-    // However, currently we don't have such use case so we ignore it for now.
-    //
-    for (Use& u : capture->uses())
-    {
-        User* usr = u.getUser();
-        if (isa<CallInst>(usr))
-        {
-            CallInst* ci = cast<CallInst>(usr);
-            Function* callee = ci->getCalledFunction();
-            ReleaseAssert(callee != nullptr);
-            ReleaseAssert(callee->isIntrinsic());
-            ReleaseAssert(callee->getIntrinsicID() == Intrinsic::lifetime_start || callee->getIntrinsicID() == Intrinsic::lifetime_end);
-            ReleaseAssert(ci->arg_size() == 2);
-            ReleaseAssert(&u == &ci->getOperandUse(1));
-            instructionToRemove.push_back(ci);
-            continue;
-        }
-
-        ReleaseAssert(isa<StoreInst>(usr) || isa<GetElementPtrInst>(usr));
-        if (isa<StoreInst>(usr))
-        {
-            StoreInst* si = cast<StoreInst>(usr);
-            ReleaseAssert(u.getOperandNo() == si->getPointerOperandIndex());
-            ReleaseAssert(capture == si->getPointerOperand());
-            rewriteFns.push_back([=](Value* newAlloca, Value* arg, BasicBlock* bb) {
-                StoreInst* clone = dyn_cast<StoreInst>(si->clone());
-                ReleaseAssert(clone != nullptr);
-                clone->setOperand(si->getPointerOperandIndex(), newAlloca);
-                ReleaseAssert(arg->getType() == clone->getValueOperand()->getType());
-                clone->setOperand(0 /*valueOperandIndex*/, arg);
-                ReleaseAssert(clone->getValueOperand() == arg);
-                bb->getInstList().push_back(clone);
-            });
-            closureRewriteArgs.push_back(si->getValueOperand());
-            instructionToRemove.push_back(si);
-        }
-        else
-        {
-            ReleaseAssert(isa<GetElementPtrInst>(usr));
-            GetElementPtrInst* gep = cast<GetElementPtrInst>(usr);
-            ReleaseAssert(u.getOperandNo() == gep->getPointerOperandIndex());
-            ReleaseAssert(gep->hasOneUse());
-            User* gepUser = *gep->user_begin();
-            // TODO: this is incomplete. For struct >8 bytes LLVM may generate a memcpy, and we should handle this case for completeness
-            // However, we don't have this use case right now so we ignore it.
-            //
-            ReleaseAssert(isa<StoreInst>(gepUser));
-            StoreInst* si = cast<StoreInst>(gepUser);
-            ReleaseAssert(si->getPointerOperand() == gep);
-            rewriteFns.push_back([=](Value* newAlloca, Value* arg, BasicBlock* bb) {
-                GetElementPtrInst* gepClone = dyn_cast<GetElementPtrInst>(gep->clone());
-                ReleaseAssert(gepClone != nullptr);
-                StoreInst* siClone = dyn_cast<StoreInst>(si->clone());
-                ReleaseAssert(siClone != nullptr);
-                gepClone->setOperand(gepClone->getPointerOperandIndex(), newAlloca);
-                siClone->setOperand(si->getPointerOperandIndex(), gepClone);
-                ReleaseAssert(arg->getType() == siClone->getValueOperand()->getType());
-                siClone->setOperand(0 /*valueOperandIndex*/, arg);
-                ReleaseAssert(siClone->getValueOperand() == arg);
-                bb->getInstList().push_back(gepClone);
-                bb->getInstList().push_back(siClone);
-            });
-            closureRewriteArgs.push_back(si->getValueOperand());
-            instructionToRemove.push_back(si);
-            instructionToRemove.push_back(gep);
-        }
-    }
-
-    ReleaseAssert(closureRewriteArgs.size() == rewriteFns.size());
-    std::vector<Type*> closureWrapperFnArgTys;
-    for (Value* val : closureRewriteArgs)
-    {
-        closureWrapperFnArgTys.push_back(val->getType());
-    }
-
-    FunctionType* fty = FunctionType::get(lambda->getReturnType() /*result*/, closureWrapperFnArgTys, false /*isVarArg*/);
-    Function* wrapper = Function::Create(fty, GlobalValue::LinkageTypes::InternalLinkage, newFnName, module);
-    ReleaseAssert(wrapper->getName().str() == newFnName);
-    wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
-    CopyFunctionAttributes(wrapper, lambda);
-
-    {
-        BasicBlock* entryBlock = BasicBlock::Create(ctx, "", wrapper);
-        AllocaInst* newClosureState = new AllocaInst(capture->getAllocatedType(), 0 /*addrSpace*/, "", entryBlock);
-        for (size_t i = 0; i < rewriteFns.size(); i++)
-        {
-            ReleaseAssert(i < wrapper->arg_size());
-            rewriteFns[i](newClosureState, wrapper->getArg(static_cast<uint32_t>(i)), entryBlock);
-        }
-        CallInst* callToClosure = CallInst::Create(lambda, { newClosureState }, "", entryBlock);
-        if (llvm_value_has_type<void>(callToClosure))
-        {
-            ReturnInst::Create(ctx, nullptr /*retVoid*/, entryBlock);
-        }
-        else
-        {
-            ReturnInst::Create(ctx, callToClosure, entryBlock);
-        }
-    }
-
-    ValidateLLVMFunction(wrapper);
-    if (lambda->hasFnAttribute(Attribute::AttrKind::NoInline))
-    {
-        lambda->removeFnAttr(Attribute::AttrKind::NoInline);
-        wrapper->addFnAttr(Attribute::AttrKind::NoInline);
-    }
-    lambda->addFnAttr(Attribute::AttrKind::AlwaysInline);
-
-    instructionToRemove.push_back(capture);
-
-    {
-        std::unordered_set<Instruction*> checkUnique;
-        for (Instruction* i : instructionToRemove)
-        {
-            ReleaseAssert(!checkUnique.count(i));
-            checkUnique.insert(i);
-        }
-    }
-
-    for (Instruction* i : instructionToRemove)
-    {
-        ReleaseAssert(i->use_empty());
-        i->eraseFromParent();
-    }
-
-    return {
-        .m_newFunc = wrapper,
-        .m_args = closureRewriteArgs
-    };
-}
 
 struct PreprocessIcEffectApiResult
 {
@@ -238,7 +37,7 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     AllocaInst* capture = cast<AllocaInst>(captureV);
     Value* lambdaPtrPtr = origin->getArgOperand(2);
     ReleaseAssert(llvm_value_has_type<void*>(lambdaPtrPtr));
-    Function* lambda = GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
+    Function* lambda = DeegenAnalyzeLambdaCapturePass::GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
 
     // Figure out the capture info of the effect lambda
     //
@@ -263,9 +62,6 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
         ReleaseAssert(!effectFnLocalCaptures.count(ordInCaptureStruct));
         ReleaseAssert(!effectFnParentCaptures.count(ordInCaptureStruct));
 
-        // The IC body lambda should be defined in the bytecode function, so it naturally should not
-        // have any capture of the "enclosing lambda"
-        //
         if (captureKind == CaptureKind::ByRefCaptureOfLocalVar)
         {
             fprintf(stderr, "[ERROR] The IC effect lambda must capture values defined in the IC body lambda by value, not by reference!\n");
@@ -801,7 +597,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     ReleaseAssert(llvm_value_has_type<void*>(closurePtr));
     Value* lambdaPtrPtr = origin->getArgOperand(2);
     ReleaseAssert(llvm_value_has_type<void*>(lambdaPtrPtr));
-    Function* lambdaFunc = GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
+    Function* lambdaFunc = DeegenAnalyzeLambdaCapturePass::GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
     ReleaseAssert(lambdaFunc->arg_size() == 1);
     ReleaseAssert(llvm_value_has_type<void*>(lambdaFunc->getArg(0)));
 
@@ -1167,7 +963,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     // make sure that the icKey is passed to the function (even if the user logic does not use it,
     // we need to use it to generate the IC entry). This is why the function name right now has an additional "_tmp"
     //
-    RewriteClosureToFunctionCallResult rr = RewriteClosureToFunctionCall(lambdaFunc, closureAlloca, wrapperFnName + "_tmp");
+    RewriteClosureToFunctionCall::Result rr = RewriteClosureToFunctionCall::Run(lambdaFunc, closureAlloca, wrapperFnName + "_tmp");
 
     Function* closureWrapperImpl = rr.m_newFunc;
     rr.m_newFunc = nullptr;

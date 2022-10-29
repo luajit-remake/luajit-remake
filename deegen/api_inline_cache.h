@@ -44,6 +44,7 @@ struct ICHandler
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Body(const LambdaType& lambda)
     {
         using ResType = std::invoke_result_t<LambdaType>;
+        static_assert(!is_lambda_mutable_v<LambdaType>, "The lambda must not be declared with 'mutable' keyword!");
         // static_assert(std::is_trivially_copyable_v<ResType>);
         return DeegenImpl_MakeIC_SetMainLambda<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
     }
@@ -65,6 +66,7 @@ struct ICHandler
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Effect(const LambdaType& lambda)
     {
         using ResType = std::invoke_result_t<LambdaType>;
+        static_assert(!is_lambda_mutable_v<LambdaType>, "The lambda must not be declared with 'mutable' keyword!");
         // static_assert(std::is_trivially_copyable_v<ResType>);
         return DeegenImpl_MakeIC_MarkEffect<ResType>(this, DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
     }

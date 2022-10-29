@@ -8,6 +8,7 @@
 #include "deegen_ast_return.h"
 #include "deegen_analyze_lambda_capture_pass.h"
 #include "deegen_ast_inline_cache.h"
+#include "deegen_ast_slow_path.h"
 
 #include "llvm/Transforms/Utils/FunctionComparator.h"
 #include "llvm/Linker/Linker.h"
@@ -612,6 +613,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     AstInlineCache::PreprocessModule(module.get());
     AstMakeCall::PreprocessModule(module.get());
+    AstSlowPath::PreprocessModule(module.get());
 
     // After all the preprocessing stage, the lambda capture analyze results are no longer useful. Remove them now.
     //

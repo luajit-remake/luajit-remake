@@ -19,17 +19,16 @@ struct is_const_member_function_impl<R(C::*)(Args...) const> : std::true_type { 
 template<typename R, typename C, typename... Args>
 struct is_const_member_function_impl<R(C::*)(Args...)> : std::false_type { };
 
-template<typename Lambda>
-constexpr bool is_lambda_mutable_v = !is_const_member_function_impl<decltype(&Lambda::operator())>::value;
-
 }   // namespace detail
+
+template<typename Lambda>
+constexpr bool is_lambda_mutable_v = !detail::is_const_member_function_impl<decltype(&Lambda::operator())>::value;
 
 // Return the address of the closure state
 //
 template<typename Lambda>
 const void* ALWAYS_INLINE WARN_UNUSED DeegenGetLambdaClosureAddr(const Lambda& lambda)
 {
-    static_assert(!detail::is_lambda_mutable_v<Lambda>, "The lambda must not be declared with 'mutable' keyword!");
     static_assert(std::is_trivially_copy_constructible_v<Lambda>, "The lambda may only capture trivially-copyable classes!");
     static_assert(std::is_trivially_destructible_v<Lambda>, "The lambda may not capture classes with non-trivial destructor!");
     return static_cast<const void*>(&lambda);
@@ -40,7 +39,6 @@ const void* ALWAYS_INLINE WARN_UNUSED DeegenGetLambdaClosureAddr(const Lambda& l
 template<typename Lambda>
 const void* ALWAYS_INLINE WARN_UNUSED DeegenGetLambdaFunctorPP(const Lambda& /*lambda*/)
 {
-    static_assert(!detail::is_lambda_mutable_v<Lambda>, "The lambda must not be declared with 'mutable' keyword!");
     static_assert(std::is_trivially_copy_constructible_v<Lambda>, "The lambda may only capture trivially-copyable classes!");
     static_assert(std::is_trivially_destructible_v<Lambda>, "The lambda may not capture classes with non-trivial destructor!");
     return detail::lambda_functor_member_pointer_pointer_v<Lambda>;

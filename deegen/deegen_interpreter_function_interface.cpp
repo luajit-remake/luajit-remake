@@ -128,6 +128,19 @@ llvm::Function* WARN_UNUSED InterpreterFunctionInterface::CreateFunction(llvm::M
     return func;
 }
 
+std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRListForBytecode()
+{
+    // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
+    // in the hope that it can reduce the likelihood of register shuffling when making C calls.
+    //
+    return std::vector<uint64_t> { 8 /*R9*/, 7 /*R8*/, 5 /*RSI*/, 6 /*RDI*/ };
+}
+
+std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRListForBytecode()
+{
+    return std::vector<uint64_t> { 10 /*XMM1*/, 11 /*XMM2*/, 12 /*XMM3*/, 13 /*XMM4*/, 14 /*XMM5*/, 15 /*XMM6*/ };
+}
+
 void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
 {
     using namespace llvm;

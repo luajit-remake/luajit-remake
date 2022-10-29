@@ -2,6 +2,7 @@
 
 #include "tvalue.h"
 #include "api_define_lib_function.h"
+#include "deegen_preserve_lambda_helper.h"
 
 class CodeBlock;
 
@@ -45,6 +46,7 @@ extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVarArgs();
 extern "C" void DeegenImpl_StoreVarArgsAsVariadicResults();
 extern "C" TValue* WARN_UNUSED DeegenImpl_GetVariadicResultsStart();
 extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVariadicResults();
+extern "C" void NO_RETURN DeegenImpl_EnterSlowPathLambda(const void* cp, const void* fpp);
 
 // Return zero or one value as the result of the operation
 //
@@ -360,4 +362,19 @@ inline void ALWAYS_INLINE StoreReturnValuesTo(TValue* dst, size_t numToStore)
 inline void ALWAYS_INLINE StoreReturnValuesAsVariadicResults()
 {
     DeegenImpl_StoreReturnValuesAsVariadicResults();
+}
+
+// Creates a slow path. The logic in the slow path will be separated out into a dedicated slow path function.
+// This helps improve code locality, and can also slightly improve the fast path code by reducing unnecessary
+// register shuffling, spilling and stack pointer adjustments.
+//
+// Note that the slow path will be executed as a tail call, so the lifetime of all the local variables in the
+// interpreter function has ended when the slow path lambda is executed. That is, it is illegal for the lambda
+// to capture or use any variable defined in the interpreter function by reference.
+//
+template<typename Lambda>
+void ALWAYS_INLINE NO_RETURN EnterSlowPath(const Lambda& lambda)
+{
+    static_assert(std::is_same_v<void, std::invoke_result_t<Lambda>>, "The lambda must take no arguments and return void");
+    DeegenImpl_EnterSlowPathLambda(DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
 }

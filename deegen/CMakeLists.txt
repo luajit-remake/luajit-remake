@@ -28,6 +28,8 @@ add_library(deegen_utils
   deegen_ast_inline_cache.cpp
   deegen_analyze_lambda_capture_pass.cpp
   deegen_bytecode_metadata.cpp
+  deegen_rewrite_closure_call.cpp
+  deegen_ast_slow_path.cpp
 ) 
 
 # Build the main Futamura projection stage binary
