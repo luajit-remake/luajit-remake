@@ -219,22 +219,18 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
         }
 
 do_metamethod_call:
+        if (likely(metamethod.Is<tFunction>()))
         {
-            GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-            if (callTarget.m_target.m_value == 0)
-            {
-                ThrowError(MakeErrorMessageForUnableToCall(metamethod));
-            }
-
-            if (unlikely(callTarget.m_invokedThroughMetatable))
-            {
-                MakeCall(callTarget.m_target.As(), metamethod, lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
-            }
-            else
-            {
-                MakeCall(callTarget.m_target.As(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
-            }
+            MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
         }
+
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(metamethod));
+        }
+
+        MakeCall(callTarget, metamethod, lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
     }
 fail:
     // TODO: make this error consistent with Lua

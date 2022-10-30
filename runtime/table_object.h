@@ -426,24 +426,6 @@ struct PutByIntegerIndexICInfo
     SystemHeapPointer<void> m_newHiddenClass;
 };
 
-struct GetCallTargetConsideringMetatableResult
-{
-    // If m_target.m_value == 0, an error shall be thrown
-    //
-    UserHeapPointer<FunctionObject> m_target;
-    // If this is true, it means the call happened through an metatable, so the passed in 'value' needs to be prepended as the first parameter
-    //
-    bool m_invokedThroughMetatable;
-};
-
-// In Lua 5.1-5.3, the '__call' metamethod is non-recursive: say mt_a.__call = b, and 'b' is not
-// a function, the VM will throw an error, instead of recursively considering the metatable for 'b'
-// We support Lua 5.1 behavior for now.
-//
-// In Lua 5.4 this behavior has changed and __call can be recursive, and this function will need to be extended correspondingly.
-//
-GetCallTargetConsideringMetatableResult WARN_UNUSED GetCallTargetConsideringMetatable(TValue value);
-
 class alignas(8) TableObject
 {
 public:
@@ -2377,38 +2359,41 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
     return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
 }
 
-inline GetCallTargetConsideringMetatableResult GetCallMetamethodFromMetatable(UserHeapPointer<void> metatableMaybeNull)
+inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointer<void> metatableMaybeNull)
 {
     if (metatableMaybeNull.m_value == 0)
     {
-        return GetCallTargetConsideringMetatableResult {
-            .m_target = UserHeapPointer<FunctionObject>(),
-            .m_invokedThroughMetatable = false
-        };
+        return nullptr;
     }
     assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
     HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
     TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
-    if (likely(target.IsPointer() && target.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function))
+    if (likely(target.Is<tFunction>()))
     {
-        return GetCallTargetConsideringMetatableResult {
-            .m_target = target.AsPointer<FunctionObject>(),
-            .m_invokedThroughMetatable = true
-        };
+        return target.As<tFunction>();
     }
     else
     {
-        return GetCallTargetConsideringMetatableResult {
-            .m_target = UserHeapPointer<FunctionObject>(),
-            .m_invokedThroughMetatable = false
-        };
+        return nullptr;
     }
 }
 
-inline GetCallTargetConsideringMetatableResult NO_INLINE WARN_UNUSED GetCallTargetConsideringMetatableSlowPath(TValue value)
+// If a non-function value is called, Lua will execute the call by searching for the call metamethod of the value.
+//
+// This function returns the metamethod function to call, or nullptr if failure.
+//
+// In Lua 5.1-5.3, the '__call' metamethod is non-recursive: say mt_a.__call = b, and 'b' is not
+// a function, the VM will throw an error, instead of recursively considering the metatable for 'b'
+// We support Lua 5.1 behavior for now.
+//
+// In Lua 5.4 this behavior has changed and __call can be recursive, and this function will need to be extended correspondingly.
+//
+inline HeapPtr<FunctionObject> WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(TValue value)
 {
+    assert(!value.Is<tFunction>());
+
     if (likely(value.Is<tHeapEntity>()))
     {
         HeapEntityType ty = value.GetHeapEntityType();
@@ -2416,19 +2401,19 @@ inline GetCallTargetConsideringMetatableResult NO_INLINE WARN_UNUSED GetCallTarg
 
         if (likely(ty == HeapEntityType::Table))
         {
-            HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
+            HeapPtr<TableObject> tableObj = value.As<tTable>();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
-            return GetCallMetamethodFromMetatable(result.m_result);
+            return GetCallMetamethodFromMetatableImpl(result.m_result);
         }
 
         if (ty == HeapEntityType::String)
         {
-            return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForString);
+            return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForString);
         }
 
         if (ty == HeapEntityType::Thread)
         {
-            return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
+            return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForCoroutine);
         }
 
         // TODO: support USERDATA type
@@ -2437,28 +2422,16 @@ inline GetCallTargetConsideringMetatableResult NO_INLINE WARN_UNUSED GetCallTarg
 
     if (value.Is<tNil>())
     {
-        return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
+        return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForNil);
     }
     else if (value.Is<tMIV>())
     {
         assert(value.Is<tBool>());
-        return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
+        return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
     }
 
     assert(value.Is<tDouble>() || value.Is<tInt32>());
-    return GetCallMetamethodFromMetatable(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
-}
-
-inline GetCallTargetConsideringMetatableResult ALWAYS_INLINE WARN_UNUSED GetCallTargetConsideringMetatable(TValue value)
-{
-    if (likely(value.Is<tFunction>()))
-    {
-        return GetCallTargetConsideringMetatableResult {
-            .m_target = value.AsPointer<FunctionObject>(),
-            .m_invokedThroughMetatable = false
-        };
-    }
-    return GetCallTargetConsideringMetatableSlowPath(value);
+    return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
 }
 
 // TableObjectIterator: the class used by Lua to iterate all key-value pairs in a table

@@ -23,24 +23,8 @@ void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRe
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(func);
-    if (callTarget.m_target.m_value == 0)
-    {
-        ThrowError(MakeErrorMessageForUnableToCall(func));
-    }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        if constexpr(passVariadicRes)
-        {
-            MakeCallPassingVariadicRes(callTarget.m_target.As(), func, argStart, numArgs, CallOperationReturnContinuation);
-        }
-        else
-        {
-            MakeCall(callTarget.m_target.As(), func, argStart, numArgs, CallOperationReturnContinuation);
-        }
-    }
-    else
+    if (likely(func.Is<tFunction>()))
     {
         if constexpr(passVariadicRes)
         {
@@ -50,6 +34,21 @@ void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRe
         {
             MakeInPlaceCall(argStart, numArgs, CallOperationReturnContinuation);
         }
+    }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+    if (unlikely(callTarget == nullptr))
+    {
+        ThrowError(MakeErrorMessageForUnableToCall(func));
+    }
+
+    if constexpr(passVariadicRes)
+    {
+        MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+    }
+    else
+    {
+        MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
     }
 }
 

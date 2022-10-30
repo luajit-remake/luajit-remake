@@ -21,28 +21,26 @@ static void NO_RETURN ForLoopIterCallReturnContinuation(TValue* base, uint16_t n
 static void NO_RETURN ForLoopIterImpl(TValue* base, uint16_t /*numRets*/)
 {
     TValue callee = base[0];
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(callee);
-    if (callTarget.m_target.m_value == 0)
-    {
-        ThrowError(MakeErrorMessageForUnableToCall(callee));
-    }
-
     TValue* callBase = base + 3;
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        callBase[0] = TValue::Create<tFunction>(callTarget.m_target.As());
-        callBase[x_numSlotsForStackFrameHeader] = callee;
-        callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
-        callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
-        MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, ForLoopIterCallReturnContinuation);
-    }
-    else
+    if (likely(callee.Is<tFunction>()))
     {
         callBase[0] = callee;
         callBase[x_numSlotsForStackFrameHeader] = base[1];
         callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
         MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, ForLoopIterCallReturnContinuation);
     }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
+    if (unlikely(callTarget == nullptr))
+    {
+        ThrowError(MakeErrorMessageForUnableToCall(callee));
+    }
+
+    callBase[0] = TValue::Create<tFunction>(callTarget);
+    callBase[x_numSlotsForStackFrameHeader] = callee;
+    callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
+    callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
+    MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, ForLoopIterCallReturnContinuation);
 }
 
 DEEGEN_DEFINE_BYTECODE(ForLoopIter)

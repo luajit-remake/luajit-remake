@@ -50,20 +50,18 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
     // but for 'length', the parameter is only 'input'.
     // Lua 5.2+ unified the behavior and always pass 'input, input', but for now we are targeting Lua 5.1.
     //
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), input, LengthOperatorMetamethodCallContinuation);
+    }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
     }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        MakeCall(callTarget.m_target.As(), metamethod, input, LengthOperatorMetamethodCallContinuation);
-    }
-    else
-    {
-        MakeCall(callTarget.m_target.As(), input, LengthOperatorMetamethodCallContinuation);
-    }
+    MakeCall(callTarget, metamethod, input, LengthOperatorMetamethodCallContinuation);
 }
 
 DEEGEN_DEFINE_BYTECODE(LengthOf)

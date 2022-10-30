@@ -38,27 +38,25 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm), icInfo /*out*/);
     TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm).As<void>(), icInfo);
 
-    if (metamethod.Is<tNil>())
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), input, input, UnaryMinusMetamethodCallContinuation);
+    }
+
+    if (unlikely(metamethod.Is<tNil>()))
     {
         // TODO: make this error consistent with Lua
         //
         ThrowError("Invalid type for unary minus");
     }
 
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
     }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        MakeCall(callTarget.m_target.As(), metamethod, input, input, UnaryMinusMetamethodCallContinuation);
-    }
-    else
-    {
-        MakeCall(callTarget.m_target.As(), input, input, UnaryMinusMetamethodCallContinuation);
-    }
+    MakeCall(callTarget, metamethod, input, input, UnaryMinusMetamethodCallContinuation);
 }
 
 DEEGEN_DEFINE_BYTECODE(UnaryMinus)

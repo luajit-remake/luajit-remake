@@ -130,27 +130,25 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     // Call metamethod
     //
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
-    if (metamethod.Is<tNil>())
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+    }
+
+    if (unlikely(metamethod.Is<tNil>()))
     {
         // TODO: make this error consistent with Lua
         //
         ThrowError("Invalid types for concat");
     }
 
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
     }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        MakeCall(callTarget.m_target.As(), metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
-    }
-    else
-    {
-        MakeCall(callTarget.m_target.As(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
-    }
+    MakeCall(callTarget, metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
 }
 
 static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
@@ -213,27 +211,25 @@ static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
     // Call metamethod
     //
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
-    if (metamethod.Is<tNil>())
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+    }
+
+    if (unlikely(metamethod.Is<tNil>()))
     {
         // TODO: make this error consistent with Lua
         //
         ThrowError("Invalid types for concat");
     }
 
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-    if (callTarget.m_target.m_value == 0)
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
     }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        MakeCall(callTarget.m_target.As(), metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
-    }
-    else
-    {
-        MakeCall(callTarget.m_target.As(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
-    }
+    MakeCall(callTarget, metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
 }
 
 DEEGEN_DEFINE_BYTECODE(Concat)

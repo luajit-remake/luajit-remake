@@ -10,24 +10,8 @@ void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
-    GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(func);
-    if (callTarget.m_target.m_value == 0)
-    {
-        ThrowError(MakeErrorMessageForUnableToCall(func));
-    }
 
-    if (unlikely(callTarget.m_invokedThroughMetatable))
-    {
-        if constexpr(passVariadicRes)
-        {
-            MakeTailCallPassingVariadicRes(callTarget.m_target.As(), func, argStart, numArgs);
-        }
-        else
-        {
-            MakeTailCall(callTarget.m_target.As(), func, argStart, numArgs);
-        }
-    }
-    else
+    if (likely(func.Is<tFunction>()))
     {
         if constexpr(passVariadicRes)
         {
@@ -37,6 +21,21 @@ void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
         {
             MakeInPlaceTailCall(argStart, numArgs);
         }
+    }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+    if (unlikely(callTarget == nullptr))
+    {
+        ThrowError(MakeErrorMessageForUnableToCall(func));
+    }
+
+    if constexpr(passVariadicRes)
+    {
+        MakeTailCallPassingVariadicRes(callTarget, func, argStart, numArgs);
+    }
+    else
+    {
+        MakeTailCall(callTarget, func, argStart, numArgs);
     }
 }
 

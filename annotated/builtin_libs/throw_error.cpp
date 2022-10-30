@@ -252,57 +252,50 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
     // 'callStart' should be at +2 because local 0 and 1 are all needed to be kept alive
     //
     TValue* callStart = stackbase + 2;
-    GetCallTargetConsideringMetatableResult res = GetCallTargetConsideringMetatable(calleeInput);
-    if (res.m_target.m_value == 0)
+    if (likely(calleeInput.Is<tFunction>()))
     {
-        // The function is not callable, so we should call the error handler.
-        // Now, check if the error handler is a FunctionObject
-        // Note that Lua won't consider the metatable of the error handler: it must be a function in order to be called
+        callStart[0] = calleeInput;
+        MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
+    }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(calleeInput);
+    if (likely(callTarget != nullptr))
+    {
+        callStart[0] = TValue::Create<tFunction>(callTarget);
+        callStart[x_numSlotsForStackFrameHeader] = calleeInput;
+        MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
+    }
+
+    // The function is not callable, so we should call the error handler.
+    // Now, check if the error handler is a FunctionObject
+    // Note that Lua won't consider the metatable of the error handler: it must be a function in order to be called
+    //
+    if (errHandler.Is<tFunction>())
+    {
+        // The error handler is a function, so it shall be invoked.
         //
-        if (errHandler.Is<tFunction>())
-        {
-            // The error handler is a function, so it shall be invoked.
-            //
-            // However, we cannot throw the error by ourselves, or call the error handler by ourselves: if we do that, since the error
-            // is not thrown from the called function, but from xpcall itself, it will not be protected since there is no stack frame
-            // with ret = 'onSuccessReturn', so neither 'onErrorReturn' nor the 'ThrowError' could see the xpcall.
-            //
-            // To workaround this, we will let ourselves call 'base.error' with our error object as argument.
-            // Then 'base.error' will throw out that error for us, which will be protected and invoke our error handler, as desired.
-            //
-            TValue baseDotError = VM::GetActiveVMForCurrentThread()->GetLibBaseDotErrorFunctionObject();
-            assert(baseDotError.Is<tFunction>());
+        // However, we cannot throw the error by ourselves, or call the error handler by ourselves: if we do that, since the error
+        // is not thrown from the called function, but from xpcall itself, it will not be protected since there is no stack frame
+        // with ret = 'onSuccessReturn', so neither 'onErrorReturn' nor the 'ThrowError' could see the xpcall.
+        //
+        // To workaround this, we will let ourselves call 'base.error' with our error object as argument.
+        // Then 'base.error' will throw out that error for us, which will be protected and invoke our error handler, as desired.
+        //
+        TValue baseDotError = VM::GetActiveVMForCurrentThread()->GetLibBaseDotErrorFunctionObject();
+        assert(baseDotError.Is<tFunction>());
 
-            callStart[0] = baseDotError;
-            callStart[x_numSlotsForStackFrameHeader] = MakeErrorMessageForUnableToCall(calleeInput);
+        callStart[0] = baseDotError;
+        callStart[x_numSlotsForStackFrameHeader] = MakeErrorMessageForUnableToCall(calleeInput);
 
-            MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
-        }
-        else
-        {
-            // The error handler is not a function (note that Lua ignores the metatable here)
-            // So calling the error handler will result in infinite error recursion
-            // So we should return false + "error in error handler"
-            //
-            Return(TValue::CreateBoolean(false), MakeErrorMessageForTooManyNestedErrors());
-        }
+        MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
     }
     else
     {
-        // Now we know the function is callable, call it
+        // The error handler is not a function (note that Lua ignores the metatable here)
+        // So calling the error handler will result in infinite error recursion
+        // So we should return false + "error in error handler"
         //
-        size_t numParams = 0;
-        if (!res.m_invokedThroughMetatable)
-        {
-            callStart[0] = calleeInput;
-        }
-        else
-        {
-            callStart[0] = TValue::CreatePointer(res.m_target);
-            callStart[x_numSlotsForStackFrameHeader] = calleeInput;
-            numParams++;
-        }
-        MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, numParams, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
+        Return(TValue::CreateBoolean(false), MakeErrorMessageForTooManyNestedErrors());
     }
 }
 
@@ -324,28 +317,28 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     TValue calleeInput = GetArg(0);
     size_t numCalleeArgs = GetNumArgs() - 1;
 
-    GetCallTargetConsideringMetatableResult res = GetCallTargetConsideringMetatable(calleeInput);
-    if (res.m_target.m_value == 0)
-    {
-        // The function is not callable, we should return false + 'unable to call' error msg
-        //
-        Return(TValue::CreateBoolean(false), MakeErrorMessageForUnableToCall(calleeInput));
-    }
-
-    // Now we know the function is callable, set up the call frame, which can start at local 1
-    // (because local 0 is reserved by us as the identification boolean for the stack walker to distinguish pcall and xpcall)
+    // Set up the call frame, which can start at local 1
+    // (local 0 is reserved by us as the identification boolean for the stack walker to distinguish pcall and xpcall)
     //
     TValue* callFrameBegin = stackbase + 1;
-    if (likely(!res.m_invokedThroughMetatable))
+    if (likely(calleeInput.Is<tFunction>()))
     {
         memmove(callFrameBegin + x_numSlotsForStackFrameHeader, stackbase + 1 /*inputArgsBegin*/, sizeof(TValue) * numCalleeArgs);
         callFrameBegin[0] = calleeInput;
     }
     else
     {
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(calleeInput);
+        if (callTarget == nullptr)
+        {
+            // The function is not callable, we should return false + 'unable to call' error msg
+            //
+            Return(TValue::CreateBoolean(false), MakeErrorMessageForUnableToCall(calleeInput));
+        }
+
         memmove(callFrameBegin + x_numSlotsForStackFrameHeader + 1, stackbase + 1 /*inputArgsBegin*/, sizeof(TValue) * numCalleeArgs);
         callFrameBegin[x_numSlotsForStackFrameHeader] = calleeInput;
-        callFrameBegin[0] = TValue::CreatePointer(res.m_target);
+        callFrameBegin[0] = TValue::Create<tFunction>(callTarget);
         numCalleeArgs++;
     }
 

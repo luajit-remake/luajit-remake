@@ -85,25 +85,23 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
         }
 
         TValue metamethod = GetMetamethodFromMetatableForComparisonOperation<true /*supportsQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Eq);
-        if (metamethod.Is<tNil>())
+        if (likely(metamethod.Is<tNil>()))
         {
             goto not_equal;
         }
 
-        GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-        if (callTarget.m_target.m_value == 0)
+        if (metamethod.Is<tFunction>())
+        {
+            MakeCall(metamethod.As<tFunction>(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
+        }
+
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));
         }
 
-        if (unlikely(callTarget.m_invokedThroughMetatable))
-        {
-            MakeCall(callTarget.m_target.As(), metamethod, lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
-        }
-        else
-        {
-            MakeCall(callTarget.m_target.As(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
-        }
+        MakeCall(callTarget, metamethod, lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
     }
 
 not_equal:

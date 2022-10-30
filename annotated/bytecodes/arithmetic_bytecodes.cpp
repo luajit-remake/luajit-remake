@@ -87,22 +87,18 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         }
 
 do_metamethod_call:
+        if (likely(metamethod.Is<tFunction>()))
         {
-            GetCallTargetConsideringMetatableResult callTarget = GetCallTargetConsideringMetatable(metamethod);
-            if (callTarget.m_target.m_value == 0)
-            {
-                ThrowError(MakeErrorMessageForUnableToCall(metamethod));
-            }
-
-            if (unlikely(callTarget.m_invokedThroughMetatable))
-            {
-                MakeCall(callTarget.m_target.As(), metamethod, lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
-            }
-            else
-            {
-                MakeCall(callTarget.m_target.As(), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
-            }
+            MakeCall(metamethod.As<tFunction>(), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
         }
+
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(metamethod));
+        }
+
+        MakeCall(callTarget, metamethod, lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
     }
 }
 
