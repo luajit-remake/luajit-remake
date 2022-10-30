@@ -90,7 +90,7 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
             goto not_equal;
         }
 
-        if (metamethod.Is<tFunction>())
+        if (likely(metamethod.Is<tFunction>()))
         {
             MakeCall(metamethod.As<tFunction>(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
         }

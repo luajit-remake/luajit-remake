@@ -329,7 +329,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     else
     {
         HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(calleeInput);
-        if (callTarget == nullptr)
+        if (unlikely(callTarget == nullptr))
         {
             // The function is not callable, we should return false + 'unable to call' error msg
             //
