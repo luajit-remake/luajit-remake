@@ -890,8 +890,17 @@ struct tvalue_typecheck_strength_reduction_def_helper<-1>
 // Internal use only, do not call from user code
 // Do not change this function name: it is hardcoded for our LLVM logic
 //
+// Despite that LLVM can deduce those functions are '__const__', we are manually adding
+// '__const__' attribute here because it's risky to run LLVM's function attribute inference
+// pass early in our transform pipeline (since our transformation can break them).
+// However, we do want accurate function attributes to help LLVM desugar the IR, so we
+// simply add important attributes manually as a workaround.
+//
+// We are adding '__flatten__' attribute to workaround a limitation in our
+// LLVMRepeatedInliningInhibitor utility: see comments in that class.
+//
 template<typename T>
-bool DeegenImpl_TValueIs(TValue val)
+bool __attribute__((__const__, __flatten__)) DeegenImpl_TValueIs(TValue val)
 {
     return T::check(val);
 }
@@ -900,7 +909,7 @@ bool DeegenImpl_TValueIs(TValue val)
 // Do not change this function name: it is hardcoded for our LLVM logic
 //
 template<typename T>
-auto DeegenImpl_TValueAs(TValue val)
+auto __attribute__((__const__, __flatten__)) DeegenImpl_TValueAs(TValue val)
 {
     assert(val.Is<T>());
     return T::decode(val);

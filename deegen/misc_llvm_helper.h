@@ -1304,7 +1304,8 @@ struct LLVMRepeatedInliningInhibitor
                     // always_inline and inlined into its caller, now it makes sense to inline 'g' as well
                     // (since the size of 'g' is going to be small compared with its caller). But our current
                     // implementation will prevent 'g' from being inlined because 'g' already got a chance to
-                    // inline (while 'f' is still marked no_inline).
+                    // inline (while 'f' is still marked no_inline). For now, we are working around this issue
+                    // by adding __flatten__ attribute to such functions to make sure their callees are inlined.
                     //
                     continue;
                 }

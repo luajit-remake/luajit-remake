@@ -6,38 +6,38 @@ target triple = "x86_64-unknown-linux-gnu"
 %class.anon = type { i8 }
 %class.anon.0 = type { i8 }
 
-; Function Attrs: mustprogress nounwind uwtable
+; Function Attrs: mustprogress nounwind readnone willreturn uwtable
 declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64) #0
 
 ; Function Attrs: mustprogress noreturn nounwind uwtable
 define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   %3 = alloca %class.anon, align 1
   %4 = alloca %class.anon.0, align 1
-  %5 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %0)
+  %5 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %0) #7
   br i1 %5, label %6, label %10
 
 6:                                                ; preds = %2
-  %7 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0)
-  call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3) #7
-  %8 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %3) #7
+  %7 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0) #7
+  call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3) #8
+  %8 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %3) #8
   %9 = ptrtoint ptr addrspace(256) %7 to i64
   call void @__DeegenInternal_AstMakeCallIdentificationFunc_0(i1 false, i1 false, i1 false, i64 %9, ptr @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m", i64 0, i64 %0, i64 %1)
   unreachable
 
 10:                                               ; preds = %2
-  %11 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %1)
+  %11 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %1) #7
   br i1 %11, label %12, label %15
 
 12:                                               ; preds = %10
-  %13 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1)
+  %13 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1) #7
   %14 = ptrtoint ptr addrspace(256) %13 to i64
   call void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1 false, i1 false, i1 true, i64 %14, ptr null, i64 0, i64 %1, i64 %0)
   unreachable
 
 15:                                               ; preds = %10
-  %16 = call noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64 %0, i64 %1) #7
-  call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %4) #7
-  %17 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %4) #7
+  %16 = call noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64 %0, i64 %1) #8
+  call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %4) #8
+  %17 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %4) #8
   %18 = ptrtoint ptr addrspace(256) %16 to i64
   call void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1 false, i1 true, i1 false, i64 %18, ptr @"_ZZ7testfn1EN3$_18__invokeE6TValueS0_PS0_m", i64 1, i64 %0, i64 %1, i64 %0, i64 %1)
   unreachable
@@ -54,7 +54,7 @@ declare dso_local noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64, i64) lo
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #3 align 2
 
-; Function Attrs: mustprogress nounwind uwtable
+; Function Attrs: mustprogress nounwind readnone willreturn uwtable
 declare dso_local noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64) local_unnamed_addr #0
 
 ; Function Attrs: inlinehint nounwind uwtable
@@ -72,14 +72,15 @@ declare void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1, i1, i1, i64, 
 ; Function Attrs: noreturn nounwind
 declare void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1, i1, i1, i64, ptr, i64, i64, i64, i64, i64) #6
 
-attributes #0 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #0 = { mustprogress nounwind readnone willreturn uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { mustprogress noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #2 = { argmemonly mustprogress nocallback nofree nosync nounwind willreturn }
 attributes #3 = { inlinehint mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #4 = { "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #5 = { inlinehint nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #6 = { noreturn nounwind }
-attributes #7 = { nounwind }
+attributes #7 = { nounwind readnone willreturn }
+attributes #8 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
