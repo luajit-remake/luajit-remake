@@ -44,10 +44,10 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
                 return std::make_pair(TValue(), ResKind::NotTable);
             }
 
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(reinterpret_cast<HeapPtr<TableObject>>(heapEntity), UserHeapPointer<HeapString> { index }, icInfo /*out*/);
-            ResKind resKind = icInfo.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
-            switch (icInfo.m_icKind)
+            GetByIdICInfo c_info;
+            TableObject::PrepareGetById(reinterpret_cast<HeapPtr<TableObject>>(heapEntity), UserHeapPointer<HeapString> { index }, c_info /*out*/);
+            ResKind c_resKind = c_info.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
+            switch (c_info.m_icKind)
             {
             case GetByIdICInfo::ICKind::UncachableDictionary:
             {
@@ -56,31 +56,31 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
             }
             case GetByIdICInfo::ICKind::MustBeNil:
             {
-                return ic->Effect([resKind] {
-                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    return std::make_pair(TValue::Create<tNil>(), resKind);
+                return ic->Effect([c_resKind] {
+                    IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    return std::make_pair(TValue::Create<tNil>(), c_resKind);
                 });
             }
             case GetByIdICInfo::ICKind::MustBeNilButUncacheable:
             {
-                return std::make_pair(TValue::Create<tNil>(), resKind);
+                return std::make_pair(TValue::Create<tNil>(), c_resKind);
             }
             case GetByIdICInfo::ICKind::InlinedStorage:
             {
-                int32_t slot = icInfo.m_slot;
-                return ic->Effect([heapEntity, slot, resKind] {
-                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    TValue res = TCGet(reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_inlineStorage[slot]);
-                    return std::make_pair(res, resKind);
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([heapEntity, c_slot, c_resKind] {
+                    IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    TValue res = TCGet(reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_inlineStorage[c_slot]);
+                    return std::make_pair(res, c_resKind);
                 });
             }
             case GetByIdICInfo::ICKind::OutlinedStorage:
             {
-                int32_t slot = icInfo.m_slot;
-                return ic->Effect([heapEntity, slot, resKind] {
-                    IcSpecializeValueFullCoverage(resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    TValue res = reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_butterfly->GetNamedProperty(slot);
-                    return std::make_pair(res, resKind);
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([heapEntity, c_slot, c_resKind] {
+                    IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                    TValue res = reinterpret_cast<HeapPtr<TableObject>>(heapEntity)->m_butterfly->GetNamedProperty(c_slot);
+                    return std::make_pair(res, c_resKind);
                 });
             }
             }   /* switch icKind */

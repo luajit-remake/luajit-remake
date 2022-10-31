@@ -19,29 +19,29 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         auto [result, mayHaveMt] = ic->Body([ic, base, index]() -> std::pair<TValue, bool> {
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(base, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
-            bool mayHaveMetatable = icInfo.m_mayHaveMetatable;
-            if (icInfo.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
+            GetByIdICInfo c_info;
+            TableObject::PrepareGetById(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);
+            bool c_mayHaveMt = c_info.m_mayHaveMetatable;
+            if (c_info.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
             {
-                int32_t slot = icInfo.m_slot;
-                return ic->Effect([base, slot, mayHaveMetatable] {
-                    IcSpecializeValueFullCoverage(mayHaveMetatable, false, true);
-                    return std::make_pair(TCGet(base->m_inlineStorage[slot]), mayHaveMetatable);
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, c_slot, c_mayHaveMt] {
+                    IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
+                    return std::make_pair(TCGet(base->m_inlineStorage[c_slot]), c_mayHaveMt);
                 });
             }
-            else if (icInfo.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
+            else if (c_info.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
             {
-                int32_t slot = icInfo.m_slot;
-                return ic->Effect([base, slot, mayHaveMetatable] {
-                    IcSpecializeValueFullCoverage(mayHaveMetatable, false, true);
-                    return std::make_pair(base->m_butterfly->GetNamedProperty(slot), mayHaveMetatable);
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, c_slot, c_mayHaveMt] {
+                    IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
+                    return std::make_pair(base->m_butterfly->GetNamedProperty(c_slot), c_mayHaveMt);
                 });
             }
             else
             {
-                assert(icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
-                return std::make_pair(TValue::Nil(), mayHaveMetatable);
+                assert(c_info.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
+                return std::make_pair(TValue::Nil(), c_mayHaveMt);
             }
         });
 
