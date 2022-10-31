@@ -53,22 +53,20 @@ mv /llvm.patch llvm.patch
 git apply llvm.patch
 
 # Build and install Clang+LLVM
-# Since we are already building Clang+LLVM by ourselves, take this chance to enable RTTI and Debug info. 
+# Since we are already building Clang+LLVM by ourselves, take this chance to enable RTTI. 
 # (otherwise we would need to either disable RTTI for our own LLVM code, or risk random link failures..)
 # Clang/LLVM's performance isn't a problem, since we are only using them for the build step.
 #
+# We do not enable debug info for LLVM library. While seemingly good, it turns out to be a terrible idea: 
+# gdb becomes extraordinarily slow due to the extra debug info, and it turns out that even LLVM's 
+# stack trace printer fails due to OOM while parsing the debug info...
+#
 mkdir build
 cd $LLVM_SRC_DIR/llvm-project/build
-CC=clang-12 CXX=clang++-12 cmake -GNinja -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_RTTI=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_ENABLE_PROJECTS=clang ../llvm
+CC=clang-12 CXX=clang++-12 cmake -GNinja -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_RTTI=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=clang ../llvm
 # Leave two CPUs idle so the system won't be irresponsible during the build
 #
 REQUIRES_RTTI=1 ninja -j$((`nproc`-2))
-# We don't need debug info for the binary files: we only need them for the LLVM library
-# These debug info are huge (60GB..) so strip them now. 
-# Note that the 'bin' directory contains non-binary files, so strip will return a non-zero result. 
-#This is expected, so just supress it
-#
-strip -g bin/* || true
 REQUIRES_RTTI=1 ninja install
 
 # Having built Clang+LLVM, we can now uninstall the system Clang compiler
