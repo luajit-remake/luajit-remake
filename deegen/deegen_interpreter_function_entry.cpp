@@ -4,6 +4,7 @@
 #include "deegen_ast_return.h"
 #include "tvalue.h"
 #include "tag_register_optimization.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 
 namespace dast {
 
@@ -114,6 +115,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     }
     else
     {
+        // TODO: consider rewrite this and split out the cold path for tail call memmove
+        //
         Value* numFixedParams;
         if (IsNumFixedParamSpecialized())
         {
@@ -151,6 +154,21 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
 
     dummyInst->eraseFromParent();
 
+    bool shouldPutIntoHotCodeSection;
+    if (m_acceptVarArgs)
+    {
+        shouldPutIntoHotCodeSection = IsNumFixedParamSpecialized() && GetSpecializedNumFixedParam() <= 2;
+    }
+    else
+    {
+        shouldPutIntoHotCodeSection = true;
+    }
+    if (shouldPutIntoHotCodeSection)
+    {
+        func->setSection(InterpreterBytecodeImplCreator::x_hot_code_section_name);
+    }
+
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::Top);
     RunTagRegisterOptimizationPass(func);
     RunLLVMOptimizePass(module.get());
 
