@@ -1297,6 +1297,15 @@ struct LLVMRepeatedInliningInhibitor
                     // This means our caller has changed the function to always_inline.
                     // We should respect it. Just skip.
                     //
+                    // TODO: there are still some problems with this strategy. Specifically, many Deegen APIs
+                    // are marked no_inline initially and gradually desugared by the desugaring pass. This
+                    // causes a problem: a Deegen API 'f' may call some function 'g', which is small but not
+                    // inlined into 'f' because 'f' itself is also too small. However, when 'f' is marked
+                    // always_inline and inlined into its caller, now it makes sense to inline 'g' as well
+                    // (since the size of 'g' is going to be small compared with its caller). But our current
+                    // implementation will prevent 'g' from being inlined because 'g' already got a chance to
+                    // inline (while 'f' is still marked no_inline).
+                    //
                     continue;
                 }
 

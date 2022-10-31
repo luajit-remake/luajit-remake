@@ -15,11 +15,11 @@ void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
     {
         if constexpr(passVariadicRes)
         {
-            MakeInPlaceTailCallPassingVariadicRes(argStart, numArgs);
+            MakeInPlaceTailCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs);
         }
         else
         {
-            MakeInPlaceTailCall(argStart, numArgs);
+            MakeInPlaceTailCall(func.As<tFunction>(), argStart, numArgs);
         }
     }
 

@@ -28,28 +28,30 @@ void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRe
     {
         if constexpr(passVariadicRes)
         {
-            MakeInPlaceCallPassingVariadicRes(argStart, numArgs, CallOperationReturnContinuation);
+            MakeInPlaceCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation);
         }
         else
         {
-            MakeInPlaceCall(argStart, numArgs, CallOperationReturnContinuation);
+            MakeInPlaceCall(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation);
         }
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
-    if (unlikely(callTarget == nullptr))
-    {
-        ThrowError(MakeErrorMessageForUnableToCall(func));
-    }
+    EnterSlowPath([argStart, numArgs, func]() {
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(func));
+        }
 
-    if constexpr(passVariadicRes)
-    {
-        MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
-    }
-    else
-    {
-        MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
-    }
+        if constexpr(passVariadicRes)
+        {
+            MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+        }
+        else
+        {
+            MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+        }
+    });
 }
 
 }   // anonymous namespace

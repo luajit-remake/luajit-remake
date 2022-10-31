@@ -4,6 +4,7 @@
 
 #include "api_define_bytecode.h"
 #include "deegen_bytecode_metadata.h"
+#include "deegen_call_inline_cache.h"
 
 namespace dast {
 
@@ -462,12 +463,12 @@ struct BytecodeOperandQuickeningDescriptor
 class BytecodeVariantDefinition
 {
 public:
-    void SetMaxOperandWidthBytes(size_t maxWidthBytes)
+    void SetMaxOperandWidthBytes(size_t maxWidthBytesInput)
     {
         ReleaseAssert(!m_hasDecidedOperandWidth);
         m_hasDecidedOperandWidth = true;
         size_t currentOffset = x_opcodeSizeBytes;
-        auto update = [&](BcOperand* operand)
+        auto update = [&](BcOperand* operand, size_t maxWidthBytes)
         {
             if (operand->IsElidedFromBytecodeStruct())
             {
@@ -483,15 +484,17 @@ public:
         };
         for (auto& operand : m_list)
         {
-            update(operand.get());
+            update(operand.get(), maxWidthBytesInput);
         }
         if (m_hasOutputValue)
         {
-            update(m_outputOperand.get());
+            update(m_outputOperand.get(), maxWidthBytesInput);
         }
         if (m_hasConditionalBranchTarget)
         {
-            update(m_condBrTarget.get());
+            // Currently the frontend locked condBr's width to 2 bytes, we can improve this later
+            //
+            update(m_condBrTarget.get(), 2 /*maxWidth*/);
         }
         m_bytecodeStructLength = currentOffset;
     }
@@ -553,6 +556,30 @@ public:
         return m_metadataStructInfo;
     }
 
+    bool HasInterpreterCallIC()
+    {
+        ReleaseAssert(IsBytecodeStructLengthFinalized());
+        return m_interpreterCallIcMetadata.IcExists();
+    }
+
+    InterpreterCallIcMetadata& GetInterpreterCallIc()
+    {
+        ReleaseAssert(HasInterpreterCallIC());
+        return m_interpreterCallIcMetadata;
+    }
+
+    // If this function is called, this bytecode will have a interpreter call inline cache
+    //
+    void AddInterpreterCallIc()
+    {
+        ReleaseAssert(!IsBytecodeStructLengthFinalized());
+        ReleaseAssert(!m_interpreterCallIcMetadata.IcExists());
+        std::pair<std::unique_ptr<BytecodeMetadataStruct>, InterpreterCallIcMetadata> res = InterpreterCallIcMetadata::Create();
+        AddBytecodeMetadata(std::move(res.first));
+        m_interpreterCallIcMetadata = res.second;
+        ReleaseAssert(m_interpreterCallIcMetadata.IcExists());
+    }
+
     // For now we have a fixed 2-byte opcode header for simplicity
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
     //
@@ -584,6 +611,9 @@ public:
     //
     std::unique_ptr<BytecodeMetadataStruct> m_bytecodeMetadataMaybeNull;
 
+    bool m_isInterpreterCallIcExplicitlyDisabled;
+    bool m_isInterpreterCallIcEverUsed;
+
     BytecodeQuickeningKind m_quickeningKind;
     // Populated if m_quickeningKind == LockedQuickening or Quickened or QuickeningSelector
     // For QuickeningSelector, this holds the first quickening.
@@ -596,6 +626,10 @@ public:
 private:
     size_t m_bytecodeStructLength;
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
+
+    // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
+    //
+    InterpreterCallIcMetadata m_interpreterCallIcMetadata;
 };
 
 }  // namespace dast

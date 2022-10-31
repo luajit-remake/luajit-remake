@@ -12,12 +12,13 @@ struct MiscImmediateValue
     static constexpr uint64_t x_nil = 0;
     static constexpr uint64_t x_false = 2;
     static constexpr uint64_t x_true = 3;
+    static constexpr uint64_t x_impossible_value = 4;
 
     MiscImmediateValue() : m_value(0) { }
     MiscImmediateValue(uint64_t value)
         : m_value(value)
     {
-        assert(m_value == x_nil || m_value == x_true || m_value == x_false);
+        assert(m_value == x_nil || m_value == x_true || m_value == x_false || m_value == x_impossible_value);
     }
 
     bool IsNil() const
@@ -65,6 +66,14 @@ struct MiscImmediateValue
     static MiscImmediateValue WARN_UNUSED CreateTrue()
     {
         return MiscImmediateValue { x_true };
+    }
+
+    // This value will never show up in the TValue computed by user program
+    // This allows us to safely create a TValue which bit pattern is different from all TValues computable by user program
+    //
+    static MiscImmediateValue WARN_UNUSED CreateImpossibleValue()
+    {
+        return MiscImmediateValue { x_impossible_value };
     }
 
     bool WARN_UNUSED operator==(const MiscImmediateValue& rhs) const
@@ -245,6 +254,11 @@ struct TValue
         TValue result { miv.m_value ^ x_mivTag };
         assert(result.AsMIV().m_value == miv.m_value);
         return result;
+    }
+
+    static TValue CreateImpossibleValue()
+    {
+        return TValue::CreateMIV(MiscImmediateValue::CreateImpossibleValue());
     }
 
     static TValue CreateTrue()

@@ -210,6 +210,8 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_hasDecidedOperandWidth = false;
             def->m_bytecodeStructLengthFinalized = false;
             def->m_metadataStructInfoAssigned = false;
+            def->m_isInterpreterCallIcEverUsed = false;
+            def->m_isInterpreterCallIcExplicitlyDisabled = false;
             def->m_implFunctionName = implFuncName;
             def->m_hasOutputValue = hasTValueOutput;
             def->m_hasConditionalBranchTarget = canPerformBranch;

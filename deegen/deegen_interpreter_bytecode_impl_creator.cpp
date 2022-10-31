@@ -740,6 +740,8 @@ void InterpreterBytecodeImplCreator::DoOptimization()
         //
         ReleaseAssert(m_processKind == ProcessKind::SlowPath);
     }
+
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 }
 
 void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
@@ -787,6 +789,26 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     //
     if (m_processKind == ProcessKind::Main)
     {
+        // Figure out if we need Call IC. We need it if there are any calls used in the main function.
+        // Note that we must do this check here after all optimizations have happened, as optimizations could have
+        // deduced that calls are unreachable and removed them.
+        //
+        bool needCallIc = false;
+        if (AstMakeCall::GetAllUseInFunction(m_impl).size() > 0)
+        {
+            needCallIc = true;
+        }
+        if (GetBytecodeDef()->m_isInterpreterCallIcExplicitlyDisabled)
+        {
+            needCallIc = false;
+        }
+        if (needCallIc)
+        {
+            m_bytecodeDef->AddInterpreterCallIc();
+        }
+
+        // At this point we should have determined everything that needs to sit in the bytecode metadata (if any)
+        //
         m_bytecodeDef->FinalizeBytecodeStructLength();
         if (m_bytecodeDef->m_bytecodeMetadataMaybeNull.get() != nullptr)
         {

@@ -34,6 +34,9 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_num_variadic_args.cpp
   store_variadic_args_as_variadic_results.cpp
   get_variadic_results_start.cpp
+  box_function_object_to_tvalue.cpp
+  get_cb_heap_ptr_from_tvalue.cpp
+  get_func_obj_as_u64_from_tvalue.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

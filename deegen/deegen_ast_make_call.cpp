@@ -1,6 +1,8 @@
 #include "deegen_ast_make_call.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
+#include "deegen_call_inline_cache.h"
+#include "deegen_bytecode_operand.h"
 
 #include "runtime_utils.h"
 
@@ -352,6 +354,17 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
 
 void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
 {
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    // Get the code pointer and the callee CodeBlock
+    //
+    Value* calleeCbHeapPtr = nullptr;
+    Value* codePointer = nullptr;
+    DeegenCallIcLogicCreator::EmitForInterpreter(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    ReleaseAssert(codePointer != nullptr);
+
     // Currently our call scheme is as follows:
     // Caller side:
     // 1. Construct the callee stack frame assuming callee does not take varargs.
@@ -364,8 +377,6 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     //    (note that special care is needed for the varargs stack rearrangement if the call is mustTail).
     // 3. Pass (coroCtx, fixedUpStackBase, bytecode, codeBlock) to first bytecode
     //
-    using namespace llvm;
-    LLVMContext& ctx = ifi->GetModule()->getContext();
 
     size_t numRangeArgs = 0;
     for (Arg& arg : m_args)
@@ -422,19 +433,6 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
                     },
                     m_origin /*insertBefore*/);
             }
-
-            std::ignore = ifi->CallDeegenCommonSnippet(
-                "PopulateNewCallFrameHeader",
-                {
-                    newSfBase,
-                    ifi->GetStackBase() /*oldStackBase*/,
-                    ifi->GetCodeBlock(),
-                    ifi->GetCurBytecode(),
-                    m_target,
-                    GetContinuationDispatchTarget() /*onReturn*/,
-                    CreateLLVMConstantInt<bool>(ctx, true) /*doNotFillFunc*/
-                },
-                m_origin /*insertBefore*/);
         }
         else
         {
@@ -503,20 +501,18 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
                     curOffset = CreateUnsignedAddNoOverflow(curOffset, CreateLLVMConstantInt<uint64_t>(ctx, 1), m_origin);
                 }
             }
-
-            std::ignore = ifi->CallDeegenCommonSnippet(
-                "PopulateNewCallFrameHeader",
-                {
-                    newSfBase,
-                    ifi->GetStackBase() /*oldStackBase*/,
-                    ifi->GetCodeBlock(),
-                    ifi->GetCurBytecode(),
-                    m_target,
-                    GetContinuationDispatchTarget() /*onReturn*/,
-                    CreateLLVMConstantInt<bool>(ctx, false) /*doNotFillFunc*/
-                },
-                m_origin /*insertBefore*/);
         }
+        std::ignore = ifi->CallDeegenCommonSnippet(
+            "PopulateNewCallFrameHeader",
+            {
+                newSfBase,
+                ifi->GetStackBase() /*oldStackBase*/,
+                ifi->GetCodeBlock(),
+                ifi->GetCurBytecode(),
+                m_target,
+                GetContinuationDispatchTarget() /*onReturn*/
+            },
+            m_origin /*insertBefore*/);
     }
     else
     {
@@ -795,13 +791,6 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(totalNumArgs != nullptr);
     ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
-
-    Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { m_target }, m_origin /*insertBefore*/);
-    ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
-
-    Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", m_origin /*insertBefore*/);
-    Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", m_origin /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
     InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
 

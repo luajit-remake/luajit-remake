@@ -24,10 +24,9 @@ static void NO_RETURN ForLoopIterImpl(TValue* base, uint16_t /*numRets*/)
     TValue* callBase = base + 3;
     if (likely(callee.Is<tFunction>()))
     {
-        callBase[0] = callee;
         callBase[x_numSlotsForStackFrameHeader] = base[1];
         callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
-        MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, ForLoopIterCallReturnContinuation);
+        MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, ForLoopIterCallReturnContinuation);
     }
 
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
@@ -36,11 +35,10 @@ static void NO_RETURN ForLoopIterImpl(TValue* base, uint16_t /*numRets*/)
         ThrowError(MakeErrorMessageForUnableToCall(callee));
     }
 
-    callBase[0] = TValue::Create<tFunction>(callTarget);
     callBase[x_numSlotsForStackFrameHeader] = callee;
     callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
     callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
-    MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, ForLoopIterCallReturnContinuation);
+    MakeInPlaceCall(callTarget, callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, ForLoopIterCallReturnContinuation);
 }
 
 DEEGEN_DEFINE_BYTECODE(ForLoopIter)

@@ -90,10 +90,9 @@ static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
 
         if (likely(callee.Is<tFunction>()))
         {
-            callBase[0] = callee;
             callBase[x_numSlotsForStackFrameHeader] = base[1];
             callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
-            MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, KVLoopIterCallReturnContinuation);
+            MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, KVLoopIterCallReturnContinuation);
         }
 
         HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
@@ -102,11 +101,10 @@ static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
             ThrowError(MakeErrorMessageForUnableToCall(callee));
         }
 
-        callBase[0] = TValue::Create<tFunction>(callTarget);
         callBase[x_numSlotsForStackFrameHeader] = callee;
         callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
         callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
-        MakeInPlaceCall(callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, KVLoopIterCallReturnContinuation);
+        MakeInPlaceCall(callTarget, callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, KVLoopIterCallReturnContinuation);
     }
 }
 

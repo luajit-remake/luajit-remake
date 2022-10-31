@@ -64,7 +64,8 @@ DEEGEN_DEFINE_BYTECODE(test3)
 
 static void NO_RETURN fn4()
 {
-    MakeInPlaceCall(r1(), s1(), rc);
+    TValue* r = r1();
+    MakeInPlaceCall((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1(), rc);
 }
 
 DEEGEN_DEFINE_BYTECODE(test4)
@@ -77,7 +78,8 @@ DEEGEN_DEFINE_BYTECODE(test4)
 
 static void NO_RETURN fn5()
 {
-    MakeInPlaceCallPassingVariadicRes(r1(), s1(), rc);
+    TValue* r = r1();
+    MakeInPlaceCallPassingVariadicRes((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1(), rc);
 }
 
 DEEGEN_DEFINE_BYTECODE(test5)
@@ -168,7 +170,8 @@ DEEGEN_DEFINE_BYTECODE(test11)
 
 static void NO_RETURN fn12()
 {
-    MakeInPlaceTailCall(r1(), s1());
+    TValue* r = r1();
+    MakeInPlaceTailCall((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1());
 }
 
 DEEGEN_DEFINE_BYTECODE(test12)
@@ -181,7 +184,8 @@ DEEGEN_DEFINE_BYTECODE(test12)
 
 static void NO_RETURN fn13()
 {
-    MakeInPlaceTailCallPassingVariadicRes(r1(), s1());
+    TValue* r = r1();
+    MakeInPlaceTailCallPassingVariadicRes((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1());
 }
 
 DEEGEN_DEFINE_BYTECODE(test13)

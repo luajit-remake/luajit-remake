@@ -29,6 +29,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     ReleaseAssert(defs.size() >= testcaseNum);
     ReleaseAssert(defs[testcaseNum - 1].size() > 0);
     auto& target = defs[testcaseNum - 1][0];
+    target->m_isInterpreterCallIcExplicitlyDisabled = true;
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);

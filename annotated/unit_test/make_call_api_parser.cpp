@@ -26,7 +26,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue* vbegin, size
 {
     if (vbegin->Is<tFunction>())
     {
-        MakeInPlaceCall(vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
+        MakeInPlaceCall(vbegin->As<tFunction>(), vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }

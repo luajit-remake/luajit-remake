@@ -90,6 +90,8 @@ public:
         {
             item.DoLoweringForInterpreter(ifi);
         }
+
+        ValidateLLVMFunction(func);
     }
 
 private:

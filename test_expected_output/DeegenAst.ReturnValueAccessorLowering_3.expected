@@ -42,7 +42,7 @@ __DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %
   %outputSlot = zext i32 %31 to i64
   %36 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
   store i64 %.0.i, ptr %36, align 8
-  %37 = getelementptr inbounds i8, ptr %29, i64 6
+  %37 = getelementptr inbounds i8, ptr %29, i64 10
   %38 = load i16, ptr %37, align 1
   %39 = zext i16 %38 to i64
   %40 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %39

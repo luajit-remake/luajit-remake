@@ -8,6 +8,24 @@
 
 namespace dast {
 
+static TypeSpeculationMask WARN_UNUSED ParseTypeSpeculationMaskFromCppTypeName(std::string tplName)
+{
+    bool found = false;
+    TypeSpeculationMask res = 0;
+    constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
+    for (size_t i = 0; i < defs.size(); i++)
+    {
+        if (tplName == defs[i].second)
+        {
+            ReleaseAssert(!found);
+            found = true;
+            res = defs[i].first;
+        }
+    }
+    ReleaseAssert(found);
+    return res;
+}
+
 bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
 {
     std::string fnName = func->getName().str();
@@ -25,19 +43,34 @@ bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typ
         {
             demangledName = demangledName.substr(strlen(expected_prefix));
             demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
+            *typeMask = ParseTypeSpeculationMaskFromCppTypeName(demangledName);
+        }
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
 
-            bool found = false;
-            constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
-            for (size_t i = 0; i < defs.size(); i++)
-            {
-                if (demangledName == defs[i].second)
-                {
-                    *typeMask = defs[i].first;
-                    found = true;
-                    break;
-                }
-            }
-            ReleaseAssert(found);
+bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
+{
+    std::string fnName = func->getName().str();
+    ReleaseAssert(fnName != "");
+    if (!IsCXXSymbol(fnName))
+    {
+        return false;
+    }
+    std::string demangledName = GetDemangledName(func);
+    constexpr const char* expected_prefix = "auto DeegenImpl_TValueAs<";
+    constexpr const char* expected_suffix = ">(TValue)";
+    if (demangledName.starts_with(expected_prefix) && demangledName.ends_with(expected_suffix))
+    {
+        if (typeMask != nullptr)
+        {
+            demangledName = demangledName.substr(strlen(expected_prefix));
+            demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
+            *typeMask = ParseTypeSpeculationMaskFromCppTypeName(demangledName);
         }
         return true;
     }
@@ -62,7 +95,12 @@ bool IsTValueTypeCheckStrengthReductionFunction(llvm::Function* func)
 
 DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, DesugaringLevel level)
 {
-    if (!IsTValueTypeCheckAPIFunction(func) && !IsTValueTypeCheckStrengthReductionFunction(func))
+    // We preserve TValue::As<> functions as well, even though the TValueTypecheckOptimization pass does not use it.
+    // This is mainly because it doesn't hurt to do so, and an optimization in the call IC relies on
+    // identifying calls to TValue::As<>. I think putting TValue::Is<> and TValue::As<> at the same
+    // desugaring level is the most reasonable thing to do.
+    //
+    if (!IsTValueTypeCheckAPIFunction(func) && !IsTValueTypeCheckStrengthReductionFunction(func) && !IsTValueDecodeAPIFunction(func))
     {
         return DesugarDecision::DontCare;
     }
@@ -1215,6 +1253,31 @@ void TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPat
     pass.SetConstraint(std::move(constraint));
 
     pass.Run();
+}
+
+TypeSpeculationMask WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func)
+{
+    using namespace llvm;
+    TypeSpeculationMask res = 0;
+    if (IsTValueTypeCheckAPIFunction(func, &res /*out*/))
+    {
+        return res;
+    }
+
+    ReleaseAssert(IsTValueTypeCheckStrengthReductionFunction(func));
+    bool found = false;
+    TypeCheckFunctionSelector strengthReductionList(func->getParent());
+    for (const TypecheckStrengthReductionCandidate& candidate : strengthReductionList.GetStrengthReductionList())
+    {
+        if (candidate.m_func == func)
+        {
+            ReleaseAssert(!found);
+            found = true;
+            res = candidate.m_checkedMask;
+        }
+    }
+    ReleaseAssert(found);
+    return res;
 }
 
 }   // namespace dast

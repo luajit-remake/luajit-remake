@@ -200,9 +200,24 @@ private:
     std::unordered_map<llvm::BasicBlock*, std::unordered_map<llvm::BasicBlock*, bool>> m_isControlFlowEdgeFeasible;
 };
 
+// Returns true if the function is a TValue typecheck API function (TValue::Is<>(...))
+//
 bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr);
+
+// Returns true if the function is a TValue decode API function (TValue::As<>(...))
+//
+bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr);
+
+// Returns true if the function is a TValue typecheck strength reduction function (created by optimization)
+//
 bool IsTValueTypeCheckStrengthReductionFunction(llvm::Function* func);
+
 DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, DesugaringLevel level);
+
+// 'func' must be a TValue typecheck API or typecheck strength reduction function
+// Returns the mask being checked
+//
+TypeSpeculationMask WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func);
 
 struct TypecheckStrengthReductionCandidate;
 
@@ -227,6 +242,11 @@ struct TypeCheckFunctionSelector
     };
 
     QueryResult WARN_UNUSED Query(TypeSpeculationMask maskToCheck, TypeSpeculationMask preconditionMask);
+
+    const std::vector<TypecheckStrengthReductionCandidate>& GetStrengthReductionList()
+    {
+        return *m_candidateList.get();
+    }
 
 private:
     std::pair<llvm::Function*, size_t /*cost*/> FindBestStrengthReduction(TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask);

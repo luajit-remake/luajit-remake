@@ -34,7 +34,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, p
   %33 = load i64, ptr %32, align 8
   %34 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
   store i64 %33, ptr %34, align 8
-  %35 = getelementptr inbounds i8, ptr %29, i64 6
+  %35 = getelementptr inbounds i8, ptr %29, i64 10
   %36 = load i16, ptr %35, align 1
   %37 = zext i16 %36 to i64
   %38 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %37
