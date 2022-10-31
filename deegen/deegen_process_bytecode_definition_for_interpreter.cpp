@@ -1217,8 +1217,26 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         for (auto& grp : equivGroups)
         {
             ReleaseAssert(grp.size() > 0);
+            bool mergedFunctionShouldBeInHotSection = false;
+            for (size_t i = 0; i < grp.size(); i++)
+            {
+                Function* func = grp[i];
+                ReleaseAssert(func->hasSection());
+                std::string sectionName = func->getSection().str();
+                ReleaseAssert(sectionName == InterpreterBytecodeImplCreator::x_hot_code_section_name ||
+                              sectionName == InterpreterBytecodeImplCreator::x_cold_code_section_name);
+                if (sectionName == InterpreterBytecodeImplCreator::x_hot_code_section_name)
+                {
+                    mergedFunctionShouldBeInHotSection = true;
+                }
+            }
+
             Function* fnToKeep = grp[0];
             fnNamesExpectedToExist.push_back(fnToKeep->getName().str());
+            if (mergedFunctionShouldBeInHotSection)
+            {
+                fnToKeep->setSection(InterpreterBytecodeImplCreator::x_hot_code_section_name);
+            }
 
             for (size_t i = 1; i < grp.size(); i++)
             {

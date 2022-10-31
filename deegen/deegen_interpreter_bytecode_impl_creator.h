@@ -77,6 +77,9 @@ public:
     static std::string WARN_UNUSED GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd);
     static bool WARN_UNUSED IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName);
 
+    static constexpr const char* x_hot_code_section_name = "deegen_interpreter_code_section_hot";
+    static constexpr const char* x_cold_code_section_name = "deegen_interpreter_code_section_cold";
+
 private:
     void CreateWrapperFunction();
     void LowerGetBytecodeMetadataPtrAPI();

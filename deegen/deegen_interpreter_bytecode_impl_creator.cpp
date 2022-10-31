@@ -22,7 +22,6 @@ struct ReturnContinuationFinder
 {
     ReturnContinuationFinder(llvm::Function* from)
     {
-        m_count = 0;
         std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(from);
         for (AstMakeCall& amc : list)
         {
@@ -31,21 +30,19 @@ struct ReturnContinuationFinder
         // We disallow the entry function itself to also be a continuation,
         // since the entry function cannot access return values while the continuation function can.
         //
-        ReleaseAssert(!m_labelMap.count(from));
+        ReleaseAssert(!m_result.count(from));
     }
 
-    std::unordered_map<llvm::Function*, size_t> m_labelMap;
-    size_t m_count;
+    std::unordered_set<llvm::Function*> m_result;
 
 private:
     void dfs(llvm::Function* cur)
     {
-        if (cur == nullptr || m_labelMap.count(cur))
+        if (cur == nullptr || m_result.count(cur))
         {
             return;
         }
-        m_labelMap[cur] = m_count;
-        m_count++;
+        m_result.insert(cur);
 
         std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(cur);
         for (AstMakeCall& amc : list)
@@ -226,10 +223,8 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         auto scanForReturnContinuations = [&allReturnContFns](Function* func)
         {
             ReturnContinuationFinder rcFinder(func);
-            ReleaseAssert(rcFinder.m_labelMap.size() == rcFinder.m_count);
-            for (auto& it : rcFinder.m_labelMap)
+            for (Function* rc : rcFinder.m_result)
             {
-                Function* rc = it.first;
                 allReturnContFns.insert(rc);
             }
         };
@@ -783,6 +778,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     ReleaseAssert(!m_generated);
     m_generated = true;
 
+    // Figure out whether this bytecode has metadata.
     // This is a bit tricky. We relying on the fact that the Main processor is executed before the other processors,
     // and that whether or not the bytecode metadata exists depends solely on the logic of the Main processor.
     // We probably should refactor it so that it's less tricky. But let's stay with it for now.
@@ -826,7 +822,33 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         m_bytecodeDef->m_bytecodeMetadataMaybeNull->LowerAll(m_module.get());
     }
 
+    // If we are the main function, figure out the return continuations directly or transitively used by us
+    // These return continuations are considered hot, and will be put into the interpreter's hot code section
+    // The other return continuations (which are used by calls that can only happen in the slow paths) will
+    // be put into the cold code section.
+    //
+    std::unordered_set<std::string> fnNamesOfAllReturnContinuationsUsedByMainFn;
+    if (m_processKind == ProcessKind::Main)
+    {
+        ReturnContinuationFinder rcFinder(m_impl);
+        for (Function* func : rcFinder.m_result)
+        {
+            std::string rcImplName = func->getName().str();
+            ReleaseAssert(rcImplName.ends_with("_impl"));
+            std::string rcFinalName = rcImplName.substr(0, rcImplName.length() - strlen("_impl"));
+            ReleaseAssert(!fnNamesOfAllReturnContinuationsUsedByMainFn.count(rcFinalName));
+            fnNamesOfAllReturnContinuationsUsedByMainFn.insert(rcFinalName);
+        }
+    }
+
     // Create the wrapper function 'm_wrapper'
+    // TODO: currently this happens after we decide whether the bytecode has metadata, because CreateWrapperFunction()
+    // also decodes the metadata pointer. However, this is not ideal. In theory, the extra information in the wrapper
+    // function (e.g., certain bytecode operands are constant) could eliminate calls in the bytecode, thus making
+    // some of the metadata unnecessary, or even eliminate the metadata altogether.
+    // This should be fixed by first create the wrapper and run desugaring, then decide the metadata by inspecting the
+    // wrapper, and finally emit logic in the wrapper to decode the metadata pointer if it exists. However, we are
+    // leaving it as is for now because we don't have such use cases.
     //
     CreateWrapperFunction();
     ReleaseAssert(m_wrapper != nullptr);
@@ -840,7 +862,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
     m_impl->setLinkage(GlobalValue::InternalLinkage);
 
-    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
     RunLLVMDeadGlobalElimination(m_module.get());
     m_impl = nullptr;
 
@@ -912,9 +934,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         extractTargets.push_back(m_resultFuncName);
         for (auto& icBodyFnName : m_icBodyNames)
         {
-            if (m_module->getFunction(icBodyFnName) != nullptr)
+            Function* icBodyFn = m_module->getFunction(icBodyFnName);
+            if (icBodyFn != nullptr)
             {
                 extractTargets.push_back(icBodyFnName);
+                // I'm not certain if the IC body shall be put into the hot code section or the cold code section.
+                // For now, let's not bother with this, and just put them in the normal code section like the other runtime functions.
+                //
+                ReleaseAssert(!icBodyFn->hasSection());
             }
             else
             {
@@ -931,8 +958,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
     if (m_processKind == ProcessKind::Main)
     {
-        // If we are the main function, we need to link in all the return continuations, and possibly the quickening slowpath
+        // If we are the main function, we need to link in all the return continuations, and possibly the quickening slowpath.
         //
+        // We also assign hot/cold section for each function.
+        // The main function and any return continuations directly/transitively used by the main function are hot,
+        // and everything else are cold.
+        //
+        ReleaseAssert(!m_wrapper->hasSection());
+        m_wrapper->setSection(x_hot_code_section_name);
 
         // Link in the quickening slow path if needed
         // We link in the quickening slow path before the return continuations so that related code stay closer to each other.
@@ -952,8 +985,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             //
             ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
 
-            ReleaseAssert(m_module->getFunction(expectedSpName) != nullptr);
-            ReleaseAssert(!m_module->getFunction(expectedSpName)->empty());
+            Function* linkedInFn = m_module->getFunction(expectedSpName);
+            ReleaseAssert(linkedInFn != nullptr);
+            ReleaseAssert(!linkedInFn->empty());
+            ReleaseAssert(!linkedInFn->hasSection());
+            linkedInFn->setSection(x_cold_code_section_name);
         }
 
         // Note that some of the return continuations could be dead (due to optimizations), however, since return continuations
@@ -980,9 +1016,21 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             //
             ReleaseAssert(linker.linkInModule(std::move(rcModule)) == false);
 
-            ReleaseAssert(m_module->getFunction(expectedRcName) != nullptr);
-            ReleaseAssert(!m_module->getFunction(expectedRcName)->empty());
+            Function* linkedInFn = m_module->getFunction(expectedRcName);
+            ReleaseAssert(linkedInFn != nullptr);
+            ReleaseAssert(!linkedInFn->empty());
+            ReleaseAssert(!linkedInFn->hasSection());
+            if (fnNamesOfAllReturnContinuationsUsedByMainFn.count(expectedRcName))
+            {
+                fnNamesOfAllReturnContinuationsUsedByMainFn.erase(expectedRcName);
+                linkedInFn->setSection(x_hot_code_section_name);
+            }
+            else
+            {
+                linkedInFn->setSection(x_cold_code_section_name);
+            }
         }
+        ReleaseAssert(fnNamesOfAllReturnContinuationsUsedByMainFn.empty());
 
         // Similarly, some slow paths could be dead. But we need to link in everything first.
         //
@@ -998,8 +1046,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             //
             ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
 
-            ReleaseAssert(m_module->getFunction(expectedFnName) != nullptr);
-            ReleaseAssert(!m_module->getFunction(expectedFnName)->empty());
+            Function* linkedInFn = m_module->getFunction(expectedFnName);
+            ReleaseAssert(linkedInFn != nullptr);
+            ReleaseAssert(!linkedInFn->empty());
+            ReleaseAssert(!linkedInFn->hasSection());
+            linkedInFn->setSection(x_cold_code_section_name);
         }
 
         // Now, having linked in everything, we can strip dead return continuations and slow paths by
