@@ -297,7 +297,6 @@ struct GetByIdICInfo
     //
     bool m_mayHaveMetatable;
     int32_t m_slot;
-    SystemHeapPointer<void> m_hiddenClass;
 };
 
 struct GetByIntegerIndexICInfo
@@ -326,7 +325,6 @@ struct GetByIntegerIndexICInfo
     // so if the result turns out to be nil, we must inspect the metatable
     //
     bool m_mayHaveMetatable;
-    SystemHeapPointer<void> m_hiddenClass;
 };
 
 struct PutByIdICInfo
@@ -519,7 +517,6 @@ public:
     {
         ArrayType arrType = TCGet(self->m_arrayType);
 
-        icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
         icInfo.m_icKind = ComputeGetByIntegerIndexIcKindFromArrayType(arrType);
     }
@@ -640,15 +637,13 @@ public:
         return res;
     }
 
-    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PrepareGetById(T self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    template<typename U>
+    static void PrepareGetById(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
-        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
         HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
         assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
-        icInfo.m_hiddenClass = hiddenClass;
 
         uint32_t slotOrd;
         uint32_t inlineStorageCapacity;
@@ -715,6 +710,18 @@ public:
                 icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNilButUncacheable;
             }
         }
+    }
+
+    template<typename U>
+    static void PrepareGetById(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        return PrepareGetById(self->m_hiddenClass, propertyName, icInfo /*out*/);
+    }
+
+    template<typename U>
+    static void PrepareGetById(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        return PrepareGetById(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>

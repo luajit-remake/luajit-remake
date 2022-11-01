@@ -419,8 +419,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
         UserHeapPointer<HeapString> propToTest = strings[numStrings - 1];
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(curObject, propToTest, icInfo /*out*/);
-        ReleaseAssert(icInfo.m_hiddenClass.As() == TCGet(curObject->m_hiddenClass).As());
-        ReleaseAssert(icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        ReleaseAssert(TCGet(curObject->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
         ReleaseAssert(icInfo.m_mayHaveMetatable == false);
         ReleaseAssert(icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
     }
