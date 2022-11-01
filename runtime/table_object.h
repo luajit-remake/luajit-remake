@@ -325,6 +325,9 @@ struct GetByIntegerIndexICInfo
     // so if the result turns out to be nil, we must inspect the metatable
     //
     bool m_mayHaveMetatable;
+    // If 'm_isContinuous' is true, it means the array is continuous. This also implies that ICKind must be VectorStorage
+    //
+    bool m_isContinuous;
 };
 
 struct PutByIdICInfo
@@ -519,6 +522,57 @@ public:
 
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
         icInfo.m_icKind = ComputeGetByIntegerIndexIcKindFromArrayType(arrType);
+        icInfo.m_isContinuous = arrType.IsContinuous();
+    }
+
+    // Returns isSuccess = false if 'idx' does not fit in the vector storage
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static std::pair<TValue, bool /*isSuccess*/> WARN_UNUSED ALWAYS_INLINE TryAccessIndexInVectorStorage(T self, int64_t idx)
+    {
+#ifndef NDEBUG
+        ArrayType arrType = TCGet(self->m_arrayType);
+#endif
+        assert(arrType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
+        {
+            TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
+            // If the array is continuous, result must be non-nil
+            //
+            AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.Is<tNil>());
+            AssertImp(!res.Is<tNil>() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.Is<tInt32>());
+            AssertImp(!res.Is<tNil>() && arrType.ArrayKind() == ArrayType::Kind::Double, res.Is<tDouble>());
+            return std::make_pair(res, true /*isSuccess*/);
+        }
+
+        return std::make_pair(TValue(), false /*isSuccess*/);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED ALWAYS_INLINE CheckIndexFitsInContinuousArray(T self, int64_t idx)
+    {
+#ifndef NDEBUG
+        ArrayType arrType = TCGet(self->m_arrayType);
+#endif
+        assert(arrType.IsContinuous());
+        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
+        {
+#ifndef NDEBUG
+            TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
+            assert(!res.Is<tNil>());
+            AssertImp(arrType.ArrayKind() == ArrayType::Kind::Int32, res.Is<tInt32>());
+            AssertImp(arrType.ArrayKind() == ArrayType::Kind::Double, res.Is<tDouble>());
+#endif
+            return true;
+        }
+
+#ifndef NDEBUG
+        {
+            auto [res, success] = TryAccessIndexInVectorStorage(self, idx);
+            AssertImp(success, res.IsNil());
+        }
+#endif
+        return false;
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
@@ -536,17 +590,12 @@ public:
 
         // Check if the index is in vector storage range
         //
-        // TODO: we should add optimization for continuous vector as the metatable check can potentially be skipped
-        //
-        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
         {
-            TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
-            // If the array is actually continuous, result must be non-nil
-            //
-            AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.IsNil());
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32());
-            AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble());
-            return res;
+            auto [res, success] = TryAccessIndexInVectorStorage(self, idx);
+            if (likely(success))
+            {
+                return res;
+            }
         }
 
         // Now we know the index is outside vector storage range
@@ -622,7 +671,7 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue QueryArraySparseMap(T self, double idx)
+    static TValue __attribute__((__preserve_most__)) NO_INLINE QueryArraySparseMap(T self, double idx)
     {
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);

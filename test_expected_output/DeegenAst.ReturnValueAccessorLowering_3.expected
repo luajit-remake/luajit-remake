@@ -38,10 +38,10 @@ define dso_local ghccc void @__deegen_interpreter_op_test3_0_retcont_0(ptr %0, p
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
 __DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %33, %14
-  %.0.i = phi i64 [ %35, %33 ], [ %7, %14 ]
+  %.0.reg2mem.0.i = phi i64 [ %35, %33 ], [ %7, %14 ]
   %outputSlot = zext i32 %31 to i64
   %36 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %.0.i, ptr %36, align 8
+  store i64 %.0.reg2mem.0.i, ptr %36, align 8
   %37 = getelementptr inbounds i8, ptr %29, i64 10
   %38 = load i16, ptr %37, align 1
   %39 = zext i16 %38 to i64

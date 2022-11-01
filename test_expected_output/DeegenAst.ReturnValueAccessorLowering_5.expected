@@ -34,10 +34,10 @@ define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(ptr %0, p
   br i1 %30, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
 
 .lr.ph.i:                                         ; preds = %.lr.ph.i, %14
-  %.014.i = phi i64 [ %34, %.lr.ph.i ], [ %numRet, %14 ]
-  %33 = getelementptr inbounds i64, ptr %28, i64 %.014.i
+  %.014.reg2mem.0.i = phi i64 [ %34, %.lr.ph.i ], [ %numRet, %14 ]
+  %33 = getelementptr inbounds i64, ptr %28, i64 %.014.reg2mem.0.i
   store i64 %7, ptr %33, align 8, !tbaa !18
-  %34 = add nuw i64 %.014.i, 1
+  %34 = add nuw i64 %.014.reg2mem.0.i, 1
   %exitcond.not.i = icmp eq i64 %34, %29
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.lr.ph.i, !llvm.loop !20
 

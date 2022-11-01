@@ -69,8 +69,8 @@ define dso_local i32 @__deegen_inline_cache_body_0(ptr %0, i32 %1, i32 %2) #3 {
   br label %__deegen_inline_cache_body_0_tmp.exit
 
 __deegen_inline_cache_body_0_tmp.exit:            ; preds = %12, %7
-  %.0.i.i = phi i32 [ %11, %7 ], [ %13, %12 ]
-  ret i32 %.0.i.i
+  %.0.reg2mem.i.i.0.reg2mem.0 = phi i32 [ %11, %7 ], [ %13, %12 ]
+  ret i32 %.0.reg2mem.i.i.0.reg2mem.0
 }
 
 attributes #0 = { argmemonly mustprogress nocallback nofree nosync nounwind willreturn }

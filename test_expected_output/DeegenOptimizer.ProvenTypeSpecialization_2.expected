@@ -11,13 +11,13 @@ declare dso_local noundef zeroext i1 @_Z19DeegenImpl_TValueIsI7tDoubleEb6TValue(
 ; Function Attrs: mustprogress noreturn nounwind uwtable
 define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   %3 = tail call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI7tDoubleEb6TValue(i64 %1) #3
-  br i1 %3, label %4, label %5
+  br i1 %3, label %4, label %._crit_edge2
 
 4:                                                ; preds = %2
   tail call void @DeegenImpl_ReturnValue(i64 %0) #4
   unreachable
 
-5:                                                ; preds = %2
+._crit_edge2:                                     ; preds = %2
   tail call void @DeegenImpl_ThrowErrorCString(ptr noundef nonnull @.str) #4
   unreachable
 }

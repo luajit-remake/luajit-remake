@@ -17,12 +17,17 @@ declare dso_local noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64, i64) lo
 ; Function Attrs: mustprogress noreturn nounwind uwtable
 define dso_local void @testfn2(ptr noundef %0, i64 noundef %1) #3 {
   %3 = alloca %class.anon.2, align 1
+  %.sroa.012.0.copyload.reg2mem = alloca i64, align 8
+  %"reg2mem alloca point" = bitcast i32 0 to i32
   %.sroa.012.0.copyload = load i64, ptr %0, align 8, !tbaa.struct !2
-  %4 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %.sroa.012.0.copyload) #7
+  store i64 %.sroa.012.0.copyload, ptr %.sroa.012.0.copyload.reg2mem, align 8
+  %.sroa.012.0.copyload.reload59 = load i64, ptr %.sroa.012.0.copyload.reg2mem, align 8
+  %4 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %.sroa.012.0.copyload.reload59) #7
   br i1 %4, label %5, label %9
 
 5:                                                ; preds = %2
-  %6 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %.sroa.012.0.copyload) #7
+  %.sroa.012.0.copyload.reload58 = load i64, ptr %.sroa.012.0.copyload.reg2mem, align 8
+  %6 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %.sroa.012.0.copyload.reload58) #7
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3) #8
   %7 = call fastcc noundef ptr @"_ZZ7testfn2ENK3$_2cvPFvP6TValuemS1_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %3) #8
   %8 = ptrtoint ptr addrspace(256) %6 to i64
@@ -32,7 +37,8 @@ define dso_local void @testfn2(ptr noundef %0, i64 noundef %1) #3 {
 9:                                                ; preds = %2
   %10 = getelementptr inbounds %struct.TValue, ptr %0, i64 1
   %.sroa.02.0.copyload = load i64, ptr %10, align 8, !tbaa.struct !2
-  %11 = call noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64 %.sroa.012.0.copyload, i64 %.sroa.02.0.copyload) #8
+  %.sroa.012.0.copyload.reload = load i64, ptr %.sroa.012.0.copyload.reg2mem, align 8
+  %11 = call noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64 %.sroa.012.0.copyload.reload, i64 %.sroa.02.0.copyload) #8
   %12 = getelementptr inbounds %struct.TValue, ptr %0, i64 2
   %.sroa.01.0.copyload = load i64, ptr %12, align 8, !tbaa.struct !2
   %13 = getelementptr inbounds %struct.TValue, ptr %0, i64 3

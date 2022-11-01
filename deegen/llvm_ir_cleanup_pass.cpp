@@ -50,6 +50,7 @@
 #include "llvm/Transforms/Instrumentation/InstrProfiling.h"
 #include "llvm/Transforms/Instrumentation/MemProfiler.h"
 #include "llvm/Transforms/Instrumentation/PGOInstrumentation.h"
+#include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/ADCE.h"
 #include "llvm/Transforms/Scalar/AlignmentFromAssumptions.h"
 #include "llvm/Transforms/Scalar/AnnotationRemarks.h"
@@ -213,12 +214,25 @@ static ModuleInlinerWrapperPass BuildInlinerPipelineForDesugaring()
 
 namespace dast {
 
-// Logic stolen from llvm/lib/Passes/PassBuilder.cpp
-// function buildPerModuleDefaultPipeline
+// Most of the heavy-lifting logic below are stolen from llvm/lib/Passes/PassBuilder.cpp function buildPerModuleDefaultPipeline.
+// Some adaptions are made to fit our purpose.
 //
 void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
 {
     ValidateLLVMModule(module);
+
+    // It turns out that LLVM's SROA pass is not perfect: if function X is already in SSA form,
+    // and it gets inlined into some other function Y, SROA often fails to fully decompose the
+    // structures in Y into scalars, and produce miserable results. It seems like LLVM's SROA
+    // expects that everything is in register form before inlining.
+    //
+    // Therefore, we first run the RegToMem pass to reverse everything back to register form.
+    //
+    {
+        legacy::PassManager Passes;
+        Passes.add(createDemoteRegisterToMemoryPass());
+        Passes.run(*module);
+    }
 
     PassBuilder passBuilder;
     LoopAnalysisManager LAM;

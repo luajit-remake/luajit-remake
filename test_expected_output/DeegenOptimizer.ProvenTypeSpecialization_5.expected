@@ -5,6 +5,7 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: mustprogress noreturn nounwind uwtable
 define dso_local void @testfn1(i64 %0, i64 %1) #0 {
+._crit_edge:
   tail call void @DeegenImpl_ReturnValue(i64 %1) #2
   unreachable
 }
