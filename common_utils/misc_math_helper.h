@@ -328,7 +328,17 @@ struct BitFieldMember
     static constexpr CarrierType x_maskForGet = static_cast<CarrierType>(((static_cast<CarrierType>(1) << width) - 1) << start);
     static constexpr CarrierType x_maskForSet = static_cast<CarrierType>(~x_maskForGet);
 
-    static void ALWAYS_INLINE Set(CarrierType& c, SelfType v)
+    static constexpr uint32_t BitOffset()
+    {
+        return x_fieldBitStart;
+    }
+
+    static constexpr uint32_t BitWidth()
+    {
+        return x_fieldBitWidth;
+    }
+
+    static constexpr void ALWAYS_INLINE Set(CarrierType& c, SelfType v)
     {
         CarrierType value;
         if constexpr(std::is_enum_v<SelfType>)
@@ -354,7 +364,7 @@ struct BitFieldMember
         assert(Get(c) == v);
     }
 
-    static SelfType ALWAYS_INLINE WARN_UNUSED Get(const CarrierType& c)
+    static constexpr SelfType ALWAYS_INLINE WARN_UNUSED Get(const CarrierType& c)
     {
         if constexpr(std::is_same_v<SelfType, bool>)
         {

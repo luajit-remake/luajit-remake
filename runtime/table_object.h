@@ -304,13 +304,13 @@ struct GetByIntegerIndexICInfo
 {
     enum class ICKind: uint8_t
     {
-        // It must return nil because we have no butterfly array part
-        //
-        NoArrayPart,
         // It must be in the vector storage if it exists
         // So if the index is not a vector index or not within range, the result must be nil
         //
         VectorStorage,
+        // It must return nil because we have no butterfly array part
+        //
+        NoArrayPart,
         // The array has a sparse map but the sparse map doesn't contain vector-qualifying index
         // So for vector-qualifying index it must be in vector range if exists, but otherwise it must be in sparse map if exists
         //
@@ -448,8 +448,72 @@ public:
         return true;
     }
 
-    // TODO: we should make this function a static mapping from arrType to GetByNumericICInfo for better perf
-    //
+    template<bool ignoreAssert = false>
+    static constexpr GetByIntegerIndexICInfo::ICKind NaiveComputeGetByIntegerIndexIcKindFromArrayType(ArrayType arrType)
+    {
+        // Check case: continuous array
+        //
+        if (likely(arrType.IsContinuous()))
+        {
+            return GetByIntegerIndexICInfo::ICKind::VectorStorage;
+        }
+        // Check case: No array at all
+        //
+        if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
+        {
+            assert(ignoreAssert || !arrType.HasSparseMap());
+            return GetByIntegerIndexICInfo::ICKind::NoArrayPart;
+        }
+
+        // Now, we know the array type contains a vector part and potentially a sparse map
+        //
+        if (unlikely(arrType.SparseMapContainsVectorIndex()))
+        {
+            return GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap;
+        }
+        else if (unlikely(arrType.HasSparseMap()))
+        {
+            return GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap;
+        }
+        else
+        {
+            return GetByIntegerIndexICInfo::ICKind::VectorStorage;
+        }
+    }
+
+    static consteval uint64_t ComputeGetByIntegerIndexIcBitVectorForNonContinuousArray()
+    {
+        // This is a trick that precomputes a bitvector to speed up some steps in PrepareGetByIntegerIndex
+        // We rely on the fact that ArrayType has 6 useful bits, and the mayHaveMetatable bit is bit 5
+        //
+        // So we can enumerate through all the ArrayType by enumerating [0, 32)
+        // There are 32 such combinations, and GetByIntegerIndexICInfo::ICKind also happens to take 2 bits
+        // So we can precompute all the results and store them into a uint64_t bitvector.
+        //
+        static_assert(ArrayType::x_usefulBitsMask == 63);
+        static_assert(ArrayType::BFM_mayHaveMetatable::BitOffset() == 5 && ArrayType::BFM_mayHaveMetatable::BitWidth() == 1);
+
+        uint64_t result = 0;
+        for (uint8_t mask = 0; mask < 32; mask++)
+        {
+            ArrayType arrType;
+            arrType.m_asValue = mask;
+            GetByIntegerIndexICInfo::ICKind kind = NaiveComputeGetByIntegerIndexIcKindFromArrayType<true /*ignoreAssert*/>(arrType);
+            uint64_t k64 = static_cast<uint64_t>(kind);
+            assert(k64 < 4);
+            result |= k64 << (mask * 2);
+        }
+        return result;
+    }
+
+    static constexpr GetByIntegerIndexICInfo::ICKind ComputeGetByIntegerIndexIcKindFromArrayType(ArrayType arrType)
+    {
+        constexpr uint64_t x_result_bitvector = ComputeGetByIntegerIndexIcBitVectorForNonContinuousArray();
+        GetByIntegerIndexICInfo::ICKind result = static_cast<GetByIntegerIndexICInfo::ICKind>((x_result_bitvector >> ((arrType.m_asValue * 2) & 63)) & 3);
+        assert(result == NaiveComputeGetByIntegerIndexIcKindFromArrayType(arrType));
+        return result;
+    }
+
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void ALWAYS_INLINE PrepareGetByIntegerIndex(T self, GetByIntegerIndexICInfo& icInfo /*out*/)
     {
@@ -457,42 +521,11 @@ public:
 
         icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
-
-        // Check case: continuous array
-        //
-        if (likely(arrType.IsContinuous()))
-        {
-            icInfo.m_icKind = GetByIntegerIndexICInfo::ICKind::VectorStorage;
-            return;
-        }
-
-        // Check case: No array at all
-        //
-        if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
-        {
-            assert(!arrType.HasSparseMap());
-            icInfo.m_icKind = GetByIntegerIndexICInfo::ICKind::NoArrayPart;
-            return;
-        }
-
-        // Now, we know the array type contains a vector part and potentially a sparse map
-        //
-        if (unlikely(arrType.SparseMapContainsVectorIndex()))
-        {
-            icInfo.m_icKind = GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap;
-        }
-        else if (unlikely(arrType.HasSparseMap()))
-        {
-            icInfo.m_icKind = GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap;
-        }
-        else
-        {
-            icInfo.m_icKind = GetByIntegerIndexICInfo::ICKind::VectorStorage;
-        }
+        icInfo.m_icKind = ComputeGetByIntegerIndexIcKindFromArrayType(arrType);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue ALWAYS_INLINE GetByIntegerIndex(T self, int64_t idx, GetByIntegerIndexICInfo icInfo)
+    static TValue GetByIntegerIndex(T self, int64_t idx, GetByIntegerIndexICInfo icInfo)
     {
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);

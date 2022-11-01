@@ -48,8 +48,8 @@ struct ArrayGrowthPolicy
 
 struct ArrayType
 {
-    ArrayType() : m_asValue(0) { }
-    ArrayType(uint8_t value) : m_asValue(value) { }
+    constexpr ArrayType() : m_asValue(0) { }
+    constexpr ArrayType(uint8_t value) : m_asValue(value) { }
 
     enum class Kind : uint8_t  // must fit in 2 bits
     {
@@ -68,47 +68,47 @@ struct ArrayType
 
     // The storage value is interpreted as the following:
     //
-    // bit 0: bool m_isContinuous
+    // bit 0-1: Kind m_kind
+    //   Whether all non-hole values in the array has the same type (including sparse map part)
+    //   If m_kind is Int32 or Double, then m_mayHaveMetatable must be false
+    //
+    using BFM_arrayKind = BitFieldMember<BitFieldCarrierType, Kind /*type*/, 0 /*start*/, 2 /*width*/>;
+    constexpr Kind ArrayKind() { return BFM_arrayKind::Get(m_asValue); }
+    constexpr void SetArrayKind(Kind v) { return BFM_arrayKind::Set(m_asValue, v); }
+
+    // bit 2: bool m_hasSparseMap
+    //   Whether there is a sparse map
+    //
+    using BFM_hasSparseMap = BitFieldMember<BitFieldCarrierType, bool /*type*/, 2 /*start*/, 1 /*width*/>;
+    constexpr bool HasSparseMap() { return BFM_hasSparseMap::Get(m_asValue); }
+    constexpr void SetHasSparseMap(bool v) { return BFM_hasSparseMap::Set(m_asValue, v); }
+
+    // bit 3: bool m_sparseMapContainsVectorIndex
+    //   Whether the sparse map contains index between [x_arrayBaseOrd, MaxInt32]
+    //   When this is true, the vector part can no longer grow
+    //
+    using BFM_sparseMapContainsVectorIndex = BitFieldMember<BitFieldCarrierType, bool /*type*/, 3 /*start*/, 1 /*width*/>;
+    constexpr bool SparseMapContainsVectorIndex() { return BFM_sparseMapContainsVectorIndex::Get(m_asValue); }
+    constexpr void SetSparseMapContainsVectorIndex(bool v) { return BFM_sparseMapContainsVectorIndex::Set(m_asValue, v); }
+
+    // bit 4: bool m_isContinuous
     //   Whether the array is continuous, i.e., entry is non-nil iff index in [x_arrayBaseOrd, len). Notes:
     //   (1) If Kind is NoButterflyArrayPart, m_isContinuous is false
     //   (2) m_isContinuous = true also implies m_hasSparseMap = false
     //
-    using BFM_isContinuous = BitFieldMember<BitFieldCarrierType, bool /*type*/, 0 /*start*/, 1 /*width*/>;
-    bool IsContinuous() { return BFM_isContinuous::Get(m_asValue); }
-    void SetIsContinuous(bool v) { return BFM_isContinuous::Set(m_asValue, v); }
-
-    // bit 1-2: Kind m_kind
-    //   Whether all non-hole values in the array has the same type (including sparse map part)
-    //   If m_kind is Int32 or Double, then m_mayHaveMetatable must be false
-    //
-    using BFM_arrayKind = BitFieldMember<BitFieldCarrierType, Kind /*type*/, 1 /*start*/, 2 /*width*/>;
-    Kind ArrayKind() { return BFM_arrayKind::Get(m_asValue); }
-    void SetArrayKind(Kind v) { return BFM_arrayKind::Set(m_asValue, v); }
-
-    // bit 3: bool m_hasSparseMap
-    //   Whether there is a sparse map
-    //
-    using BFM_hasSparseMap = BitFieldMember<BitFieldCarrierType, bool /*type*/, 3 /*start*/, 1 /*width*/>;
-    bool HasSparseMap() { return BFM_hasSparseMap::Get(m_asValue); }
-    void SetHasSparseMap(bool v) { return BFM_hasSparseMap::Set(m_asValue, v); }
-
-    // bit 4: bool m_sparseMapContainsVectorIndex
-    //   Whether the sparse map contains index between [x_arrayBaseOrd, MaxInt32]
-    //   When this is true, the vector part can no longer grow
-    //
-    using BFM_sparseMapContainsVectorIndex = BitFieldMember<BitFieldCarrierType, bool /*type*/, 4 /*start*/, 1 /*width*/>;
-    bool SparseMapContainsVectorIndex() { return BFM_sparseMapContainsVectorIndex::Get(m_asValue); }
-    void SetSparseMapContainsVectorIndex(bool v) { return BFM_sparseMapContainsVectorIndex::Set(m_asValue, v); }
+    using BFM_isContinuous = BitFieldMember<BitFieldCarrierType, bool /*type*/, 4 /*start*/, 1 /*width*/>;
+    constexpr bool IsContinuous() { return BFM_isContinuous::Get(m_asValue); }
+    constexpr void SetIsContinuous(bool v) { return BFM_isContinuous::Set(m_asValue, v); }
 
     // bit 5: bool m_mayHaveMetatable
     //   Whether the object may have a non-null metatable
     //   When this is true, nil values have to be handled specially since it may invoke metatable methods
     //
     using BFM_mayHaveMetatable = BitFieldMember<BitFieldCarrierType, bool /*type*/, 5 /*start*/, 1 /*width*/>;
-    bool MayHaveMetatable() { return BFM_mayHaveMetatable::Get(m_asValue); }
-    void SetMayHaveMetatable(bool v) { return BFM_mayHaveMetatable::Set(m_asValue, v); }
+    constexpr bool MayHaveMetatable() { return BFM_mayHaveMetatable::Get(m_asValue); }
+    constexpr void SetMayHaveMetatable(bool v) { return BFM_mayHaveMetatable::Set(m_asValue, v); }
 
-    static ArrayType GetInitialArrayType()
+    static constexpr ArrayType GetInitialArrayType()
     {
         return ArrayType(0);
     }
