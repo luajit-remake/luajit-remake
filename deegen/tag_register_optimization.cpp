@@ -44,7 +44,7 @@ static llvm::Value* WARN_UNUSED TryReplaceConstantByTagRegister(llvm::Constant* 
         }
     };
 
-    if (dyn_cast<ConstantInt>(c))
+    if (isa<ConstantInt>(c))
     {
         if (llvm_value_has_type<uint64_t>(c))
         {
@@ -55,10 +55,32 @@ static llvm::Value* WARN_UNUSED TryReplaceConstantByTagRegister(llvm::Constant* 
         return nullptr;
     }
 
-    // TODO: It would be nice if we could also handle aggregate types (ConstantDataSequential/ConstantAggregate),
-    // and maybe intToPtr ConstantExpr. But we currently don't have use cases for them right now (primarily
-    // because this pass happens before loop vectorization, so vector constants haven't been created by LLVM yet),
-    // so let's stay simple.
+    if (isa<ConstantExpr>(c))
+    {
+        ConstantExpr* expr = cast<ConstantExpr>(c);
+        if (expr->getOpcode() == Instruction::CastOps::IntToPtr)
+        {
+            Constant* op = expr->getOperand(0);
+            if (llvm_value_has_type<uint64_t>(op))
+            {
+                uint64_t cstVal = GetValueOfLLVMConstantInt<uint64_t>(op);
+                Value* val = replaceImpl(cstVal);
+                if (val == nullptr)
+                {
+                    return nullptr;
+                }
+                ReleaseAssert(llvm_value_has_type<uint64_t>(val));
+                Instruction* castInst = new IntToPtrInst(val, expr->getType(), "");
+                insertionSet.push_back(castInst);
+                return castInst;
+            }
+        }
+        return nullptr;
+    }
+
+    // TODO: It would be nice if we could also handle aggregate types (ConstantDataSequential/ConstantAggregate).
+    // But we currently don't have use cases for them right now (primarily because this pass happens before loop
+    // vectorization, so vector constants haven't been created by LLVM yet), so let's stay simple.
     //
 
     return nullptr;
