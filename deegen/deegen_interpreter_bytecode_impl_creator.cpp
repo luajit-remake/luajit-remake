@@ -18,37 +18,90 @@
 
 namespace dast {
 
-struct ReturnContinuationFinder
+struct ReturnContinuationAndSlowPathFinder
 {
-    ReturnContinuationFinder(llvm::Function* from)
+    ReturnContinuationAndSlowPathFinder(llvm::Function* from, bool ignoreSlowPaths)
+    {
+        m_ignoreSlowPaths = ignoreSlowPaths;
+
+        FindCalls(from);
+        FindSlowPaths(from);
+
+        // We disallow the entry function itself to also be a continuation,
+        // since the entry function cannot access return values while the continuation function can.
+        //
+        ReleaseAssert(!m_returnContinuations.count(from));
+
+        // The entry function should not be a slow path either: it just doesn't make sense
+        //
+        ReleaseAssert(!m_slowPaths.count(from));
+
+        ReleaseAssertImp(m_ignoreSlowPaths, m_slowPaths.size() == 0);
+
+        m_allResults = m_returnContinuations;
+        for (llvm::Function* func : m_slowPaths)
+        {
+            ReleaseAssert(!m_allResults.count(func));
+            m_allResults.insert(func);
+        }
+    }
+
+    bool m_ignoreSlowPaths;
+
+    std::unordered_set<llvm::Function*> m_returnContinuations;
+    std::unordered_set<llvm::Function*> m_slowPaths;
+
+    // This is simply m_slowPaths + m_returnContinuations
+    //
+    std::unordered_set<llvm::Function*> m_allResults;
+
+private:
+    void FindCalls(llvm::Function* from)
     {
         std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(from);
         for (AstMakeCall& amc : list)
         {
-            dfs(amc.m_continuation);
+            dfs(amc.m_continuation, true /*isCall*/);
         }
-        // We disallow the entry function itself to also be a continuation,
-        // since the entry function cannot access return values while the continuation function can.
-        //
-        ReleaseAssert(!m_result.count(from));
     }
 
-    std::unordered_set<llvm::Function*> m_result;
-
-private:
-    void dfs(llvm::Function* cur)
+    void FindSlowPaths(llvm::Function* from)
     {
-        if (cur == nullptr || m_result.count(cur))
+        if (m_ignoreSlowPaths) { return; }
+        std::vector<AstSlowPath> list = AstSlowPath::GetAllUseInFunction(from);
+        for (AstSlowPath& sp : list)
+        {
+            dfs(sp.GetImplFunction(), false /*isCall*/);
+        }
+    }
+
+    void dfs(llvm::Function* cur, bool isCall)
+    {
+        if (cur == nullptr)
         {
             return;
         }
-        m_result.insert(cur);
-
-        std::vector<AstMakeCall> list = AstMakeCall::GetAllUseInFunction(cur);
-        for (AstMakeCall& amc : list)
+        if (isCall)
         {
-            dfs(amc.m_continuation);
+            ReleaseAssert(!m_slowPaths.count(cur));
+            if (m_returnContinuations.count(cur))
+            {
+                return;
+            }
+            m_returnContinuations.insert(cur);
         }
+        else
+        {
+            ReleaseAssert(!m_returnContinuations.count(cur));
+            if (m_slowPaths.count(cur))
+            {
+                return;
+            }
+            m_slowPaths.insert(cur);
+        }
+
+        FindCalls(cur);
+        FindSlowPaths(cur);
     }
 };
 
@@ -202,43 +255,20 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     //
     if (m_processKind == ProcessKind::Main)
     {
-        // Find all the return continuations, give each of them a unique name, and create the declarations.
+        // Find all the return continuations and slow paths.
+        // For return continuations, give each of them a unique name right now, and create the declarations.
         // This is necessary for us to later link them together.
+        // For slow paths, we will rename them in the end since that's easier.
         //
-        // Note that if we have slow paths (created by EnterSlowPath API), we also need to recursively search for return
-        // continuations in each slow path. So find all the slow path functions first.
+        // Note that return continuations and slow paths may arbitrarily call each other, so the search needs
+        // to be recursive.
         //
-        std::vector<AstSlowPath> slowPaths = AstSlowPath::GetAllUseInFunction(m_impl);
-
-        // Note that LLVM optimizer in theory may tail-duplicate those slow path calls,
-        // so we need to de-duplicate the functions here
-        //
-        std::unordered_set<Function*> slowPathFns;
-        for (AstSlowPath& slowPath : slowPaths)
-        {
-            slowPathFns.insert(slowPath.GetImplFunction());
-        }
-
-        std::unordered_set<Function*> allReturnContFns;
-        auto scanForReturnContinuations = [&allReturnContFns](Function* func)
-        {
-            ReturnContinuationFinder rcFinder(func);
-            for (Function* rc : rcFinder.m_result)
-            {
-                allReturnContFns.insert(rc);
-            }
-        };
-
-        scanForReturnContinuations(m_impl);
-        for (Function* fn : slowPathFns)
-        {
-            scanForReturnContinuations(fn);
-        }
+        ReturnContinuationAndSlowPathFinder finder(m_impl, false /*ignoreSlowPaths*/);
 
         // Sort the return continuations by their original name for determinism
         //
         std::map<std::string /*fnName*/, Function*> sortedReturnContFns;
-        for (Function* fn : allReturnContFns)
+        for (Function* fn : finder.m_returnContinuations)
         {
             std::string fnName = fn->getName().str();
             ReleaseAssert(!sortedReturnContFns.count(fnName));
@@ -291,14 +321,25 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
             ReleaseAssert(m_impl->getName().str() == oldName);
         }
 
+        // Sanity check that all the slow path calls have the right types
+        //
+        for (Function* fn : finder.m_allResults)
+        {
+            std::vector<AstSlowPath> slowPaths = AstSlowPath::GetAllUseInFunction(fn);
+            for (AstSlowPath& sp : slowPaths)
+            {
+                sp.CheckWellFormedness(m_impl);
+            }
+        }
+
         // Process the slow paths if any.
         //
-        if (slowPaths.size() > 0)
+        if (finder.m_slowPaths.size() > 0)
         {
             // Sort all the functions by function name and process them in sorted order for determinism
             //
             std::map<std::string /*fnName*/, Function*> sortedFns;
-            for (Function* fn : slowPathFns)
+            for (Function* fn : finder.m_slowPaths)
             {
                 std::string fnName = fn->getName().str();
                 ReleaseAssert(!sortedFns.count(fnName));
@@ -502,18 +543,16 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::vector<Value*> opcodeValues;
-    if (m_processKind != ProcessKind::SlowPath)
+
+    for (auto& operand : m_bytecodeDef->m_list)
     {
-        for (auto& operand : m_bytecodeDef->m_list)
+        if (alreadyDecodedArgs.count(operand->OperandOrdinal()))
         {
-            if (alreadyDecodedArgs.count(operand->OperandOrdinal()))
-            {
-                opcodeValues.push_back(nullptr);
-            }
-            else
-            {
-                opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
-            }
+            opcodeValues.push_back(nullptr);
+        }
+        else
+        {
+            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
         }
     }
 
@@ -545,7 +584,6 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::vector<Value*> usageValues;
-    if (m_processKind != ProcessKind::SlowPath)
     {
         size_t ord = 0;
         for (auto& operand : m_bytecodeDef->m_list)
@@ -583,9 +621,14 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         }
         ReleaseAssert(ord == opcodeValues.size() && ord == usageValues.size());
     }
-    else
+
+    if (m_processKind == ProcessKind::SlowPath)
     {
-        usageValues = AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(m_impl, currentBlock);
+        std::vector<Value*> extraArgs = AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(static_cast<uint32_t>(usageValues.size()), m_impl, currentBlock);
+        for (Value* val : extraArgs)
+        {
+            usageValues.push_back(val);
+        }
     }
 
     {
@@ -723,17 +766,13 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     {
         TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPath(m_bytecodeDef, m_impl);
     }
-    else if (m_processKind == ProcessKind::ReturnContinuation)
+    else if (m_processKind == ProcessKind::ReturnContinuation || m_processKind == ProcessKind::SlowPath)
     {
         TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
     }
     else
     {
-        // For slow path, since we are currently not decoding the bytecode operands, we have no type information
-        // I think this should be fine since it's already the slow path, but maybe we can also provide the
-        // decoded bytecode operands to user so they can use it if desired?
-        //
-        ReleaseAssert(m_processKind == ProcessKind::SlowPath);
+        ReleaseAssert(false);
     }
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
@@ -830,8 +869,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     std::unordered_set<std::string> fnNamesOfAllReturnContinuationsUsedByMainFn;
     if (m_processKind == ProcessKind::Main)
     {
-        ReturnContinuationFinder rcFinder(m_impl);
-        for (Function* func : rcFinder.m_result)
+        ReturnContinuationAndSlowPathFinder rcFinder(m_impl, true /*ignoreSlowPaths*/);
+        for (Function* func : rcFinder.m_returnContinuations)
         {
             std::string rcImplName = func->getName().str();
             ReleaseAssert(rcImplName.ends_with("_impl"));

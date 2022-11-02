@@ -3,9 +3,7 @@
 
 #include "runtime_utils.h"
 
-namespace {
-
-void NO_RETURN CallOperationReturnContinuation(TValue* base, uint32_t /*numArgs*/, int32_t numRets)
+static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint32_t /*numArgs*/, int32_t numRets)
 {
     if (numRets < 0)
     {
@@ -19,7 +17,26 @@ void NO_RETURN CallOperationReturnContinuation(TValue* base, uint32_t /*numArgs*
 }
 
 template<bool passVariadicRes>
-void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRets*/)
+static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint32_t /*numArgs*/, int32_t /*numRets*/, TValue* argStart, uint32_t numArgs, TValue func)
+{
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+    if (unlikely(callTarget == nullptr))
+    {
+        ThrowError(MakeErrorMessageForUnableToCall(func));
+    }
+
+    if constexpr(passVariadicRes)
+    {
+        MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+    }
+    else
+    {
+        MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+    }
+}
+
+template<bool passVariadicRes>
+static void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRets*/)
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
@@ -36,25 +53,8 @@ void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRe
         }
     }
 
-    EnterSlowPath([argStart, numArgs, func]() {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
-        if (unlikely(callTarget == nullptr))
-        {
-            ThrowError(MakeErrorMessageForUnableToCall(func));
-        }
-
-        if constexpr(passVariadicRes)
-        {
-            MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
-        }
-        else
-        {
-            MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
-        }
-    });
+    EnterSlowPath<CheckMetatableSlowPath<passVariadicRes>>(argStart, numArgs, func);
 }
-
-}   // anonymous namespace
 
 DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes)
 {

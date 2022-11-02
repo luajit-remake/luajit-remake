@@ -46,7 +46,7 @@ extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVarArgs();
 extern "C" void DeegenImpl_StoreVarArgsAsVariadicResults();
 extern "C" TValue* WARN_UNUSED DeegenImpl_GetVariadicResultsStart();
 extern "C" size_t WARN_UNUSED DeegenImpl_GetNumVariadicResults();
-extern "C" void NO_RETURN DeegenImpl_EnterSlowPathLambda(const void* cp, const void* fpp);
+template<typename... Args> void NO_RETURN __attribute__((__nomerge__)) DeegenImpl_MarkEnterSlowPath(Args... args);
 
 // Return zero or one value as the result of the operation
 //
@@ -364,17 +364,53 @@ inline void ALWAYS_INLINE StoreReturnValuesAsVariadicResults()
     DeegenImpl_StoreReturnValuesAsVariadicResults();
 }
 
+namespace detail {
+
+// Cast each argument to the type expected by the slow path function
+//
+template<size_t ord, auto func, typename Arg, typename... Args>
+void ALWAYS_INLINE NO_RETURN EnterSlowPathApiImpl(Arg arg1, Args... args)
+{
+    using Func = decltype(func);
+    static_assert(std::is_trivially_copyable_v<Arg>);
+    if constexpr(ord == sizeof...(Args) + 1)
+    {
+        DeegenImpl_MarkEnterSlowPath(func, arg1, args...);
+    }
+    else
+    {
+        static_assert(ord < sizeof...(Args) + 1);
+        using expected_arg_t = arg_nth_t<Func, num_args_in_function<Func> - sizeof...(Args) - 1 + ord>;
+        EnterSlowPathApiImpl<ord + 1, func>(args..., static_cast<expected_arg_t>(arg1));
+    }
+}
+
+}   // namespace detail
+
 // Creates a slow path. The logic in the slow path will be separated out into a dedicated slow path function.
 // This helps improve code locality, and can also slightly improve the fast path code by reducing unnecessary
 // register shuffling, spilling and stack pointer adjustments.
 //
 // Note that the slow path will be executed as a tail call, so the lifetime of all the local variables in the
-// interpreter function has ended when the slow path lambda is executed. That is, it is illegal for the lambda
-// to capture or use any variable defined in the interpreter function by reference.
+// interpreter function has ended when the slow path lambda is executed. That is, it is illegal for the slow path
+// to use any variable defined in the interpreter function by reference.
 //
-template<typename Lambda>
-void ALWAYS_INLINE NO_RETURN EnterSlowPath(const Lambda& lambda)
+template<auto func, typename... Args>
+void ALWAYS_INLINE NO_RETURN EnterSlowPath(Args... args)
 {
-    static_assert(std::is_same_v<void, std::invoke_result_t<Lambda>>, "The lambda must take no arguments and return void");
-    DeegenImpl_EnterSlowPathLambda(DeegenGetLambdaClosureAddr(lambda), DeegenGetLambdaFunctorPP(lambda));
+    using Func = decltype(func);
+    static_assert(num_args_in_function<Func> >= sizeof...(Args));
+
+    // This will be problematic if the slow path function has more than 6 arguments and contains non-word-sized
+    // structure types, as under Linux ABI those structure won't be decomposed so we'll have a hard time to figure
+    // out how to reconstruct them at LLVM IR level. But for now let's stay simple since we don't have such use cases.
+    //
+    if constexpr(sizeof...(Args) == 0)
+    {
+        DeegenImpl_MarkEnterSlowPath(func);
+    }
+    else
+    {
+        detail::EnterSlowPathApiImpl<0, func>(args...);
+    }
 }

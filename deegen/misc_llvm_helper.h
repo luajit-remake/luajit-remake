@@ -670,6 +670,15 @@ inline void DumpLLVMModuleForDebug(llvm::Module* module)
     printf("%s\n", dump.c_str());
 }
 
+inline std::string DumpLLVMTypeAsString(llvm::Type* ty)
+{
+    std::string _dst;
+    llvm::raw_string_ostream rso(_dst /*target*/);
+    ty->print(rso);
+    std::string dump = rso.str();
+    return dump;
+}
+
 inline std::string DumpLLVMModuleAsString(llvm::Module* module)
 {
     std::string _dst;

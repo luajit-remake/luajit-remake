@@ -340,13 +340,7 @@ namespace detail {
 template<typename F, typename... T>
 struct CheckFirstTypeUniqueImpl
 {
-    template<typename... Res>
-    static consteval bool has_true(Res... args)
-    {
-        return (false || ... || args);
-    }
-
-    static constexpr bool value = !has_true(std::is_same_v<F, T>...);
+    static constexpr bool value = !(false || ... || std::is_same_v<F, T>);
 };
 
 // bool b, size_t k, typename F, typename... T:

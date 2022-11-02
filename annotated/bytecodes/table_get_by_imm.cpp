@@ -9,6 +9,77 @@ static void NO_RETURN TableGetByImmMetamethodCallContinuation(TValue /*base*/, i
     Return(GetReturnValue(0));
 }
 
+// Forward declaration due to mutual recursion
+//
+static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index, TValue metamethod);
+
+// At this point, we know that 'rawget(base, index)' is nil and 'base' might have a metatable
+//
+static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
+{
+    assert(base.Is<tTable>());
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
+    if (gmr.m_result.m_value != 0)
+    {
+        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+        {
+            TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+            if (!metamethod.Is<tNil>())
+            {
+                EnterSlowPath<HandleMetatableSlowPath>(base, index, metamethod);
+            }
+        }
+    }
+    Return(TValue::Create<tNil>());
+}
+
+// At this point, we know that 'base' is not a table
+//
+static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
+{
+    assert(!base.Is<tTable>());
+    TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
+    if (metamethod.Is<tNil>())
+    {
+        ThrowError("bad type for TableGetByImm");
+    }
+    EnterSlowPath<HandleMetatableSlowPath>(base, index, metamethod);
+}
+
+// At this point, we know that 'rawget(base, index)' is nil, and 'base' has a non-nil metamethod which we shall use
+//
+static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index, TValue metamethod)
+{
+    assert(!metamethod.Is<tNil>());
+
+    // If 'metamethod' is a function, we should invoke the metamethod
+    //
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), TableGetByImmMetamethodCallContinuation);
+    }
+
+    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+    //
+    base = metamethod;
+
+    if (unlikely(!base.Is<tTable>()))
+    {
+        EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
+    }
+
+    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    GetByIntegerIndexICInfo icInfo;
+    TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+    TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
+    if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+    {
+        EnterSlowPath<CheckMetatableSlowPath>(base, index);
+    }
+    Return(result);
+}
+
 enum class TableGetByImmIcResultKind
 {
     NotTable,           // The base object is not a table
@@ -18,11 +89,6 @@ enum class TableGetByImmIcResultKind
 
 static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
 {
-    enum {
-        SlowPathNotTableObject,
-        SlowPathCheckMetatable
-    } slowpathKind;
-
     if (likely(base.Is<tHeapEntity>()))
     {
         HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
@@ -128,95 +194,30 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             }   /* switch icKind */
         });
 
-        if (likely(resultKind == ResKind::NoMetatable))
+        switch (resultKind)
+        {
+        case ResKind::NoMetatable: [[likely]]
         {
             Return(result);
         }
-
-        if (unlikely(resultKind == ResKind::NotTable))
+        case ResKind::NotTable: [[unlikely]]
         {
-            slowpathKind = SlowPathNotTableObject;
-            goto slowpath;
+            EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
         }
-
-        assert(resultKind == ResKind::MayHaveMetatable);
-        if (likely(!result.Is<tNil>()))
+        case ResKind::MayHaveMetatable:
         {
-            Return(result);
+            if (likely(!result.Is<tNil>()))
+            {
+                Return(result);
+            }
+            EnterSlowPath<CheckMetatableSlowPath>(base, index);
         }
-        slowpathKind = SlowPathCheckMetatable;
-        goto slowpath;
+        }   /* switch resultKind*/
     }
     else
     {
-        slowpathKind = SlowPathNotTableObject;
-        goto slowpath;
+        EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
     }
-
-slowpath:
-    EnterSlowPath([base, index, slowpathKind]() mutable {
-        TValue metamethod;
-
-        switch (slowpathKind) {
-        case SlowPathNotTableObject: goto not_table_object;
-        case SlowPathCheckMetatable: goto check_metatable_for_table_object;
-        }   /* switch slowpathKind */
-
-check_metatable_for_table_object:
-        {
-            TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
-            if (gmr.m_result.m_value != 0)
-            {
-                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-                if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
-                {
-                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
-                    if (!metamethod.Is<tNil>())
-                    {
-                        goto handle_metamethod;
-                    }
-                }
-            }
-            Return(TValue::Create<tNil>());
-        }
-
-not_table_object:
-        metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
-        if (metamethod.Is<tNil>())
-        {
-            ThrowError("bad type for TableGetByImm");
-        }
-
-handle_metamethod:
-        // If 'metamethod' is a function, we should invoke the metamethod
-        //
-        if (likely(metamethod.Is<tFunction>()))
-        {
-            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), TableGetByImmMetamethodCallContinuation);
-        }
-
-        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
-        //
-        base = metamethod;
-
-        if (unlikely(!base.Is<tTable>()))
-        {
-            goto not_table_object;
-        }
-
-        {
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
-            TValue result;
-            GetByIntegerIndexICInfo icInfo;
-            TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
-            result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
-            if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
-            {
-                goto check_metatable_for_table_object;
-            }
-            Return(result);
-        }
-    });
 }
 
 DEEGEN_DEFINE_BYTECODE(TableGetByImm)

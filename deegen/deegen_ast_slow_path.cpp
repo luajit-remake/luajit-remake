@@ -13,81 +13,49 @@ static void AstSlowPathPreprocessOneUse(llvm::Module* module, llvm::CallInst* or
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
-    ReleaseAssert(origin->arg_size() == 2);
-    Value* captureV = origin->getArgOperand(0);
-    ReleaseAssert(llvm_value_has_type<void*>(captureV));
-    Value* lambdaPtrPtr = origin->getArgOperand(1);
-    ReleaseAssert(llvm_value_has_type<void*>(lambdaPtrPtr));
+    ReleaseAssert(origin->arg_size() >= 1);
 
-    AllocaInst* capture = dyn_cast<AllocaInst>(captureV);
-    ReleaseAssert(capture != nullptr);
-    Function* lambda = DeegenAnalyzeLambdaCapturePass::GetLambdaFunctionFromPtrPtr(lambdaPtrPtr);
-
+    Function* slowPathFn = dyn_cast<Function>(origin->getArgOperand(0));
+    if (slowPathFn == nullptr)
     {
-        // We don't really care what is captured in the lambda -- the RewriteClosureCall logic will
-        // gracefully handle them for us any way. The only thing we are concerned here is to ascertain
-        // that the lambda did not capture anything by reference: since we will eventually transform
-        // this call to a tail call, if the user captured anything by reference they will get invalidated.
-        //
-        // Note that this is only best-effort, not complete -- user may still create a local variable,
-        // take its address and store it in another variable, and capture that variable by value.
-        // We will not be able to catch illegal uses like that and will just generate buggy code...
-        //
-        CallInst* lambdaInfoDummyCall = DeegenAnalyzeLambdaCapturePass::GetLambdaCaptureInfo(capture);
-
-        using CaptureKind = DeegenAnalyzeLambdaCapturePass::CaptureKind;
-        for (uint32_t i = 1; i < lambdaInfoDummyCall->arg_size(); i += 3)
-        {
-            Value* arg2 = lambdaInfoDummyCall->getArgOperand(i + 1);
-            ReleaseAssert(llvm_value_has_type<uint64_t>(arg2));
-            CaptureKind captureKind = GetValueOfLLVMConstantInt<CaptureKind>(arg2);
-            ReleaseAssert(captureKind < CaptureKind::Invalid);
-
-            if (captureKind == CaptureKind::ByRefCaptureOfLocalVar)
-            {
-                fprintf(stderr, "[ERROR] The slow path body lambda should not capture anything by reference!\n");
-                abort();
-            }
-
-            if (captureKind != CaptureKind::ByValueCaptureOfLocalVar)
-            {
-                fprintf(stderr, "[ERROR] The slow path body lambda should be defined in a function, not in another lambda!\n");
-                abort();
-            }
-        }
-
-        // Having parsed the capture info, we can remove the dummy call
-        //
-        ReleaseAssert(lambdaInfoDummyCall->use_empty());
-        lambdaInfoDummyCall->eraseFromParent();
-        lambdaInfoDummyCall = nullptr;
+        fprintf(stderr, "[ERROR] The EnterSlowPath API did not specify the slow path function in the first parameter! Offending LLVM IR:\n");
+        origin->dump();
+        abort();
     }
 
-    // Now, rewrite the function
-    // Note that RewriteClosureCall expects us to temporarily remove the use of 'capture' in the call, so do it now
+    if (slowPathFn->getLinkage() != GlobalValue::InternalLinkage)
+    {
+        fprintf(stderr, "[ERROR] The function '%s' called by EnterSlowPath must be marked static!\n", slowPathFn->getName().str().c_str());
+        abort();
+    }
+
+    if (!slowPathFn->hasFnAttribute(Attribute::AttrKind::NoReturn))
+    {
+        fprintf(stderr, "[ERROR] The function '%s' called by EnterSlowPath must be NO_RETURN!\n", slowPathFn->getName().str().c_str());
+        abort();
+    }
+
+    // Rename slowPathFn if it hasn't been renamed yet
     //
-    origin->setArgOperand(0, UndefValue::get(llvm_type_of<void*>(ctx)));
-    std::string fnName = GetFirstAvailableFunctionNameWithPrefix(module, x_slowPathImplLambdaFunctionNamePrefix);
-    RewriteClosureToFunctionCall::Result res = RewriteClosureToFunctionCall::Run(lambda, capture, fnName);
-    ReleaseAssert(res.m_newFunc->getName() == fnName);
+    {
+        std::string slowPathFnName = slowPathFn->getName().str();
+        if (!slowPathFnName.starts_with(x_slowPathImplLambdaFunctionNamePrefix))
+        {
+            std::string newName = GetFirstAvailableFunctionNameWithPrefix(module, x_slowPathImplLambdaFunctionNamePrefix);
+            slowPathFn->setName(newName);
+            ReleaseAssert(slowPathFn->getName() == newName);
+        }
+    }
 
     // Replace 'origin' by the annotation call for later processing
     //
-    std::vector<Value*> args;
-    args.push_back(res.m_newFunc);
-    for (Value* val : res.m_args) { args.push_back(val); }
-
     std::vector<Type*> tys;
-    for (Value* val : args) { tys.push_back(val->getType()); }
+    for (uint32_t i = 0; i < origin->arg_size(); i++) { tys.push_back(origin->getArgOperand(i)->getType()); }
     FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, tys, false /*isVarArg*/);
     std::string annotationFnName = GetFirstAvailableFunctionNameWithPrefix(module, x_slowPathAnnotationLambdaFunctionNamePrefix);
     Function* annotationFn = Function::Create(fty, GlobalValue::ExternalLinkage, annotationFnName, module);
     ReleaseAssert(annotationFn->getName() == annotationFnName);
-    CallInst* replacement = CallInst::Create(annotationFn, args, "", origin /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<void>(origin));
-    ReleaseAssert(llvm_value_has_type<void>(replacement));
-    ReleaseAssert(origin->use_empty());
-    origin->eraseFromParent();
+    origin->setCalledFunction(annotationFn);
 }
 
 void AstSlowPath::PreprocessModule(llvm::Module* module)
@@ -104,9 +72,13 @@ void AstSlowPath::PreprocessModule(llvm::Module* module)
                 if (callInst != nullptr)
                 {
                     Function* callee = callInst->getCalledFunction();
-                    if (callee != nullptr && callee->getName().str() == "DeegenImpl_EnterSlowPathLambda")
+                    if (callee != nullptr)
                     {
-                        allUses.push_back(callInst);
+                        std::string fnName = callee->getName().str();
+                        if (IsCXXSymbol(fnName) && DemangleCXXSymbol(fnName).find(" DeegenImpl_MarkEnterSlowPath<") != std::string::npos)
+                        {
+                            allUses.push_back(callInst);
+                        }
                     }
                 }
             }
@@ -119,6 +91,80 @@ void AstSlowPath::PreprocessModule(llvm::Module* module)
     }
 
     ValidateLLVMModule(module);
+}
+
+void AstSlowPath::CheckWellFormedness(llvm::Function* bytecodeImplFunc)
+{
+    using namespace llvm;
+
+    // Type-check everything, and check that structures have been decomposed into scalars
+    //
+    Function* slowPathFn = dyn_cast<Function>(m_origin->getArgOperand(0));
+    if (slowPathFn == nullptr)
+    {
+        fprintf(stderr, "[ERROR] The EnterSlowPath API did not specify the slow path function in the first parameter! Offending LLVM IR:\n");
+        m_origin->dump();
+        abort();
+    }
+
+    if (bytecodeImplFunc->arg_size() > slowPathFn->arg_size())
+    {
+        fprintf(stderr, "[ERROR] The slow path function '%s' should start with the bytecode arguments.\n", slowPathFn->getName().str().c_str());
+        abort();
+    }
+
+    for (uint32_t i = 0; i < bytecodeImplFunc->arg_size(); i++)
+    {
+        Type* expectedTy = bytecodeImplFunc->getArg(i)->getType();
+        Type* actualTy = slowPathFn->getArg(i)->getType();
+        if (actualTy != expectedTy)
+        {
+            fprintf(stderr, "[ERROR] The slow path function '%s' has unexpected argument type at arg %u (0-based). Expected %s got %s.\n",
+                    slowPathFn->getName().str().c_str(),
+                    static_cast<unsigned int>(i),
+                    DumpLLVMTypeAsString(expectedTy).c_str(),
+                    DumpLLVMTypeAsString(actualTy).c_str());
+            abort();
+        }
+    }
+
+    for (uint32_t i = 0; i < slowPathFn->arg_size(); i++)
+    {
+        Type* ty = slowPathFn->getArg(i)->getType();
+        if (!ty->isPointerTy() && !ty->isIntegerTy() && !ty->isDoubleTy())
+        {
+            fprintf(stderr, "[ERROR] The slow path function '%s' has unsupported argument type at arg %u (0-based). "
+                            "Only pointer, integer and double types are supported. Got %s instead.\n",
+                    slowPathFn->getName().str().c_str(), static_cast<unsigned int>(i), DumpLLVMTypeAsString(ty).c_str());
+            abort();
+        }
+    }
+
+    if (bytecodeImplFunc->arg_size() + m_origin->arg_size() - 1 != slowPathFn->arg_size())
+    {
+        fprintf(stderr, "[ERROR] The slow path function '%s' has unexpected number of arguments. This could either be a bug in your code "
+                        "or a deficiency in our system. You might want to workaround it by passing structures at the beginning.\n",
+                slowPathFn->getName().str().c_str());
+        abort();
+    }
+
+    for (uint32_t i = 1; i < m_origin->arg_size(); i++)
+    {
+        uint32_t slowPathFnArgOrd = static_cast<uint32_t>(bytecodeImplFunc->arg_size()) + i - 1;
+        Type* expectedTy = m_origin->getArgOperand(i)->getType();
+        Type* actualTy = slowPathFn->getArg(slowPathFnArgOrd)->getType();
+        if (actualTy != expectedTy)
+        {
+            fprintf(stderr, "[ERROR] The slow path function '%s' has unexpected argument type at arg %u (0-based). Expected %s got %s."
+                            "This could either be a bug in your code or a deficiency in our system. You might want to workaround it by "
+                            "passing structures at the beginning.\n",
+                    slowPathFn->getName().str().c_str(),
+                    static_cast<unsigned int>(slowPathFnArgOrd),
+                    DumpLLVMTypeAsString(expectedTy).c_str(),
+                    DumpLLVMTypeAsString(actualTy).c_str());
+            abort();
+        }
+    }
 }
 
 llvm::Function* WARN_UNUSED AstSlowPath::GetImplFunction()
@@ -346,14 +392,14 @@ void AstSlowPath::LowerForInterpreter(InterpreterBytecodeImplCreator* ifi)
     m_origin = nullptr;
 }
 
-std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(llvm::Function* implFunc, llvm::BasicBlock* bb)
+std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(uint32_t extraArgBegin, llvm::Function* implFunc, llvm::BasicBlock* bb)
 {
     using namespace llvm;
     LLVMContext& ctx = implFunc->getContext();
     std::vector<uint64_t> argOrdList;
     {
         std::vector<Type*> argTys;
-        for (uint32_t i = 0; i < implFunc->arg_size(); i++)
+        for (uint32_t i = extraArgBegin; i < implFunc->arg_size(); i++)
         {
             argTys.push_back(implFunc->getArg(i)->getType());
         }
@@ -368,7 +414,7 @@ std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapp
     {
         ReleaseAssert(argOrdList[i] < func->arg_size());
         Value* src = func->getArg(static_cast<uint32_t>(argOrdList[i]));
-        Type* dstTy = implFunc->getArg(i)->getType();
+        Type* dstTy = implFunc->getArg(extraArgBegin + i)->getType();
 
         Value* cvt = nullptr;
         if (llvm_value_has_type<double>(src))
@@ -417,7 +463,7 @@ std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapp
         ReleaseAssert(cvt != nullptr && cvt->getType() == dstTy);
         result.push_back(cvt);
     }
-    ReleaseAssert(result.size() == implFunc->arg_size());
+    ReleaseAssert(extraArgBegin + result.size() == implFunc->arg_size());
     return result;
 }
 
