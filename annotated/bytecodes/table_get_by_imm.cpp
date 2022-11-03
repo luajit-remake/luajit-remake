@@ -103,19 +103,19 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
                 return std::make_pair(TValue(), ResKind::NotTable);
             }
 
-            GetByIntegerIndexICInfo c_icInfo;
-            TableObject::PrepareGetByIntegerIndex(heapEntity, c_icInfo /*out*/);
-            ResKind c_resKind = c_icInfo.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
+            GetByIntegerIndexICInfo c_info;
+            TableObject::PrepareGetByIntegerIndex(heapEntity, c_info /*out*/);
+            ResKind c_resKind = c_info.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
 
             if (unlikely(TCGet(heapEntity->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure))
             {
                 // We cannot inline cache array access for CacheableDictionary or UncacheableDictionary
                 //
-                TValue res = TableObject::GetByIntegerIndex(heapEntity, index, c_icInfo);
+                TValue res = TableObject::GetByIntegerIndex(heapEntity, index, c_info);
                 return std::make_pair(res, c_resKind);
             }
 
-            if (likely(c_icInfo.m_isContinuous))
+            if (likely(c_info.m_isContinuous))
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
@@ -135,7 +135,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
                 });
             }
 
-            switch (c_icInfo.m_icKind)
+            switch (c_info.m_icKind)
             {
             case GetByIntegerIndexICInfo::ICKind::VectorStorage:
             {
