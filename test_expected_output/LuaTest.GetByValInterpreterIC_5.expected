@@ -1,0 +1,465 @@
+-- test 1 --
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+3
+3
+6
+6
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+123
+123
+nil
+nil
+nil
+nil
+nil
+nil
+3
+3
+6
+6
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+123
+123
+a
+a
+nil
+nil
+nil
+nil
+3
+3
+6
+6
+nil
+nil
+nil
+nil
+b
+b
+nil
+nil
+123
+123
+a
+a
+nil
+nil
+nil
+nil
+3
+3
+6
+6
+nil
+nil
+nil
+nil
+b
+b
+p
+p
+123
+123
+a
+a
+nil
+nil
+nil
+nil
+3
+3
+6
+6
+nil
+nil
+nil
+nil
+b
+b
+p
+p
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+nil
+nil
+3
+3
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+nil
+nil
+b
+b
+p
+p
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+3
+3
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+p
+p
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+3
+3
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+3
+3
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+3
+3
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+6
+6
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+8
+8
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	a8
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+8
+8
+16
+16
+c
+c
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+8
+8
+16
+16
+c
+c
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+d
+d
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+8
+8
+16
+16
+c
+c
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+d
+d
+nil
+nil
+in metatable (test 1), idx = 	2
+2333
+in metatable (test 1), idx = 	2
+2333
+888
+888
+456
+456
+8
+8
+16
+16
+c
+c
+nil
+nil
+123
+123
+d
+d
+nil
+nil
+nil
+nil
+888
+888
+456
+456
+8
+8
+16
+16
