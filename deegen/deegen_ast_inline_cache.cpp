@@ -1596,6 +1596,27 @@ void AstInlineCache::DoLoweringForInterpreter()
     // }
     //
 
+    // Create the 'isCacheable' variable, which should default to true, but can be set to false by 'SetUncacheable() API call
+    //
+    AllocaInst* isCacheableAlloca = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", &m_bodyFn->getEntryBlock().front() /*insertBefore*/);
+
+    {
+        // We should insert our init code after the first alloca, so that allocas come first and LLVM is happy.
+        // Find first non-alloca instruction in the entry block.
+        //
+        Instruction* insertionPt = nullptr;
+        for (Instruction& inst : m_bodyFn->getEntryBlock())
+        {
+            if (!isa<AllocaInst>(&inst))
+            {
+                insertionPt = &inst;
+                break;
+            }
+        }
+        ReleaseAssert(insertionPt != nullptr);
+        new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 1), isCacheableAlloca, insertionPt);
+    }
+
     std::unique_ptr<BytecodeMetadataStruct> ms = std::make_unique<BytecodeMetadataStruct>();
 
     Value* icPtr = m_icPtrOrigin;
@@ -1821,19 +1842,30 @@ void AstInlineCache::DoLoweringForInterpreter()
             // Generate the logic in the IC body that creates the IC state
             // Basically we need to create the IC state, then invoke the IC effect lambda
             //
-            Instruction* insertBefore = e.m_origin;
             Value* bodyIcPtr = e.m_icPtr;
             // For the interpreter, since by design we only have space for one IC entry,
             // currently the policy is that the new IC entry will always overwrite the old IC entry.
             //
+            // Check if the IC has been marked uncacheable by SetUncacheable() API. If that is the case, we must not create the IC.
+            //
+            Instruction* updateIcLogicInsertionPt = nullptr;
+            {
+                Value* isCacheableU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), isCacheableAlloca, "", e.m_origin /*insertBefore*/);
+                Value* isCacheable = new TruncInst(isCacheableU8,llvm_type_of<bool>(ctx), "", e.m_origin /*insertBefore*/);
+                updateIcLogicInsertionPt = SplitBlockAndInsertIfThen(isCacheable, e.m_origin /*splitBefore*/, false /*isUnreachable*/);
+                ReleaseAssert(isa<BranchInst>(updateIcLogicInsertionPt));
+                ReleaseAssert(!cast<BranchInst>(updateIcLogicInsertionPt)->isConditional() &&
+                              cast<BranchInst>(updateIcLogicInsertionPt)->getSuccessor(0) == e.m_origin->getParent());
+            }
+            ReleaseAssert(updateIcLogicInsertionPt != nullptr);
             // Write the IC key
             //
             {
                 ReleaseAssert(m_bodyFnIcKeyArgOrd < m_bodyFn->arg_size());
                 Value* icKeyToWrite = m_bodyFn->getArg(m_bodyFnIcKeyArgOrd);
                 ReleaseAssert(icKeyToWrite->getType() == m_icKey->getType());
-                Value* addr = ms_cachedIcVal->EmitGetAddress(module, bodyIcPtr, insertBefore);
-                new StoreInst(icKeyToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), insertBefore);
+                Value* addr = ms_cachedIcVal->EmitGetAddress(module, bodyIcPtr, updateIcLogicInsertionPt);
+                new StoreInst(icKeyToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
             }
             // Write the effect ordinal (if it is not elided)
             //
@@ -1845,10 +1877,10 @@ void AstInlineCache::DoLoweringForInterpreter()
                 {
                     args.push_back(it.m_valueInBodyFn);
                 }
-                Value* effectKindToWrite = CallInst::Create(effectOrdinalGetterFn, args, "", insertBefore);
+                Value* effectKindToWrite = CallInst::Create(effectOrdinalGetterFn, args, "", updateIcLogicInsertionPt);
                 ReleaseAssert(llvm_value_has_type<uint8_t>(effectKindToWrite));
-                Value* addr = ms_effectKind->EmitGetAddress(module, bodyIcPtr, insertBefore);
-                new StoreInst(effectKindToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), insertBefore);
+                Value* addr = ms_effectKind->EmitGetAddress(module, bodyIcPtr, updateIcLogicInsertionPt);
+                new StoreInst(effectKindToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
             }
             // Write the IC state
             {
@@ -1858,13 +1890,13 @@ void AstInlineCache::DoLoweringForInterpreter()
                 {
                     args.push_back(val);
                 }
-                CallInst* writeIcStateInst = CallInst::Create(e.m_icStateEncoder, args, "", insertBefore);
+                CallInst* writeIcStateInst = CallInst::Create(e.m_icStateEncoder, args, "", updateIcLogicInsertionPt);
                 ReleaseAssert(llvm_value_has_type<void>(writeIcStateInst));
             }
             // Replace the annotation dummy call by the actual call that executes the IC effect logic
             //
             ReleaseAssert(e.m_effectFnBody->arg_size() == 1);
-            CallInst* replacement = CallInst::Create(e.m_effectFnBody, { e.m_effectFnBodyCapture }, "", insertBefore);
+            CallInst* replacement = CallInst::Create(e.m_effectFnBody, { e.m_effectFnBodyCapture }, "", e.m_origin /*insertBefore*/);
             ReleaseAssert(replacement->getType() == e.m_origin->getType());
             if (!llvm_value_has_type<void>(replacement))
             {
@@ -1888,9 +1920,14 @@ void AstInlineCache::DoLoweringForInterpreter()
         }
     }
 
-    // TODO: lower the setUncachable API and any other misc API we will need
+    // Lower the SetUncacheable() APIs
     //
-    ReleaseAssert(m_setUncacheableApiCalls.size() == 0 && "unimplemented");
+    for (CallInst* setUncacheableApiCall : m_setUncacheableApiCalls)
+    {
+        ReleaseAssert(llvm_value_has_type<void>(setUncacheableApiCall));
+        new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), isCacheableAlloca, setUncacheableApiCall /*insertBefore*/);
+        setUncacheableApiCall->eraseFromParent();
+    }
 
     // Create the slow path logic, which should simply call the IC body
     //

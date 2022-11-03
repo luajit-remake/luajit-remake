@@ -111,8 +111,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 // We cannot inline cache array access for CacheableDictionary or UncacheableDictionary
                 //
-                TValue res = TableObject::GetByIntegerIndex(heapEntity, index, c_info);
-                return std::make_pair(res, c_resKind);
+                ic->SetUncacheable();
             }
 
             if (likely(c_info.m_isContinuous))
