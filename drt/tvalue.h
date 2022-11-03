@@ -159,6 +159,15 @@ struct TValue
 
     HeapEntityType ALWAYS_INLINE GetHeapEntityType() const;
 
+    // Interpret the TValue as a double.
+    // This means that if it is indeed a double, its value will be returned.
+    // If it is not a double, due to the boxing scheme, the returned value will be a double NaN.
+    //
+    double ALWAYS_INLINE ViewAsDouble() const
+    {
+        return cxx2a_bit_cast<double>(m_value);
+    }
+
     double ALWAYS_INLINE AsDouble() const
     {
         assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());

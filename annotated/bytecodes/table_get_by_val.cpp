@@ -1,4 +1,5 @@
 #include "api_define_bytecode.h"
+#include "api_inline_cache.h"
 #include "deegen_api.h"
 
 #include "runtime_utils.h"
@@ -8,118 +9,273 @@ static void NO_RETURN TableGetByValMetamethodCallContinuation(TValue /*base*/, T
     Return(GetReturnValue(0));
 }
 
-static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
+static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromTableObject(HeapPtr<TableObject> tableObj)
 {
-    TValue metamethod;
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+    if (gmr.m_result.m_value != 0)
+    {
+        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+        {
+            TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
+            bool hasMetamethod = !metamethod.Is<tNil>();
+            return std::make_pair(hasMetamethod, metamethod);
+        }
+    }
+    return std::make_pair(false /*hasMetamethod*/, TValue());
+}
 
+// Forward declaration due to mutual recursion
+//
+static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base);
+
+// At this point, we know that 'base' is table and 'rawget(base, index)' is nil, and we need to check the metatable of 'base'
+//
+static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, int32_t index)
+{
+    assert(base.Is<tTable>());
+    HeapPtr<TableObject> tableObj = base.As<tTable>();
     while (true)
     {
-        if (unlikely(!base.Is<tTable>()))
+        // The invariant here is 'base' is table 'tableObj', 'base[index]' is nil, and we should check its metatable
+        //
+        auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+
+        if (likely(!hasMetamethod))
         {
-            goto not_table_object;
+            Return(TValue::Create<tNil>());
         }
 
+        // If 'metamethod' is a function, we should invoke the metamethod
+        //
+        if (likely(metamethod.Is<tFunction>()))
         {
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
-            TValue result;
-            if (tvIndex.Is<tInt32>())
+            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), TableGetByValMetamethodCallContinuation);
+        }
+
+        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+        //
+        base = metamethod;
+
+        if (unlikely(!base.Is<tTable>()))
+        {
+            EnterSlowPath<HandleNotTableObjectSlowPath>(base);
+        }
+
+        tableObj = base.As<tTable>();
+        GetByIntegerIndexICInfo icInfo;
+        TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+        TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
+        if (likely(!icInfo.m_mayHaveMetatable || !result.Is<tNil>()))
+        {
+            Return(result);
+        }
+    }
+}
+
+// At this point we know that 'index' is not a double representing an int32_t value
+//
+static void NO_RETURN HandleNotInt32IndexSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, double tvIndexViewAsDouble)
+{
+    if (likely(base.Is<tTable>()))
+    {
+        TValue tvIndex; tvIndex.m_value = cxx2a_bit_cast<uint64_t>(tvIndexViewAsDouble);
+        if (likely(tvIndex.Is<tHeapEntity>()))
+        {
+            while (true)
             {
-                // TODO: we must be careful that we cannot do IC if the hidden class is CacheableDictionary
-                //
-                GetByIntegerIndexICInfo icInfo;
-                TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
-                result = TableObject::GetByIntegerIndex(tableObj, tvIndex.As<tInt32>(), icInfo);
-                if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+                assert(base.Is<tTable>());
+                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                GetByIdICInfo icInfo;
+                TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo /*out*/);
+                TValue result = TableObject::GetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo);
+                if (likely(!icInfo.m_mayHaveMetatable || !result.Is<tNil>()))
                 {
-                    goto check_metatable;
+                    Return(result);
+                }
+
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+
+                if (likely(!hasMetamethod))
+                {
+                    Return(TValue::Create<tNil>());
+                }
+
+                // If 'metamethod' is a function, we should invoke the metamethod
+                //
+                if (likely(metamethod.Is<tFunction>()))
+                {
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                }
+
+                // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+                //
+                base = metamethod;
+
+                if (unlikely(!base.Is<tTable>()))
+                {
+                    EnterSlowPath<HandleNotTableObjectSlowPath>(base);
                 }
             }
-            else if (tvIndex.Is<tDouble>())
+        }
+        else if (likely(tvIndex.Is<tDouble>()))
+        {
+            double idx = tvIndex.As<tDouble>();
+            assert(!TableObject::IsVectorQualifyingIndex(idx));
+            while (true)
             {
-                double indexDouble = tvIndex.As<tDouble>();
-                if (unlikely(IsNaN(indexDouble)))
+                assert(base.Is<tTable>());
+                HeapPtr<TableObject> tableObj = base.As<tTable>();
+
+                TValue result;
+                if (unlikely(IsNaN(idx)))
                 {
                     // Indexing a table by 'NaN' for read is not an error, but always results in nil,
                     // because indexing a table by 'NaN' for write is an error
                     //
                     result = TValue::Create<tNil>();
-                    goto check_metatable;
                 }
                 else
                 {
+                    // We already know that 'idx' is not a vector-qualifying index
+                    // If it exists, it must be in the sparse map
+                    //
                     GetByIntegerIndexICInfo icInfo;
                     TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
-                    result = TableObject::GetByDoubleVal(tableObj, indexDouble, icInfo);
-                    if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+                    if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap ||
+                        icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap)
                     {
-                        goto check_metatable;
+                        assert(TCGet(tableObj->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+                        result = TableObject::QueryArraySparseMap(tableObj, idx);
+                    }
+                    else
+                    {
+                        result = TValue::Create<tNil>();
+                    }
+                    if (likely(!icInfo.m_mayHaveMetatable))
+                    {
+                        Return(result);
                     }
                 }
-            }
-            else if (tvIndex.Is<tHeapEntity>())
-            {
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo /*out*/);
-                result = TableObject::GetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo);
-                if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+                if (likely(!result.Is<tNil>()))
                 {
-                    goto check_metatable;
+                    Return(result);
                 }
+
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+
+                if (likely(!hasMetamethod))
+                {
+                    Return(TValue::Create<tNil>());
+                }
+
+                // If 'metamethod' is a function, we should invoke the metamethod
+                //
+                if (likely(metamethod.Is<tFunction>()))
+                {
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                }
+
+                // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+                //
+                base = metamethod;
+
+                if (unlikely(!base.Is<tTable>()))
+                {
+                    EnterSlowPath<HandleNotTableObjectSlowPath>(base);
+                }
+            }
+        }
+        else
+        {
+            assert(tvIndex.Is<tMIV>());
+            UserHeapPointer<HeapString> specialKey;
+            if (tvIndex.Is<tNil>())
+            {
+                specialKey.m_value = 0;
             }
             else
             {
-                assert(tvIndex.Is<tMIV>());
-                if (tvIndex.Is<tNil>())
+                assert(tvIndex.Is<tBool>());
+                specialKey = VM_GetSpecialKeyForBoolean(tvIndex.As<tBool>());
+                assert(specialKey.m_value != 0);
+            }
+
+            while (true)
+            {
+                assert(base.Is<tTable>());
+                HeapPtr<TableObject> tableObj = base.As<tTable>();
+
+                TValue result;
+                if (specialKey.m_value == 0)
                 {
                     // Indexing a table by 'nil' for read is not an error, but always results in nil,
                     // because indexing a table by 'nil' for write is an error
                     //
                     result = TValue::Create<tNil>();
-                    goto check_metatable;
                 }
                 else
                 {
-                    assert(tvIndex.Is<tBool>());
-                    UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(tvIndex.As<tBool>());
-
                     GetByIdICInfo icInfo;
                     TableObject::PrepareGetById(tableObj, specialKey, icInfo /*out*/);
                     result = TableObject::GetById(tableObj, specialKey.As<void>(), icInfo);
-                    if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
+                    if (likely(!icInfo.m_mayHaveMetatable))
                     {
-                        goto check_metatable;
+                        Return(result);
                     }
                 }
-            }
-
-            Return(result);
-
-check_metatable:
-            TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
-            if (gmr.m_result.m_value != 0)
-            {
-                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-                if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
+                if (likely(!result.Is<tNil>()))
                 {
-                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
-                    if (!metamethod.Is<tNil>())
-                    {
-                        goto handle_metamethod;
-                    }
+                    Return(result);
+                }
+
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+
+                if (likely(!hasMetamethod))
+                {
+                    Return(TValue::Create<tNil>());
+                }
+
+                // If 'metamethod' is a function, we should invoke the metamethod
+                //
+                if (likely(metamethod.Is<tFunction>()))
+                {
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                }
+
+                // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+                //
+                base = metamethod;
+
+                if (unlikely(!base.Is<tTable>()))
+                {
+                    EnterSlowPath<HandleNotTableObjectSlowPath>(base);
                 }
             }
-
-            Return(result);
         }
+    }
+    else
+    {
+        EnterSlowPath<HandleNotTableObjectSlowPath>(base);
+    }
+}
 
-not_table_object:
-        metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
+// This handles the case where 'base' is not a table.
+// This is going to be an insanely slow path any way, so just let it decode 'tvIndex' from the bytecode struct
+// (since in the main function fast path, the index is stored as a double in FPR, which requires an instruction to move it to GPR)
+// However, note that 'base' must be passed in because it might be different from the original 'base'.
+//
+static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base)
+{
+    while (true)
+    {
+        assert(!base.Is<tTable>());
+        TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
         if (metamethod.Is<tNil>())
         {
             ThrowError("bad type for TableGetByVal");
         }
 
-handle_metamethod:
         // If 'metamethod' is a function, we should invoke the metamethod
         //
         if (likely(metamethod.Is<tFunction>()))
@@ -130,6 +286,183 @@ handle_metamethod:
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
         //
         base = metamethod;
+
+        if (likely(base.Is<tTable>()))
+        {
+            break;
+        }
+    }
+
+    double idxDbl = tvIndex.ViewAsDouble();
+    int32_t idx32 = static_cast<int32_t>(idxDbl);
+    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(idx32))))
+    {
+        // tvIndex is a double that represents a int32_t value
+        //
+        assert(base.Is<tTable>());
+        HeapPtr<TableObject> tableObj = base.As<tTable>();
+        GetByIntegerIndexICInfo icInfo;
+        TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+        TValue result = TableObject::GetByIntegerIndex(tableObj, idx32, icInfo);
+        if (likely(!icInfo.m_mayHaveMetatable || !result.Is<tNil>()))
+        {
+            Return(result);
+        }
+
+        EnterSlowPath<Int32IndexCheckMetatableSlowPath>(base, idx32);
+    }
+    else
+    {
+        // Now, we know 'tvIndex' is not a int32 value, we can delegate to HandleNotInt32IndexSlowPath.
+        // Note that we already have made forward progress (by checking metatable of 'base'), so the recursion here is fine.
+        //
+        EnterSlowPath<HandleNotInt32IndexSlowPath>(base, idxDbl);
+    }
+}
+
+enum class TableGetByValIcResultKind
+{
+    NotTable,           // The base object is not a table
+    MayHaveMetatable,   // The base object is a table that may have metatable
+    NoMetatable         // The base object is a table that is guaranteed to have no metatable
+};
+
+static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
+{
+    double idxDbl = tvIndex.ViewAsDouble();
+    int32_t idx32 = static_cast<int32_t>(idxDbl);
+    // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int32 value. It is correct because:
+    // (1) If 'tvIndex' is a double, the correctness of the below check is clear.
+    // (2) If 'tvIndex' is not a double, then 'idxDbl' will be NaN, so the below check is doomed to fail, also as desired.
+    //
+    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(idx32))))
+    {
+        if (likely(base.Is<tHeapEntity>()))
+        {
+            HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+            ICHandler* ic = MakeInlineCache();
+            ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+            using ResKind = TableGetByValIcResultKind;
+            auto [result, resultKind] = ic->Body([ic, heapEntity, idx32]() -> std::pair<TValue, ResKind> {
+                if (unlikely(heapEntity->m_type != HeapEntityType::Table))
+                {
+                    return std::make_pair(TValue(), ResKind::NotTable);
+                }
+
+                GetByIntegerIndexICInfo c_info;
+                TableObject::PrepareGetByIntegerIndex(heapEntity, c_info /*out*/);
+                ResKind c_resKind = c_info.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
+
+                if (unlikely(TCGet(heapEntity->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure))
+                {
+                    // We cannot inline cache array access for CacheableDictionary or UncacheableDictionary
+                    //
+                    ic->SetUncacheable();
+                }
+
+                if (likely(c_info.m_isContinuous))
+                {
+                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                        IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                        bool isInRange = TableObject::CheckIndexFitsInContinuousArray(heapEntity, idx32);
+                        if (isInRange)
+                        {
+                            TValue res = *(heapEntity->m_butterfly->UnsafeGetInVectorIndexAddr(idx32));
+                            // We know that 'res' must not be nil thanks to the guarantee of continuous array, so no need to check metatable
+                            //
+                            assert(!res.Is<tNil>());
+                            return std::make_pair(res, ResKind::NoMetatable);
+                        }
+                        else
+                        {
+                            return std::make_pair(TValue::Create<tNil>(), c_resKind);
+                        }
+                    });
+                }
+
+                switch (c_info.m_icKind)
+                {
+                case GetByIntegerIndexICInfo::ICKind::VectorStorage: {
+                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                        IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        if (success)
+                        {
+                            return std::make_pair(res, c_resKind);
+                        }
+                        return std::make_pair(TValue::Create<tNil>(), c_resKind);
+                    });
+                }
+                case GetByIntegerIndexICInfo::ICKind::NoArrayPart: {
+                    return ic->Effect([c_resKind]() {
+                        IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                        return std::make_pair(TValue::Create<tNil>(), c_resKind);
+                    });
+                }
+                case GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap: {
+                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                        IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        if (success)
+                        {
+                            return std::make_pair(res, c_resKind);
+                        }
+                        if (idx32 < ArrayGrowthPolicy::x_arrayBaseOrd || idx32 > ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
+                        {
+                            return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(idx32)), c_resKind);
+                        }
+                        else
+                        {
+                            // The sparse map is known to not contain vector-qualifying index, so the result must be nil
+                            //
+                            return std::make_pair(TValue::Create<tNil>(), c_resKind);
+                        }
+                    });
+                }
+                case GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap: {
+                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                        IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
+                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        if (success)
+                        {
+                            return std::make_pair(res, c_resKind);
+                        }
+                        return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(idx32)), c_resKind);
+                    });
+                }
+                } /* switch icKind */
+            });
+
+            switch (resultKind)
+            {
+            case ResKind::NoMetatable: [[likely]]
+            {
+                Return(result);
+            }
+            case ResKind::NotTable: [[unlikely]]
+            {
+                EnterSlowPath<HandleNotTableObjectSlowPath>(base);
+            }
+            case ResKind::MayHaveMetatable:
+            {
+                if (likely(!result.Is<tNil>()))
+                {
+                    Return(result);
+                }
+                EnterSlowPath<Int32IndexCheckMetatableSlowPath>(base, idx32);
+            }
+            }   /* switch resultKind*/
+        }
+        else
+        {
+            EnterSlowPath<HandleNotTableObjectSlowPath>(base);
+        }
+    }
+    else
+    {
+        EnterSlowPath<HandleNotInt32IndexSlowPath>(base, idxDbl);
     }
 }
 

@@ -1811,16 +1811,29 @@ public:
         }
     }
 
+    static bool IsVectorQualifyingIndex(double index)
+    {
+        int64_t idx64;
+        if (IsInt64Index(index, idx64 /*out*/))
+        {
+            return idx64 >= ArrayGrowthPolicy::x_arrayBaseOrd && idx64 <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
     void PutIndexIntoSparseMap(VM* vm, bool isVectorQualifyingIndex, double index, TValue value)
     {
 #ifndef NDEBUG
         // Assert that the 'isVectorQualifyingIndex' parameter is accurate
         //
         {
+            AssertIff(isVectorQualifyingIndex, IsVectorQualifyingIndex(index));
             int64_t idx64;
             if (IsInt64Index(index, idx64 /*out*/))
             {
-                AssertIff(isVectorQualifyingIndex, idx64 >= ArrayGrowthPolicy::x_arrayBaseOrd && idx64 <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff);
                 // If the index is within vector storage range it should never reach this function
                 //
                 if (isVectorQualifyingIndex && m_butterfly)
