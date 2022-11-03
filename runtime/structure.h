@@ -43,7 +43,9 @@ struct ArrayGrowthPolicy
 
     // The growth factor for vector part
     //
-    constexpr static double x_vectorGrowthFactor = 2;
+    constexpr static uint32_t x_vectorGrowthFactor = 2;
+
+    static_assert(x_unconditionallySparseMapCutoff < std::numeric_limits<uint32_t>::max() / 2 / x_vectorGrowthFactor);
 };
 
 struct ArrayType

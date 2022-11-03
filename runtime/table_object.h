@@ -194,14 +194,39 @@ public:
 
     bool CanUseFastPathGetForContinuousArray(int64_t idx)
     {
-        assert(ArrayGrowthPolicy::x_arrayBaseOrd <= idx);
-        return idx < m_arrayLengthIfContinuous;
+        assert(IsContinuous());
+        // We want to compute 'ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous'
+        // but we do not want to emit two branches.
+        //
+        // The trick is to take advantage of the fact that m_arrayLengthIfContinuous > ArrayGrowthPolicy::x_arrayBaseOrd.
+        // So we can cast 'idx' to unsigned, and compare
+        //     idx - ArrayGrowthPolicy::x_arrayBaseOrd < m_arrayLengthIfContinuous - ArrayGrowthPolicy::x_arrayBaseOrd
+        //
+        // If idx < ArrayGrowthPolicy::x_arrayBaseOrd, we will underflow and get a huge number. But the right-hand-side will
+        // never underflow, so in that case LHS is guaranteed to be larger than RHS, as desired.
+        //
+        uint64_t lhs = static_cast<uint64_t>(idx) - ArrayGrowthPolicy::x_arrayBaseOrd;
+        uint64_t rhs = static_cast<uint64_t>(static_cast<int64_t>(m_arrayLengthIfContinuous)) - ArrayGrowthPolicy::x_arrayBaseOrd;
+        bool result = lhs < rhs;
+        // Just sanity check we didn't screw anything up..
+        //
+        AssertIff(result, ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous);
+        return result;
     }
 
     bool IndexFitsInVectorCapacity(int64_t idx)
     {
-        assert(ArrayGrowthPolicy::x_arrayBaseOrd <= idx);
-        return idx < m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd;
+        // Similar to the above function, we want to compute
+        //     ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd
+        // and we use the same trick to only produce one branch.
+        //
+        uint64_t lhs = static_cast<uint64_t>(idx) - ArrayGrowthPolicy::x_arrayBaseOrd;
+        uint64_t rhs = static_cast<uint64_t>(m_arrayStorageCapacity);
+        bool result = lhs < rhs;
+        // Just sanity check we didn't screw anything up..
+        //
+        AssertIff(result, ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < static_cast<int64_t>(m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
+        return result;
     }
 
     bool HasSparseMap()
@@ -227,7 +252,7 @@ public:
 
     // The capacity of the array vector storage part
     //
-    int32_t m_arrayStorageCapacity;
+    uint32_t m_arrayStorageCapacity;
 };
 // This is very hacky: ButterflyHeader has a size of 1 slot, the Butterfly pointer points at the start of ButterflyHeader, and in Lua array is 1-based.
 // This allows us to directly use ((TValue*)butterflyPtr)[index] to do array indexing
@@ -534,12 +559,12 @@ public:
         ArrayType arrType = TCGet(self->m_arrayType);
 #endif
         assert(arrType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
-        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
+        if (likely(self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
         {
             TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
             // If the array is continuous, result must be non-nil
             //
-            AssertImp(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.Is<tNil>());
+            AssertImp(arrType.IsContinuous() && self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx), !res.Is<tNil>());
             AssertImp(!res.Is<tNil>() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.Is<tInt32>());
             AssertImp(!res.Is<tNil>() && arrType.ArrayKind() == ArrayType::Kind::Double, res.Is<tDouble>());
             return std::make_pair(res, true /*isSuccess*/);
@@ -555,7 +580,7 @@ public:
         ArrayType arrType = TCGet(self->m_arrayType);
 #endif
         assert(arrType.IsContinuous());
-        if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= idx && self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
+        if (likely(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
         {
 #ifndef NDEBUG
             TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
@@ -1022,7 +1047,7 @@ public:
             }
             else
             {
-                butterfly->GetHeader()->m_arrayStorageCapacity = static_cast<int32_t>(newCapacity);
+                butterfly->GetHeader()->m_arrayStorageCapacity = newCapacity;
                 butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
 
                 uint64_t nilVal = TValue::Nil().m_value;
@@ -1038,7 +1063,7 @@ public:
         }
         else
         {
-            uint32_t oldArrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
+            uint32_t oldArrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
             uint32_t oldNamedStorageCapacity;
             HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             if (hiddenClassTy == HeapEntityType::Structure)
@@ -1108,7 +1133,7 @@ public:
             Butterfly* butterfly = reinterpret_cast<Butterfly*>(newButterflyStart + offset);
             if constexpr(!isGrowNamedStorage)
             {
-                butterfly->GetHeader()->m_arrayStorageCapacity = static_cast<int32_t>(newCapacity);
+                butterfly->GetHeader()->m_arrayStorageCapacity = newCapacity;
             }
             m_butterfly = butterfly;
         }
@@ -1373,7 +1398,7 @@ public:
             //
             assert(!value.IsNil());
             Butterfly* butterfly = self->m_butterfly;
-            if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= index && butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(index)))
+            if (likely(butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(index)))
             {
                 // The put is into a continuous array, we can just do it
                 //
@@ -1384,8 +1409,8 @@ public:
             {
                 // The put will extend the array length by 1. We can do it as long as we have enough capacity
                 //
-                assert(index <= butterfly->GetHeader()->m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd);
-                if (unlikely(index == butterfly->GetHeader()->m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd))
+                assert(index <= static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
+                if (unlikely(index == static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd))
                 {
                     return false;
                 }
@@ -1401,7 +1426,7 @@ public:
         case PutByIntegerIndexICInfo::IndexCheckKind::InBound:
         {
             Butterfly* butterfly = self->m_butterfly;
-            if (likely(ArrayGrowthPolicy::x_arrayBaseOrd <= index && butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
+            if (likely(butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
             {
                 // The put is within bound, we can just do it
                 //
@@ -1500,7 +1525,7 @@ public:
             }
             else
             {
-                int32_t currentCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
+                int64_t currentCapacity = static_cast<int64_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
                 if (index >= currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd)
                 {
                     needToGrowOrCreateButterfly = true;
@@ -1558,7 +1583,7 @@ public:
         {
             Butterfly* butterfly = m_butterfly;
             assert(butterfly != nullptr);
-            int32_t currentCapacity = butterfly->GetHeader()->m_arrayStorageCapacity;
+            int64_t currentCapacity = static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity);
 
             if (index >= currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd)
             {
@@ -1974,7 +1999,7 @@ public:
         }
         else
         {
-            uint32_t arrayStorageCapacity = static_cast<uint32_t>(m_butterfly->GetHeader()->m_arrayStorageCapacity);
+            uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
 #ifndef NDEBUG
             HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             if (hiddenClassTy == HeapEntityType::Structure)
@@ -2323,7 +2348,7 @@ public:
         {
             Butterfly* butterfly = self->m_butterfly;
             TValue* tv = reinterpret_cast<TValue*>(butterfly);
-            int32_t arrayStorageCap = butterfly->GetHeader()->m_arrayStorageCapacity;
+            uint32_t arrayStorageCap = butterfly->GetHeader()->m_arrayStorageCapacity;
             if (arrayStorageCap > 0)
             {
                 // The array has a vector storage of at least length 1
@@ -2341,7 +2366,7 @@ public:
                 if (tv[arrayStorageCap].IsNil())
                 {
                     uint32_t lb = 1;
-                    uint32_t ub = static_cast<uint32_t>(arrayStorageCap);
+                    uint32_t ub = arrayStorageCap;
                     while (lb + 1 < ub)
                     {
                         uint32_t mid = (lb + ub) / 2;
@@ -2364,13 +2389,13 @@ public:
                 if (unlikely(arrType.HasSparseMap()))
                 {
                     ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
-                    return GetTableLengthWithLuaSemanticsSlowPath(sparseMap, static_cast<uint32_t>(arrayStorageCap));
+                    return GetTableLengthWithLuaSemanticsSlowPath(sparseMap, arrayStorageCap);
                 }
                 else
                 {
                     // The sparse map doesn't exist, so 'arrayStorageCap + 1' is nil
                     //
-                    return static_cast<uint32_t>(arrayStorageCap);
+                    return arrayStorageCap;
                 }
             }
             else
@@ -2708,7 +2733,7 @@ try_start_iterating_vector_storage:
         {
 try_find_next_vector_entry:
             Butterfly* butterfly = obj->m_butterfly;
-            int32_t vectorStorageCapacity = butterfly->GetHeader()->m_arrayStorageCapacity;
+            uint32_t vectorStorageCapacity = butterfly->GetHeader()->m_arrayStorageCapacity;
             // Note that Lua array is 1-based, so the valid range is [1, vectorStorageCapacity]
             //
             while (m_vectorStorageOrd < vectorStorageCapacity)
@@ -2869,14 +2894,14 @@ finished_iteration:
                 goto get_next_from_sparse_map;
             }
 
-            if (idx64 < ArrayGrowthPolicy::x_arrayBaseOrd || !obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64))
+            if (!obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64))
             {
                 goto get_next_from_sparse_map;
             }
 
             TableObjectIterator iter;
             iter.m_state = IteratorState::VectorStorage;
-            iter.m_vectorStorageOrd = static_cast<int32_t>(idx64);
+            iter.m_vectorStorageOrd = SafeIntegerCast<uint32_t>(idx64);
             out = iter.Advance(obj);
             return true;
         }
@@ -2911,7 +2936,7 @@ get_next_from_sparse_map:
 
     union {
         uint32_t m_namedPropertyOrd;
-        int32_t m_vectorStorageOrd;
+        uint32_t m_vectorStorageOrd;
         uint32_t m_sparseMapOrd;
     };
     IteratorState m_state;

@@ -63,7 +63,7 @@ TEST(ObjectGetPutById, Sanity)
         }
         else
         {
-            ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == static_cast<int32_t>(initArrayPartSize));
+            ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == initArrayPartSize);
             ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
             for (uint32_t i = 0; i < initArrayPartSize; i++)
             {
@@ -136,7 +136,7 @@ TEST(ObjectGetPutById, Sanity)
             else
             {
                 ReleaseAssert(curObject->m_butterfly != nullptr);
-                ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == static_cast<int32_t>(initArrayPartSize));
+                ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == initArrayPartSize);
                 ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
                 for (uint32_t k = 0; k < initArrayPartSize; k++)
                 {
@@ -267,7 +267,7 @@ TEST(ObjectGetPutById, Sanity)
     std::vector<HeapPtr<TableObject>> newObjectList;
     for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
     {
-        uint32_t initArrayPartSize = static_cast<uint32_t>(allObjects[testcase]->m_butterfly->GetHeader()->m_arrayStorageCapacity);
+        uint32_t initArrayPartSize = allObjects[testcase]->m_butterfly->GetHeader()->m_arrayStorageCapacity;
         HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
 
         std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];

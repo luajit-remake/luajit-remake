@@ -199,7 +199,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(!arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
                                     ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd - 1);
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(putLocation));
+                                    ReleaseAssert(putLocation >= ArrayGrowthPolicy::x_arrayBaseOrd && obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(putLocation));
                                     checkArrayKindForNonNilValueAndNoSparseMapCase(arrType);
                                 }
                                 else if (ArrayGrowthPolicy::x_alwaysVectorCutoff < putLocation && putLocation <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
@@ -260,7 +260,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                             }
 
                             int64_t index2 = ArrayGrowthPolicy::x_alwaysVectorCutoff / 2;
-                            int32_t oldVectorCapacity = obj->m_butterfly->GetHeader()->m_arrayStorageCapacity;
+                            uint32_t oldVectorCapacity = obj->m_butterfly->GetHeader()->m_arrayStorageCapacity;
 
                             {
                                 PutByIntegerIndexICInfo icInfo;
@@ -285,7 +285,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(arrType.HasSparseMap());
                                     ReleaseAssert(arrType.SparseMapContainsVectorIndex());
                                     ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
-                                    ReleaseAssert(!obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index2));
+                                    ReleaseAssert(index2 >= ArrayGrowthPolicy::x_arrayBaseOrd && !obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index2));
                                     ReleaseAssert(oldVectorCapacity == obj->m_butterfly->GetHeader()->m_arrayStorageCapacity);
                                 }
                                 else if (ArrayGrowthPolicy::x_arrayBaseOrd <= putLocation && putLocation <= ArrayGrowthPolicy::x_alwaysVectorCutoff)
@@ -294,7 +294,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(!arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
                                     checkArrayKindForNonNilValueAndNoSparseMapCase(arrType);
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index2));
+                                    ReleaseAssert(index2 >= ArrayGrowthPolicy::x_arrayBaseOrd && obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(index2));
                                 }
                                 else
                                 {
@@ -446,7 +446,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 }
 
                                 ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == static_cast<int32_t>(expectedContinuousLen));
-                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayStorageCapacity + ArrayGrowthPolicy::x_arrayBaseOrd >= static_cast<int32_t>(expectedContinuousLen));
+                                ReleaseAssert(static_cast<int64_t>(obj->m_butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd >= static_cast<int64_t>(expectedContinuousLen));
                                 for (size_t i = 0; i < x_validateLen; i++)
                                 {
                                     GetByIntegerIndexICInfo icInfo;
@@ -1017,7 +1017,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                     {
                         // If the density is low, the array is guaranteed to become sparse map at x_alwaysVectorCutoff * x_vectorGrowthFactor
                         //
-                        multUplimit = static_cast<int>(ArrayGrowthPolicy::x_alwaysVectorCutoff * ArrayGrowthPolicy::x_vectorGrowthFactor / gap + 10);
+                        multUplimit = static_cast<int>(ArrayGrowthPolicy::x_alwaysVectorCutoff * static_cast<int>(ArrayGrowthPolicy::x_vectorGrowthFactor) / gap + 10);
                     }
 
                     expected.resize(static_cast<size_t>(multUplimit * gap + 10));
