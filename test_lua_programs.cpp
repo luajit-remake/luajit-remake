@@ -814,4 +814,14 @@ TEST(LuaTest, TableGetByIdInterpreterIC)
     RunSimpleLuaTest("luatests/table_getbyid_interpreter_ic.lua.json");
 }
 
+TEST(LuaTest, GetByImmInterpreterIC_1)
+{
+    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_1.lua.json");
+}
+
+TEST(LuaTest, GetByImmInterpreterIC_2)
+{
+    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_2.lua.json");
+}
+
 }   // anonymous namespace
