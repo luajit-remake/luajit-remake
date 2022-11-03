@@ -31,6 +31,7 @@ add_library(deegen_utils
   deegen_rewrite_closure_call.cpp
   deegen_ast_slow_path.cpp
   deegen_call_inline_cache.cpp
+  llvm_flatten_select_structure_pass.cpp
 ) 
 
 # Build the main Futamura projection stage binary

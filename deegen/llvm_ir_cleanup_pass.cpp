@@ -110,6 +110,7 @@
 
 #include "misc_llvm_helper.h"
 #include "deegen_desugaring_level.h"
+#include "llvm_flatten_select_structure_pass.h"
 
 using namespace llvm;
 
@@ -226,7 +227,19 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
     // structures in Y into scalars, and produce miserable results. It seems like LLVM's SROA
     // expects that everything is in register form before inlining.
     //
-    // Therefore, we first run the RegToMem pass to reverse everything back to register form.
+    // Therefore we need to reverse everything back to register form before invoking LLVM's SROA
+    // pass (and the rest of the simplification pipeline).
+    //
+    // It turns out that LLVM's RegToMem pass is designed for this purpose. However, it turns out
+    // that the RegToMem pass alone is not sufficient, as it has trouble putting 'select'
+    // instruction on structure values back to register form.
+    //
+    // So we first run our home-brewed pass to rewrite 'select' instruction on structure values
+    // back to register form:
+    //
+    LLVMFlattenSelectOnStructureValueToBranchPass(module);
+
+    // And then run LLVM's RegToMem pass to put everything else back to register form:
     //
     {
         legacy::PassManager Passes;
