@@ -206,6 +206,66 @@ static llvm::Function* CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(llvm
     return f;
 }
 
+InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(InterpreterBytecodeImplCreator::ProcessFusedInIcEffectTag,
+                                                               BytecodeVariantDefinition* bytecodeDef,
+                                                               llvm::Function* implTmp,
+                                                               size_t icEffectOrd)
+    : m_bytecodeDef(bytecodeDef)
+    , m_module(nullptr)
+    , m_processKind(ProcessKind::FusedInInlineCacheEffect)
+    , m_impl(nullptr)
+    , m_wrapper(nullptr)
+    , m_valuePreserver()
+    , m_generated(false)
+{
+    using namespace llvm;
+    m_module = llvm::CloneModule(*implTmp->getParent());
+    m_impl = m_module->getFunction(implTmp->getName());
+    ReleaseAssert(m_impl != nullptr);
+    LLVMContext& ctx = m_module->getContext();
+
+    ReleaseAssert(m_impl->getLinkage() == GlobalValue::ExternalLinkage);
+
+    {
+        std::string implFuncName = m_impl->getName().str();
+        ReleaseAssert(implFuncName.ends_with("_impl"));
+        m_resultFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl")) + "_fused_ic_" + std::to_string(icEffectOrd);
+    }
+
+    // Populate the implementation of the inline cache adaption placeholder functions
+    //
+    {
+        Function* func = m_module->getFunction(x_adapt_ic_hit_check_behavior_placeholder_fn);
+        ReleaseAssert(func != nullptr);
+        ReleaseAssert(func->empty());
+        func->setLinkage(GlobalValue::InternalLinkage);
+        func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+        ReleaseAssert(func->arg_size() == 1);
+        Value* input = func->getArg(0);
+        ReleaseAssert(llvm_value_has_type<bool>(input) && llvm_type_has_type<bool>(func->getReturnType()));
+        ReturnInst::Create(ctx, input, bb);
+        CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
+        ValidateLLVMFunction(func);
+    }
+
+    {
+        Function* func = m_module->getFunction(x_adapt_get_ic_effect_ord_behavior_placeholder_fn);
+        ReleaseAssert(func != nullptr);
+        ReleaseAssert(func->empty());
+        func->setLinkage(GlobalValue::InternalLinkage);
+        func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+        ReleaseAssert(func->arg_size() == 1);
+        ReleaseAssert(llvm_value_has_type<uint8_t>(func->getArg(0)));
+        ReleaseAssert(llvm_type_has_type<uint8_t>(func->getReturnType()));
+        uint8_t icEffectOrdU8 = SafeIntegerCast<uint8_t>(icEffectOrd);
+        ReturnInst::Create(ctx, CreateLLVMConstantInt<uint8_t>(ctx, icEffectOrdU8), bb);
+        CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
+        ValidateLLVMFunction(func);
+    }
+}
+
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, ProcessKind processKind)
     : m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
@@ -216,9 +276,11 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     , m_generated(false)
 {
     using namespace llvm;
+    ReleaseAssert(m_processKind != ProcessKind::FusedInInlineCacheEffect);
     m_module = llvm::CloneModule(*implTmp->getParent());
     m_impl = m_module->getFunction(implTmp->getName());
     ReleaseAssert(m_impl != nullptr);
+    LLVMContext& ctx = m_module->getContext();
 
     if (m_impl->getLinkage() != GlobalValue::InternalLinkage)
     {
@@ -383,6 +445,30 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     if (m_processKind == ProcessKind::Main)
     {
         std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(m_impl);
+
+        bool hasICFusedIntoInterpreterOpcode = false;
+        size_t numFusedIcEffects = static_cast<size_t>(-1);
+        for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
+        {
+            AstInlineCache& ic = allIcUses[icOrd];
+            if (ic.m_shouldFuseICIntoInterpreterOpcode)
+            {
+                if (hasICFusedIntoInterpreterOpcode)
+                {
+                    fprintf(stderr, "[ERROR] Function '%s' contained more than one IC with FuseICIntoInterpreterOpcode attribute!\n", m_resultFuncName.c_str());
+                    abort();
+                }
+                hasICFusedIntoInterpreterOpcode = true;
+                numFusedIcEffects = ic.m_totalEffectKinds;
+            }
+        }
+
+        if (hasICFusedIntoInterpreterOpcode && m_bytecodeDef->HasQuickeningSlowPath())
+        {
+            fprintf(stderr, "[LOCKDOWN] FuseICIntoInterpreterOpcode() currently cannot be used together with EnableHotColdSplitting().\n");
+            abort();
+        }
+
         for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
         {
             AstInlineCache& ic = allIcUses[icOrd];
@@ -428,10 +514,67 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
                 }
             }
 
-            // Also, we need to give it one more chance to inline, because previously when the inline pass was run,
-            // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.
+            if (hasICFusedIntoInterpreterOpcode)
+            {
+                // The body fn should never be inlined since it's going to be called by multiple bytecodes
+                //
+                ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
+                ic.m_bodyFn->addFnAttr(Attribute::AttrKind::NoInline);
+            }
+            else
+            {
+                // We need to give it one more chance to inline, because previously when the inline pass was run,
+                // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.
+                //
+                LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
+            }
+        }
+
+        if (hasICFusedIntoInterpreterOpcode)
+        {
+            // Create the processors for each of the specialized implementation
             //
-            LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
+            for (size_t i = 0; i < numFusedIcEffects; i++)
+            {
+                std::unique_ptr<InterpreterBytecodeImplCreator> processor = std::make_unique<InterpreterBytecodeImplCreator>(
+                    ProcessFusedInIcEffectTag(), m_bytecodeDef, m_impl, i /*effectKindOrd*/);
+                m_affliatedBytecodeFnNames.push_back(processor->m_resultFuncName);
+                m_fusedICs.push_back(std::move(processor));
+            }
+
+            // Populate the implementation of the inline cache adaption placeholder functions
+            // Since we are only called for the empty IC case, we know that the IC hit check will always fail
+            //
+            {
+                Function* func = m_module->getFunction(x_adapt_ic_hit_check_behavior_placeholder_fn);
+                ReleaseAssert(func != nullptr);
+                ReleaseAssert(func->empty());
+                func->setLinkage(GlobalValue::InternalLinkage);
+                func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+                BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+                ReleaseAssert(func->arg_size() == 1);
+                ReleaseAssert(llvm_value_has_type<bool>(func->getArg(0)));
+                ReleaseAssert(llvm_type_has_type<bool>(func->getReturnType()));
+                ReturnInst::Create(ctx, CreateLLVMConstantInt<bool>(ctx, false), bb);
+                CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
+                ValidateLLVMFunction(func);
+            }
+
+            {
+                Function* func = m_module->getFunction(x_adapt_get_ic_effect_ord_behavior_placeholder_fn);
+                ReleaseAssert(func != nullptr);
+                ReleaseAssert(func->empty());
+                func->setLinkage(GlobalValue::InternalLinkage);
+                func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+                BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+                ReleaseAssert(func->arg_size() == 1);
+                Value* input = func->getArg(0);
+                ReleaseAssert(llvm_value_has_type<uint8_t>(input));
+                ReleaseAssert(llvm_type_has_type<uint8_t>(func->getReturnType()));
+                ReturnInst::Create(ctx, input, bb);
+                CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
+                ValidateLLVMFunction(func);
+            }
         }
     }
     else if (m_processKind == ProcessKind::ReturnContinuation || m_processKind == ProcessKind::SlowPath)
@@ -732,12 +875,17 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     ValidateLLVMFunction(m_wrapper);
 }
 
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
+InterpreterBytecodeImplCreator::ProcessBytecodeResult WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
 {
     // DEVNOTE: if you change this function, you likely need to correspondingly change how we process return continuations in DoLowering()
     //
     InterpreterBytecodeImplCreator ifi(bytecodeDef, impl, ProcessKind::Main);
-    return ifi.DoOptimizationAndLowering();
+    ProcessBytecodeResult res;
+    res.m_module = ifi.DoOptimizationAndLowering();
+    res.m_mainFunctionName = ifi.m_resultFuncName;
+    ReleaseAssert(res.m_mainFunctionName == GetInterpreterBytecodeFunctionCName(bytecodeDef));
+    res.m_affliatedFunctionNameList = ifi.GetAffliatedBytecodeFunctionList();
+    return res;
 }
 
 void InterpreterBytecodeImplCreator::DoOptimization()
@@ -749,7 +897,7 @@ void InterpreterBytecodeImplCreator::DoOptimization()
     // Run TValue typecheck strength reduction
     //
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugarUpToExcluding(DesugaringLevel::TypeSpecialization));
-    if (m_processKind == ProcessKind::Main)
+    if (m_processKind == ProcessKind::Main || m_processKind == ProcessKind::FusedInInlineCacheEffect)
     {
         if (m_bytecodeDef->HasQuickeningSlowPath())
         {
@@ -914,6 +1062,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     AstReturnValueAccessor::LowerForInterpreter(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
     LowerGetBytecodeMetadataPtrAPI();
+    LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
     AstSlowPath::LowerAllForInterpreter(this, m_wrapper);
 
     // All lowerings are complete.
@@ -1005,6 +1154,29 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         //
         ReleaseAssert(!m_wrapper->hasSection());
         m_wrapper->setSection(x_hot_code_section_name);
+
+        // Link in the FuseICIntoInterpreterOpcode specializations, if any
+        //
+        ReleaseAssert(m_affliatedBytecodeFnNames.size() == m_fusedICs.size());
+        for (size_t fusedInIcOrd = 0; fusedInIcOrd < m_fusedICs.size(); fusedInIcOrd++)
+        {
+            std::unique_ptr<Module> spModule = m_fusedICs[fusedInIcOrd]->DoOptimizationAndLowering();
+            std::string expectedFnName = m_fusedICs[fusedInIcOrd]->m_resultFuncName;
+            ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
+            ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
+            ReleaseAssert(expectedFnName == m_affliatedBytecodeFnNames[fusedInIcOrd]);
+
+            Linker linker(*m_module.get());
+            // linkInModule returns true on error
+            //
+            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+            Function* linkedInFn = m_module->getFunction(expectedFnName);
+            ReleaseAssert(linkedInFn != nullptr);
+            ReleaseAssert(!linkedInFn->empty());
+            ReleaseAssert(!linkedInFn->hasSection());
+            linkedInFn->setSection(x_hot_code_section_name);
+        }
 
         // Link in the quickening slow path if needed
         // We link in the quickening slow path before the return continuations so that related code stay closer to each other.

@@ -91,6 +91,9 @@ public:
     // The CallInst that invokes the IC body in the main function
     //
     llvm::CallInst* m_origin;
+    // Whether 'FuseICIntoInterpreterOpcode()' is specified
+    //
+    bool m_shouldFuseICIntoInterpreterOpcode;
     // The transformed body function (at this stage, the body lambda has been transformed into a normal function)
     //
     llvm::Function* m_bodyFn;
@@ -103,6 +106,9 @@ public:
     // The arg ordinal of the body function that passes over the current IC key
     //
     uint32_t m_bodyFnIcKeyArgOrd;
+    // The arg ordinal of the body function that passes over the bytecode ptr, only exists if m_shouldFuseICIntoInterpreterOpcode is true
+    //
+    uint32_t m_bodyFnBytecodePtrArgOrd;
     // The key and impossible value (if no impossible value is specified, the field is nullptr)
     //
     llvm::Value* m_icKey;
@@ -120,5 +126,21 @@ public:
     //
     std::unique_ptr<BytecodeMetadataStruct> m_icStruct;
 };
+
+constexpr const char* x_get_bytecode_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodePtrPlaceholder";
+
+class InterpreterBytecodeImplCreator;
+
+void LowerInterpreterGetBytecodePtrInternalAPI(InterpreterBytecodeImplCreator* ifi, llvm::Function* func);
+
+// Always takes i1 and returns i1
+// Only used if 'FuseICIntoInterpreterOpcode' is true
+//
+constexpr const char* x_adapt_ic_hit_check_behavior_placeholder_fn = "__deegen_internal_adapt_ic_hit_check_behavior_fn";
+
+// Always takes i8 and returns i8
+// Only used if 'FuseICIntoInterpreterOpcode' is true
+//
+constexpr const char* x_adapt_get_ic_effect_ord_behavior_placeholder_fn = "__deegen_internal_adapt_get_ic_effect_ord_behavior_fn";
 
 }   // namespace dast

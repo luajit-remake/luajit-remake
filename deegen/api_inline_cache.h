@@ -13,6 +13,7 @@ template<typename ResType> ResType DeegenImpl_MakeIC_MarkEffect(ICHandler* ic, c
 template<typename ResType> ResType DeegenImpl_MakeIC_MarkEffectValue(ICHandler* ic, const ResType& value);
 void DeegenImpl_MakeIC_SetUncacheableForThisExecution(ICHandler* ic);
 template<typename ICCaptureType, typename... Rest> void DeegenImpl_MakeIC_SpecializeIcEffect(bool isFullCoverage, const ICCaptureType* capture, Rest... values);
+void DeegenImpl_MakeIC_SetShouldFuseICIntoInterpreterOpcode(ICHandler* ic);
 
 template<typename ICKeyType>
 struct ICHandlerKeyRef
@@ -32,6 +33,9 @@ struct ICHandler
     MAKE_NONCOPYABLE(ICHandler);
     MAKE_NONMOVABLE(ICHandler);
 
+    // Specify the key that the IC is caching on.
+    // Currently only one key is supported, and it must be an integral type
+    //
     template<typename ICKeyType>
     ICHandlerKeyRef<ICKeyType>& ALWAYS_INLINE AddKey(ICKeyType icKey)
     {
@@ -40,6 +44,21 @@ struct ICHandler
         return *r;
     }
 
+    // Fuse the IC cached effect kind into the interpreter opcode.
+    // This removes one (often indirect) branch for the IC hit case in the interpreter, and improves
+    // code locality for each IC hit case (but increases overall code size as more code is produced overall).
+    //
+    // The following additional restrictions must be met, otherwise it's undefined behavior:
+    // (1) At most one IC in the function can have this attribute.
+    // (2) The IC may only be executed at most once in any possible execution path (that is, it must not show up in a loop).
+    //
+    void ALWAYS_INLINE FuseICIntoInterpreterOpcode()
+    {
+        DeegenImpl_MakeIC_SetShouldFuseICIntoInterpreterOpcode(this);
+    }
+
+    // Specify the main body of the IC
+    //
     template<typename LambdaType>
     std::invoke_result_t<LambdaType> ALWAYS_INLINE Body(const LambdaType& lambda)
     {

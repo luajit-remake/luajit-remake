@@ -94,6 +94,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
         HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+        ic->FuseICIntoInterpreterOpcode();
 
         using ResKind = TableGetByImmIcResultKind;
         auto [result, resultKind] = ic->Body([ic, heapEntity, index]() -> std::pair<TValue, ResKind>

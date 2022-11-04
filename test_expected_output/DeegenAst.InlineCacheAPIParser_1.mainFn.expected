@@ -6,7 +6,7 @@ target triple = "x86_64-unknown-linux-gnu"
 ; Function Attrs: mustprogress nounwind uwtable
 define dso_local i32 @testfn1(i32 noundef %0, i32 noundef %1) local_unnamed_addr #0 {
   %3 = tail call noundef ptr @__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_0() #3
-  %4 = tail call i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr %3, i32 %0, i32 123, ptr nonnull @__deegen_inline_cache_body_0, ptr %3, i32 %1, i32 %0)
+  %4 = tail call i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr %3, i32 %0, i32 123, ptr nonnull @__deegen_inline_cache_body_0, i1 false, i32 -1, ptr %3, i32 %1, i32 %0)
   ret i32 %4
 }
 
@@ -17,7 +17,7 @@ declare ptr @__DeegenInternal_AstIC_GetICPtr_IdentificationFunc_0() local_unname
 declare dso_local i32 @__deegen_inline_cache_body_0(ptr, i32, i32) #2
 
 ; Function Attrs: nounwind
-declare i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr, i32, i32, ptr, ptr, i32, i32) local_unnamed_addr #1
+declare i32 @__DeegenInternal_AstIC_Body_IdentificationFunc_0(ptr, i32, i32, ptr, i1, i32, ptr, i32, i32) local_unnamed_addr #1
 
 attributes #0 = { mustprogress nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }

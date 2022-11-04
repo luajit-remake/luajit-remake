@@ -83,6 +83,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 
     ICHandler* ic = MakeInlineCache();
     ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+    ic->FuseICIntoInterpreterOpcode();
     auto [result, mayHaveMt] = ic->Body([ic, base, index]() -> std::pair<TValue, bool> {
         GetByIdICInfo c_info;
         TableObject::PrepareGetById(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);

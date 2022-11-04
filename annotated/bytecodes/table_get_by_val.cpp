@@ -342,6 +342,8 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
             HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+            ic->FuseICIntoInterpreterOpcode();
+
             using ResKind = TableGetByValIcResultKind;
             auto [result, resultKind] = ic->Body([ic, heapEntity, idx32]() -> std::pair<TValue, ResKind> {
                 if (unlikely(heapEntity->m_type != HeapEntityType::Table))

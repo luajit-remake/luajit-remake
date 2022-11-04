@@ -630,6 +630,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         std::string bytecodeBuilderFunctionReturnType;
         std::string generatedClassName;
 
+        size_t totalCreatedBytecodeFunctionsInThisBytecode = 0;
         finalRes.m_allExternCDeclarations.push_back({});
         std::vector<std::string>& cdeclNameForVariants = finalRes.m_allExternCDeclarations.back();
 
@@ -683,14 +684,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             fprintf(fp, "        __builtin_unreachable();\n");
             fprintf(fp, "    }\n\n");
 
-            fprintf(fp, "protected:\n");
-            fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(bytecodeDef.size()));
             fprintf(fp, "private:\n");
         }
 
         std::vector<std::string> allBytecodeMetadataDefinitionNames;
 
-        int currentBytecodeVariantOrdinal = 0;
+        size_t currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
             // For now we just stay simple and unconditionally let all operands have 2 bytes, which is already stronger than LuaJIT's assumption
@@ -700,9 +699,11 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
             ReleaseAssert(implFunc != nullptr);
 
-            std::unique_ptr<Module> bytecodeImpl = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
-            std::string variantMainFunctionName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get());
-            for (Function& func : *bytecodeImpl.get())
+            InterpreterBytecodeImplCreator::ProcessBytecodeResult res = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
+            size_t totalSubVariantsInThisVariant = 1 + res.m_affliatedFunctionNameList.size();
+            totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
+            std::string variantMainFunctionName = res.m_mainFunctionName;
+            for (Function& func : *res.m_module.get())
             {
                 if (InterpreterBytecodeImplCreator::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
                 {
@@ -712,10 +713,14 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 }
             }
 
-            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(bytecodeImpl.get())));
-            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(bytecodeImpl.get())));
-            allBytecodeFunctions.push_back(std::move(bytecodeImpl));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(res.m_module.get())));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(res.m_module.get())));
+            allBytecodeFunctions.push_back(std::move(res.m_module));
             cdeclNameForVariants.push_back(variantMainFunctionName);
+            for (std::string& fnName : res.m_affliatedFunctionNameList)
+            {
+                cdeclNameForVariants.push_back(fnName);
+            }
 
             // If this variant has metadata, it's time to generate the corresponding definition now
             //
@@ -798,11 +803,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 fprintf(fp, "Local paramOut");
             }
             fprintf(fp, ") {\n");
-            // I believe this is not strictly required, but if this assumption doesn't hold,
-            // the 'variantOrd' part in the symbol name won't match the order here, which is going to be terrible for debugging
-            //
-            ReleaseAssert(static_cast<size_t>(currentBytecodeVariantOrdinal) == bytecodeVariantDef->m_variantOrd);
-            fprintf(fp, "        static constexpr size_t x_opcode = CRTP::template GetBytecodeOpcodeBase<%s>() + %d;\n", generatedClassName.c_str(), currentBytecodeVariantOrdinal);
+            fprintf(fp, "        static constexpr size_t x_opcode = CRTP::template GetBytecodeOpcodeBase<%s>() + %d;\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
             fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
 
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
@@ -920,8 +921,15 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             fprintf(fp, "    }\n\n");
 
-            currentBytecodeVariantOrdinal++;
+            currentBytecodeVariantOrdinal += totalSubVariantsInThisVariant;
         }
+
+        ReleaseAssert(currentBytecodeVariantOrdinal == totalCreatedBytecodeFunctionsInThisBytecode);
+        ReleaseAssert(cdeclNameForVariants.size() == totalCreatedBytecodeFunctionsInThisBytecode);
+
+        fprintf(fp, "protected:\n");
+        fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+
         // Emit out the bytecode metadata type list for this bytecode
         //
         fprintf(preFp, "using %s_BytecodeMetadataInfo = std::tuple<", generatedClassName.c_str());
@@ -933,8 +941,6 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         fprintf(preFp, ">;\n\n");
 
         fprintf(fp, "};\n\n");
-
-        ReleaseAssert(currentBytecodeVariantOrdinal == static_cast<int>(bytecodeDef.size()));
     }
 
     // We need to take care when putting everything together, so that we do not introduce linkage problems

@@ -9,9 +9,16 @@ class BytecodeVariantDefinition;
 class InterpreterBytecodeImplCreator
 {
 public:
+    struct ProcessBytecodeResult
+    {
+        std::unique_ptr<llvm::Module> m_module;
+        std::string m_mainFunctionName;
+        std::vector<std::string> m_affliatedFunctionNameList;
+    };
+
     // The end-to-end API that does everything
     //
-    static std::unique_ptr<llvm::Module> WARN_UNUSED ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl);
+    static ProcessBytecodeResult WARN_UNUSED ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl);
 
     enum class ProcessKind
     {
@@ -27,7 +34,10 @@ public:
         QuickeningSlowPath,
         // This is a slow path created by EnterSlowPath API
         //
-        SlowPath
+        SlowPath,
+        // This is an affliated bytecode created by FuseICIntoInterpreterOpcode() API
+        //
+        FusedInInlineCacheEffect
     };
 
     // Prepare to create the interpreter function for 'impl'.
@@ -35,6 +45,10 @@ public:
     // The cloned module is owned by this class.
     //
     InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, ProcessKind processKind);
+
+    struct ProcessFusedInIcEffectTag { };
+
+    InterpreterBytecodeImplCreator(ProcessFusedInIcEffectTag, BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, size_t icEffectOrd);
 
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
@@ -56,6 +70,12 @@ public:
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetBytecodeMetadataPtr() const { return m_valuePreserver.Get(x_metadataPtr); }
+
+    std::vector<std::string> GetAffliatedBytecodeFunctionList()
+    {
+        ReleaseAssert(m_processKind == ProcessKind::Main);
+        return m_affliatedBytecodeFnNames;
+    }
 
     llvm::CallInst* CallDeegenCommonSnippet(const std::string& dcsName, llvm::ArrayRef<llvm::Value*> args, llvm::Instruction* insertBefore)
     {
@@ -102,6 +122,15 @@ private:
     // We will rename them after the Main processor links all the submodules together.
     //
     std::vector<std::unique_ptr<InterpreterBytecodeImplCreator>> m_slowPaths;
+
+    // If m_processKind == Main, this holds all the fused IC effect specializations, if any
+    //
+    std::vector<std::unique_ptr<InterpreterBytecodeImplCreator>> m_fusedICs;
+
+    // If m_processKind == Main, this stores all the additional affliated bytecodes functions, which should be
+    // assigned opcode ordinal immediately following the main bytecode function in sequential order
+    //
+    std::vector<std::string> m_affliatedBytecodeFnNames;
 
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;

@@ -1,5 +1,7 @@
 #include "deegen_ast_inline_cache.h"
 #include "deegen_analyze_lambda_capture_pass.h"
+#include "deegen_bytecode_operand.h"
+#include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_rewrite_closure_call.h"
 
 namespace dast {
@@ -573,6 +575,23 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     return res;
 }
 
+static llvm::Function* CreateGetBytecodePtrPlaceholderFnDeclaration(llvm::Module* module)
+{
+    using namespace llvm;
+    std::string fnName = x_get_bytecode_ptr_placeholder_fn_name;
+    Function* f = module->getFunction(fnName);
+    if (f != nullptr)
+    {
+        ReleaseAssert(f->empty() && f->arg_size() == 0 && llvm_type_has_type<void*>(f->getReturnType()));
+        return f;
+    }
+    ReleaseAssert(module->getNamedValue(fnName) == nullptr);
+    FunctionType* fty = FunctionType::get(llvm_type_of<void*>(module->getContext()), { }, false /*isVarArg*/);
+    f = Function::Create(fty, GlobalValue::ExternalLinkage, fnName, module);
+    ReleaseAssert(f->getName() == fnName);
+    return f;
+}
+
 static void PreprocessCreateIcApi(llvm::CallInst* origin)
 {
     using namespace llvm;
@@ -641,6 +660,7 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     //
     Value* icKey = nullptr;
     Value* icKeyImpossibleValue = nullptr;
+    bool shouldFuseIcIntoInterpreterOpcode = false;
     for (Use& u : ic->uses())
     {
         User* usr = u.getUser();
@@ -719,6 +739,16 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
             else if (symName.find(" DeegenImpl_MakeIC_SetMainLambda<") != std::string::npos)
             {
                 ReleaseAssert(icApiCall == origin);
+                instructionToRemove.push_back(icApiCall);
+            }
+            else if (symName.find("DeegenImpl_MakeIC_SetShouldFuseICIntoInterpreterOpcode(") != std::string::npos)
+            {
+                if (shouldFuseIcIntoInterpreterOpcode)
+                {
+                    fprintf(stderr, "[ERROR] FuseICIntoInterpreterOpcode() inline cache API should not be called multiple times!\n");
+                    abort();
+                }
+                shouldFuseIcIntoInterpreterOpcode = true;
                 instructionToRemove.push_back(icApiCall);
             }
             else
@@ -980,13 +1010,23 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         }
     }
 
+    uint32_t bytecodePtrArgumentOrdinal = static_cast<uint32_t>(-1);
     Function* closureWrapper;
     {
         std::vector<Type*> tys;
         for (Value* val : rr.m_args) { tys.push_back(val->getType()); }
         if (!isIcKeyAlreadyPassedToBody)
         {
+            // If the IC key hasn't been passed to the body, we need to pass it as it's needed for lowering
+            //
             tys.push_back(icKey->getType());
+        }
+        if (shouldFuseIcIntoInterpreterOpcode)
+        {
+            // If the IC kind is to be fused into the opcode, we need to pass in the current bytecode ptr
+            //
+            tys.push_back(llvm_type_of<void*>(ctx));
+            bytecodePtrArgumentOrdinal = static_cast<uint32_t>(tys.size()) - 1;
         }
         FunctionType* closureWrapperFty = FunctionType::get(resType, tys, false /*isVarArg*/);
         closureWrapper = Function::Create(closureWrapperFty, GlobalValue::InternalLinkage, wrapperFnName, module);
@@ -1023,6 +1063,13 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
     {
         rr.m_args.push_back(icKey);
     }
+    if (shouldFuseIcIntoInterpreterOpcode)
+    {
+        Function* getBytecodePtrFn = CreateGetBytecodePtrPlaceholderFnDeclaration(module);
+        CallInst* bytecodePtr = CallInst::Create(getBytecodePtrFn, { }, "", origin /*insertBefore*/);
+        rr.m_args.push_back(bytecodePtr);
+    }
+    ReleaseAssert(closureWrapper->arg_size() == rr.m_args.size());
 
     std::vector<Type*> closureArgTys;
     for (Value* val : rr.m_args) { closureArgTys.push_back(val->getType()); }
@@ -1033,6 +1080,8 @@ static void PreprocessCreateIcApi(llvm::CallInst* origin)
         icBodyArgs.push_back(icKey);
         icBodyArgs.push_back(icKeyImpossibleValue);
         icBodyArgs.push_back(closureWrapper);
+        icBodyArgs.push_back(CreateLLVMConstantInt<bool>(ctx, shouldFuseIcIntoInterpreterOpcode));
+        icBodyArgs.push_back(CreateLLVMConstantInt<uint32_t>(ctx, bytecodePtrArgumentOrdinal));
         for (Value* val : rr.m_args) { icBodyArgs.push_back(val); }
 
         std::vector<Type*> icBodyArgTys;
@@ -1147,6 +1196,7 @@ void AstInlineCache::PreprocessModule(llvm::Module* module)
                         ReleaseAssert(symName.find(" DeegenImpl_MakeIC_MarkEffect<") == std::string::npos);
                         ReleaseAssert(symName.find(" DeegenImpl_MakeIC_AddKey<") == std::string::npos);
                         ReleaseAssert(symName.find(" DeegenImpl_MakeIC_SetICKeyImpossibleValue<") == std::string::npos);
+                        ReleaseAssert(symName.find("DeegenImpl_MakeIC_SetShouldFuseICIntoInterpreterOpcode(") == std::string::npos);
                         ReleaseAssert(symName != "MakeInlineCache()");
                     }
                 }
@@ -1159,7 +1209,8 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
 {
     using namespace llvm;
     AstInlineCache r;
-    ReleaseAssert(origin->arg_size() >= 4);
+    constexpr uint32_t x_icBodyDescriptorNumFixedAttributeArgs = 6;
+    ReleaseAssert(origin->arg_size() >= x_icBodyDescriptorNumFixedAttributeArgs);
     ReleaseAssert(origin->getCalledFunction() != nullptr && origin->getCalledFunction()->getName().startswith(x_createIcBodyPlaceholderFunctionPrefix));
     Value* ic = origin->getArgOperand(0);
     CallInst* def = dyn_cast<CallInst>(ic);
@@ -1184,20 +1235,29 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
     r.m_bodyFn = dyn_cast<Function>(origin->getArgOperand(3));
     ReleaseAssert(r.m_bodyFn != nullptr);
 
+    ReleaseAssert(llvm_value_has_type<bool>(origin->getArgOperand(4)));
+    r.m_shouldFuseICIntoInterpreterOpcode = GetValueOfLLVMConstantInt<bool>(origin->getArgOperand(4));
+
+    ReleaseAssert(llvm_value_has_type<uint32_t>(origin->getArgOperand(5)));
+    r.m_bodyFnBytecodePtrArgOrd = GetValueOfLLVMConstantInt<uint32_t>(origin->getArgOperand(5));
+    ReleaseAssertIff(!r.m_shouldFuseICIntoInterpreterOpcode, r.m_bodyFnBytecodePtrArgOrd == static_cast<uint32_t>(-1));
+    ReleaseAssertImp(r.m_shouldFuseICIntoInterpreterOpcode, r.m_bodyFnBytecodePtrArgOrd < r.m_bodyFn->arg_size());
+    ReleaseAssertImp(r.m_shouldFuseICIntoInterpreterOpcode, llvm_value_has_type<void*>(r.m_bodyFn->getArg(r.m_bodyFnBytecodePtrArgOrd)));
+
     r.m_bodyFnIcPtrArgOrd = static_cast<uint32_t>(-1);
     r.m_bodyFnIcKeyArgOrd = static_cast<uint32_t>(-1);
-    for (uint32_t i = 4; i < origin->arg_size(); i++)
+    for (uint32_t i = x_icBodyDescriptorNumFixedAttributeArgs; i < origin->arg_size(); i++)
     {
         Value* val = origin->getArgOperand(i);
         r.m_bodyFnArgs.push_back(val);
         if (val == ic)
         {
             ReleaseAssert(r.m_bodyFnIcPtrArgOrd == static_cast<uint32_t>(-1));
-            r.m_bodyFnIcPtrArgOrd = i - 4;
+            r.m_bodyFnIcPtrArgOrd = i - x_icBodyDescriptorNumFixedAttributeArgs;
         }
         if (val == r.m_icKey && r.m_bodyFnIcKeyArgOrd == static_cast<uint32_t>(-1))
         {
-            r.m_bodyFnIcKeyArgOrd = i - 4;
+            r.m_bodyFnIcKeyArgOrd = i - x_icBodyDescriptorNumFixedAttributeArgs;
         }
     }
     ReleaseAssert(r.m_bodyFnIcPtrArgOrd != static_cast<uint32_t>(-1));
@@ -1567,6 +1627,29 @@ static llvm::Function* WARN_UNUSED CreateEffectOrdinalGetterFn(
     return fn;
 }
 
+void LowerInterpreterGetBytecodePtrInternalAPI(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    std::vector<CallInst*> allUses;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* ci = dyn_cast<CallInst>(&inst);
+            if (ci != nullptr && ci->getCalledFunction() != nullptr && ci->getCalledFunction()->getName() == x_get_bytecode_ptr_placeholder_fn_name)
+            {
+                allUses.push_back(ci);
+            }
+        }
+    }
+    for (CallInst* ci : allUses)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(ci));
+        ci->replaceAllUsesWith(ifi->GetCurBytecode());
+        ci->eraseFromParent();
+    }
+}
+
 void AstInlineCache::DoLoweringForInterpreter()
 {
     using namespace llvm;
@@ -1627,7 +1710,21 @@ void AstInlineCache::DoLoweringForInterpreter()
 
     ReleaseAssert(m_totalEffectKinds > 0 && m_totalEffectKinds < 254);
 
+    // Note that if 'm_shouldFuseICIntoInterpreterOpcode' is true, we do not need effectKind to determine the IC effect to call,
+    // but still we should not elide it, because C++ code needs this value in order to interpret the metadata struct
+    //
     bool canElideEffectKind = (m_totalEffectKinds == 1) && hasImpossibleValue;
+
+    // If 'm_shouldFuseICIntoInterpreterOpcode' is true but we can also elide the effect kind (i.e., there's no branch to
+    // check the effect kind already), lock it down since in this case 'FuseICIntoInterpreterOpcode()' will only harm
+    // performance (it does not eliminate any branch, but unnecessarily creates an interpreter function).
+    // This also reduces some edge case discussion.
+    //
+    if (canElideEffectKind && m_shouldFuseICIntoInterpreterOpcode)
+    {
+        fprintf(stderr, "[ERROR] It is not beneficial to specify FuseICIntoInterpreterOpcode() if there is only one possible IC effect!\n");
+        abort();
+    }
 
     BytecodeMetadataElement* ms_cachedIcVal = ms->AddElement(1 /*alignment*/, icKeyBytes);
     if (hasImpossibleValue)
@@ -1671,10 +1768,24 @@ void AstInlineCache::DoLoweringForInterpreter()
         icEffectKind = new LoadInst(llvm_type_of<uint8_t>(ctx), icEffectKindAddr, "", false /*isVolatile*/, Align(1), m_origin);
     }
 
+    // If the IC effect should be fused into the interpreter opcode, we need to later further specialize this IC for different effect kinds.
+    // Specifically, for the initial implementation, we know the IC doesn't exist yet, so there is no need to compare.
+    // Therefore, we pipe 'icValEqual' through a dummy function which implementation will be populated later to adapt the behavior.
+    //
+    if (m_shouldFuseICIntoInterpreterOpcode)
+    {
+        ReleaseAssert(module->getNamedValue(x_adapt_ic_hit_check_behavior_placeholder_fn) == nullptr);
+        FunctionType* fty = FunctionType::get(llvm_type_of<bool>(ctx), { llvm_type_of<bool>(ctx) }, false /*isVarArg*/);
+        Function* dummyFn = Function::Create(fty, GlobalValue::ExternalLinkage, x_adapt_ic_hit_check_behavior_placeholder_fn, module);
+        ReleaseAssert(dummyFn->getName() == x_adapt_ic_hit_check_behavior_placeholder_fn);
+        icValEqual = CallInst::Create(dummyFn, { icValEqual }, "", m_origin);
+    }
+
     // Generate the if-then-else branch, the then-branch is the fast path (IC hit), the else-branch is the slow path (IC miss)
     //
     Function* expectIntrin = Intrinsic::getDeclaration(module, Intrinsic::expect, { Type::getInt1Ty(ctx) });
     icValEqual = CallInst::Create(expectIntrin, { icValEqual, CreateLLVMConstantInt<bool>(ctx, true) }, "", m_origin);
+
     Instruction* thenBlockTerminator = nullptr;
     Instruction* elseBlockTerminator = nullptr;
     SplitBlockAndInsertIfThenElse(icValEqual, m_origin /*splitBefore*/, &thenBlockTerminator /*out*/, &elseBlockTerminator /*out*/);
@@ -1705,6 +1816,20 @@ void AstInlineCache::DoLoweringForInterpreter()
         else
         {
             defaultClause = callIcBodyBlock;
+        }
+
+        // Similar to above, if the IC effect should be fused into the interpreter opcode, we need to later further specialize this IC
+        // for different effect kinds. Specifically, in the specialized implementation we already know the IC effect kind, so there is
+        // no need to compare.
+        // Therefore, we pipe 'icEffectKind' through a dummy function which implementation will be populated later to adapt the behavior.
+        //
+        if (m_shouldFuseICIntoInterpreterOpcode)
+        {
+            ReleaseAssert(module->getNamedValue(x_adapt_get_ic_effect_ord_behavior_placeholder_fn) == nullptr);
+            FunctionType* fty = FunctionType::get(llvm_type_of<uint8_t>(ctx), { llvm_type_of<uint8_t>(ctx) }, false /*isVarArg*/);
+            Function* dummyFn = Function::Create(fty, GlobalValue::ExternalLinkage, x_adapt_get_ic_effect_ord_behavior_placeholder_fn, module);
+            ReleaseAssert(dummyFn->getName() == x_adapt_get_ic_effect_ord_behavior_placeholder_fn);
+            icEffectKind = CallInst::Create(dummyFn, { icEffectKind }, "", icCacheHitBlock);
         }
 
         SwitchInst* switchInst = SwitchInst::Create(icEffectKind, defaultClause, static_cast<uint32_t>(m_totalEffectKinds) /*caseToReserve*/, icCacheHitBlock);
@@ -1880,7 +2005,46 @@ void AstInlineCache::DoLoweringForInterpreter()
                 Value* effectKindToWrite = CallInst::Create(effectOrdinalGetterFn, args, "", updateIcLogicInsertionPt);
                 ReleaseAssert(llvm_value_has_type<uint8_t>(effectKindToWrite));
                 Value* addr = ms_effectKind->EmitGetAddress(module, bodyIcPtr, updateIcLogicInsertionPt);
+                Value* oldEffectKind = nullptr;
+                if (m_shouldFuseICIntoInterpreterOpcode)
+                {
+                    oldEffectKind = new LoadInst(llvm_type_of<uint8_t>(ctx), addr, "", false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
+                }
+
                 new StoreInst(effectKindToWrite, addr /*dst*/, false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
+
+                // If the IC effect ordinal is to be fused into the opcode, update it now
+                // Note that the caller side is responsible for resetting the opcode back to the initial one before calling us
+                //
+                if (m_shouldFuseICIntoInterpreterOpcode)
+                {
+                    ReleaseAssert(m_bodyFnBytecodePtrArgOrd != static_cast<uint32_t>(-1));
+                    ReleaseAssert(m_bodyFnBytecodePtrArgOrd < m_bodyFn->arg_size());
+                    Value* bytecodePtr = m_bodyFn->getArg(m_bodyFnBytecodePtrArgOrd);
+                    ReleaseAssert(llvm_value_has_type<void*>(bytecodePtr));
+                    Type* opcodeTy = Type::getIntNTy(ctx, static_cast<uint32_t>(BytecodeVariantDefinition::x_opcodeSizeBytes * 8));
+                    ReleaseAssert(opcodeTy->getIntegerBitWidth() == BytecodeVariantDefinition::x_opcodeSizeBytes * 8);
+
+                    // Note that here we are taking advantage of the fact that an invalid IC always have effectKind == -1,
+                    // the valid IC effects start at effectKind == 0, and the opcodes are laid out in the same order.
+                    //
+                    // Ideally we should just update the opcode by writing the absolute opcode value, which is both more robust
+                    // and faster, but under the current design we do not know the opcode value at this point..
+                    // This can be fixed but requires some work, so let's leave it to the future..
+                    //
+                    Value* valToSubtract = new SExtInst(oldEffectKind, opcodeTy, "", updateIcLogicInsertionPt);
+                    Value* valToAdd = new ZExtInst(effectKindToWrite, opcodeTy, "", updateIcLogicInsertionPt);
+                    Value* originalOpcode = new LoadInst(opcodeTy, bytecodePtr, "", false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
+                    Instruction* tmp = CreateSub(originalOpcode, valToSubtract);
+                    tmp->insertBefore(updateIcLogicInsertionPt);
+                    Instruction* newOpcode = CreateAdd(tmp, valToAdd);
+                    newOpcode->insertBefore(updateIcLogicInsertionPt);
+                    new StoreInst(newOpcode, bytecodePtr, false /*isVolatile*/, Align(1), updateIcLogicInsertionPt);
+                }
+            }
+            else
+            {
+                ReleaseAssert(!m_shouldFuseICIntoInterpreterOpcode);
             }
             // Write the IC state
             {
