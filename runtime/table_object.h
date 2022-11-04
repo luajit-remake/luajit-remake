@@ -712,51 +712,23 @@ public:
     }
 
     template<typename U>
-    static void PrepareGetById(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void PrepareGetByIdImplForStructure(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
-        static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
+        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
 
-        HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        HeapPtr<Structure> structure = hiddenClass.As<Structure>();
+        icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
+        uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
 
         uint32_t slotOrd;
-        uint32_t inlineStorageCapacity;
         bool found;
-
-        if (likely(ty == HeapEntityType::Structure))
+        if constexpr(std::is_same_v<U, HeapString>)
         {
-            HeapPtr<Structure> structure = hiddenClass.As<Structure>();
-            icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
-            inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
-
-            if constexpr(std::is_same_v<U, HeapString>)
-            {
-                found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
-            }
-            else
-            {
-                found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, propertyName, slotOrd /*out*/);
-            }
-        }
-        else if (likely(ty == HeapEntityType::CacheableDictionary))
-        {
-            HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
-            icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
-            inlineStorageCapacity = dict->m_inlineNamedStorageCapacity;
-
-            if constexpr(std::is_same_v<U, HeapString>)
-            {
-                found = CacheableDictionary::GetSlotOrdinalFromStringProperty(dict, propertyName, slotOrd /*out*/);
-            }
-            else
-            {
-                found = CacheableDictionary::GetSlotOrdinalFromMaybeNonStringProperty(dict, propertyName, slotOrd /*out*/);
-            }
+            found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
         }
         else
         {
-            // TODO: support UncacheableDictionary
-            ReleaseAssert(false && "unimplemented");
+            found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, propertyName, slotOrd /*out*/);
         }
 
         if (found)
@@ -774,28 +746,101 @@ public:
         }
         else
         {
-            if (ty == HeapEntityType::Structure)
+            icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
+        }
+    }
+
+    template<typename U>
+    static void PrepareGetByIdImplForCacheableDictionary(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+
+        HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
+        icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
+        uint32_t inlineStorageCapacity = dict->m_inlineNamedStorageCapacity;
+
+        uint32_t slotOrd;
+        bool found;
+        if constexpr(std::is_same_v<U, HeapString>)
+        {
+            found = CacheableDictionary::GetSlotOrdinalFromStringProperty(dict, propertyName, slotOrd /*out*/);
+        }
+        else
+        {
+            found = CacheableDictionary::GetSlotOrdinalFromMaybeNonStringProperty(dict, propertyName, slotOrd /*out*/);
+        }
+
+        if (found)
+        {
+            if (slotOrd < inlineStorageCapacity)
             {
-                icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNil;
+                icInfo.m_icKind = GetByIdICInfo::ICKind::InlinedStorage;
+                icInfo.m_slot = static_cast<int32_t>(slotOrd);
             }
             else
             {
-                assert(ty == HeapEntityType::CacheableDictionary);
-                icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNilButUncacheable;
+                icInfo.m_icKind = GetByIdICInfo::ICKind::OutlinedStorage;
+                icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
             }
+        }
+        else
+        {
+            // CacheableDictionary property miss is not cacheable
+            //
+            icInfo.m_icKind = GetByIdICInfo::ICKind::MustBeNilButUncacheable;
+        }
+    }
+
+    template<typename U>
+    static void PrepareGetByIdImpl(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
+
+        HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+
+        if (likely(ty == HeapEntityType::Structure))
+        {
+            PrepareGetByIdImplForStructure(hiddenClass, propertyName, icInfo /*out*/);
+        }
+        else if (likely(ty == HeapEntityType::CacheableDictionary))
+        {
+            PrepareGetByIdImplForCacheableDictionary(hiddenClass, propertyName, icInfo /*out*/);
+        }
+        else
+        {
+            // TODO: support UncacheableDictionary
+            //
+            assert(false && "unimplemented");
+            __builtin_unreachable();
         }
     }
 
     template<typename U>
     static void PrepareGetById(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
-        return PrepareGetById(self->m_hiddenClass, propertyName, icInfo /*out*/);
+        return PrepareGetByIdImpl(self->m_hiddenClass, propertyName, icInfo /*out*/);
     }
 
     template<typename U>
     static void PrepareGetById(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
-        return PrepareGetById(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
+        return PrepareGetByIdImpl(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
+    }
+
+    // Specialized GetById for global object
+    // Global object is guaranteed to be a CacheableDictionary so we can remove a branch
+    //
+    template<typename U>
+    static void PrepareGetByIdForGlobalObject(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        return PrepareGetByIdImplForCacheableDictionary(self->m_hiddenClass, propertyName, icInfo /*out*/);
+    }
+
+    template<typename U>
+    static void PrepareGetByIdForGlobalObject(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    {
+        return PrepareGetByIdImplForCacheableDictionary(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>

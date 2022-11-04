@@ -86,7 +86,9 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
     ic->FuseICIntoInterpreterOpcode();
     auto [result, mayHaveMt] = ic->Body([ic, base, index]() -> std::pair<TValue, bool> {
         GetByIdICInfo c_info;
-        TableObject::PrepareGetById(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);
+        // We know that the global object is always a CacheableDictionary
+        //
+        TableObject::PrepareGetByIdForGlobalObject(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);
         bool c_mayHaveMt = c_info.m_mayHaveMetatable;
         if (c_info.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
         {
