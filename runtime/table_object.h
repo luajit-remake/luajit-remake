@@ -390,7 +390,7 @@ struct PutByIdICInfo
     // Whether this PutById is cacheable
     //
     bool m_isInlineCacheable;
-    SystemHeapPointer<void> m_hiddenClass;
+    // SystemHeapPointer<void> m_hiddenClass;
     int32_t m_slot;
     SystemHeapPointer<Structure> m_newStructure;
 };
@@ -862,7 +862,127 @@ public:
         }
 
         // TODO: support UncacheableDictionary
-        ReleaseAssert(false && "not implemented");
+        assert(false && "not implemented");
+        __builtin_unreachable();
+    }
+
+    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void PreparePutByIdForCacheableDictionary(T self, HeapPtr<CacheableDictionary> dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    {
+        CacheableDictionary::PutByIdResult res;
+        if constexpr(std::is_same_v<U, HeapString>)
+        {
+            CacheableDictionary::PreparePutById(dict, propertyName, res /*out*/);
+        }
+        else
+        {
+            CacheableDictionary::PreparePutByMaybeNonStringKey(dict, propertyName, res /*out*/);
+        }
+
+        // Since the dictionary is 1-on-1 with the object, this step *is* idempotent.
+        //
+        if (unlikely(res.m_shouldGrowButterfly))
+        {
+            TableObject* rawSelf = TranslateToRawPointer(self);
+            assert(dict->m_butterflyNamedStorageCapacity < res.m_newButterflyCapacity);
+            rawSelf->GrowButterfly<true /*isGrowNamedStorage*/>(res.m_newButterflyCapacity);
+            dict->m_butterflyNamedStorageCapacity = res.m_newButterflyCapacity;
+        }
+
+        if (unlikely(res.m_shouldCheckForTransitionToUncacheableDictionary))
+        {
+           // TODO: check for transition to UncacheableDictionary
+           //
+        }
+
+        // For Dictionary, since it is 1-on-1 with the object, we always insert the property if it doesn't exist (and this step is idempotent)
+        // Since we always pre-fill every unused slot with 'nil', the new property always has value 'nil' if it were just inserted, as desired
+        // (this works because unlike Javascript, Lua doesn't have the concept of 'undefined')
+        //
+        // Since we have inserted the property above, for the IC, the property should always appear to be existent
+        //
+        icInfo.m_isInlineCacheable = true;
+        icInfo.m_propertyExists = true;
+        icInfo.m_shouldGrowButterfly = false;
+        icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
+
+        uint32_t slotOrd = res.m_slot;
+        uint32_t inlineStorageCapacity = dict->m_inlineNamedStorageCapacity;
+        if (slotOrd < inlineStorageCapacity)
+        {
+            icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
+            icInfo.m_slot = static_cast<int32_t>(slotOrd);
+        }
+        else
+        {
+            assert(slotOrd < dict->m_slotCount);
+            icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
+            icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
+        }
+    }
+
+    template<typename U>
+    static void PreparePutByIdForStructure(HeapPtr<Structure> structure, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    {
+        icInfo.m_isInlineCacheable = true;
+        icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
+
+        uint32_t slotOrd;
+        bool found;
+        if constexpr(std::is_same_v<U, HeapString>)
+        {
+            found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
+        }
+        else
+        {
+            found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, propertyName, slotOrd /*out*/);
+        }
+        icInfo.m_propertyExists = found;
+        if (found)
+        {
+            icInfo.m_shouldGrowButterfly = false;
+            uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+            if (slotOrd < inlineStorageCapacity)
+            {
+                icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
+                icInfo.m_slot = static_cast<int32_t>(slotOrd);
+
+            }
+            else
+            {
+                icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
+                icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
+            }
+        }
+        else
+        {
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            Structure::AddNewPropertyResult addNewPropResult;
+            TranslateToRawPointer(vm, structure)->AddNonExistentProperty(vm, propertyName.template As<void>(), addNewPropResult /*out*/);
+            if (unlikely(addNewPropResult.m_shouldTransitionToDictionaryMode))
+            {
+                icInfo.m_icKind = PutByIdICInfo::ICKind::TransitionedToDictionaryMode;
+                icInfo.m_isInlineCacheable = false;
+            }
+            else
+            {
+                slotOrd = addNewPropResult.m_slotOrdinal;
+                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
+                icInfo.m_shouldGrowButterfly = addNewPropResult.m_shouldGrowButterfly;
+                icInfo.m_newStructure = addNewPropResult.m_newStructure;
+                if (slotOrd < inlineStorageCapacity)
+                {
+                    icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
+                    icInfo.m_slot = static_cast<int32_t>(slotOrd);
+                }
+                else
+                {
+                    assert(slotOrd < icInfo.m_newStructure.As()->m_numSlots);
+                    icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
+                    icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
+                }
+            }
+        }
     }
 
     template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
@@ -874,128 +994,38 @@ public:
         HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
         assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
-        icInfo.m_hiddenClass = hiddenClass;
-        icInfo.m_isInlineCacheable = true;
-
         if (likely(ty == HeapEntityType::Structure))
         {
             HeapPtr<Structure> structure = hiddenClass.As<Structure>();
-            icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
-
-            uint32_t slotOrd;
-            bool found;
-            if constexpr(std::is_same_v<U, HeapString>)
-            {
-                found = Structure::GetSlotOrdinalFromStringProperty(structure, propertyName, slotOrd /*out*/);
-            }
-            else
-            {
-                found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, propertyName, slotOrd /*out*/);
-            }
-            icInfo.m_propertyExists = found;
-            if (found)
-            {
-                icInfo.m_shouldGrowButterfly = false;
-                uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
-                if (slotOrd < inlineStorageCapacity)
-                {
-                    icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
-                    icInfo.m_slot = static_cast<int32_t>(slotOrd);
-
-                }
-                else
-                {
-                    icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
-                    icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
-                }
-            }
-            else
-            {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                Structure::AddNewPropertyResult addNewPropResult;
-                TranslateToRawPointer(vm, structure)->AddNonExistentProperty(vm, propertyName.template As<void>(), addNewPropResult /*out*/);
-                if (unlikely(addNewPropResult.m_shouldTransitionToDictionaryMode))
-                {
-                    icInfo.m_icKind = PutByIdICInfo::ICKind::TransitionedToDictionaryMode;
-                    icInfo.m_isInlineCacheable = false;
-                }
-                else
-                {
-                    slotOrd = addNewPropResult.m_slotOrdinal;
-                    uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
-                    icInfo.m_shouldGrowButterfly = addNewPropResult.m_shouldGrowButterfly;
-                    icInfo.m_newStructure = addNewPropResult.m_newStructure;
-                    if (slotOrd < inlineStorageCapacity)
-                    {
-                        icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
-                        icInfo.m_slot = static_cast<int32_t>(slotOrd);
-                    }
-                    else
-                    {
-                        assert(slotOrd < icInfo.m_newStructure.As()->m_numSlots);
-                        icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
-                        icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
-                    }
-                }
-            }
+            PreparePutByIdForStructure(structure, propertyName, icInfo /*out*/);
         }
         else if (ty == HeapEntityType::CacheableDictionary)
         {
             HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
-
-            CacheableDictionary::PutByIdResult res;
-            if constexpr(std::is_same_v<U, HeapString>)
-            {
-                CacheableDictionary::PreparePutById(dict, propertyName, res /*out*/);
-            }
-            else
-            {
-                CacheableDictionary::PreparePutByMaybeNonStringKey(dict, propertyName, res /*out*/);
-            }
-
-            if (unlikely(res.m_shouldGrowButterfly))
-            {
-                TableObject* rawSelf = TranslateToRawPointer(self);
-                assert(dict->m_butterflyNamedStorageCapacity < res.m_newButterflyCapacity);
-                rawSelf->GrowButterfly<true /*isGrowNamedStorage*/>(res.m_newButterflyCapacity);
-                dict->m_butterflyNamedStorageCapacity = res.m_newButterflyCapacity;
-            }
-
-            if (unlikely(res.m_shouldCheckForTransitionToUncacheableDictionary))
-            {
-                // TODO: check for transition to UncacheableDictionary
-                //
-            }
-
-            // For Dictionary, since it is 1-on-1 with the object, we always insert the property if it doesn't exist
-            // Since we always pre-fill every unused slot with 'nil', the new property always has value 'nil' if it were just inserted, as desired
-            // (this works because unlike Javascript, Lua doesn't have the concept of 'undefined')
-            // So for the IC, the property should always appear to be existent
-            //
-            icInfo.m_propertyExists = true;
-            icInfo.m_shouldGrowButterfly = false;
-            icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
-
-            uint32_t slotOrd = res.m_slot;
-            uint32_t inlineStorageCapacity = dict->m_inlineNamedStorageCapacity;
-            if (slotOrd < inlineStorageCapacity)
-            {
-                icInfo.m_icKind = PutByIdICInfo::ICKind::InlinedStorage;
-                icInfo.m_slot = static_cast<int32_t>(slotOrd);
-            }
-            else
-            {
-                assert(slotOrd < dict->m_slotCount);
-                icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
-                icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
-            }
+            PreparePutByIdForCacheableDictionary(self, dict, propertyName, icInfo /*out*/);
         }
         else
         {
-            icInfo.m_isInlineCacheable = false;
+            // icInfo.m_isInlineCacheable = false;
             // TODO: support UncacheableDictionary
-            ReleaseAssert(false && "unimplemented");
+            assert(false && "unimplemented");
+            __builtin_unreachable();
         }
+    }
+
+    // Specialized PutById for global object
+    // Global object is guaranteed to be a CacheableDictionary so we can remove a branch
+    //
+    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void PreparePutByIdForGlobalObject(T self, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    {
+        static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
+
+        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
+        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+
+        HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
+        PreparePutByIdForCacheableDictionary(self, dict, propertyName, icInfo /*out*/);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
@@ -1225,7 +1255,8 @@ public:
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
             TableObject* rawSelf = TranslateToRawPointer(self);
-            rawSelf->PutByIdTransitionToDictionary(vm, propertyName, TranslateToRawPointer(vm, icInfo.m_hiddenClass.As<Structure>()), newValue);
+            assert(rawSelf->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+            rawSelf->PutByIdTransitionToDictionary(vm, propertyName, TranslateToRawPointer(vm, rawSelf->m_hiddenClass.As<Structure>()), newValue);
             return;
         }
 

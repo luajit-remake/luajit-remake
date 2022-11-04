@@ -105,8 +105,7 @@ TEST(ObjectGetPutById, Sanity)
                 ReleaseAssert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(i) - 1);
             }
-            ReleaseAssert(TCGet(curObject->m_hiddenClass).As() == icInfo.m_hiddenClass.As<Structure>());
-            if (i == icInfo.m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity + icInfo.m_hiddenClass.As<Structure>()->m_inlineNamedStorageCapacity)
+            if (i == TCGet(curObject->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity + TCGet(curObject->m_hiddenClass).As<Structure>()->m_inlineNamedStorageCapacity)
             {
                 ReleaseAssert(icInfo.m_shouldGrowButterfly);
             }
@@ -114,7 +113,7 @@ TEST(ObjectGetPutById, Sanity)
             {
                 ReleaseAssert(!icInfo.m_shouldGrowButterfly);
             }
-            ReleaseAssert(icInfo.m_hiddenClass.As<Structure>() != icInfo.m_newStructure.As());
+            ReleaseAssert(TCGet(curObject->m_hiddenClass).As<Structure>() != icInfo.m_newStructure.As());
 
             TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456)), icInfo);
 
