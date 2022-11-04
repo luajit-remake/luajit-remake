@@ -924,3 +924,17 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
         }
     }
 }
+
+inline TValue WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) GetNewIndexMetamethodFromTableObject(HeapPtr<TableObject> tableObj)
+{
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+    if (unlikely(gmr.m_result.m_value != 0))
+    {
+        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+        {
+            return GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
+        }
+    }
+    return TValue::Create<tNil>();
+}

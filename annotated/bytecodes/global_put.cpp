@@ -1,4 +1,5 @@
 #include "api_define_bytecode.h"
+#include "api_inline_cache.h"
 #include "deegen_api.h"
 
 #include "runtime_utils.h"
@@ -8,70 +9,137 @@ static void NO_RETURN GlobalPutMetamethodCallContinuation(TValue /*tvIndex*/, TV
     Return();
 }
 
+static void NO_RETURN HandleMetamethodSlowPath(TValue /*bc_tvIndex*/, TValue /*bc_valueToPut*/, TValue base, HeapPtr<HeapString> index, TValue valueToPut, TValue metamethod)
+{
+    // If 'metamethod' is a function, we should invoke the metamethod.
+    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+    //
+    while (true)
+    {
+        assert(!metamethod.Is<tNil>());
+        if (likely(metamethod.Is<tHeapEntity>()))
+        {
+            HeapEntityType mmType = metamethod.GetHeapEntityType();
+            if (mmType == HeapEntityType::Function)
+            {
+                MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tString>(index), valueToPut, GlobalPutMetamethodCallContinuation);
+            }
+            else if (mmType == HeapEntityType::Table)
+            {
+                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                PutByIdICInfo icInfo;
+                TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
+
+                if (unlikely(TableObject::PutByIdNeedToCheckMetatable(tableObj, icInfo)))
+                {
+                    metamethod = GetNewIndexMetamethodFromTableObject(tableObj);
+                    if (!metamethod.Is<tNil>())
+                    {
+                        base = TValue::Create<tTable>(tableObj);
+                        continue;
+                    }
+                }
+
+                TableObject::PutById(tableObj, index, valueToPut, icInfo);
+                Return();
+            }
+        }
+
+        // Now we know 'metamethod' is not a function or pointer, so we should locate its own exotic '__index' metamethod..
+        // The difference is that if the metamethod is nil, we need to throw an error
+        //
+        base = metamethod;
+        metamethod = GetMetamethodForValue(metamethod, LuaMetamethodKind::NewIndex);
+        if (metamethod.Is<tNil>())
+        {
+            // TODO: make error message consistent with Lua
+            //
+            ThrowError("bad type for GlobalPut");
+        }
+    }
+}
+
 static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
     HeapPtr<TableObject> base = GetFEnvGlobalObject();
 
-    TValue metamethod;
-    TValue metamethodBase;
-
-retry:
-    PutByIdICInfo icInfo;
-    TableObject::PreparePutById(base, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
-
-    if (unlikely(TableObject::PutByIdNeedToCheckMetatable(base, icInfo)))
-    {
-        TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
-        if (gmr.m_result.m_value != 0)
+    ICHandler* ic = MakeInlineCache();
+    ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+    ic->FuseICIntoInterpreterOpcode();
+    auto [metamethod, hasMetamethod] = ic->Body([ic, base, index, valueToPut]() -> std::pair<TValue, bool> {
+        PutByIdICInfo c_info;
+        TableObject::PreparePutByIdForGlobalObject(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);
+        // We know that the global object must be a CacheableDictionary, so most fields in c_info should have determined values
+        //
+        assert(c_info.m_isInlineCacheable && c_info.m_propertyExists && !c_info.m_shouldGrowButterfly);
+        assert(c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_info.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+        if (likely(!c_info.m_mayHaveMetatable))
         {
-            HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-            if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+            if (c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
             {
-                metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
-                if (!metamethod.Is<tNil>())
-                {
-                    metamethodBase = TValue::Create<tTable>(base);
-                    goto handle_metamethod;
-                }
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, valueToPut, c_slot] {
+                    TCSet(base->m_inlineStorage[c_slot], valueToPut);
+                    return std::make_pair(TValue(), false /*hasMetamethod*/);
+                });
+            }
+            else
+            {
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, valueToPut, c_slot] {
+                    TCSet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)), valueToPut);
+                    return std::make_pair(TValue(), false /*hasMetamethod*/);
+                });
             }
         }
-    }
-
-    TableObject::PutById(base, index, valueToPut, icInfo);
-    Return();
-
-handle_metamethod:
-    // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
-    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
-    //
-    if (likely(metamethod.Is<tHeapEntity>()))
-    {
-        HeapEntityType mmType = metamethod.GetHeapEntityType();
-        if (mmType == HeapEntityType::Function)
+        else
         {
-            MakeCall(metamethod.As<tFunction>(), metamethodBase, tvIndex, valueToPut, GlobalPutMetamethodCallContinuation);
+            if (c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
+            {
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, valueToPut, c_slot] {
+                    TValue oldValue = TCGet(base->m_inlineStorage[c_slot]);
+                    if (unlikely(oldValue.Is<tNil>()))
+                    {
+                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
+                        if (unlikely(!mm.Is<tNil>()))
+                        {
+                            return std::make_pair(mm, true /*hasMetamethod*/);
+                        }
+                    }
+                    TCSet(base->m_inlineStorage[c_slot], valueToPut);
+                    return std::make_pair(TValue(), false /*hasMetamethod*/);
+                });
+            }
+            else
+            {
+                int32_t c_slot = c_info.m_slot;
+                return ic->Effect([base, valueToPut, c_slot] {
+                    TValue oldValue = TCGet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)));
+                    if (unlikely(oldValue.Is<tNil>()))
+                    {
+                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
+                        if (unlikely(!mm.Is<tNil>()))
+                        {
+                            return std::make_pair(mm, true /*hasMetamethod*/);
+                        }
+                    }
+                    TCSet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)), valueToPut);
+                    return std::make_pair(TValue(), false /*hasMetamethod*/);
+                });
+            }
         }
-        else if (mmType == HeapEntityType::Table)
-        {
-            base = metamethod.As<tTable>();
-            goto retry;
-        }
+    });
+
+    if (likely(!hasMetamethod))
+    {
+        Return();
     }
 
-    // Now we know 'metamethod' is not a function or pointer, so we should locate its own exotic '__index' metamethod..
-    // The difference is that if the metamethod is nil, we need to throw an error
-    //
-    metamethodBase = metamethod;
-    metamethod = GetMetamethodForValue(metamethod, LuaMetamethodKind::NewIndex);
-    if (metamethod.Is<tNil>())
-    {
-        // TODO: make error message consistent with Lua
-        //
-        ThrowError("bad type for GlobalPut");
-    }
-    goto handle_metamethod;
+    assert(!metamethod.Is<tNil>());
+    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), index, valueToPut, metamethod);
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalPut)

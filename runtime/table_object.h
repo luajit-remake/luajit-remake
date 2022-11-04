@@ -390,7 +390,6 @@ struct PutByIdICInfo
     // Whether this PutById is cacheable
     //
     bool m_isInlineCacheable;
-    // SystemHeapPointer<void> m_hiddenClass;
     int32_t m_slot;
     SystemHeapPointer<Structure> m_newStructure;
 };
