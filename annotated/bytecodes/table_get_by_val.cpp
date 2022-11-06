@@ -341,7 +341,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
         {
             HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
             ICHandler* ic = MakeInlineCache();
-            ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
+            ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();
 
             using ResKind = TableGetByValIcResultKind;
@@ -354,13 +354,6 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 GetByIntegerIndexICInfo c_info;
                 TableObject::PrepareGetByIntegerIndex(heapEntity, c_info /*out*/);
                 ResKind c_resKind = c_info.m_mayHaveMetatable ? ResKind::MayHaveMetatable : ResKind::NoMetatable;
-
-                if (unlikely(TCGet(heapEntity->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure))
-                {
-                    // We cannot inline cache array access for CacheableDictionary or UncacheableDictionary
-                    //
-                    ic->SetUncacheable();
-                }
 
                 if (likely(c_info.m_isContinuous))
                 {
