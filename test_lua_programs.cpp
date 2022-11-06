@@ -879,4 +879,39 @@ TEST(LuaTest, PutByIdInterpreterIC_1)
     RunSimpleLuaTest("luatests/putbyid_interpreter_ic_1.lua.json");
 }
 
+TEST(LuaTest, PutByIdInterpreterIC_2)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_2.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_3)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_3.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_4)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_4.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_5)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_5.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_6)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_6.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_7)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_7.lua.json");
+}
+
+TEST(LuaTest, PutByIdInterpreterIC_8)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_8.lua.json");
+}
+
 }   // anonymous namespace
