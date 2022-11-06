@@ -2518,8 +2518,8 @@ public:
     HeapEntityType m_type;
     GcCellState m_cellState;
 
-    ArrayType m_arrayType;
     uint8_t m_reserved;
+    ArrayType m_arrayType;
 
     Butterfly* m_butterfly;
     TValue m_inlineStorage[0];

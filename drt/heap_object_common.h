@@ -120,7 +120,8 @@ static constexpr GcCellState x_defaultCellState = GcCellState::White;
 //   SystemHeapPtr<void> m_hiddenClass
 //   uint8_t m_type
 //   uint8_t m_cellState    // reserved for GC
-//   uint16_t m_opaque
+//   uint8_t m_opaque
+//   ArrayType m_arrayType
 //
 // Note that m_hiddenClass must encompass at least the information of m_type (that is,
 // different m_type must correspond to different m_hiddenClass)
@@ -133,13 +134,21 @@ static constexpr GcCellState x_defaultCellState = GcCellState::White;
 // and different kinds of objects also use m_opaque differently, this class is not inherited by
 // the object classes. Instead, the object classes are responsible to make sure that the layout matches.
 //
+// Similar to 'm_hiddenClass', for all non-table objects, 'm_arrayType' must be x_invalidArrayType,
+// so inline cache can cache on its field value directly, knowing that if the field value matches then
+// the object must be a table.
+//
 class UserHeapGcObjectHeader
 {
 public:
     uint32_t m_hiddenClass;
     HeapEntityType m_type;
     GcCellState m_cellState;     // reserved for GC
+    uint8_t m_opaque;
+    uint8_t m_arrayType;
 
+    // Does not populate 'm_opaque' or 'm_arrayType'
+    //
     template<typename T>
     static void Populate(T self)
     {

@@ -9,7 +9,7 @@ void CheckStringObjectIsAsExpected(UserHeapPointer<HeapString> p, const void* ex
     HeapPtr<HeapString> s = p.As<HeapString>();
     ReleaseAssert(s->m_type == HeapEntityType::String);
     ReleaseAssert(static_cast<size_t>(s->m_length) == expectedLen);
-    ReleaseAssert(s->m_hashHigh == static_cast<uint16_t>(expectedHash >> 48));
+    ReleaseAssert(s->m_hashHigh == static_cast<uint8_t>(expectedHash >> 56));
     ReleaseAssert(s->m_hashLow == static_cast<uint32_t>(expectedHash));
     void* ptr = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(s->m_string);
     ReleaseAssert(memcmp(ptr, expectedStr, expectedLen) == 0);

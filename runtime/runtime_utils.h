@@ -125,6 +125,7 @@ public:
         CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass = x_hiddenClassForCoroutineRuntimeContext;
+        r->m_invalidArrayType = ArrayType::x_invalidArrayType;
         r->m_globalObject = globalObject;
         r->m_numVariadicRets = 0;
         r->m_variadicRetSlotBegin = 0;
@@ -139,7 +140,8 @@ public:
     HeapEntityType m_type;
     GcCellState m_cellState;
 
-    uint16_t m_reserved1;
+    uint8_t m_reserved1;
+    uint8_t m_invalidArrayType;
 
     // The global object, if interpreter
     //
@@ -502,14 +504,15 @@ class FunctionObject
 public:
     // Does not fill 'm_executable' or upvalue array
     //
-    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateImpl(VM* vm, uint16_t numUpvalues)
+    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateImpl(VM* vm, uint8_t numUpvalues)
     {
         size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(GeneralHeapPointer<Upvalue>) * numUpvalues;
         sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
         HeapPtr<FunctionObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>();
         UserHeapGcObjectHeader::Populate(r);
 
-        r->m_numUpvalues = static_cast<uint16_t>(numUpvalues);
+        r->m_numUpvalues = numUpvalues;
+        r->m_invalidArrayType = ArrayType::x_invalidArrayType;
         return r;
     }
 
@@ -518,8 +521,8 @@ public:
     static UserHeapPointer<FunctionObject> WARN_UNUSED Create(VM* vm, CodeBlock* cb)
     {
         uint32_t numUpvalues = cb->m_numUpvalues;
-        assert(numUpvalues <= std::numeric_limits<uint16_t>::max());
-        UserHeapPointer<FunctionObject> r = CreateImpl(vm, static_cast<uint16_t>(numUpvalues));
+        assert(numUpvalues <= std::numeric_limits<uint8_t>::max());
+        UserHeapPointer<FunctionObject> r = CreateImpl(vm, static_cast<uint8_t>(numUpvalues));
         SystemHeapPointer<ExecutableCode> executable { static_cast<ExecutableCode*>(cb) };
         TCSet(r.As()->m_executable, executable);
         return r;
@@ -555,7 +558,10 @@ public:
     HeapEntityType m_type;
     GcCellState m_cellState;
 
-    uint16_t m_numUpvalues;
+    uint8_t m_numUpvalues;
+    // Always 255 (invalid array type)
+    //
+    uint8_t m_invalidArrayType;
 
     GeneralHeapPointer<Upvalue> m_upvalues[0];
 };

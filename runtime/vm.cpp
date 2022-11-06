@@ -509,7 +509,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::InsertMultiPieceString(Iterator iter
     StringLengthAndHash lenAndHash = HashMultiPieceString(iterator);
     uint64_t hash = lenAndHash.m_hashValue;
     size_t length = lenAndHash.m_length;
-    uint16_t expectedHashHigh = static_cast<uint16_t>(hash >> 48);
+    uint8_t expectedHashHigh = static_cast<uint8_t>(hash >> 56);
     uint32_t expectedHashLow = BitwiseTruncateTo<uint32_t>(hash);
 
     uint32_t slotForInsertion = static_cast<uint32_t>(-1);

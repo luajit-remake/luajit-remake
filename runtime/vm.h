@@ -2,6 +2,7 @@
 
 #include "memory_ptr.h"
 #include "tvalue.h"
+#include "array_type.h"
 
 enum ThreadKind : uint8_t
 {
@@ -63,8 +64,8 @@ constexpr LuaMetamethodBitVectorT x_luaMetamethodBitVectorFullMask = static_cast
 
 // This corresponds to the m_high field in corresponding HeapString
 //
-constexpr std::array<uint16_t, x_totalLuaMetamethodKind> x_luaMetamethodHashes = {
-#define macro(e) constexpr_xxh3::XXH3_64bits_const( std::string_view { PP_STRINGIFY(PP_TUPLE_GET_2(e)) } ) >> 48,
+constexpr std::array<uint8_t, x_totalLuaMetamethodKind> x_luaMetamethodHashes = {
+#define macro(e) constexpr_xxh3::XXH3_64bits_const( std::string_view { PP_STRINGIFY(PP_TUPLE_GET_2(e)) } ) >> 56,
         PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
 #undef macro
 };
@@ -83,7 +84,7 @@ constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
     for (size_t i = 0; i < htSize; i++) { result[i] = 255; }
     for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
     {
-        uint16_t slot = static_cast<uint16_t>((x_luaMetamethodHashes[i] >> 8) % htSize);
+        size_t slot = x_luaMetamethodHashes[i] % htSize;
         while (result[slot] != 255)
         {
             slot = (slot + 1) % htSize;
@@ -95,10 +96,10 @@ constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
 
 // Return -1 if not found
 //
-constexpr int WARN_UNUSED GetLuaMetamethodOrdinalFromStringHash(uint16_t hashHigh)
+constexpr int WARN_UNUSED GetLuaMetamethodOrdinalFromStringHash(uint8_t hashHigh)
 {
     constexpr size_t htSize = std::size(x_luaMetamethodNamesSimpleHashTable);
-    uint16_t slot = static_cast<uint16_t>((hashHigh >> 8) % htSize);
+    size_t slot = hashHigh % htSize;
     while (true)
     {
         uint8_t entry = x_luaMetamethodNamesSimpleHashTable[slot];
@@ -367,9 +368,13 @@ public:
     HeapEntityType m_type;          // always TypeEnumForHeapObject<HeapString>
     GcCellState m_cellState;
 
-    // This is the high 16 bits of the XXHash64 value, for quick comparison
+    // This is the high 8 bits of the XXHash64 value, for quick comparison
     //
-    uint16_t m_hashHigh;
+    uint8_t m_hashHigh;
+    // Always ArrayType::x_invalidArrayType
+    //
+    uint8_t m_invalidArrayType;
+
     // This is the low 32 bits of the XXHash64 value, for hash table indexing and quick comparison
     //
     uint32_t m_hashLow;
@@ -391,7 +396,8 @@ public:
         m_type = TypeEnumForHeapObject<HeapString>;
         m_cellState = x_defaultCellState;
 
-        m_hashHigh = static_cast<uint16_t>(slah.m_hashValue >> 48);
+        m_hashHigh = static_cast<uint8_t>(slah.m_hashValue >> 56);
+        m_invalidArrayType = ArrayType::x_invalidArrayType;
         m_hashLow = BitwiseTruncateTo<uint32_t>(slah.m_hashValue);
         m_length = SafeIntegerCast<uint32_t>(slah.m_length);
     }
