@@ -724,10 +724,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             // If this variant has metadata, it's time to generate the corresponding definition now
             //
-            BytecodeMetadataStruct* bms = bytecodeVariantDef->m_bytecodeMetadataMaybeNull.get();
-            std::string bmsClassName;
-            if (bms != nullptr)
+            bool hasOutlinedMetadata = bytecodeVariantDef->HasBytecodeMetadata() && !bytecodeVariantDef->IsBytecodeMetadataInlined();
+            std::string bmsClassName;   // only populated if hasOutlinedMetadata
+            if (hasOutlinedMetadata)
             {
+                BytecodeMetadataStruct* bms = bytecodeVariantDef->m_bytecodeMetadataMaybeNull.get();
+
                 BytecodeMetadataStructBase::StructInfo bmsInfo = bytecodeVariantDef->GetMetadataStructInfo();
 
                 bmsClassName = "GeneratedDeegenBytecodeMetadata_" + bytecodeVariantDef->m_bytecodeName + "_" + std::to_string(bytecodeVariantDef->m_variantOrd);
@@ -896,14 +898,51 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, SafeIntegerCast<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
             }
 
-            ReleaseAssertIff(bms == nullptr, bytecodeVariantDef->m_metadataPtrOffset.get() == nullptr);
-            if (bms != nullptr)
+            ReleaseAssertIff(hasOutlinedMetadata, bytecodeVariantDef->m_metadataPtrOffset.get() != nullptr);
+            if (hasOutlinedMetadata)
             {
                 size_t offset = bytecodeVariantDef->m_metadataPtrOffset->GetOffsetInBytecodeStruct();
                 ReleaseAssert(bytecodeVariantDef->m_metadataPtrOffset->GetKind() == BcOperandKind::Literal);
                 ReleaseAssert(bytecodeVariantDef->m_metadataPtrOffset->GetSizeInBytecodeStruct() == 4);
                 ReleaseAssert(bmsClassName != "");
                 fprintf(fp, "        crtp->template RegisterMetadataField<%s>(base + %u);\n", bmsClassName.c_str(), SafeIntegerCast<unsigned int>(offset));
+            }
+
+            bool hasInlinedMetadata = bytecodeVariantDef->HasBytecodeMetadata() && bytecodeVariantDef->IsBytecodeMetadataInlined();
+            ReleaseAssertIff(hasInlinedMetadata || hasOutlinedMetadata, bytecodeVariantDef->HasBytecodeMetadata());
+            ReleaseAssertIff(hasInlinedMetadata, bytecodeVariantDef->m_inlinedMetadata.get() != nullptr);
+            ReleaseAssert(!(hasInlinedMetadata && hasOutlinedMetadata));
+            if (hasInlinedMetadata)
+            {
+                size_t inlinedMetadataOffset = bytecodeVariantDef->m_inlinedMetadata->GetOffsetInBytecodeStruct();
+                std::vector<BytecodeMetadataElement*> initInfo = bytecodeVariantDef->m_bytecodeMetadataMaybeNull->CollectInitializationInfo();
+                std::vector<std::pair<size_t /*offset*/, uint8_t /*initVal*/>> initVals;
+                for (BytecodeMetadataElement* e : initInfo)
+                {
+                    ReleaseAssert(e->HasInitValue());
+                    std::vector<uint8_t> initVal = e->GetInitValue();
+                    size_t offsetBegin = e->GetStructOffset();
+                    for (size_t i = 0; i < initVal.size(); i++)
+                    {
+                        initVals.push_back(std::make_pair(offsetBegin + i, initVal[i]));
+                    }
+                }
+                std::sort(initVals.begin(), initVals.end());
+                {
+                    std::unordered_set<size_t> checkUnique;
+                    for (auto& it : initVals)
+                    {
+                        ReleaseAssert(!checkUnique.count(it.first));
+                        checkUnique.insert(it.first);
+                        ReleaseAssert(it.first < bytecodeVariantDef->m_inlinedMetadata->m_size);
+                    }
+                }
+                for (size_t i = 0; i < initVals.size(); i++)
+                {
+                    size_t offset = inlinedMetadataOffset + initVals[i].first;
+                    uint8_t val = initVals[i].second;
+                    fprintf(fp, "        UnalignedStore<uint8_t>(base + %u, %d);\n", SafeIntegerCast<unsigned int>(offset), static_cast<int>(val));
+                }
             }
 
             if (bytecodeVariantDef->m_hasConditionalBranchTarget)

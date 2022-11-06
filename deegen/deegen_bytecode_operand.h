@@ -14,7 +14,8 @@ enum class BcOperandKind
     Constant,
     Literal,
     SpecializedLiteral,
-    BytecodeRangeBase
+    BytecodeRangeBase,
+    InlinedMetadata
 };
 
 class InterpreterBytecodeImplCreator;
@@ -48,6 +49,13 @@ public:
         return false;
     }
 
+    // Retunr true if this operand cannot be decoded trivially by a load from the bytecode struct
+    //
+    virtual bool WARN_UNUSED IsNotTriviallyDecodeableFromBytecodeStruct()
+    {
+        return false;
+    }
+
     // Return the # of bytes for the full representation of this operand
     //
     virtual size_t WARN_UNUSED ValueFullByteLength() = 0;
@@ -68,6 +76,7 @@ public:
 
     llvm::Type* WARN_UNUSED GetSourceValueFullRepresentationType(llvm::LLVMContext& ctx)
     {
+        ReleaseAssert(!IsNotTriviallyDecodeableFromBytecodeStruct());
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(ValueFullByteLength() * 8));
     }
 
@@ -429,6 +438,48 @@ public:
     BcOperand* m_operandRangeLimit;
 };
 
+// A bytecode operand that is an inlined bytecode metadata
+//
+class BcOpInlinedMetadata final : public BcOperand
+{
+public:
+    BcOpInlinedMetadata(size_t size)
+        : BcOperand("inlined_bytecode_metadata")
+        , m_size(size)
+    { }
+
+    virtual void dump(std::stringstream& ss) override
+    {
+        ss << "Bytecode inlined metadata: size = " << m_size << " bytes" << std::endl;
+    }
+
+    virtual BcOperandKind GetKind() override { return BcOperandKind::InlinedMetadata; }
+
+    virtual bool WARN_UNUSED IsNotTriviallyDecodeableFromBytecodeStruct() override
+    {
+        return true;
+    }
+
+    virtual size_t WARN_UNUSED ValueFullByteLength() override
+    {
+        return m_size;
+    }
+
+    virtual bool WARN_UNUSED IsSignedValue() override
+    {
+        return false;
+    }
+
+    virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override
+    {
+        return llvm_type_of<void*>(ctx);
+    }
+
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
+    size_t m_size;
+};
+
 enum class BytecodeQuickeningKind
 {
     // This variant is a normal variant
@@ -529,25 +580,48 @@ public:
         m_bytecodeStructLengthFinalized = true;
         if (m_bytecodeMetadataMaybeNull.get() != nullptr)
         {
-            ReleaseAssert(m_metadataPtrOffset.get() == nullptr);
-            m_metadataPtrOffset = std::make_unique<BcOpLiteral>("bytecodeMetadata", false /*isSigned*/, 4 /*numBytes*/);
-            m_metadataPtrOffset->AssignOrChangeBytecodeStructOffsetAndSize(m_bytecodeStructLength, 4 /*size*/);
-            m_bytecodeStructLength += 4;
+            BytecodeMetadataStruct::StructInfo info = m_bytecodeMetadataMaybeNull->FinalizeStructAndAssignOffsets();
+            // We cannot store the metadata inline if it contains pointers that need to be visited by GC
+            // Therefore, we currently conservatively inline only if the metadata struct is < 4 bytes, since each
+            // pointer is at least 4 bytes. The alignment also must be 1 since the bytecode is not aligned.
+            //
+            // TODO: we could have done better, for example, we may want to make the decision on a per-IC basis,
+            // or even on a per-member basis.
+            //
+            ReleaseAssert(m_metadataPtrOffset.get() == nullptr && m_inlinedMetadata.get() == nullptr);
+            if (info.alignment == 1 && info.allocSize < 4)
+            {
+                m_inlinedMetadata = std::make_unique<BcOpInlinedMetadata>(info.allocSize);
+                m_inlinedMetadata->AssignOrChangeBytecodeStructOffsetAndSize(m_bytecodeStructLength, info.allocSize /*size*/);
+                m_bytecodeStructLength += info.allocSize;
+            }
+            else
+            {
+                AssignMetadataStructInfo(info);
+                m_metadataPtrOffset = std::make_unique<BcOpLiteral>("bytecodeMetadata", false /*isSigned*/, 4 /*numBytes*/);
+                m_metadataPtrOffset->AssignOrChangeBytecodeStructOffsetAndSize(m_bytecodeStructLength, 4 /*size*/);
+                m_bytecodeStructLength += 4;
+            }
         }
-        ReleaseAssertIff(m_bytecodeMetadataMaybeNull.get() == nullptr, m_metadataPtrOffset.get() == nullptr);
+    }
+
+    bool HasBytecodeMetadata()
+    {
+        ReleaseAssert(m_bytecodeStructLengthFinalized);
+        return m_bytecodeMetadataMaybeNull.get() != nullptr;
+    }
+
+    bool IsBytecodeMetadataInlined()
+    {
+        ReleaseAssert(HasBytecodeMetadata());
+        ReleaseAssert(m_inlinedMetadata.get() != nullptr ^ m_metadataPtrOffset.get() != nullptr);
+        return m_inlinedMetadata.get() != nullptr;
     }
 
     size_t GetBytecodeStructLength()
     {
         ReleaseAssert(m_bytecodeStructLengthFinalized);
         return m_bytecodeStructLength;
-    }
-
-    void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)
-    {
-        ReleaseAssert(!m_metadataStructInfoAssigned);
-        m_metadataStructInfoAssigned = true;
-        m_metadataStructInfo = info;
     }
 
     BytecodeMetadataStructBase::StructInfo GetMetadataStructInfo()
@@ -603,7 +677,13 @@ public:
     bool m_hasConditionalBranchTarget;
     std::unique_ptr<BcOpSlot> m_outputOperand;
     std::unique_ptr<BcOpLiteral> m_condBrTarget;
+
+    // If the bytecode has metadata, exactly one of the two fields above will be non-nullptr
+    // If 'm_metadataPtrOffset' is not nullptr, the bytecode metadata is outlined, and its ptr offset is stored by this member.
+    // If 'm_inlinedMetadata' is not nullptr, the bytecode metadata is inlined with size and offset described by this member.
+    //
     std::unique_ptr<BcOpLiteral> m_metadataPtrOffset;
+    std::unique_ptr<BcOpInlinedMetadata> m_inlinedMetadata;
 
     bool m_metadataStructInfoAssigned;
 
@@ -624,6 +704,13 @@ public:
     std::vector<std::vector<BytecodeOperandQuickeningDescriptor>> m_allOtherQuickenings;
 
 private:
+    void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)
+    {
+        ReleaseAssert(!m_metadataStructInfoAssigned);
+        m_metadataStructInfoAssigned = true;
+        m_metadataStructInfo = info;
+    }
+
     size_t m_bytecodeStructLength;
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 

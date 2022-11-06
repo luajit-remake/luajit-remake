@@ -17,6 +17,10 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     {
         return nullptr;
     }
+    if (IsNotTriviallyDecodeableFromBytecodeStruct())
+    {
+        return nullptr;
+    }
 
     size_t offsetInBytecodeStruct = GetOffsetInBytecodeStruct();
     size_t numBytesInBytecodeStruct = GetSizeInBytecodeStruct();
@@ -100,6 +104,17 @@ llvm::Value* WARN_UNUSED BcOpBytecodeRangeBase::EmitUsageValueFromBytecodeValue(
     LLVMContext& ctx = ifi->GetModule()->getContext();
     ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(bytecodeValue->getContext()));
     Value* res = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { bytecodeValue }, "", targetBB);
+    ReleaseAssert(res->getType() == GetUsageType(ctx));
+    return res;
+}
+
+llvm::Value* WARN_UNUSED BcOpInlinedMetadata::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    ReleaseAssert(bytecodeValue == nullptr);
+    Value* res = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCurBytecode(), { CreateLLVMConstantInt<uint64_t>(ctx, GetOffsetInBytecodeStruct()) }, "", targetBB);
     ReleaseAssert(res->getType() == GetUsageType(ctx));
     return res;
 }

@@ -716,14 +716,23 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
-    if (m_bytecodeDef->m_metadataPtrOffset.get() != nullptr)
+    if (m_bytecodeDef->HasBytecodeMetadata())
     {
-        Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
-        ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
-        Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
-        GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);
-        m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
-        metadataPtr->setName(x_metadataPtr);
+        if (m_bytecodeDef->IsBytecodeMetadataInlined())
+        {
+            Value* metadataPtr = m_bytecodeDef->m_inlinedMetadata->EmitUsageValueFromBytecodeValue(this, currentBlock, nullptr /*bytecodeValue*/);
+            m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
+            metadataPtr->setName(x_metadataPtr);
+        }
+        else
+        {
+            Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
+            ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
+            Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
+            GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);
+            m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
+            metadataPtr->setName(x_metadataPtr);
+        }
     }
 
     std::vector<Value*> usageValues;
@@ -993,19 +1002,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         // At this point we should have determined everything that needs to sit in the bytecode metadata (if any)
         //
         m_bytecodeDef->FinalizeBytecodeStructLength();
-        if (m_bytecodeDef->m_bytecodeMetadataMaybeNull.get() != nullptr)
-        {
-            BytecodeMetadataStruct::StructInfo info = m_bytecodeDef->m_bytecodeMetadataMaybeNull->FinalizeStructAndAssignOffsets();
-            m_bytecodeDef->AssignMetadataStructInfo(info);
-        }
     }
 
     // Having decided the final bytecode metadata struct layout, we can lower all the metadata struct element getters
     // Again, this relies on the fact that the metadata struct layout is solely determined by the Main processor
     //
-    if (m_bytecodeDef->m_bytecodeMetadataMaybeNull.get() != nullptr)
+    ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
+    if (m_bytecodeDef->HasBytecodeMetadata())
     {
-        ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
         m_bytecodeDef->m_bytecodeMetadataMaybeNull->LowerAll(m_module.get());
     }
 
