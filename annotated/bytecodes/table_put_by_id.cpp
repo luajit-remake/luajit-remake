@@ -167,6 +167,10 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 }
                 else
                 {
+                    // TODO: think about if we should inline cache this case. We could have just inline cached it.
+                    // We are not doing it only because butterfly expansion is not a cheap operation, so probably the benefit
+                    // of IC is low.
+                    //
                     if (c_info.m_shouldGrowButterfly)
                     {
                         ic->SetUncacheable();
@@ -184,26 +188,49 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
             }
             else if (!c_info.m_propertyExists)
             {
-                if (c_info.m_shouldGrowButterfly)
-                {
-                    ic->SetUncacheable();
-                    TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(tableObj, c_info.m_newStructure.As()->m_butterflyNamedStorageCapacity);
-                }
+                SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
 
                 // The property is known to not exist, so we must always check the metatable
                 //
-                SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
-                return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
-                    IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                if (c_info.m_shouldGrowButterfly)
+                {
+                    // It's critical for us to check the metatable first, and only call GrowButterfly()
+                    // when we are certain the metamethod doesn't exist: once we call GrowButterfly(),
+                    // we are committed to complete the rawput operation by updating the hidden class and writing the value.
+                    //
+                    // This is because the size of the butterfly is coded in the hidden class, so if we call GrowButterfly()
+                    // but not update the hidden class, we are putting the table object in an inconsistent state.
+                    //
+                    // TODO: think about if we should inline cache this case. We could have just inline cached it.
+                    // We are not doing it only because butterfly expansion is not a cheap operation, so probably the benefit
+                    // of IC is low.
+                    //
                     TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
                     if (unlikely(!mm.Is<tNil>()))
                     {
                         return std::make_pair(mm, ResKind::HandleMetamethod);
                     }
+
+                    TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(tableObj, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
+
                     TCSet(tableObj->m_hiddenClass, c_newStructure);
                     PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                     return std::make_pair(TValue(), ResKind::NoMetamethod);
-                });
+                }
+                else
+                {
+                    return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
+                        IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                        TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
+                        if (unlikely(!mm.Is<tNil>()))
+                        {
+                            return std::make_pair(mm, ResKind::HandleMetamethod);
+                        }
+                        TCSet(tableObj->m_hiddenClass, c_newStructure);
+                        PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
+                }
             }
             else
             {

@@ -874,4 +874,9 @@ TEST(LuaTest, GlobalPutInterpreterIC_4)
     RunSimpleLuaTest("luatests/globalput_interpreter_ic_4.lua.json");
 }
 
+TEST(LuaTest, PutByIdInterpreterIC_1)
+{
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_1.lua.json");
+}
+
 }   // anonymous namespace
