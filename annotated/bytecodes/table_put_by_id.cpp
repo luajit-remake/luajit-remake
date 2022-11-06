@@ -132,11 +132,14 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
             PutByIdICInfo c_info;
             TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index } , c_info /*out*/);
 
+            int32_t c_slot = c_info.m_slot;
+            PutByIdICInfo::ICKind c_icKind = c_info.m_icKind;
+
             if (unlikely(!c_info.m_isInlineCacheable))
             {
                 // Currently since we don't have UncacheableDictionary, the only case for this is TransitionedToDictionaryMode
                 //
-                assert(c_info.m_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
+                assert(c_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
                 assert(!c_info.m_propertyExists);
                 if (unlikely(TableObject::PutByIdNeedToCheckMetatable(tableObj, c_info)))
                 {
@@ -146,21 +149,16 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                         return std::make_pair(mm, ResKind::HandleMetamethod);
                     }
                 }
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                TableObject* rawTab = TranslateToRawPointer(tableObj);
-                assert(rawTab->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-                rawTab->PutByIdTransitionToDictionary(vm, index, TranslateToRawPointer(vm, rawTab->m_hiddenClass.As<Structure>()), valueToPut);
+                TableObject::PutByIdTransitionToDictionary(tableObj, index, valueToPut);
                 return std::make_pair(TValue(), ResKind::NoMetamethod);
             }
 
-            assert(c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_info.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+            assert(c_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
             if (likely(!c_info.m_mayHaveMetatable))
             {
                 if (c_info.m_propertyExists)
                 {
                     assert(!c_info.m_shouldGrowButterfly);
-                    int32_t c_slot = c_info.m_slot;
-                    PutByIdICInfo::ICKind c_icKind = c_info.m_icKind;
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
@@ -172,12 +170,9 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                     if (c_info.m_shouldGrowButterfly)
                     {
                         ic->SetUncacheable();
-                        TableObject* rawTab = TranslateToRawPointer(tableObj);
-                        rawTab->GrowButterfly<true /*isGrowNamedStorage*/>(c_info.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+                        TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(tableObj, c_info.m_newStructure.As()->m_butterflyNamedStorageCapacity);
                     }
 
-                    int32_t c_slot = c_info.m_slot;
-                    PutByIdICInfo::ICKind c_icKind = c_info.m_icKind;
                     SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
@@ -192,14 +187,11 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 if (c_info.m_shouldGrowButterfly)
                 {
                     ic->SetUncacheable();
-                    TableObject* rawTab = TranslateToRawPointer(tableObj);
-                    rawTab->GrowButterfly<true /*isGrowNamedStorage*/>(c_info.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+                    TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(tableObj, c_info.m_newStructure.As()->m_butterflyNamedStorageCapacity);
                 }
 
                 // The property is known to not exist, so we must always check the metatable
                 //
-                int32_t c_slot = c_info.m_slot;
-                PutByIdICInfo::ICKind c_icKind = c_info.m_icKind;
                 SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
                 return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                     IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
@@ -219,8 +211,6 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
 
                 // The property exists, so we must check if its old value is nil and then check metatable
                 //
-                int32_t c_slot = c_info.m_slot;
-                PutByIdICInfo::ICKind c_icKind = c_info.m_icKind;
                 return ic->Effect([tableObj, valueToPut, c_icKind, c_slot] {
                     IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                     TValue oldValue = PutByIdICHelper::GetOldValueFromTableObject(tableObj, c_icKind, c_slot);

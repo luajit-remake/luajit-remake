@@ -1076,7 +1076,7 @@ public:
     // This function must be called before changing the structure
     //
     template<bool isGrowNamedStorage>
-    void ALWAYS_INLINE GrowButterfly(uint32_t newCapacity)
+    void GrowButterfly(uint32_t newCapacity)
     {
         if (m_butterfly == nullptr)
         {
@@ -1213,9 +1213,18 @@ public:
         }
     }
 
-    void PutByIdTransitionToDictionary(VM* vm, UserHeapPointer<void> prop, Structure* structure, TValue newValue)
+    template<bool isGrowNamedStorage>
+    static void GrowButterfly(HeapPtr<TableObject> tableObj, uint32_t newCapacity)
+    {
+        TableObject* raw = TranslateToRawPointer(tableObj);
+        raw->GrowButterfly<isGrowNamedStorage>(newCapacity);
+    }
+
+    void PutByIdTransitionToDictionaryImpl(VM* vm, UserHeapPointer<void> prop, TValue newValue)
     {
         CacheableDictionary::CreateFromStructureResult res;
+        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Structure* structure = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>());
         CacheableDictionary::CreateFromStructure(vm, this, structure, prop, res /*out*/);
         CacheableDictionary* dictionary = res.m_dictionary;
         if (res.m_shouldGrowButterfly)
@@ -1248,14 +1257,20 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static void PutByIdTransitionToDictionary(T self, UserHeapPointer<void> propertyName, TValue newValue)
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TableObject* rawSelf = TranslateToRawPointer(vm, self);
+        assert(rawSelf->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        rawSelf->PutByIdTransitionToDictionaryImpl(vm, propertyName, newValue);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void ALWAYS_INLINE PutById(T self, UserHeapPointer<void> propertyName, TValue newValue, PutByIdICInfo icInfo)
     {
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode)
         {
-            VM* vm = VM::GetActiveVMForCurrentThread();
-            TableObject* rawSelf = TranslateToRawPointer(self);
-            assert(rawSelf->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-            rawSelf->PutByIdTransitionToDictionary(vm, propertyName, TranslateToRawPointer(vm, rawSelf->m_hiddenClass.As<Structure>()), newValue);
+            PutByIdTransitionToDictionary(self, propertyName, newValue);
             return;
         }
 
@@ -1263,8 +1278,7 @@ public:
         {
             if (icInfo.m_shouldGrowButterfly)
             {
-                TableObject* rawSelf = TranslateToRawPointer(self);
-                rawSelf->GrowButterfly<true /*isGrowNamedStorage*/>(icInfo.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+                TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(self, icInfo.m_newStructure.As()->m_butterflyNamedStorageCapacity);
             }
 
             TCSet(self->m_hiddenClass, SystemHeapPointer<void> { icInfo.m_newStructure.As() });
