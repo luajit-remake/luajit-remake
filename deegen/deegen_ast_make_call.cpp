@@ -507,7 +507,6 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
             {
                 newSfBase,
                 ifi->GetStackBase() /*oldStackBase*/,
-                ifi->GetCodeBlock(),
                 ifi->GetCurBytecode(),
                 m_target,
                 GetContinuationDispatchTarget() /*onReturn*/

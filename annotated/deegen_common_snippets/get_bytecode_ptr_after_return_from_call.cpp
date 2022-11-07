@@ -3,12 +3,10 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* calleeStackBase, CodeBlock* cb)
+static uint8_t* DeegenSnippet_GetBytecodePtrAfterReturnFromCall(void* calleeStackBase)
 {
     StackFrameHeader* calleeHdr = StackFrameHeader::Get(calleeStackBase);
-    uint32_t bytecodeOffset = calleeHdr->m_callerBytecodeOffset;
-    uint8_t* bytecodeBase = cb->m_bytecode;
-    return bytecodeBase + bytecodeOffset;
+    return TranslateToRawPointer(calleeHdr->m_callerBytecodePtr.As());
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetBytecodePtrAfterReturnFromCall", DeegenSnippet_GetBytecodePtrAfterReturnFromCall)

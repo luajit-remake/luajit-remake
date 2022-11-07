@@ -22,7 +22,7 @@ struct ExpectedResult
     uint64_t m_expectedNumVarArgs;
     CodeBlock* m_expectedCodeBlock;
     void* m_callerStackFrameBase;
-    uint32_t m_callerBytecodeOffset;
+    SystemHeapPointer<uint8_t> m_callerBytecodePtr;
     std::vector<uint64_t> m_expectedStackContentBeforeThisFrame;
     std::vector<uint64_t> m_arguments;
     uint64_t m_numFixedArgsAcceptedByCallee;
@@ -59,7 +59,7 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_
     ReleaseAssert(reinterpret_cast<uint64_t>(hdr->m_func) == 12345678987654321ULL);
     ReleaseAssert(hdr->m_caller == g_expectedResult.m_callerStackFrameBase);
     ReleaseAssert(reinterpret_cast<uint64_t>(hdr->m_retAddr) == 22345678987654322ULL);
-    ReleaseAssert(hdr->m_callerBytecodeOffset == g_expectedResult.m_callerBytecodeOffset);
+    ReleaseAssert(hdr->m_callerBytecodePtr.m_value == g_expectedResult.m_callerBytecodePtr.m_value);
 
     for (size_t i = 0; i < g_expectedResult.m_expectedStackContentBeforeThisFrame.size(); i++)
     {
@@ -125,7 +125,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
     rootSfh->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(1000000345);
-    rootSfh->m_callerBytecodeOffset = 0;
+    rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* previousFrameEnd = reinterpret_cast<uint64_t*>(rootSfh + 1);
 
@@ -133,12 +133,12 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     hdr->m_caller = rootSfh + 1;
     hdr->m_retAddr = reinterpret_cast<void*>(22345678987654322ULL);
     hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(12345678987654321ULL);
-    hdr->m_callerBytecodeOffset = 50;
+    hdr->m_callerBytecodePtr.m_value = 50;
     hdr->m_numVariadicArguments = 0;
 
     g_expectedResult.m_previousCallFrameEnd = previousFrameEnd;
     g_expectedResult.m_callerStackFrameBase = rootSfh + 1;
-    g_expectedResult.m_callerBytecodeOffset = 50;
+    g_expectedResult.m_callerBytecodePtr.m_value = 50;
     g_expectedResult.m_numFixedArgsAcceptedByCallee = numFixedArgs;
     g_expectedResult.m_calleeAcceptsVarArgs = calleeAcceptsVarArgs;
     g_expectedResult.m_isTailCall = isTailCall;

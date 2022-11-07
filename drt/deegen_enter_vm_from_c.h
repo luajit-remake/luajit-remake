@@ -43,7 +43,7 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     hdr->m_caller = nullptr;
     hdr->m_retAddr = reinterpret_cast<void*>(deegen_internal_use_only_exit_vm_epilogue);
     hdr->m_func = func;
-    hdr->m_callerBytecodeOffset = 0;
+    hdr->m_callerBytecodePtr = 0;
     hdr->m_numVariadicArguments = 0;
     uint64_t* stackBase = reinterpret_cast<uint64_t*>(hdr + 1);
     if (numArgs > 0)

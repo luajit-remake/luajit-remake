@@ -33,6 +33,7 @@ uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeSt
     }
 
     uint32_t trailingArraySize = RoundUpToMultipleOf<8>(curOffset) - cbTrailingArrayOffset;
+    assert(trailingArraySize % 8 == 0);
 
     for (auto& patch : patchList)
     {

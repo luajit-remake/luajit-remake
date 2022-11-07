@@ -81,7 +81,8 @@ TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
 
 CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
-    size_t sizeToAllocate = GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(ucb->m_bytecodeMetadataLength) + sizeof(TValue) * ucb->m_cstTableLength;
+    assert(ucb->m_bytecodeMetadataLength % 8 == 0);
+    size_t sizeToAllocate = GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength + sizeof(TValue) * ucb->m_cstTableLength + RoundUpToMultipleOf<8>(ucb->m_bytecodeLength);
     uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
 
@@ -89,7 +90,8 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
-    cb->m_bytecode = new uint8_t[ucb->m_bytecodeLength];
+    uint8_t* bytecodeStart = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength;
+    cb->m_bytecode = bytecodeStart;
     memcpy(cb->m_bytecode, ucb->m_bytecode, ucb->m_bytecodeLength);
     cb->m_bestEntryPoint = generated::GetGuestLanguageFunctionEntryPointForInterpreter(ucb->m_hasVariadicArguments, ucb->m_numFixedArguments);
     cb->m_globalObject = globalObject;

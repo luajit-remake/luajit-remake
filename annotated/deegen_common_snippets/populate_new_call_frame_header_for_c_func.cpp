@@ -8,7 +8,7 @@ static void DeegenSnippet_PopulateNewCallFrameHeaderForCallFromCFunc(void* newSt
     StackFrameHeader* hdr = StackFrameHeader::Get(newStackBase);
     hdr->m_retAddr = onReturn;
     hdr->m_caller = oldStackBase;
-    hdr->m_callerBytecodeOffset = 0;
+    hdr->m_callerBytecodePtr = 0;
     hdr->m_numVariadicArguments = 0;
 }
 

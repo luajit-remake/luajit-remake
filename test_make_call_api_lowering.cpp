@@ -104,22 +104,22 @@ void TestModuleOneCase(llvm::Module* moduleIn,
         ReleaseAssert(module->getFunction(expectedRcName) != nullptr);
     }
 
-    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock)).AsNoAssert<CodeBlock>());
+    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
 
     calleeCb->m_bestEntryPoint = reinterpret_cast<void*>(ResultChecker);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    calleeCb->m_bytecode = new uint8_t[100];
+    calleeCb->m_bytecode = reinterpret_cast<uint8_t*>(calleeCb) + CodeBlock::GetTrailingArrayOffset();
     HeapPtr<FunctionObject> calleefo = FunctionObject::Create(vm, calleeCb).As();
 
-    CodeBlock* callerCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock)).AsNoAssert<CodeBlock>());
+    CodeBlock* callerCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(callerCb);
     callerCb->m_bestEntryPoint = nullptr;
     callerCb->m_numUpvalues = 0;
     callerCb->m_stackFrameNumSlots = static_cast<uint32_t>(numLocals);
-    callerCb->m_bytecode = new uint8_t[100];
+    callerCb->m_bytecode =reinterpret_cast<uint8_t*>(callerCb) + CodeBlock::GetTrailingArrayOffset();
     uint8_t* curBytecode = callerCb->m_bytecode + 50;
     HeapPtr<FunctionObject> callerfo = FunctionObject::Create(vm, callerCb).As();
 
@@ -247,7 +247,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
     rootSfh->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(1000000345);
-    rootSfh->m_callerBytecodeOffset = 0;
+    rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* callerStackBegin = reinterpret_cast<uint64_t*>(rootSfh + 1);
 
@@ -260,7 +260,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     callerSfh->m_caller = rootSfh + 1;
     callerSfh->m_retAddr = reinterpret_cast<void*>(1000000456);
     callerSfh->m_func = callerfo;
-    callerSfh->m_callerBytecodeOffset = 0;
+    callerSfh->m_callerBytecodePtr = 0;
     callerSfh->m_numVariadicArguments = static_cast<uint32_t>(numVarArgs);
 
     uint64_t* callerLocalsBegin = reinterpret_cast<uint64_t*>(callerSfh + 1);
@@ -304,7 +304,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
         calleeSfh->m_caller = callerSfh + 1;
         calleeSfh->m_retAddr = rcFnAddr;
         calleeSfh->m_func = calleefo;
-        calleeSfh->m_callerBytecodeOffset = static_cast<uint32_t>(curBytecode - callerCb->m_bytecode);
+        calleeSfh->m_callerBytecodePtr = curBytecode;
         calleeSfh->m_numVariadicArguments = 0;
     }
     else

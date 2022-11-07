@@ -198,6 +198,7 @@ public:
             m_metadataFieldPatched = true;
             PatchMetadataFields();
         }
+        assert(m_bytecodeMetadataLength % 8 == 0);
         return m_bytecodeMetadataLength;
     }
 

@@ -1097,9 +1097,9 @@ public:
     // The return address
     //
     void* m_retAddr;
-    // If the function is calling (i.e. not topmost frame), denotes the offset of the bytecode that performed the call
+    // If the function is calling (i.e. not topmost frame), denotes the bytecode position that performed the call
     //
-    uint32_t m_callerBytecodeOffset;
+    SystemHeapPointer<uint8_t> m_callerBytecodePtr;
     // Total number of variadic arguments passed to the function
     //
     uint32_t m_numVariadicArguments;

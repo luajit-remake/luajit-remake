@@ -245,10 +245,10 @@ class UnlinkedCodeBlock;
 
 // This uniquely corresponds to each pair of <UnlinkedCodeBlock, GlobalObject>
 // It owns the bytecode and the corresponding metadata (the bytecode is copied from the UnlinkedCodeBlock,
-// we need our own copy because we do bytecode opcode specialization optimization)
+// we need our own copy because we do quickening, aka., dynamic bytecode opcode specialization optimization)
 //
 // Layout:
-// [ upvalue table and constant table ] [ CodeBlock ] [ byetecode metadata ]
+// [ upvalue table and constant table ] [ CodeBlock ] [ byetecode metadata ] [ bytecode ]
 //
 class alignas(8) CodeBlock final : public ExecutableCode
 {

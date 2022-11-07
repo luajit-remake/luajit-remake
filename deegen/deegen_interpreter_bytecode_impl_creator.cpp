@@ -661,19 +661,13 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         numRet->setName(x_numRet);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
-        Function* getCbFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetCodeBlockFromStackBase");
-        ReleaseAssert(getCbFunc->arg_size() == 1 && llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getParamType(0)));
-        ReleaseAssert(llvm_type_has_type<void*>(getCbFunc->getFunctionType()->getReturnType()));
-        Instruction* codeblock = CallInst::Create(getCbFunc, { GetStackBase() }, "" /*name*/, currentBlock);
-
-        Function* getBytecodePtrFunc = LinkInDeegenCommonSnippet(m_module.get(), "GetBytecodePtrAfterReturnFromCall");
-        ReleaseAssert(getBytecodePtrFunc->arg_size() == 2 &&
-                      llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(0)) &&
-                      llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getParamType(1)));
-        ReleaseAssert(llvm_type_has_type<void*>(getBytecodePtrFunc->getFunctionType()->getReturnType()));
-        // Note that the 'm_callerBytecodeOffset' is stored in the callee's stack frame header, so we should pass 'calleeStackBase' here
+        // Note that the 'm_callerBytecodePtr' is stored in the callee's stack frame header, so we should pass 'calleeStackBase' here
         //
-        Instruction* bytecodePtr = CallInst::Create(getBytecodePtrFunc, { calleeStackBase, codeblock }, "" /*name*/, currentBlock);
+        Instruction* bytecodePtr = CreateCallToDeegenCommonSnippet(GetModule(), "GetBytecodePtrAfterReturnFromCall", { calleeStackBase }, currentBlock);
+        ReleaseAssert(llvm_value_has_type<void*>(bytecodePtr));
+
+        Instruction* codeblock = CreateCallToDeegenCommonSnippet(GetModule(), "GetCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
+        ReleaseAssert(llvm_value_has_type<void*>(codeblock));
 
         m_valuePreserver.Preserve(x_codeBlock, codeblock);
         m_valuePreserver.Preserve(x_curBytecode, bytecodePtr);
