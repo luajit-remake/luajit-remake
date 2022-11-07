@@ -146,7 +146,7 @@ struct MetadataFieldPatchRecord
 
 // Returns the length of the metadata part, which should also be the trailing array size of the code block
 //
-uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList);
+uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, size_t bytecodeLen, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList);
 
 class BytecodeBuilder;
 
@@ -179,7 +179,7 @@ public:
         uint8_t* res = new uint8_t[len + x_numExtraPaddingAtEnd];
         memcpy(res, GetBytecodeStart(), len);
         memset(res + len, 0, x_numExtraPaddingAtEnd);
-        return std::make_pair(res, len);
+        return std::make_pair(res, len + x_numExtraPaddingAtEnd);
     }
 
     std::pair<uint64_t*, size_t> GetBuiltConstantTable()
@@ -318,7 +318,13 @@ private:
         // So we are assuming that our template parameter 'MetadataTypeListInfo' is just the BytecodeMetadataTypeListInfo
         // define in bytecode_builder.h, but we cannot assert it. Honestly this is fragile, but let's go with it for now.
         //
-        m_bytecodeMetadataLength = PatchBytecodeMetadataFields(m_bufferBegin, m_bytecodeMetadataCnt.data(), m_metadataFieldPatchRecords);
+        // Note that the bytecodeLength below must agree with the length returned by GetBuiltBytecodeSequence()
+        //
+        m_bytecodeMetadataLength = PatchBytecodeMetadataFields(
+            m_bufferBegin /*bytecodeStart*/,
+            GetCurLength() + x_numExtraPaddingAtEnd /*bytecodeLen*/,
+            m_bytecodeMetadataCnt.data(),
+            m_metadataFieldPatchRecords);
     }
 
     uint8_t* m_bufferBegin;

@@ -3,13 +3,14 @@
 
 namespace DeegenBytecodeBuilder {
 
-uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList)
+uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, size_t bytecodeLen, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList)
 {
     // Note that the logic below that computes the offset for each metadata struct must
     // agree with the logic that iterates the metadata structs from the CodeBlock
     //
     uint32_t cbTrailingArrayOffset = static_cast<uint32_t>(CodeBlock::GetTrailingArrayOffset());
-    uint32_t curOffset = cbTrailingArrayOffset;
+    assert(cbTrailingArrayOffset % 8 == 0);
+    uint32_t curOffset = cbTrailingArrayOffset + RoundUpToMultipleOf<8>(static_cast<uint32_t>(bytecodeLen));
 
     // TODO: ideally we should store the metadata structs in increasing order of alignment to minimize padding
     //

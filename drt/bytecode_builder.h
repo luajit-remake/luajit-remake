@@ -111,6 +111,6 @@ template<typename Lambda>
 void ALWAYS_INLINE ForEachBytecodeMetadata(CodeBlock* cb, const Lambda& lambda)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
-    uintptr_t mdStart = reinterpret_cast<uintptr_t>(cb->m_bytecodeMetadata);
+    uintptr_t mdStart = cb->GetBytecodeMetadataStart();
     detail::ForEachBytecodeMetadataHelper<BytecodeMetadataStructTypeList>::Run<0>(mdStart, ucb->m_bytecodeMetadataUseCounts, lambda);
 }

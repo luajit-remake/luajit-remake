@@ -202,6 +202,7 @@ public:
     uint32_t m_numFixedArguments;
 
     // This is nullptr iff it is an intrinsic, and negative iff it is a user-provided C function
+    // TODO: I don't think this field is needed any more..
     //
     uint8_t* m_bytecode;
 
@@ -248,7 +249,7 @@ class UnlinkedCodeBlock;
 // we need our own copy because we do quickening, aka., dynamic bytecode opcode specialization optimization)
 //
 // Layout:
-// [ upvalue table and constant table ] [ CodeBlock ] [ byetecode metadata ] [ bytecode ]
+// [ upvalue table and constant table ] [ CodeBlock ] [ bytecode ] [ byetecode metadata ]
 //
 class alignas(8) CodeBlock final : public ExecutableCode
 {
@@ -257,7 +258,12 @@ public:
 
     static constexpr size_t GetTrailingArrayOffset()
     {
-        return offsetof_member_v<&CodeBlock::m_bytecodeMetadata>;
+        return offsetof_member_v<&CodeBlock::m_bytecodeStream>;
+    }
+
+    uintptr_t GetBytecodeMetadataStart()
+    {
+        return reinterpret_cast<uintptr_t>(this) + GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(m_bytecodeLength);
     }
 
     UserHeapPointer<TableObject> m_globalObject;
@@ -272,7 +278,7 @@ public:
 
     UnlinkedCodeBlock* m_owner;
 
-    uint64_t m_bytecodeMetadata[0];
+    uint64_t m_bytecodeStream[0];
 };
 
 // This is just x_num_bytecode_metadata_struct_kinds

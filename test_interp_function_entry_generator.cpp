@@ -95,14 +95,14 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
-    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock)).AsNoAssert<CodeBlock>());
+    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    calleeCb->m_bytecode = new uint8_t[100];
+    calleeCb->m_bytecode = reinterpret_cast<uint8_t*>(calleeCb->m_bytecodeStream);
     calleeCb->m_numFixedArguments = static_cast<uint32_t>(numFixedArgs);
-    memset(calleeCb->m_bytecode, 0, 100);
+    memset(calleeCb->m_bytecode, 0, 128);
 
     CoroutineRuntimeContext* coroCtx = CoroutineRuntimeContext::Create(vm, UserHeapPointer<TableObject> {} /*globalObject*/);
 

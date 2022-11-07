@@ -90,8 +90,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
-    uint8_t* bytecodeStart = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength;
-    cb->m_bytecode = bytecodeStart;
+    cb->m_bytecode = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset();
     memcpy(cb->m_bytecode, ucb->m_bytecode, ucb->m_bytecodeLength);
     cb->m_bestEntryPoint = generated::GetGuestLanguageFunctionEntryPointForInterpreter(ucb->m_hasVariadicArguments, ucb->m_numFixedArguments);
     cb->m_globalObject = globalObject;
