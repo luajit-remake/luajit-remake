@@ -7,15 +7,21 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
 define dso_local ghccc void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, ptr %stackBase, ptr nocapture readnone %curBytecode, ptr nocapture readnone %codeBlock, i64 %0, ptr nocapture readnone %1, i64 %2, i64 %3, i64 %4, i64 %5, double %6, double %7, double %8, double %9, double %10, double %11) local_unnamed_addr #0 section "deegen_interpreter_code_section_hot" {
+  %13 = icmp ult i64 %4, 4294967296
+  tail call void @llvm.assume(i1 %13)
   musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr %coroutineCtx, ptr %stackBase, ptr nonnull @.str.3, ptr undef, i64 %0, ptr undef, i64 undef, i64 undef, i64 undef, i64 %5, double undef, double undef, double undef, double undef, double undef, double undef)
   ret void
 }
 
+; Function Attrs: inaccessiblememonly mustprogress nocallback nofree nosync nounwind willreturn
+declare void @llvm.assume(i1 noundef) #1
+
 ; Function Attrs: nounwind
-declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, i64, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
+declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, i64, i64, i64, double, double, double, double, double, double) local_unnamed_addr #2
 
 attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cx8,+fsgsbase,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { nounwind }
+attributes #1 = { inaccessiblememonly mustprogress nocallback nofree nosync nounwind willreturn }
+attributes #2 = { nounwind }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}

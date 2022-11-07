@@ -217,8 +217,8 @@ static std::vector<uint64_t> WARN_UNUSED AstSlowPathGetInterpreterFunctionArgAss
 {
     using namespace llvm;
 
-    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecode();
-    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecode();
+    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecodeSlowPath();
+    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath();
 
     std::vector<uint64_t> gprArgs;
     std::vector<uint64_t> fprArgs;
@@ -370,12 +370,7 @@ void AstSlowPath::LowerForInterpreter(InterpreterBytecodeImplCreator* ifi)
     }
     ReleaseAssert(dispatchFn->getFunctionType() == fty);
 
-    InterpreterFunctionInterface::CreateDispatchToBytecode(dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), ifi->GetCurBytecode(), ifi->GetCodeBlock(), m_origin /*insertBefore*/);
-
-    CallInst* callInst = dyn_cast<CallInst>(m_origin->getPrevNode()->getPrevNode());
-    ReleaseAssert(callInst != nullptr);
-    ReleaseAssert(callInst->getCalledFunction() == dispatchFn);
-
+    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), ifi->GetCurBytecode(), ifi->GetCodeBlock(), m_origin /*insertBefore*/);
     for (size_t i = 0; i < argOrdList.size(); i++)
     {
         uint32_t argOrd = static_cast<uint32_t>(argOrdList[i]);

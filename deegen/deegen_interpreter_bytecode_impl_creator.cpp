@@ -5,6 +5,7 @@
 #include "deegen_ast_return_value_accessor.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_ast_throw_error.h"
+#include "deegen_options.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_ast_simple_lowering_utils.h"
 #include "tag_register_optimization.h"
@@ -146,8 +147,8 @@ static std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> GetQuick
     //
     // The already-decoded args will be passed to the continuation using registers in the following order.
     //
-    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecode();
-    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecode();
+    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecodeSlowPath();
+    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath();
 
     // We will use pop_back for simplicity, so reverse the vector now
     //
@@ -622,6 +623,8 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
+    Value* preloadedOpValue = nullptr;
+
     if (m_processKind != ProcessKind::ReturnContinuation)
     {
         // Note that we also set parameter names here.
@@ -642,6 +645,23 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         Value* codeBlock = m_wrapper->getArg(3);
         codeBlock->setName(x_codeBlock);
         m_valuePreserver.Preserve(x_codeBlock, codeBlock);
+
+        if (m_processKind == ProcessKind::Main && x_deegen_enable_interpreter_optimistic_preloading)
+        {
+            Value* val = m_wrapper->getArg(8);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
+
+            // Emit __builtin_assume(val <= MAX_UINT32)
+            // This is unfortunate: we cannot make the argument uint32 due to LLVM limitation of tail call,
+            // but the fits-in-uint32 information can help LLVM generate (slightly) better code.
+            // Since every instruction counts here, we do want LLVM to work at its full potential.
+            //
+            ICmpInst* assumeCond = new ICmpInst(*currentBlock /*insertAtEnd*/, CmpInst::Predicate::ICMP_ULT, val, CreateLLVMConstantInt<uint64_t>(ctx, 1ULL << 32));
+            Function* assumeIntrin = Intrinsic::getDeclaration(GetModule(), Intrinsic::assume, { });
+            CallInst::Create(assumeIntrin, { assumeCond }, "", currentBlock);
+
+            preloadedOpValue = new TruncInst(val, llvm_type_of<uint32_t>(ctx), "", currentBlock);
+        }
     }
     else
     {
@@ -687,15 +707,19 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         {
             opcodeValues.push_back(nullptr);
         }
+        else if (!operand->SupportsGetOperandValueFromBytecodeStruct())
+        {
+            opcodeValues.push_back(nullptr);
+        }
         else
         {
-            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
+            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue));
         }
     }
 
     if (m_bytecodeDef->m_hasOutputValue)
     {
-        Value* outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBytecodeStruct(this, currentBlock);
+        Value* outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
         ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
         m_valuePreserver.Preserve(x_outputSlot, outputSlot);
         outputSlot->setName(x_outputSlot);
@@ -703,7 +727,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
 
     if (m_bytecodeDef->m_hasConditionalBranchTarget)
     {
-        Value* condBrTarget = m_bytecodeDef->m_condBrTarget->GetOperandValueFromBytecodeStruct(this, currentBlock);
+        Value* condBrTarget = m_bytecodeDef->m_condBrTarget->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
         ReleaseAssert(llvm_value_has_type<int32_t>(condBrTarget));
         m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
         condBrTarget->setName(x_condBrDest);
@@ -714,13 +738,14 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     {
         if (m_bytecodeDef->IsBytecodeMetadataInlined())
         {
+            ReleaseAssert(!m_bytecodeDef->m_inlinedMetadata->SupportsGetOperandValueFromBytecodeStruct());
             Value* metadataPtr = m_bytecodeDef->m_inlinedMetadata->EmitUsageValueFromBytecodeValue(this, currentBlock, nullptr /*bytecodeValue*/);
             m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
             metadataPtr->setName(x_metadataPtr);
         }
         else
         {
-            Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
+            Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
             ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
             Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
             GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);
@@ -804,10 +829,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
             ReleaseAssert(slowpathFn->getName() == slowpathName);
             slowpathBB = BasicBlock::Create(ctx, "slowpath", m_wrapper);
             Instruction* tmp = new UnreachableInst(ctx, slowpathBB);
-            InterpreterFunctionInterface::CreateDispatchToBytecode(slowpathFn, GetCoroutineCtx(), GetStackBase(), GetCurBytecode(), GetCodeBlock(), tmp /*insertBefore*/);
-            CallInst* callInst = dyn_cast<CallInst>(tmp->getPrevNode()->getPrevNode());
-            ReleaseAssert(callInst != nullptr);
-            ReleaseAssert(callInst->getCalledFunction() == slowpathFn);
+            CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(slowpathFn, GetCoroutineCtx(), GetStackBase(), GetCurBytecode(), GetCodeBlock(), tmp /*insertBefore*/);
             tmp->eraseFromParent();
             std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> extraArgs = GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
             for (auto& it : extraArgs)

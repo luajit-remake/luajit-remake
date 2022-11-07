@@ -47,7 +47,10 @@ __DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit: ; preds = 
   %38 = zext i16 %37 to i64
   %39 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %38
   %40 = load ptr, ptr %39, align 8
-  musttail call ghccc void %40(ptr %0, ptr %16, ptr nonnull %36, ptr %32, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #4
+  %41 = getelementptr inbounds i8, ptr %35, i64 8
+  %42 = load i32, ptr %41, align 1
+  %43 = zext i32 %42 to i64
+  musttail call ghccc void %40(ptr %0, ptr %16, ptr nonnull %36, ptr %32, i64 %4, ptr undef, i64 undef, i64 undef, i64 %43, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #4
   ret void
 }
 

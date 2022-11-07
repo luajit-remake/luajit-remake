@@ -130,11 +130,15 @@ public:
         m_sizeInBytecodeStruct = size;
     }
 
-    // If m_offsetInBytecodeStruct == -1, return nullptr
-    // Otherwise emit decoding logic into 'targetBB', and return the decoded operand value in the bytecode struct
+    bool WARN_UNUSED SupportsGetOperandValueFromBytecodeStruct();
+
+    // May only be called if SupportsGetOperandValueFromBytecodeStruct() is true
+    // Emit decoding logic into 'targetBB', and return the decoded operand value in the bytecode struct
     // 'bytecodeStruct' must have type i8*
+    // 'preloadedOpValue' should be the preloaded i32 value if interpreter optimistic preloading is enabled
+    // and the preloaded value is available, or nullptr otherwise.
     //
-    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB);
+    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB, llvm::Value* preloadedOpValue);
 
 private:
     std::string m_name;
@@ -555,6 +559,7 @@ public:
     static void AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module);
 
     static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
+    static llvm::Value* WARN_UNUSED OptimisticPreloadBytecodeOperands(llvm::Value* bytecode, llvm::Instruction* insertBefore);
 
     bool HasQuickeningSlowPath()
     {

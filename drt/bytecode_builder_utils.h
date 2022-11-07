@@ -161,6 +161,8 @@ class BytecodeBuilderBase
 public:
     friend class BranchTargetPopulator;
 
+    // We need at least 4 bytes of extra padding, since optimistic bytecode preloading can load up to 4 bytes immediately following the opcode.
+    //
     static constexpr size_t x_numExtraPaddingAtEnd = 4;
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()

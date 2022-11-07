@@ -9,15 +9,25 @@ struct InterpreterFunctionInterface
 public:
     static llvm::FunctionType* WARN_UNUSED GetType(llvm::LLVMContext& ctx);
     static llvm::Function* WARN_UNUSED CreateFunction(llvm::Module* module, const std::string& name);
-    static void CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore);
-    static void CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore);
-    static void CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore);
+
+    // If interpreter optimistic preloading is disabled, 'preloadedOpValue' should be nullptr.
+    // Otherwise, it should be an i32 that represents the 4 bytes immediately following the bytecode opcode
+    //
+    static llvm::CallInst* CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Value* preloadedOpValue, llvm::Instruction* insertBefore);
+
+    // Bytecode slow path may take additional arguments. These arguments are not specified here: caller should populate them as needed by themselves.
+    //
+    static llvm::CallInst* CreateDispatchToBytecodeSlowPath(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore);
+
+    static llvm::CallInst* CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore);
+
+    static llvm::CallInst* CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore);
 
     // Return the list of avaiable GPR/FPR that can be used to pass additional arguments to the interpreter bytecode function
     // The result is represented as a vector of argument ordinals.
     //
-    static std::vector<uint64_t> WARN_UNUSED GetAvaiableGPRListForBytecode();
-    static std::vector<uint64_t> WARN_UNUSED GetAvaiableFPRListForBytecode();
+    static std::vector<uint64_t> WARN_UNUSED GetAvaiableGPRListForBytecodeSlowPath();
+    static std::vector<uint64_t> WARN_UNUSED GetAvaiableFPRListForBytecodeSlowPath();
 };
 
 }   // namespace dast

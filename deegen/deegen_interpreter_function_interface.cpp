@@ -1,4 +1,5 @@
 #include "deegen_interpreter_function_interface.h"
+#include "deegen_options.h"
 
 namespace dast {
 
@@ -128,20 +129,22 @@ llvm::Function* WARN_UNUSED InterpreterFunctionInterface::CreateFunction(llvm::M
     return func;
 }
 
-std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRListForBytecode()
+std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRListForBytecodeSlowPath()
 {
     // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
     // in the hope that it can reduce the likelihood of register shuffling when making C calls.
     //
+    // Note that the interpreter main function may use R9 to store the preloaded bytecode value, but it is never used for slow paths.
+    //
     return std::vector<uint64_t> { 8 /*R9*/, 7 /*R8*/, 5 /*RSI*/, 6 /*RDI*/ };
 }
 
-std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRListForBytecode()
+std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath()
 {
     return std::vector<uint64_t> { 10 /*XMM1*/, 11 /*XMM2*/, 12 /*XMM3*/, 13 /*XMM4*/, 14 /*XMM5*/, 15 /*XMM6*/ };
 }
 
-void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
+static llvm::CallInst* InterpreterFunctionCreateDispatchToBytecodeImpl(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = target->getContext();
@@ -156,7 +159,7 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
     ReleaseAssert(func != nullptr);
 
     CallInst* callInst = CallInst::Create(
-        GetType(ctx),
+        InterpreterFunctionInterface::GetType(ctx),
         target,
         {
             /*R13*/ coroutineCtx,
@@ -184,9 +187,36 @@ void InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target,
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+
+    return callInst;
 }
 
-void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore)
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Value* preloadedOpValue, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = target->getContext();
+    CallInst* ci = InterpreterFunctionCreateDispatchToBytecodeImpl(target, coroutineCtx, stackbase, bytecodePtr, codeBlock, insertBefore);
+    if (x_deegen_enable_interpreter_optimistic_preloading)
+    {
+        ReleaseAssert(preloadedOpValue != nullptr);
+        ReleaseAssert(llvm_value_has_type<uint32_t>(preloadedOpValue));
+        preloadedOpValue = new ZExtInst(preloadedOpValue, llvm_type_of<uint64_t>(ctx), "", ci /*insertBefore*/);
+        ci->setArgOperand(8 /*R9*/, preloadedOpValue);
+    }
+    else
+    {
+        ReleaseAssert(preloadedOpValue == nullptr);
+    }
+
+    return ci;
+}
+
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
+{
+    return InterpreterFunctionCreateDispatchToBytecodeImpl(target, coroutineCtx, stackbase, bytecodePtr, codeBlock, insertBefore);
+}
+
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* retStart, llvm::Value* numRets, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = target->getContext();
@@ -229,9 +259,11 @@ void InterpreterFunctionInterface::CreateDispatchToReturnContinuation(llvm::Valu
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+
+    return callInst;
 }
 
-void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore)
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = codePointer->getContext();
@@ -281,6 +313,8 @@ void InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePoint
     ReleaseAssert(llvm_value_has_type<void>(callInst));
 
     std::ignore = ReturnInst::Create(ctx, nullptr /*retVal*/, insertBefore);
+
+    return callInst;
 }
 
 }   // namespace dast
