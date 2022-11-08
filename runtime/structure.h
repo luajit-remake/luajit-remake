@@ -975,6 +975,7 @@ public:
         uint8_t stepping = internal::x_optimalInlineCapacitySteppingArray[inlineCapacity];
         assert(stepping < x_numInlineCapacitySteppings);
         assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
+        assert(internal::x_optimalInlineCapacityArray[internal::x_inlineStorageSizeForSteppingArray[stepping]] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
         return stepping;
     }
 

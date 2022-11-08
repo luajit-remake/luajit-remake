@@ -305,11 +305,23 @@ constexpr uint32_t x_maxInlineCapacity = 253;
 constexpr uint8_t ComputeOptimalInlineStorageCapacity(uint8_t elementToHold)
 {
     assert(elementToHold <= x_maxInlineCapacity);
+    // A simple heuristic:
+    // If the object contains at least one (but not zero) property, then it's likely more are coming.
+    // So give it at least a few more inline slots
+    //
+    if (elementToHold > 0)
+    {
+        elementToHold = std::max(elementToHold, static_cast<uint8_t>(4));
+    }
     // The TableObject has a header of 2 slots (16 bytes)
     //
     uint32_t minimalSlotsNeeded = elementToHold + 2;
     uint32_t r32 = GetLeastFitCellSizeInSlots(minimalSlotsNeeded);
+    // Deduce the 2-slot header, that's the true inline capacity we have
+    //
+    r32 -= 2;
     r32 = std::min(r32, x_maxInlineCapacity);
+    assert(r32 >= elementToHold);
     return static_cast<uint8_t>(r32);
 }
 
@@ -319,7 +331,12 @@ constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeOptimalInlineStora
     for (uint8_t i = 0; i <= x_maxInlineCapacity; i++)
     {
         r[i] = ComputeOptimalInlineStorageCapacity(i);
+        assert(r[i] >= i);
         AssertImp(i > 0, r[i] >= r[i-1]);
+    }
+    for (uint8_t i = 0; i <= x_maxInlineCapacity; i++)
+    {
+        assert(r[r[i]] == r[i]);
     }
     return r;
 }
@@ -762,7 +779,7 @@ private:
         return result;
     }
 
-    void BumpUserHeap();
+    void __attribute__((__preserve_most__)) BumpUserHeap();
     void BumpSystemHeap();
 
     bool WARN_UNUSED SpdsAllocateTryGetFreeListPage(int32_t* out)

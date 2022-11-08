@@ -131,7 +131,7 @@ bool WARN_UNUSED VM::InitializeVMBase()
     return true;
 }
 
-void VM::BumpUserHeap()
+void __attribute__((__preserve_most__)) VM::BumpUserHeap()
 {
     assert(m_userHeapCurPtr < m_userHeapPtrLimit);
     VM_FAIL_IF(m_userHeapCurPtr < -static_cast<intptr_t>(x_vmBaseOffset),

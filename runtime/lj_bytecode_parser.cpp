@@ -1160,10 +1160,53 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             case LJOpcode::TDUP:
             {
                 TestAssert(opdata.size() == 2);
-                bw.CreateTableDup({
-                    .src = objCst(opdata[1]),
-                    .output = local(opdata[0])
-                });
+                TValue tv = objCst(opdata[1]);
+                TestAssert(tv.Is<tTable>());
+                HeapPtr<TableObject> tab = tv.As<tTable>();
+                bool usedSpecializedTableDup = false;
+                if (TCGet(tab->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
+                {
+                    HeapPtr<Structure> structure = TCGet(tab->m_hiddenClass).As<Structure>();
+                    if (structure->m_butterflyNamedStorageCapacity == 0 && !TCGet(tab->m_arrayType).HasSparseMap())
+                    {
+                        uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;
+                        uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);
+                        TestAssert(internal::x_inlineStorageSizeForSteppingArray[stepping] == inlineCapacity);
+                        if (tab->m_butterfly == nullptr)
+                        {
+                            if (stepping <= TableObject::TableDupMaxInlineCapacitySteppingForNoButterflyCase())
+                            {
+                                usedSpecializedTableDup = true;
+                                bw.CreateTableDup({
+                                    .src = tv,
+                                    .inlineCapacityStepping = stepping,
+                                    .hasButterfly = 0,
+                                    .output = local(opdata[0])
+                                });
+                            }
+                        }
+                        else
+                        {
+                            if (stepping <= TableObject::TableDupMaxInlineCapacitySteppingForHasButterflyCase())
+                            {
+                                usedSpecializedTableDup = true;
+                                bw.CreateTableDup({
+                                    .src = tv,
+                                    .inlineCapacityStepping = stepping,
+                                    .hasButterfly = 1,
+                                    .output = local(opdata[0])
+                                });
+                            }
+                        }
+                    }
+                }
+                if (!usedSpecializedTableDup)
+                {
+                    bw.CreateTableDupGeneral({
+                        .src = tv,
+                        .output = local(opdata[0])
+                    });
+                }
                 break;
             }
             case LJOpcode::TGETV:

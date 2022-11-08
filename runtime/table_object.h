@@ -2026,13 +2026,19 @@ public:
         }
     }
 
+    static uint32_t ComputeObjectAllocationSize(uint8_t inlineCapacity)
+    {
+        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
+        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
+        return static_cast<uint32_t>(allocationSize);
+    }
+
     // Does NOT set m_hiddenClass and m_butterfly, and does NOT fill nils to the inline storage!
     //
     static HeapPtr<TableObject> WARN_UNUSED AllocateObjectImpl(VM* vm, uint8_t inlineCapacity)
     {
-        constexpr size_t x_baseSize = offsetof_member_v<&TableObject::m_inlineStorage>;
-        size_t allocationSize = x_baseSize + inlineCapacity * sizeof(TValue);
-        HeapPtr<TableObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationSize)).AsNoAssert<TableObject>();
+        uint32_t allocationSize = ComputeObjectAllocationSize(inlineCapacity);
+        HeapPtr<TableObject> r = vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>();
         UserHeapGcObjectHeader::Populate(r);
         TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
         return r;
@@ -2082,53 +2088,47 @@ public:
 
     Butterfly* WARN_UNUSED CloneButterfly(uint32_t butterflyNamedStorageCapacity)
     {
-        if (m_butterfly == nullptr)
+        assert(m_butterfly != nullptr);
+        uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
+#ifndef NDEBUG
+        HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        if (hiddenClassTy == HeapEntityType::Structure)
         {
-            return nullptr;
+            assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
+        }
+        else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
+        {
+            assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
         }
         else
         {
-            uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
-#ifndef NDEBUG
-            HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            if (hiddenClassTy == HeapEntityType::Structure)
-            {
-                assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
-            }
-            else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
-            {
-                assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
-            }
-            else
-            {
-                assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
-                // TODO: support UncacheableDictionary
-                ReleaseAssert(false && "unimplemented");
-            }
-#endif
-            uint32_t butterflySlots = arrayStorageCapacity + butterflyNamedStorageCapacity + 1;
-
-            uint32_t butterflyStartOffset = butterflyNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
-            uint64_t* butterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - butterflyStartOffset;
-
-            uint64_t* butterflyCopy = new uint64_t[butterflySlots];
-            memcpy(butterflyCopy, butterflyStart, sizeof(uint64_t) * butterflySlots);
-            Butterfly* butterflyPtr = reinterpret_cast<Butterfly*>(butterflyCopy + butterflyStartOffset);
-
-            // Clone array sparse map if exists
-            //
-            ButterflyHeader* hdr = butterflyPtr->GetHeader();
-            if (hdr->HasSparseMap())
-            {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
-                ArraySparseMap* newSparseMap = oldSparseMap->Clone(vm);
-                hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
-                assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
-            }
-
-            return butterflyPtr;
+            assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
+            // TODO: support UncacheableDictionary
+            ReleaseAssert(false && "unimplemented");
         }
+#endif
+        uint32_t butterflySlots = arrayStorageCapacity + butterflyNamedStorageCapacity + 1;
+
+        uint32_t butterflyStartOffset = butterflyNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+        uint64_t* butterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - butterflyStartOffset;
+
+        uint64_t* butterflyCopy = new uint64_t[butterflySlots];
+        memcpy(butterflyCopy, butterflyStart, sizeof(uint64_t) * butterflySlots);
+        Butterfly* butterflyPtr = reinterpret_cast<Butterfly*>(butterflyCopy + butterflyStartOffset);
+
+        // Clone array sparse map if exists
+        //
+        ButterflyHeader* hdr = butterflyPtr->GetHeader();
+        if (hdr->HasSparseMap())
+        {
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
+            ArraySparseMap* newSparseMap = oldSparseMap->Clone(vm);
+            hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
+            assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
+        }
+
+        return butterflyPtr;
     }
 
     HeapPtr<TableObject> WARN_UNUSED ShallowCloneTableObject(VM* vm)
@@ -2164,8 +2164,76 @@ public:
         r->m_arrayType = m_arrayType;
         r->m_hiddenClass = newHiddenClass;
         memcpy(r->m_inlineStorage, m_inlineStorage, sizeof(TValue) * inlineCapacity);
-        r->m_butterfly = CloneButterfly(butterflyNamedStorageCapacity);
+        if (likely(m_butterfly == nullptr))
+        {
+            r->m_butterfly = nullptr;
+        }
+        else
+        {
+            r->m_butterfly = CloneButterfly(butterflyNamedStorageCapacity);
+        }
         return TranslateToHeapPtr(r);
+    }
+
+    // Specialized CloneButterfly for TableDup, which leverages the statically known information for better code.
+    //
+    // Specifically, this function assumes that the butterfly has no named storage part and no SparseArray part
+    //
+    Butterfly* WARN_UNUSED CloneButterflyForTableDup()
+    {
+        assert(m_butterfly != nullptr);
+        uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
+        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
+        uint32_t butterflySlots = arrayStorageCapacity + 1;
+        uint32_t butterflyStartOffset = static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+        uint64_t* butterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - butterflyStartOffset;
+        uint64_t* butterflyCopy = new uint64_t[butterflySlots];
+        memcpy(butterflyCopy, butterflyStart, sizeof(uint64_t) * butterflySlots);
+        Butterfly* butterflyPtr = reinterpret_cast<Butterfly*>(butterflyCopy + butterflyStartOffset);
+        assert(!butterflyPtr->GetHeader()->HasSparseMap());
+        return butterflyPtr;
+    }
+
+    // These are just some artificial configuration limits for specialized TableDup opcodes
+    // Maybe the config shouldn't be put here, but let's think about that later..
+    //
+    static constexpr uint8_t TableDupMaxInlineCapacitySteppingForNoButterflyCase() { return 3; }
+    static constexpr uint8_t TableDupMaxInlineCapacitySteppingForHasButterflyCase() { return 2; }
+
+    // Specialized ShallowCloneTableObject for TableDup, which leverages the statically known information for better code.
+    // This function is ALWAYS_INLINE because by design the arguments will be constants after inlining.
+    //
+    // This function makes the following assumption:
+    // (1) The table hidden class is a structure
+    // (2) The table has no array sparse map and the butterfly named storage has zero capacity
+    // (3) 'inlineCapacityStepping' and 'hasButterfly' accurately reflects the info in the table
+    //
+    HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE ShallowCloneTableObjectForTableDup(VM* vm, uint8_t inlineCapacityStepping, bool hasButterfly)
+    {
+        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        [[maybe_unused]] Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
+        uint8_t inlineCapacity = internal::x_inlineStorageSizeForSteppingArray[inlineCapacityStepping];
+        assert(inlineCapacity == structure->m_inlineNamedStorageCapacity);
+        assert(structure->m_butterflyNamedStorageCapacity == 0);
+
+        uint32_t allocationSize = ComputeObjectAllocationSize(inlineCapacity);
+        HeapPtr<TableObject> hr = vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>();
+        TableObject* r = TranslateToRawPointer(vm, hr);
+        // We can simply copy everything, except that we need to fix up the GC state
+        // and the butterfly pointer (which needs to be cloned) manually afterwards
+        //
+        memcpy(r, this, allocationSize);
+        r->m_cellState = GcCellState::White;
+        if (hasButterfly)
+        {
+            r->m_butterfly = CloneButterflyForTableDup();
+        }
+        else
+        {
+            assert(r->m_butterfly == nullptr);
+        }
+        return hr;
     }
 
     struct GetMetatableResult
