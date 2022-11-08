@@ -1,4 +1,5 @@
 #include "api_define_bytecode.h"
+#include "api_inline_cache.h"
 #include "deegen_api.h"
 
 #include "runtime_utils.h"
@@ -8,94 +9,355 @@ static void NO_RETURN TablePutByImmMetamethodCallContinuation(TValue /*base*/, i
     Return();
 }
 
-static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue valueToPut)
+static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValue valueToPut, TValue metamethod)
 {
-    TValue metamethod;
-
+    // If 'metamethod' is a function, we should invoke the metamethod.
+    // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
+    //
     while (true)
     {
-        if (unlikely(!base.Is<tTable>()))
+        assert(!metamethod.Is<tNil>());
+        if (likely(metamethod.Is<tHeapEntity>()))
         {
-            goto not_table_object;
+            HeapEntityType mmType = metamethod.GetHeapEntityType();
+            if (mmType == HeapEntityType::Function)
+            {
+                MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), valueToPut, TablePutByImmMetamethodCallContinuation);
+            }
+            else if (mmType == HeapEntityType::Table)
+            {
+                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+
+                PutByIntegerIndexICInfo icInfo;
+                TableObject::PreparePutByIntegerIndex(tableObj, index, valueToPut, icInfo /*out*/);
+
+                if (likely(!icInfo.m_mayHaveMetatable))
+                {
+                    goto no_metamethod;
+                }
+                else
+                {
+                    // Try to execute the fast checks to rule out __newindex metamethod first
+                    //
+                    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
+                    if (likely(gmr.m_result.m_value == 0))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    // Getting the metamethod from the metatable is more expensive than getting the index value,
+                    // so get the index value and check if it's nil first
+                    //
+                    GetByIntegerIndexICInfo getIcInfo;
+                    TableObject::PrepareGetByIntegerIndex(tableObj, getIcInfo /*out*/);
+                    TValue originalVal = TableObject::GetByIntegerIndex(tableObj, index, getIcInfo);
+                    if (likely(!originalVal.Is<tNil>()))
+                    {
+                        goto no_metamethod;
+                    }
+
+                    metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
+                    if (metamethod.Is<tNil>())
+                    {
+                        goto no_metamethod;
+                    }
+
+                    // Now, we know we need to invoke the metamethod
+                    //
+                    base = TValue::Create<tTable>(tableObj);
+                    continue;
+                }
+
+no_metamethod:
+                if (!TableObject::TryPutByIntegerIndexFast(tableObj, index, valueToPut, icInfo))
+                {
+                    VM* vm = VM::GetActiveVMForCurrentThread();
+                    TableObject* obj = TranslateToRawPointer(vm, tableObj);
+                    obj->PutByIntegerIndexSlow(vm, index, valueToPut);
+                }
+                Return();
+            }
         }
 
+        // Now we know 'metamethod' is not a function or pointer, so we should locate its own exotic '__index' metamethod..
+        // The difference is that if the metamethod is nil, we need to throw an error
+        //
+        base = metamethod;
+        metamethod = GetMetamethodForValue(metamethod, LuaMetamethodKind::NewIndex);
+        if (metamethod.Is<tNil>())
         {
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            // TODO: make error message consistent with Lua
+            //
+            ThrowError("bad type for TablePutByImm");
+        }
+    }
+}
 
-            PutByIntegerIndexICInfo icInfo;
-            TableObject::PreparePutByIntegerIndex(tableObj, index, valueToPut, icInfo /*out*/);
+static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, int16_t /*index*/, TValue /*valueToPut*/)
+{
+    assert(!base.Is<tTable>());
+    TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
+    if (metamethod.Is<tNil>())
+    {
+        ThrowError("bad type for TablePutByImm");
+    }
+    EnterSlowPath<HandleMetamethodSlowPath>(metamethod);
+}
 
-            if (likely(!icInfo.m_mayHaveMetatable))
+enum class TablePutByImmIcResultKind
+{
+    NotTable,           // The base object is not a table
+    HandleMetamethod,   // The base object is a table that has the __newindex metamethod
+    NoMetamethod        // The TablePutById has been executed fully
+};
+
+static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue valueToPut)
+{
+    if (likely(base.Is<tHeapEntity>()))
+    {
+        HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        ICHandler* ic = MakeInlineCache();
+        ic->AddKey(tableObj->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
+        ic->FuseICIntoInterpreterOpcode();
+
+        using ResKind = TablePutByImmIcResultKind;
+        auto [metamethod, resKind] = ic->Body([ic, tableObj, index, valueToPut]() -> std::pair<TValue, TablePutByImmIcResultKind> {
+            if (unlikely(tableObj->m_type != HeapEntityType::Table))
             {
-                goto no_metamethod;
+                return std::make_pair(TValue(), ResKind::NotTable);
+            }
+
+            PutByIntegerIndexICInfo c_info;
+            TableObject::PreparePutByIntegerIndex(tableObj, index, valueToPut, c_info /*out*/);
+
+            using IndexCheckKind = PutByIntegerIndexICInfo::IndexCheckKind;
+            using ValueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind;
+            if (likely(!c_info.m_mayHaveMetatable))
+            {
+                switch (c_info.m_indexCheckKind)
+                {
+                case IndexCheckKind::Continuous:
+                {
+                    ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
+                        {
+                            if (likely(TableObject::TryPutByIntegerIndexFastPath_ContinuousArray(tableObj, index, valueToPut)))
+                            {
+                                return std::make_pair(TValue(), ResKind::NoMetamethod);
+                            }
+                        }
+                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
+                }
+                case IndexCheckKind::InBound:
+                {
+                    ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
+                    assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::Int32OrNil || c_valueCK == ValueCheckKind::NoCheck);
+                    return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::DoubleOrNil, ValueCheckKind::Int32OrNil, ValueCheckKind::NoCheck);
+                        if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
+                        {
+                            if (likely(TableObject::TryPutByIntegerIndexFastPath_InBoundPut(tableObj, index, valueToPut)))
+                            {
+                                return std::make_pair(TValue(), ResKind::NoMetamethod);
+                            }
+                        }
+                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
+                }
+                case IndexCheckKind::NoArrayPart:
+                {
+                    ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
+                    SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
+                    ArrayType c_newArrayType = c_info.m_newArrayType;
+                    return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
+                        {
+                            if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
+                            {
+                                Butterfly* butterfly = tableObj->m_butterfly;
+                                if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
+                                {
+                                    if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                    {
+                                        *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
+                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                                        TCSet(tableObj->m_arrayType, c_newArrayType);
+                                        TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                                    }
+                                }
+                            }
+                        }
+                        if (!valueToPut.Is<tNil>())
+                        {
+                            TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                        }
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
+                }
+                case IndexCheckKind::ForceSlowPath:
+                {
+                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                }
+                }   /* switch indexCheckKind */
             }
             else
             {
-                // Try to execute the fast checks to rule out __newindex metamethod first
-                //
-                TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
-                if (likely(gmr.m_result.m_value == 0))
+                switch (c_info.m_indexCheckKind)
                 {
-                    goto no_metamethod;
-                }
-
-                HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
-                if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
+                case IndexCheckKind::Continuous:
                 {
-                    goto no_metamethod;
-                }
+                    ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        // Check for metamethod call
+                        //
+                        {
+                            // Since the array is continuous, the old value is nil iff it's out of range
+                            //
+                            bool isInRange = TableObject::CheckIndexFitsInContinuousArray(tableObj, index);
+                            bool isOldValueNil = !isInRange;
+                            if (unlikely(isOldValueNil))
+                            {
+                                TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
+                                if (unlikely(!mm.Is<tNil>()))
+                                {
+                                    return std::make_pair(mm, ResKind::HandleMetamethod);
+                                }
+                            }
+                        }
 
-                // Getting the metamethod from the metatable is more expensive than getting the index value,
-                // so get the index value and check if it's nil first
-                //
-                GetByIntegerIndexICInfo getIcInfo;
-                TableObject::PrepareGetByIntegerIndex(tableObj, getIcInfo /*out*/);
-                TValue originalVal = TableObject::GetByIntegerIndex(tableObj, index, getIcInfo);
-                if (likely(!originalVal.Is<tNil>()))
+                        if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
+                        {
+                            if (likely(TableObject::TryPutByIntegerIndexFastPath_ContinuousArray(tableObj, index, valueToPut)))
+                            {
+                                return std::make_pair(TValue(), ResKind::NoMetamethod);
+                            }
+                        }
+                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
+                }
+                case IndexCheckKind::InBound:
                 {
-                    goto no_metamethod;
-                }
+                    // The check for whether the old value is nil needs to go through a lot of code already, so don't IC for now
+                    //
+                    {
+                        // Check for metamethod call
+                        //
+                        GetByIntegerIndexICInfo getIcInfo;
+                        TableObject::PrepareGetByIntegerIndex(tableObj, getIcInfo /*out*/);
+                        TValue originalVal = TableObject::GetByIntegerIndex(tableObj, index, getIcInfo);
+                        if (unlikely(originalVal.Is<tNil>()))
+                        {
+                            TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
+                            if (unlikely(!mm.Is<tNil>()))
+                            {
+                                return std::make_pair(mm, ResKind::HandleMetamethod);
+                            }
+                        }
+                    }
 
-                metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
-                if (metamethod.Is<tNil>())
+                    if (TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_info.m_valueCheckKind))
+                    {
+                        if (TableObject::TryPutByIntegerIndexFastPath_InBoundPut(tableObj, index, valueToPut))
+                        {
+                            return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        }
+                    }
+
+                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                }
+                case IndexCheckKind::NoArrayPart:
                 {
-                    goto no_metamethod;
+                    ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
+                    SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
+                    ArrayType c_newArrayType = c_info.m_newArrayType;
+                    return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        {
+                            // Check for metamethod call
+                            // Since the table object has no array part, the old value must be nil
+                            //
+                            TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
+                            if (unlikely(!mm.Is<tNil>()))
+                            {
+                                return std::make_pair(mm, ResKind::HandleMetamethod);
+                            }
+                        }
+                        if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
+                        {
+                            if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
+                            {
+                                Butterfly* butterfly = tableObj->m_butterfly;
+                                if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
+                                {
+                                    if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                    {
+                                        *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
+                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                                        TCSet(tableObj->m_arrayType, c_newArrayType);
+                                        TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                                    }
+                                }
+                            }
+                        }
+                        if (!valueToPut.Is<tNil>())
+                        {
+                            TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                        }
+                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    });
                 }
-
-                // Now, we know we need to invoke the metamethod
-                //
-                goto handle_metamethod;
+                case IndexCheckKind::ForceSlowPath:
+                {
+                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                }
+                }   /* switch indexCheckKind */
             }
+        });
 
-no_metamethod:
-            if (!TableObject::TryPutByIntegerIndexFast(tableObj, index, valueToPut, icInfo))
-            {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                TableObject* obj = TranslateToRawPointer(vm, tableObj);
-                obj->PutByIntegerIndexSlow(vm, index, valueToPut);
-            }
-
+        switch (resKind)
+        {
+        case ResKind::NoMetamethod: [[likely]]
+        {
             Return();
         }
-
-not_table_object:
-        metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
-        if (metamethod.Is<tNil>())
+        case ResKind::HandleMetamethod:
         {
-            ThrowError("bad type for TablePutByImm");
+            EnterSlowPath<HandleMetamethodSlowPath>(metamethod);
         }
-
-handle_metamethod:
-        // If 'metamethod' is a function, we should invoke the metamethod
-        //
-        if (likely(metamethod.Is<tFunction>()))
+        case ResKind::NotTable: [[unlikely]]
         {
-            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), valueToPut, TablePutByImmMetamethodCallContinuation);
+            EnterSlowPath<HandleNotTableObjectSlowPath>();
         }
-
-        // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
-        //
-        base = metamethod;
+        }   /* switch resKind */
+    }
+    else
+    {
+        EnterSlowPath<HandleNotTableObjectSlowPath>();
     }
 }
 

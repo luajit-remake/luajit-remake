@@ -57,7 +57,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
     //
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), TableGetByImmMetamethodCallContinuation);
+        MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), TableGetByImmMetamethodCallContinuation);
     }
 
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])

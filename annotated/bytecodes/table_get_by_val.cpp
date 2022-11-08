@@ -50,7 +50,7 @@ static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tInt32>(index), TableGetByValMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])

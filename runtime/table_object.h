@@ -299,10 +299,7 @@ struct PutByIntegerIndexICInfo
     //
     enum class IndexCheckKind : uint8_t
     {
-        // No fast-path exists. The main case for this is if the object is in dictionary mode.
-        // This is because the hidden class is the IC key (which is necessary because the object might not even be a table, so we cannot use ArrayType as IC key),
-        // and if we want to make CacheableDictionary cachable for array indexing, we will have to migrate it to a new address whenever
-        // we change array type, which is annoying, and it's unclear if doing so is beneficial (since it seems bizzare to have a dictionary with array part).
+        // No fast-path exists.
         //
         ForceSlowPath,
         // Fast-path check for ArrayType's NoButterflyArrayPart array kind
@@ -335,12 +332,10 @@ struct PutByIntegerIndexICInfo
     IndexCheckKind m_indexCheckKind;
     ValueCheckKind m_valueCheckKind;
     bool m_mayHaveMetatable;
-    // Only useful if IndexCheckKind == NoArrayPart: this is the only case where fast path changes array type & hidden class
+    // The below fields are only useful if IndexCheckKind == NoArrayPart: this is the only case where fast path changes array type & hidden class
     //
-    ArrayType m_newArrayType;
     SystemHeapPointer<void> m_hiddenClass;
-    // Only useful if IndexCheckKind == NoArrayPart: this is the only case where fast path changes array type & hidden class
-    //
+    ArrayType m_newArrayType;
     SystemHeapPointer<void> m_newHiddenClass;
 };
 
@@ -1200,23 +1195,14 @@ public:
     {
         ArrayType arrType = TCGet(self->m_arrayType);
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
-        icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
-        AssertImp(icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
-                  arrType.m_asValue == icInfo.m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
+        AssertImp(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
+                  arrType.m_asValue == TCGet(self->m_hiddenClass).template As<Structure>()->m_arrayType.m_asValue);
 
         auto setForceSlowPath = [&icInfo]() ALWAYS_INLINE
         {
             icInfo.m_indexCheckKind = PutByIntegerIndexICInfo::IndexCheckKind::ForceSlowPath;
             icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::NoCheck;
         };
-
-        // We cannot IC any fast path if the object is in dictionary mode: see comment on IndexCheckKind::ForceSlowPath
-        //
-        if (icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure)
-        {
-            setForceSlowPath();
-            return;
-        }
 
         if (index < ArrayGrowthPolicy::x_arrayBaseOrd)
         {
@@ -1232,15 +1218,29 @@ public:
                 return;
             }
 
-            auto setNewStructureAndArrayType = [&](ArrayType::Kind newKind) ALWAYS_INLINE
+            auto setNewHiddenClassAndArrayType = [&](ArrayType::Kind newKind) ALWAYS_INLINE
             {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                Structure* structure = TranslateToRawPointer(vm, icInfo.m_hiddenClass.As<Structure>());
                 ArrayType newArrType = arrType;
                 newArrType.SetArrayKind(newKind);
                 newArrType.SetIsContinuous(true);
-                Structure* newStructure = structure->UpdateArrayType(vm, newArrType);
-                icInfo.m_newHiddenClass = newStructure;
+
+                VM* vm = VM::GetActiveVMForCurrentThread();
+                icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
+                HeapEntityType ty = icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+                if (ty == HeapEntityType::Structure)
+                {
+                    Structure* structure = TranslateToRawPointer(vm, icInfo.m_hiddenClass.As<Structure>());
+                    Structure* newStructure = structure->UpdateArrayType(vm, newArrType);
+                    icInfo.m_newHiddenClass = newStructure;
+                }
+                else if (ty == HeapEntityType::CacheableDictionary)
+                {
+                    icInfo.m_newHiddenClass = icInfo.m_hiddenClass;
+                }
+                else
+                {
+                    assert(false && "unimplemented");
+                }
                 icInfo.m_newArrayType = newArrType;
             };
 
@@ -1248,17 +1248,17 @@ public:
             if (value.IsInt32())
             {
                 icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::Int32;
-                setNewStructureAndArrayType(ArrayType::Kind::Int32);
+                setNewHiddenClassAndArrayType(ArrayType::Kind::Int32);
             }
             else if (value.IsDouble())
             {
                 icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::Double;
-                setNewStructureAndArrayType(ArrayType::Kind::Double);
+                setNewHiddenClassAndArrayType(ArrayType::Kind::Double);
             }
             else if (!value.IsNil())
             {
                 icInfo.m_valueCheckKind = PutByIntegerIndexICInfo::ValueCheckKind::NotNil;
-                setNewStructureAndArrayType(ArrayType::Kind::Any);
+                setNewHiddenClassAndArrayType(ArrayType::Kind::Any);
             }
             else
             {
@@ -1326,16 +1326,13 @@ public:
         }
     }
 
-    // Return false if need to fallback to slow path
-    //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED TryPutByIntegerIndexFast(T self, int64_t index, TValue value, PutByIntegerIndexICInfo icInfo)
+    static bool WARN_UNUSED ALWAYS_INLINE CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(TValue valueToPut, PutByIntegerIndexICInfo::ValueCheckKind valueCheckKind)
     {
-        switch (icInfo.m_valueCheckKind)
+        switch (valueCheckKind)
         {
         case PutByIntegerIndexICInfo::ValueCheckKind::Int32:
         {
-            if (!value.IsInt32())
+            if (!valueToPut.Is<tInt32>())
             {
                 return false;
             }
@@ -1343,7 +1340,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::Int32OrNil:
         {
-            if (!value.IsInt32() && !value.IsNil())
+            if (!valueToPut.Is<tInt32>() && !valueToPut.Is<tNil>())
             {
                 return false;
             }
@@ -1351,7 +1348,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::Double:
         {
-            if (!value.IsDouble())
+            if (!valueToPut.Is<tDouble>())
             {
                 return false;
             }
@@ -1359,7 +1356,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::DoubleOrNil:
         {
-            if (!value.IsDouble() && !value.IsNil())
+            if (!valueToPut.Is<tDouble>() && !valueToPut.Is<tNil>())
             {
                 return false;
             }
@@ -1367,7 +1364,7 @@ public:
         }
         case PutByIntegerIndexICInfo::ValueCheckKind::NotNil:
         {
-            if (value.IsNil())
+            if (valueToPut.Is<tNil>())
             {
                 return false;
             }
@@ -1378,54 +1375,78 @@ public:
             break;  // no-op
         }
         }
+        return true;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_ContinuousArray(T self, int64_t index, TValue value)
+    {
+        // For the continuous case, a nil value should always fail the value check above
+        //
+        assert(!value.IsNil());
+        Butterfly* butterfly = self->m_butterfly;
+        if (likely(butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(index)))
+        {
+            // The put is into a continuous array, we can just do it
+            //
+            *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
+            return true;
+        }
+        else if (likely(index == butterfly->GetHeader()->m_arrayLengthIfContinuous))
+        {
+            // The put will extend the array length by 1. We can do it as long as we have enough capacity
+            //
+            assert(index <= static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
+            if (unlikely(index == static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd))
+            {
+                return false;
+            }
+            *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = static_cast<int32_t>(index + 1);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_InBoundPut(T self, int64_t index, TValue value)
+    {
+        Butterfly* butterfly = self->m_butterfly;
+        if (likely(butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
+        {
+            // The put is within bound, we can just do it
+            //
+            *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    // Return false if need to fallback to slow path
+    //
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED TryPutByIntegerIndexFast(T self, int64_t index, TValue value, PutByIntegerIndexICInfo icInfo)
+    {
+        if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, icInfo.m_valueCheckKind))
+        {
+            return false;
+        }
 
         switch (icInfo.m_indexCheckKind)
         {
         case PutByIntegerIndexICInfo::IndexCheckKind::Continuous:
         {
-            // For the continuous case, a nil value should always fail the value check above
-            //
-            assert(!value.IsNil());
-            Butterfly* butterfly = self->m_butterfly;
-            if (likely(butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(index)))
-            {
-                // The put is into a continuous array, we can just do it
-                //
-                *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
-                return true;
-            }
-            else if (likely(index == butterfly->GetHeader()->m_arrayLengthIfContinuous))
-            {
-                // The put will extend the array length by 1. We can do it as long as we have enough capacity
-                //
-                assert(index <= static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
-                if (unlikely(index == static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd))
-                {
-                    return false;
-                }
-                *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
-                butterfly->GetHeader()->m_arrayLengthIfContinuous = static_cast<int32_t>(index + 1);
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            return TryPutByIntegerIndexFastPath_ContinuousArray(self, index, value);
         }
         case PutByIntegerIndexICInfo::IndexCheckKind::InBound:
         {
-            Butterfly* butterfly = self->m_butterfly;
-            if (likely(butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
-            {
-                // The put is within bound, we can just do it
-                //
-                *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            return TryPutByIntegerIndexFastPath_InBoundPut(self, index, value);
         }
         case PutByIntegerIndexICInfo::IndexCheckKind::NoArrayPart:
         {
@@ -1446,6 +1467,7 @@ public:
             {
                 *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = value;
                 butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                assert(TCGet(self->m_hiddenClass).m_value == icInfo.m_hiddenClass.m_value);
                 TCSet(self->m_arrayType, icInfo.m_newArrayType);
                 TCSet(self->m_hiddenClass, icInfo.m_newHiddenClass);
                 return true;
@@ -1473,10 +1495,6 @@ public:
         // This debug variable validates that we did not enter this slow-path for no reason (i.e. the fast path should have handled the case it ought to handle)
         //
         DEBUG_ONLY(bool didSomethingNontrivial = false;)
-
-        // The fast path can only handle the case where the hidden class is structure
-        //
-        DEBUG_ONLY(didSomethingNontrivial |= (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type != HeapEntityType::Structure));
 
         int32_t index = static_cast<int32_t>(index64);
         ArrayType arrType = m_arrayType;
@@ -1539,6 +1557,10 @@ public:
                 newArrayType.SetIsContinuous(true);
                 assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
                 m_butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd + 1;
+
+                // Even if the array is continuous afterwards, we could still be hitting this path because the hidden class is different
+                //
+                DEBUG_ONLY(didSomethingNontrivial = true;)
             }
             else
             {
@@ -1794,6 +1816,13 @@ public:
         }
 
         assert(didSomethingNontrivial);
+    }
+
+    static void __attribute__((__preserve_most__)) NO_INLINE PutByIntegerIndexSlow(HeapPtr<TableObject> tableObj, int64_t index64, TValue value)
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TableObject* raw = TranslateToRawPointer(vm, tableObj);
+        [[clang::always_inline]] raw->PutByIntegerIndexSlow(vm, index64, value);
     }
 
     ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
