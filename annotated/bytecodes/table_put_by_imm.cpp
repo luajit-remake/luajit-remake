@@ -110,11 +110,22 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, int16_t /*index*
     EnterSlowPath<HandleMetamethodSlowPath>(metamethod);
 }
 
+static void NO_RETURN HandleNoMetamethodSlowPathPut(TValue base, int16_t index, TValue valueToPut)
+{
+    assert(base.Is<tTable>());
+    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    TableObject* raw = TranslateToRawPointer(vm, tableObj);
+    raw->PutByIntegerIndexSlow(vm, index, valueToPut);
+    Return();
+}
+
 enum class TablePutByImmIcResultKind
 {
     NotTable,           // The base object is not a table
     HandleMetamethod,   // The base object is a table that has the __newindex metamethod
-    NoMetamethod        // The TablePutById has been executed fully
+    NoMetamethod,       // The TablePutByImm has been executed fully
+    SlowPathPut         // No metamethod needed, but fast path put failed. A slow path put is needed.
 };
 
 static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue valueToPut)
@@ -155,8 +166,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 return std::make_pair(TValue(), ResKind::NoMetamethod);
                             }
                         }
-                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        return std::make_pair(TValue(), ResKind::SlowPathPut);
                     });
                 }
                 case IndexCheckKind::InBound:
@@ -172,8 +182,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 return std::make_pair(TValue(), ResKind::NoMetamethod);
                             }
                         }
-                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        return std::make_pair(TValue(), ResKind::SlowPathPut);
                     });
                 }
                 case IndexCheckKind::NoArrayPart:
@@ -203,17 +212,16 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 }
                             }
                         }
-                        if (!valueToPut.Is<tNil>())
+                        if (valueToPut.Is<tNil>())
                         {
-                            TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                            return std::make_pair(TValue(), ResKind::NoMetamethod);
                         }
-                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        return std::make_pair(TValue(), ResKind::SlowPathPut);
                     });
                 }
                 case IndexCheckKind::ForceSlowPath:
                 {
-                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    return std::make_pair(TValue(), ResKind::SlowPathPut);
                 }
                 }   /* switch indexCheckKind */
             }
@@ -251,8 +259,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 return std::make_pair(TValue(), ResKind::NoMetamethod);
                             }
                         }
-                        TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        return std::make_pair(TValue(), ResKind::SlowPathPut);
                     });
                 }
                 case IndexCheckKind::InBound:
@@ -283,8 +290,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                         }
                     }
 
-                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    return std::make_pair(TValue(), ResKind::SlowPathPut);
                 }
                 case IndexCheckKind::NoArrayPart:
                 {
@@ -323,17 +329,16 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 }
                             }
                         }
-                        if (!valueToPut.Is<tNil>())
+                        if (valueToPut.Is<tNil>())
                         {
-                            TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
+                            return std::make_pair(TValue(), ResKind::NoMetamethod);
                         }
-                        return std::make_pair(TValue(), ResKind::NoMetamethod);
+                        return std::make_pair(TValue(), ResKind::SlowPathPut);
                     });
                 }
                 case IndexCheckKind::ForceSlowPath:
                 {
-                    TableObject::PutByIntegerIndexSlow(tableObj, index, valueToPut);
-                    return std::make_pair(TValue(), ResKind::NoMetamethod);
+                    return std::make_pair(TValue(), ResKind::SlowPathPut);
                 }
                 }   /* switch indexCheckKind */
             }
@@ -344,6 +349,10 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
         case ResKind::NoMetamethod: [[likely]]
         {
             Return();
+        }
+        case ResKind::SlowPathPut:
+        {
+            EnterSlowPath<HandleNoMetamethodSlowPathPut>();
         }
         case ResKind::HandleMetamethod:
         {
