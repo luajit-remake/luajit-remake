@@ -646,7 +646,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         codeBlock->setName(x_codeBlock);
         m_valuePreserver.Preserve(x_codeBlock, codeBlock);
 
-        if (m_processKind == ProcessKind::Main && x_deegen_enable_interpreter_optimistic_preloading)
+        if ((m_processKind == ProcessKind::Main || m_processKind == ProcessKind::FusedInInlineCacheEffect) && x_deegen_enable_interpreter_optimistic_preloading)
         {
             Value* val = m_wrapper->getArg(8);
             ReleaseAssert(llvm_value_has_type<uint64_t>(val));
