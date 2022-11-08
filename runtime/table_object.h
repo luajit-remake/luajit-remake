@@ -1070,6 +1070,66 @@ public:
         }
     }
 
+    template<bool isGrowNamedStorage>
+    void GrowButterflyFromNull(uint32_t newCapacity)
+    {
+        assert(m_butterfly == nullptr);
+#ifndef NDEBUG
+        if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
+        {
+            assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
+        }
+        else if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary)
+        {
+            assert(m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity == 0);
+        }
+        else
+        {
+           // TODO: assert for UncacheableDictionary
+        }
+#endif
+        uint64_t* butterflyStart = new uint64_t[newCapacity + 1];
+        uint32_t offset;
+        if constexpr(isGrowNamedStorage)
+        {
+            offset = newCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+        }
+        else
+        {
+            offset = static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+        }
+        Butterfly* butterfly = reinterpret_cast<Butterfly*>(butterflyStart + offset);
+        if constexpr(isGrowNamedStorage)
+        {
+            butterfly->GetHeader()->m_arrayStorageCapacity = 0;
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
+
+            uint64_t nilVal = TValue::Nil().m_value;
+            uint64_t* nilFillBegin = butterflyStart;
+            uint64_t* nilFillEnd = butterflyStart + newCapacity;
+            while (nilFillBegin < nilFillEnd)
+            {
+                *nilFillBegin = nilVal;
+                nilFillBegin++;
+            }
+        }
+        else
+        {
+            butterfly->GetHeader()->m_arrayStorageCapacity = newCapacity;
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
+
+            uint64_t nilVal = TValue::Nil().m_value;
+            uint64_t* nilFillBegin = butterflyStart + 1;
+            uint64_t* nilFillEnd = butterflyStart + 1 + newCapacity;
+            while (nilFillBegin < nilFillEnd)
+            {
+                *nilFillBegin = nilVal;
+                nilFillBegin++;
+            }
+        }
+        m_butterfly = butterfly;
+    }
+
     // If isGrowNamedStorage == true, grow named storage capacity to 'newCapacity', and keep current array storage
     // Otherwise, grow array storage capacity to 'newCapcity', and keep current named storage
     //
@@ -1080,60 +1140,7 @@ public:
     {
         if (m_butterfly == nullptr)
         {
-#ifndef NDEBUG
-            if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
-            {
-                assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
-            }
-            else if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary)
-            {
-                assert(m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity == 0);
-            }
-            else
-            {
-                // TODO: assert for UncacheableDictionary
-            }
-#endif
-            uint64_t* butterflyStart = new uint64_t[newCapacity + 1];
-            uint32_t offset;
-            if constexpr(isGrowNamedStorage)
-            {
-                offset = newCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
-            }
-            else
-            {
-                offset = static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
-            }
-            Butterfly* butterfly = reinterpret_cast<Butterfly*>(butterflyStart + offset);
-            if constexpr(isGrowNamedStorage)
-            {
-                butterfly->GetHeader()->m_arrayStorageCapacity = 0;
-                butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
-
-                uint64_t nilVal = TValue::Nil().m_value;
-                uint64_t* nilFillBegin = butterflyStart;
-                uint64_t* nilFillEnd = butterflyStart + newCapacity;
-                while (nilFillBegin < nilFillEnd)
-                {
-                    *nilFillBegin = nilVal;
-                    nilFillBegin++;
-                }
-            }
-            else
-            {
-                butterfly->GetHeader()->m_arrayStorageCapacity = newCapacity;
-                butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
-
-                uint64_t nilVal = TValue::Nil().m_value;
-                uint64_t* nilFillBegin = butterflyStart + 1;
-                uint64_t* nilFillEnd = butterflyStart + 1 + newCapacity;
-                while (nilFillBegin < nilFillEnd)
-                {
-                    *nilFillBegin = nilVal;
-                    nilFillBegin++;
-                }
-            }
-            m_butterfly = butterfly;
+            GrowButterflyFromNull<isGrowNamedStorage>(newCapacity);
         }
         else
         {
@@ -2044,14 +2051,14 @@ public:
         return r;
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
+    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObjectImpl(VM* vm, Structure* emptyStructure, uint8_t inlineCapacity, uint32_t initialButterflyArrayPartCapacity)
     {
         assert(emptyStructure->m_numSlots == 0);
         assert(emptyStructure->m_metatable == 0);
         assert(emptyStructure->m_arrayType.m_asValue == 0);
         assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
 
-        uint8_t inlineCapacity = emptyStructure->m_inlineNamedStorageCapacity;
+        assert(inlineCapacity == emptyStructure->m_inlineNamedStorageCapacity);
         HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
         TCSet(r->m_hiddenClass, SystemHeapPointer<void> { emptyStructure });
         // Initialize the butterfly storage
@@ -2059,7 +2066,7 @@ public:
         r->m_butterfly = nullptr;
         if (initialButterflyArrayPartCapacity > 0)
         {
-            TranslateToRawPointer(vm, r)->GrowButterfly<false /*isGrowNamedStorage*/>(initialButterflyArrayPartCapacity);
+            TranslateToRawPointer(vm, r)->GrowButterflyFromNull<false /*isGrowNamedStorage*/>(initialButterflyArrayPartCapacity);
         }
         // Initialize the inline storage
         //
@@ -2069,6 +2076,11 @@ public:
             TCSet(r->m_inlineStorage[i], nilVal);
         }
         return r;
+    }
+
+    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
+    {
+        return CreateEmptyTableObjectImpl(vm, emptyStructure, emptyStructure->m_inlineNamedStorageCapacity, initialButterflyArrayPartCapacity);
     }
 
     static HeapPtr<TableObject> WARN_UNUSED CreateEmptyGlobalObject(VM* vm)
