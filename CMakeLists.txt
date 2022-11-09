@@ -202,6 +202,7 @@ set(UNIT_TEST_SRC
   test_inline_cache_api_parser.cpp
   test_lambda_capture_parser.cpp
   test_inline_cache_api_lowering.cpp
+  test_lj_optimized_math_lib.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES
