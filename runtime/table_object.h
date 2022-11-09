@@ -756,6 +756,8 @@ public:
     template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void PreparePutByIdForCacheableDictionary(T self, HeapPtr<CacheableDictionary> dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
+        assert(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        assert(TCGet(self->m_hiddenClass).template As<CacheableDictionary>() == dict);
         CacheableDictionary::PutByIdResult res;
         if constexpr(std::is_same_v<U, HeapString>)
         {
@@ -772,7 +774,7 @@ public:
         {
             TableObject* rawSelf = TranslateToRawPointer(self);
             assert(dict->m_butterflyNamedStorageCapacity < res.m_newButterflyCapacity);
-            rawSelf->GrowButterfly<true /*isGrowNamedStorage*/>(res.m_newButterflyCapacity);
+            rawSelf->GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(dict->m_butterflyNamedStorageCapacity, res.m_newButterflyCapacity);
             dict->m_butterflyNamedStorageCapacity = res.m_newButterflyCapacity;
         }
 
@@ -1024,7 +1026,7 @@ public:
     // This function must be called before changing the structure
     //
     template<bool isGrowNamedStorage>
-    void GrowButterfly(uint32_t newCapacity)
+    void GrowButterflyKnowingNamedStorageCapacity(uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
     {
         if (m_butterfly == nullptr)
         {
@@ -1033,22 +1035,23 @@ public:
         else
         {
             uint32_t oldArrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
-            uint32_t oldNamedStorageCapacity;
+#ifndef NDEBUG
             HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             if (hiddenClassTy == HeapEntityType::Structure)
             {
-                oldNamedStorageCapacity = m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
+                assert(oldNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
             }
             else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
             {
-                oldNamedStorageCapacity = m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity;
+                assert(oldNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
             }
             else
             {
                 assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
                 // TODO: support UncacheableDictionary
-                ReleaseAssert(false && "unimplemented");
+                assert(false && "unimplemented");
             }
+#endif
             uint32_t oldButterflySlots = oldArrayStorageCapacity + oldNamedStorageCapacity + 1;
 
             uint32_t oldButterflyStartOffset = oldNamedStorageCapacity + static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
@@ -1109,6 +1112,42 @@ public:
     }
 
     template<bool isGrowNamedStorage>
+    void GrowButterfly(uint32_t newCapacity)
+    {
+        uint32_t oldNamedStorageCapacity;
+        HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
+        if (hiddenClassTy == HeapEntityType::Structure)
+        {
+            oldNamedStorageCapacity = m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
+        }
+        else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
+        {
+            oldNamedStorageCapacity = m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity;
+        }
+        else
+        {
+            assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
+            // TODO: support UncacheableDictionary
+            assert(false && "unimplemented");
+            __builtin_unreachable();
+        }
+        GrowButterflyKnowingNamedStorageCapacity<isGrowNamedStorage>(oldNamedStorageCapacity, newCapacity);
+    }
+
+    template<bool isGrowNamedStorage>
+    static void GrowButterflyKnowingNamedStorageCapacity(HeapPtr<TableObject> tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
+    {
+        TableObject* raw = TranslateToRawPointer(tableObj);
+        raw->GrowButterflyKnowingNamedStorageCapacity<isGrowNamedStorage>(oldNamedStorageCapacity, newCapacity);
+    }
+
+    static void __attribute__((__preserve_most__)) NO_INLINE GrowButterflyNamedStorage_RT(HeapPtr<TableObject> tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
+    {
+        TableObject* raw = TranslateToRawPointer(tableObj);
+        [[clang::always_inline]] raw->GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(oldNamedStorageCapacity, newCapacity);
+    }
+
+    template<bool isGrowNamedStorage>
     static void GrowButterfly(HeapPtr<TableObject> tableObj, uint32_t newCapacity)
     {
         TableObject* raw = TranslateToRawPointer(tableObj);
@@ -1124,7 +1163,7 @@ public:
         CacheableDictionary* dictionary = res.m_dictionary;
         if (res.m_shouldGrowButterfly)
         {
-            GrowButterfly<true /*isGrowNamedStorage*/>(dictionary->m_butterflyNamedStorageCapacity);
+            GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(structure->m_butterflyNamedStorageCapacity, dictionary->m_butterflyNamedStorageCapacity);
         }
         else
         {
@@ -1838,7 +1877,7 @@ public:
     {
         if (unlikely(m_butterfly == nullptr))
         {
-            GrowButterfly<false /*isGrowNamedStorage*/>(0 /*newCapacity*/);
+            GrowButterflyKnowingNamedStorageCapacity<false /*isGrowNamedStorage*/>(0 /*oldButterflyNamedStorageCapacity*/, 0 /*newCapacity*/);
             return AllocateNewArraySparseMap(vm);
         }
         else
@@ -2250,7 +2289,7 @@ public:
             {
                 if (unlikely(result.m_shouldGrowButterfly))
                 {
-                    GrowButterfly<true /*isGrowNamedStorage*/>(result.m_newStructure.As()->m_butterflyNamedStorageCapacity);
+                    GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(structure->m_butterflyNamedStorageCapacity, result.m_newStructure.As()->m_butterflyNamedStorageCapacity);
                 }
 
                 uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
