@@ -123,7 +123,7 @@ static void NO_RETURN HandleNoMetamethodSlowPathPut(TValue base, int16_t index, 
 enum class TablePutByImmIcResultKind
 {
     NotTable,           // The base object is not a table
-    HandleMetamethod,   // The base object is a table that has the __newindex metamethod
+    HandleMetamethod,   // The base object is a table that has the __newindex metamethod, and the metamethod should be called
     NoMetamethod,       // The TablePutByImm has been executed fully
     SlowPathPut         // No metamethod needed, but fast path put failed. A slow path put is needed.
 };
@@ -198,7 +198,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
-                            if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
+                            // PreparePutByIntegerIndex only create IC with IndexCheckKind::NoArrayPart if the index is x_arrayBaseOrd.
+                            // And since this is PutByImm, the index is a constant, thus will never change in future runs of this IC.
+                            //
+                            assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
+                            std::ignore = index;
+                            if (likely(tableObj->m_butterfly != nullptr))
                             {
                                 Butterfly* butterfly = tableObj->m_butterfly;
                                 if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
@@ -315,7 +320,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                         }
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
-                            if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
+                            // PreparePutByIntegerIndex only create IC with IndexCheckKind::NoArrayPart if the index is x_arrayBaseOrd.
+                            // And since this is PutByImm, the index is a constant, thus will never change in future runs of this IC.
+                            //
+                            assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
+                            std::ignore = index;
+                            if (likely(tableObj->m_butterfly != nullptr))
                             {
                                 Butterfly* butterfly = tableObj->m_butterfly;
                                 if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
