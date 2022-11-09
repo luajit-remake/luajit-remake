@@ -1877,7 +1877,7 @@ public:
     {
         if (unlikely(m_butterfly == nullptr))
         {
-            GrowButterflyKnowingNamedStorageCapacity<false /*isGrowNamedStorage*/>(0 /*oldButterflyNamedStorageCapacity*/, 0 /*newCapacity*/);
+            GrowButterflyFromNull<false /*isGrowNamedStorage*/>(0 /*newCapacity*/);
             return AllocateNewArraySparseMap(vm);
         }
         else
