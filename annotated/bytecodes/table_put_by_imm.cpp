@@ -156,9 +156,11 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::Continuous:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    // DEVNOTE: when we support int32 type, we need to specialize for ValueCheckKind::Int32 as well. Same in the other places.
+                    //
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
-                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
                             if (likely(TableObject::TryPutByIntegerIndexFastPath_ContinuousArray(tableObj, index, valueToPut)))
@@ -172,9 +174,9 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::InBound:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::Int32OrNil || c_valueCK == ValueCheckKind::NoCheck);
+                    assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::NoCheck);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
-                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::DoubleOrNil, ValueCheckKind::Int32OrNil, ValueCheckKind::NoCheck);
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::DoubleOrNil, ValueCheckKind::NoCheck);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
                             if (likely(TableObject::TryPutByIntegerIndexFastPath_InBoundPut(tableObj, index, valueToPut)))
@@ -188,12 +190,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::NoArrayPart:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                     SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                     ArrayType c_newArrayType = c_info.m_newArrayType;
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
-                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
                             if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
@@ -232,9 +234,9 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::Continuous:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
-                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         // Check for metamethod call
                         //
                         {
@@ -295,12 +297,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::NoArrayPart:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::Int32 || c_valueCK == ValueCheckKind::NotNil);
+                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                     SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                     ArrayType c_newArrayType = c_info.m_newArrayType;
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
-                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::Int32, ValueCheckKind::NotNil);
+                        IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         {
                             // Check for metamethod call
                             // Since the table object has no array part, the old value must be nil
