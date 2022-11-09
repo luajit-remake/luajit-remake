@@ -755,7 +755,7 @@ public:
 
     static constexpr size_t OffsetofLjrLibBaseDotNextFunctionObject()
     {
-        return offsetof_member_v<&VM::m_ljrLibBaseDotErrorFunctionObject>;
+        return offsetof_member_v<&VM::m_ljrLibBaseDotNextFunctionObject>;
     }
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);

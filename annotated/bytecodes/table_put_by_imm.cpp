@@ -338,6 +338,21 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 }
                 case IndexCheckKind::ForceSlowPath:
                 {
+                    {
+                        // Check for metamethod call
+                        //
+                        GetByIntegerIndexICInfo getIcInfo;
+                        TableObject::PrepareGetByIntegerIndex(tableObj, getIcInfo /*out*/);
+                        TValue originalVal = TableObject::GetByIntegerIndex(tableObj, index, getIcInfo);
+                        if (unlikely(originalVal.Is<tNil>()))
+                        {
+                            TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
+                            if (unlikely(!mm.Is<tNil>()))
+                            {
+                                return std::make_pair(mm, ResKind::HandleMetamethod);
+                            }
+                        }
+                    }
                     return std::make_pair(TValue(), ResKind::SlowPathPut);
                 }
                 }   /* switch indexCheckKind */
