@@ -934,4 +934,29 @@ TEST(LuaTest, PutByImmInterpreterIC_4)
     RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_4.lua.json");
 }
 
+TEST(LuaTest, PutByValInterpreterIC_1)
+{
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_1.lua.json");
+}
+
+TEST(LuaTest, PutByValInterpreterIC_2)
+{
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_2.lua.json");
+}
+
+TEST(LuaTest, PutByValInterpreterIC_3)
+{
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_3.lua.json");
+}
+
+TEST(LuaTest, PutByValInterpreterIC_4)
+{
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_4.lua.json");
+}
+
+TEST(LuaTest, PutByValInterpreterIC_5)
+{
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_5.lua.json");
+}
+
 }   // anonymous namespace
