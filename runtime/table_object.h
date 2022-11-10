@@ -992,7 +992,7 @@ public:
         if constexpr(isGrowNamedStorage)
         {
             butterfly->GetHeader()->m_arrayStorageCapacity = 0;
-            butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = 0;
 
             uint64_t nilVal = TValue::Nil().m_value;
             uint64_t* nilFillBegin = butterflyStart;
@@ -1006,7 +1006,7 @@ public:
         else
         {
             butterfly->GetHeader()->m_arrayStorageCapacity = newCapacity;
-            butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd;
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = 0;
 
             uint64_t nilVal = TValue::Nil().m_value;
             uint64_t* nilFillBegin = butterflyStart + 1;
@@ -1431,7 +1431,7 @@ public:
             *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
             return true;
         }
-        else if (likely(index == butterfly->GetHeader()->m_arrayLengthIfContinuous))
+        else if (likely(index == butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd))
         {
             // The put will extend the array length by 1. We can do it as long as we have enough capacity
             //
@@ -1441,7 +1441,7 @@ public:
                 return false;
             }
             *butterfly->UnsafeGetInVectorIndexAddr(index) = value;
-            butterfly->GetHeader()->m_arrayLengthIfContinuous = static_cast<int32_t>(index + 1);
+            butterfly->GetHeader()->m_arrayLengthIfContinuous = static_cast<int32_t>(index + 1 - ArrayGrowthPolicy::x_arrayBaseOrd);
             return true;
         }
         else
@@ -1505,7 +1505,7 @@ public:
             if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
             {
                 *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = value;
-                butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
                 assert(TCGet(self->m_hiddenClass).m_value == icInfo.m_hiddenClass.m_value);
                 TCSet(self->m_arrayType, icInfo.m_newArrayType);
                 TCSet(self->m_hiddenClass, icInfo.m_newHiddenClass);
@@ -1594,8 +1594,8 @@ public:
             if (index == ArrayGrowthPolicy::x_arrayBaseOrd)
             {
                 newArrayType.SetIsContinuous(true);
-                assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
-                m_butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd + 1;
+                assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
+                m_butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
 
                 // Even if the array is continuous afterwards, we could still be hitting this path because the hidden class is different
                 //
@@ -1604,7 +1604,7 @@ public:
             else
             {
                 newArrayType.SetIsContinuous(false);
-                m_butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+                m_butterfly->GetHeader()->m_arrayLengthIfContinuous = -1;
 
                 // We did something nontrivial because the fast path only handles the case that the array after the operation is continuous
                 //
@@ -1670,7 +1670,7 @@ public:
                 DEBUG_ONLY(bool shouldIncrementContinuousLength = false;)
                 if (isContinuous)
                 {
-                    if (index != butterfly->GetHeader()->m_arrayLengthIfContinuous)
+                    if (index != butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd)
                     {
                         isContinuous = false;
                     }
@@ -1729,7 +1729,7 @@ public:
                 newArrayType.SetIsContinuous(isContinuous);
                 if (isContinuous)
                 {
-                    assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= ArrayGrowthPolicy::x_arrayBaseOrd);
+                    assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
                     m_butterfly->GetHeader()->m_arrayLengthIfContinuous++;
                 }
                 else
@@ -1738,8 +1738,8 @@ public:
                     {
                         // We just turned from continuous to discontinuous
                         //
-                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= ArrayGrowthPolicy::x_arrayBaseOrd);
-                        m_butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
+                        m_butterfly->GetHeader()->m_arrayLengthIfContinuous = -1;
                     }
                 }
 
@@ -1756,7 +1756,9 @@ public:
                 bool isContinuous = arrType.IsContinuous();
                 if (isContinuous)
                 {
-                    int32_t continuousLength = butterfly->GetHeader()->m_arrayLengthIfContinuous;
+                    // We know that currently an element is non-nil iff its index is in [ArrayGrowthPolicy::x_arrayBaseOrd, continuousLength)
+                    //
+                    int32_t continuousLength = butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd;
                     if (value.IsNil())
                     {
                         // The fast path cannot handle the case of writing a nil to a continuous array
@@ -1775,7 +1777,7 @@ public:
                             // We just deleted the last element in the continuous sequence
                             // The sequence is still continuous, but we need to update length
                             //
-                            butterfly->GetHeader()->m_arrayLengthIfContinuous = continuousLength - 1;
+                            butterfly->GetHeader()->m_arrayLengthIfContinuous = continuousLength - 1 - ArrayGrowthPolicy::x_arrayBaseOrd;
                         }
                         else
                         {
@@ -1793,7 +1795,7 @@ public:
                         }
                         else if (index == continuousLength)
                         {
-                            butterfly->GetHeader()->m_arrayLengthIfContinuous = continuousLength + 1;
+                            butterfly->GetHeader()->m_arrayLengthIfContinuous = continuousLength + 1 - ArrayGrowthPolicy::x_arrayBaseOrd;
                         }
                     }
 
@@ -1801,8 +1803,8 @@ public:
                     {
                         // We just turned from continuous to discontinuous
                         //
-                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= ArrayGrowthPolicy::x_arrayBaseOrd);
-                        m_butterfly->GetHeader()->m_arrayLengthIfContinuous = ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
+                        m_butterfly->GetHeader()->m_arrayLengthIfContinuous = -1;
                     }
                 }
 
@@ -2465,8 +2467,8 @@ public:
             // Fast path: the array is continuous
             //
             int32_t val = self->m_butterfly->GetHeader()->m_arrayLengthIfContinuous;
-            assert(val >= ArrayGrowthPolicy::x_arrayBaseOrd);
-            return static_cast<uint32_t>(val - 1);
+            assert(val >= 0);
+            return static_cast<uint32_t>(val - 1 + ArrayGrowthPolicy::x_arrayBaseOrd);
         }
         else if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
         {

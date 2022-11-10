@@ -9,7 +9,7 @@ class alignas(8) ButterflyHeader
 public:
     bool IsContinuous()
     {
-        return m_arrayLengthIfContinuous >= ArrayGrowthPolicy::x_arrayBaseOrd;
+        return m_arrayLengthIfContinuous >= 0;
     }
 
     bool CanUseFastPathGetForContinuousArray(int64_t idx)
@@ -18,19 +18,19 @@ public:
         // We want to compute 'ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous'
         // but we do not want to emit two branches.
         //
-        // The trick is to take advantage of the fact that m_arrayLengthIfContinuous > ArrayGrowthPolicy::x_arrayBaseOrd.
+        // The trick is to take advantage of the fact that m_arrayLengthIfContinuous >= 0.
         // So we can cast 'idx' to unsigned, and compare
-        //     idx - ArrayGrowthPolicy::x_arrayBaseOrd < m_arrayLengthIfContinuous - ArrayGrowthPolicy::x_arrayBaseOrd
+        //     idx - ArrayGrowthPolicy::x_arrayBaseOrd < m_arrayLengthIfContinuous
         //
-        // If idx < ArrayGrowthPolicy::x_arrayBaseOrd, we will underflow and get a huge number. But the right-hand-side will
-        // never underflow, so in that case LHS is guaranteed to be larger than RHS, as desired.
+        // If idx < ArrayGrowthPolicy::x_arrayBaseOrd, we will underflow and get a huge number.
+        // So in that case LHS is guaranteed to be larger than RHS, as desired.
         //
         uint64_t lhs = static_cast<uint64_t>(idx) - ArrayGrowthPolicy::x_arrayBaseOrd;
-        uint64_t rhs = static_cast<uint64_t>(static_cast<int64_t>(m_arrayLengthIfContinuous)) - ArrayGrowthPolicy::x_arrayBaseOrd;
+        uint64_t rhs = static_cast<uint64_t>(static_cast<int64_t>(m_arrayLengthIfContinuous));
         bool result = lhs < rhs;
         // Just sanity check we didn't screw anything up..
         //
-        AssertIff(result, ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous);
+        AssertIff(result, ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd);
         return result;
     }
 
@@ -51,21 +51,20 @@ public:
 
     bool HasSparseMap()
     {
-        return m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+        return m_arrayLengthIfContinuous < - 1;
     }
 
     HeapPtr<ArraySparseMap> GetSparseMap()
     {
         assert(HasSparseMap());
-        assert(m_arrayLengthIfContinuous < 0);
         return GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As();
     }
 
-    // If == x_arrayBaseOrd - 1, it means the vector part is not continuous
-    // If < x_arrayBaseOrd - 1, it means the vector part is not continuous and there is a sparse map,
+    // If == - 1, it means the vector part is not continuous
+    // If < - 1, it means the vector part is not continuous and there is a sparse map,
     //     and the value can be interpreted as a GeneralHeapPointer<ArraySparseMap>
-    // If >= x_arrayBaseOrd, it means the vector part is continuous and has no sparse map.
-    //     That is, range [x_arrayBaseOrd, m_arrayLengthIfContinuous) are all non-nil values, and everything else are nils
+    // If >= 0, it means the vector part is continuous and has no sparse map.
+    //     That is, range [x_arrayBaseOrd, m_arrayLengthIfContinuous + x_arrayBaseOrd) are all non-nil values, and everything else are nils
     //     (note that in Lua arrays are 1-based)
     //
     int32_t m_arrayLengthIfContinuous;

@@ -64,7 +64,7 @@ TEST(ObjectGetPutById, Sanity)
         else
         {
             ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == initArrayPartSize);
-            ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
+            ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
             for (uint32_t i = 0; i < initArrayPartSize; i++)
             {
                 ReleaseAssert(curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(i + ArrayGrowthPolicy::x_arrayBaseOrd))->IsNil());
@@ -129,14 +129,14 @@ TEST(ObjectGetPutById, Sanity)
                 {
                     ReleaseAssert(curObject->m_butterfly != nullptr);
                     ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == 0);
-                    ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
+                    ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
                 }
             }
             else
             {
                 ReleaseAssert(curObject->m_butterfly != nullptr);
                 ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayStorageCapacity == initArrayPartSize);
-                ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd);
+                ReleaseAssert(curObject->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
                 for (uint32_t k = 0; k < initArrayPartSize; k++)
                 {
                     TValue val = *curObject->m_butterfly->UnsafeGetInVectorIndexAddr(static_cast<int32_t>(k) + ArrayGrowthPolicy::x_arrayBaseOrd);

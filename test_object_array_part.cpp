@@ -188,7 +188,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(arrType.IsContinuous());
                                     ReleaseAssert(!arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd + 1);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 1);
                                     checkArrayKindForNonNilValueAndNoSparseMapCase(arrType);
                                 }
                                 else if (ArrayGrowthPolicy::x_arrayBaseOrd <= putLocation && putLocation <= ArrayGrowthPolicy::x_alwaysVectorCutoff)
@@ -198,7 +198,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(!arrType.IsContinuous());
                                     ReleaseAssert(!arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == -1);
                                     ReleaseAssert(putLocation >= ArrayGrowthPolicy::x_arrayBaseOrd && obj->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(putLocation));
                                     checkArrayKindForNonNilValueAndNoSparseMapCase(arrType);
                                 }
@@ -209,7 +209,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(!arrType.IsContinuous());
                                     ReleaseAssert(arrType.HasSparseMap());
                                     ReleaseAssert(arrType.SparseMapContainsVectorIndex());
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < -1);
                                     ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
                                 }
                                 else
@@ -219,7 +219,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                     ReleaseAssert(!arrType.IsContinuous());
                                     ReleaseAssert(arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < -1);
                                     ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
                                 }
                             }
@@ -445,7 +445,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                     ReleaseAssert(arrType.ArrayKind() == ArrayType::Kind::Any);
                                 }
 
-                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == static_cast<int32_t>(expectedContinuousLen));
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd == static_cast<int32_t>(expectedContinuousLen));
                                 ReleaseAssert(static_cast<int64_t>(obj->m_butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd >= static_cast<int64_t>(expectedContinuousLen));
                                 for (size_t i = 0; i < x_validateLen; i++)
                                 {
@@ -648,13 +648,13 @@ TEST(ObjectArrayPart, ContinuousArray)
                             {
                                 ReleaseAssert(arrType.HasSparseMap());
                                 ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
-                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < -1);
                             }
                             else if (ett == EndTransitionType::MakeNotContinuousAndVectorRangeSparseMap)
                             {
                                 ReleaseAssert(arrType.HasSparseMap());
                                 ReleaseAssert(arrType.SparseMapContainsVectorIndex());
-                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous < -1);
                             }
                             else
                             {
@@ -662,11 +662,11 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
                                 if (expectContinuous)
                                 {
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == expectedContinuousLen);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd == expectedContinuousLen);
                                 }
                                 else
                                 {
-                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+                                    ReleaseAssert(obj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous == -1);
                                 }
                             }
                             ReleaseAssert(arrType.ArrayKind() == expectNewKind);

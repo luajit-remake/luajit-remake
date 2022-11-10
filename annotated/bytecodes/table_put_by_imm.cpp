@@ -211,7 +211,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                     if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
                                     {
                                         *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
-                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
                                         TCSet(tableObj->m_arrayType, c_newArrayType);
                                         TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
                                         return std::make_pair(TValue(), ResKind::NoMetamethod);
@@ -333,7 +333,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                     if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
                                     {
                                         *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
-                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1 + ArrayGrowthPolicy::x_arrayBaseOrd;
+                                        butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
                                         TCSet(tableObj->m_arrayType, c_newArrayType);
                                         TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
                                         return std::make_pair(TValue(), ResKind::NoMetamethod);
