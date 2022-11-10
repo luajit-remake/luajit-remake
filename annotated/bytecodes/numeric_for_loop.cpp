@@ -3,7 +3,9 @@
 
 #include "runtime_utils.h"
 
-static void NO_RETURN ForLoopInitImpl(TValue* base)
+// Handles the case where the loop start, end and step variable contains non-double value or double NaN value
+//
+static void NO_RETURN ForLoopInitSlowPath(TValue* base)
 {
     double vals[3];
     for (uint32_t i = 0; i < 3; i++)
@@ -44,6 +46,49 @@ static void NO_RETURN ForLoopInitImpl(TValue* base)
     {
         base[3] = TValue::Create<tDouble>(vals[0]);
         Return();
+    }
+}
+
+static void NO_RETURN ForLoopInitImpl(TValue* base)
+{
+    if (unlikely(!base[0].Is<tDoubleNotNaN>() || !base[1].Is<tDoubleNotNaN>() || !base[2].Is<tDoubleNotNaN>()))
+    {
+        EnterSlowPath<ForLoopInitSlowPath>();
+    }
+
+    double vals[3];
+    vals[0] = base[0].As<tDoubleNotNaN>();
+    vals[1] = base[1].As<tDoubleNotNaN>();
+    vals[2] = base[2].As<tDoubleNotNaN>();
+
+    // Having reached here, we know 'vals[2]' is not NaN,
+    // so the 'vals[2] <= 0' term in the loop condition check
+    //     '(vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1])'
+    // can be optimized out.
+    //
+    if (likely(vals[2] > 0))
+    {
+        if (vals[0] <= vals[1])
+        {
+            base[3] = TValue::Create<tDouble>(vals[0]);
+            Return();
+        }
+        else
+        {
+            ReturnAndBranch();
+        }
+    }
+    else
+    {
+        if (vals[0] >= vals[1])
+        {
+            base[3] = TValue::Create<tDouble>(vals[0]);
+            Return();
+        }
+        else
+        {
+            ReturnAndBranch();
+        }
     }
 }
 

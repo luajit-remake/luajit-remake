@@ -1552,7 +1552,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
 
     TestAssert(chunkFn->m_numFixedArguments == 0);
     TestAssert(chunkFn->m_numUpvalues == 0);
-    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, UnlinkedCodeBlock::GetCodeBlock(chunkFn, globalObject));
+    UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, chunkFn->GetCodeBlock(globalObject));
     r->m_defaultEntryPoint = entryPointFunc;
 
     return r;

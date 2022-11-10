@@ -58,6 +58,33 @@ static void NO_RETURN KVLoopIterCallReturnContinuation(TValue* base, uint8_t num
     }
 }
 
+static void NO_RETURN KVLoopIterNotNextFunctionSlowPath(TValue* /*base*/, uint8_t /*numRets*/, TValue* base)
+{
+    // It turns out that this loop is actually not a table-kv-iteration loop
+    // We have to execute the normal for-loop logic
+    //
+    TValue callee = base[0];
+    TValue* callBase = base + 3;
+
+    if (likely(callee.Is<tFunction>()))
+    {
+        callBase[x_numSlotsForStackFrameHeader] = base[1];
+        callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
+        MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, KVLoopIterCallReturnContinuation);
+    }
+
+    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
+    if (unlikely(callTarget == nullptr))
+    {
+        ThrowError(MakeErrorMessageForUnableToCall(callee));
+    }
+
+    callBase[x_numSlotsForStackFrameHeader] = callee;
+    callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
+    callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
+    MakeInPlaceCall(callTarget, callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, KVLoopIterCallReturnContinuation);
+}
+
 static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
 {
     if (likely(base[0].m_value == VM_GetVMTrueBaseLibNextFunctionObject().m_value))
@@ -82,29 +109,7 @@ static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
     }
     else
     {
-        // It turns out that this loop is actually not a table-kv-iteration loop
-        // We have to execute the normal for-loop logic
-        //
-        TValue callee = base[0];
-        TValue* callBase = base + 3;
-
-        if (likely(callee.Is<tFunction>()))
-        {
-            callBase[x_numSlotsForStackFrameHeader] = base[1];
-            callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
-            MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, KVLoopIterCallReturnContinuation);
-        }
-
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
-        if (unlikely(callTarget == nullptr))
-        {
-            ThrowError(MakeErrorMessageForUnableToCall(callee));
-        }
-
-        callBase[x_numSlotsForStackFrameHeader] = callee;
-        callBase[x_numSlotsForStackFrameHeader + 1] = base[1];
-        callBase[x_numSlotsForStackFrameHeader + 2] = base[2];
-        MakeInPlaceCall(callTarget, callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 3 /*numArgs*/, KVLoopIterCallReturnContinuation);
+        EnterSlowPath<KVLoopIterNotNextFunctionSlowPath>(base);
     }
 }
 

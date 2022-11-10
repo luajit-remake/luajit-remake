@@ -8,7 +8,7 @@ static void NO_RETURN NewClosureImpl(TValue tvucb)
     // This is a bit hacky but 'tvucb' is always a pointer in the constant table, disguised as a TValue..
     //
     UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(tvucb.m_value);
-    CodeBlock* cb = UnlinkedCodeBlock::GetCodeBlock(ucb, GetFEnvGlobalObject());
+    CodeBlock* cb = ucb->GetCodeBlock(GetFEnvGlobalObject());
     HeapPtr<FunctionObject> func = CreateNewClosure(cb);
     Return(TValue::Create<tFunction>(func));
 }

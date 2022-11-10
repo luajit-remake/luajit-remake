@@ -29,7 +29,7 @@ DEEGEN_DEFINE_LIB_FUNC(testfn5)
 
 DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(testcont1)
 {
-    Return(GetNumReturnValues(), *GetReturnValuesBegin());
+    Return(TValue::Create<tDouble>(static_cast<int>(GetNumReturnValues())), *GetReturnValuesBegin());
 }
 
 DEEGEN_DEFINE_LIB_FUNC(testfn7)

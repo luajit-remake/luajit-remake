@@ -8,24 +8,8 @@ static void NO_RETURN LengthOperatorMetamethodCallContinuation(TValue /*input*/)
     Return(GetReturnValue(0));
 }
 
-static void NO_RETURN LengthOperatorImpl(TValue input)
+static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
 {
-    if (likely(input.Is<tString>()))
-    {
-        HeapPtr<HeapString> s = input.As<tString>();
-        Return(TValue::Create<tDouble>(s->m_length));
-    }
-
-    if (likely(input.Is<tTable>()))
-    {
-        // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
-        // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
-        //
-        HeapPtr<TableObject> s = input.As<tTable>();
-        uint32_t result = TableObject::GetTableLengthWithLuaSemantics(s);
-        Return(TValue::Create<tDouble>(result));
-    }
-
     UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(input);
     if (metatableMaybeNull.m_value == 0)
     {
@@ -62,6 +46,41 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
     }
 
     MakeCall(callTarget, metamethod, input, LengthOperatorMetamethodCallContinuation);
+}
+
+static void NO_RETURN LengthOperatorTableLengthSlowPath(TValue input)
+{
+    assert(input.Is<tTable>());
+    uint32_t length = TableObject::GetTableLengthWithLuaSemanticsSlowPath(input.As<tTable>());
+    Return(TValue::Create<tDouble>(length));
+}
+
+static void NO_RETURN LengthOperatorImpl(TValue input)
+{
+    if (input.Is<tString>())
+    {
+        HeapPtr<HeapString> s = input.As<tString>();
+        Return(TValue::Create<tDouble>(s->m_length));
+    }
+
+    if (likely(input.Is<tTable>()))
+    {
+        // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
+        // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
+        //
+        HeapPtr<TableObject> s = input.As<tTable>();
+        auto [success, result] = TableObject::TryGetTableLengthWithLuaSemanticsFastPath(s);
+        if (likely(success))
+        {
+            Return(TValue::Create<tDouble>(result));
+        }
+        else
+        {
+            EnterSlowPath<LengthOperatorTableLengthSlowPath>();
+        }
+    }
+
+    EnterSlowPath<LengthOperatorNotTableOrStringSlowPath>();
 }
 
 DEEGEN_DEFINE_BYTECODE(LengthOf)

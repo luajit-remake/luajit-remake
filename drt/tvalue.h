@@ -108,7 +108,7 @@ struct TValue
     //
 
     ALWAYS_INLINE TValue() = default;
-    ALWAYS_INLINE TValue(uint64_t value) : m_value(value) { }
+    explicit ALWAYS_INLINE TValue(uint64_t value) : m_value(value) { }
 
     static constexpr uint64_t x_int32Tag = 0xFFFBFFFF00000000ULL;
     static constexpr uint64_t x_mivTag = 0xFFFCFFFF0000007FULL;

@@ -308,17 +308,13 @@ public:
         return offsetof_member_v<&UnlinkedCodeBlock::m_bytecodeMetadataUseCounts>;
     }
 
-    // This is for the new interpreter. We should remove the above functions after we port everything to the new interpreter
-    //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, UnlinkedCodeBlock>>>
-    static CodeBlock* WARN_UNUSED GetCodeBlock(T self, UserHeapPointer<TableObject> globalObject)
+    CodeBlock* WARN_UNUSED ALWAYS_INLINE GetCodeBlock(UserHeapPointer<TableObject> globalObject)
     {
-        if (likely(globalObject == self->m_defaultGlobalObject))
+        if (likely(globalObject == m_defaultGlobalObject))
         {
-            return self->m_defaultCodeBlock;
+            return m_defaultCodeBlock;
         }
-        UnlinkedCodeBlock* raw = TranslateToRawPointer(self);
-        return raw->GetCodeBlockSlowPath(globalObject);
+        return GetCodeBlockSlowPath(globalObject);
     }
 
     CodeBlock* WARN_UNUSED NO_INLINE GetCodeBlockSlowPath(UserHeapPointer<TableObject> globalObject)

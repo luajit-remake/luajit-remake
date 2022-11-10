@@ -2400,7 +2400,7 @@ public:
         }
     }
 
-    static uint32_t WARN_UNUSED GetTableLengthWithLuaSemanticsSlowPath(ArraySparseMap* sparseMap, uint32_t existentLb)
+    static uint32_t WARN_UNUSED NO_INLINE GetTableLengthWithLuaSemanticsSlowPathSlowPath(ArraySparseMap* sparseMap, uint32_t existentLb)
     {
         assert(existentLb > 0);
         uint32_t ub = existentLb;
@@ -2454,11 +2454,90 @@ public:
         return lb;
     }
 
+    static uint32_t WARN_UNUSED NO_INLINE GetTableLengthWithLuaSemanticsSlowPath(HeapPtr<TableObject> self)
+    {
+        ArrayType arrType = TCGet(self->m_arrayType);
+        Butterfly* butterfly = self->m_butterfly;
+        TValue* tv = reinterpret_cast<TValue*>(butterfly);
+        uint32_t arrayStorageCap = butterfly->GetHeader()->m_arrayStorageCapacity;
+        if (arrayStorageCap > 0)
+        {
+            // The array has a vector storage of at least length 1
+            //
+            // Case 1: if slot 1 is nil, we found a valid length of '0'
+            //
+            if (tv[1].IsNil())
+            {
+                return 0;
+            }
+            // Case 2: now we know slot 1 isn't nil. If the last slot 'cap' is nil,
+            // we can always use binary search to narrow down to a slot 'k' satisfying 'k' is not nil but 'k+1' is nil
+            // (the invariant is that at any moment, our range [l,r] satisfies slot 'l' is not nil and slot 'r' is nil)
+            //
+            if (tv[arrayStorageCap].IsNil())
+            {
+                uint32_t lb = 1;
+                uint32_t ub = arrayStorageCap;
+                while (lb + 1 < ub)
+                {
+                    uint32_t mid = (lb + ub) / 2;
+                    if (tv[mid].IsNil())
+                    {
+                        ub = mid;
+                    }
+                    else
+                    {
+                        lb = mid;
+                    }
+                }
+                assert(lb + 1 == ub);
+                assert(!tv[lb].IsNil() && tv[lb + 1].IsNil());
+                return lb;
+            }
+            // Case 3: the last slot 'cap' is not nil, we are not guaranteed to find an empty slot in vector range.
+            // Try to find in sparse map
+            //
+            if (unlikely(arrType.HasSparseMap()))
+            {
+                ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
+                return GetTableLengthWithLuaSemanticsSlowPathSlowPath(sparseMap, arrayStorageCap);
+            }
+            else
+            {
+                // The sparse map doesn't exist, so 'arrayStorageCap + 1' is nil
+                //
+                return arrayStorageCap;
+            }
+        }
+        else
+        {
+            // The array doesn't have vector part, now check the sparse map part
+            //
+            if (likely(!arrType.HasSparseMap()))
+            {
+                // It doesn't have sparse map part either, so length is 0
+                //
+                return 0;
+            }
+            ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
+            TValue val = sparseMap->GetByVal(1);
+            if (val.IsNil())
+            {
+                // slot '1' doesn't exist, so length is 0
+                //
+                return 0;
+            }
+            // Slot '1' exists, so we have an existent lower bound, we can call GetTableLengthWithLuaSemanticsSlowPath now
+            //
+            return GetTableLengthWithLuaSemanticsSlowPathSlowPath(sparseMap, 1 /*existentLb*/);
+        }
+    }
+
     // The 'length' operator under Lua semantics
     // The definition is any non-negative integer index n such that value for index 'n' is non-nil but value for index 'n+1' is nil,
     // or if index '1' is nil, the length is 0
     //
-    static uint32_t WARN_UNUSED GetTableLengthWithLuaSemantics(HeapPtr<TableObject> self)
+    static std::pair<bool /*success*/, uint32_t /*length*/> WARN_UNUSED ALWAYS_INLINE TryGetTableLengthWithLuaSemanticsFastPath(HeapPtr<TableObject> self)
     {
         static_assert(ArrayGrowthPolicy::x_arrayBaseOrd == 1, "this function currently only works under lua semantics");
         ArrayType arrType = TCGet(self->m_arrayType);
@@ -2468,90 +2547,17 @@ public:
             //
             int32_t val = self->m_butterfly->GetHeader()->m_arrayLengthIfContinuous;
             assert(val >= 0);
-            return static_cast<uint32_t>(val - 1 + ArrayGrowthPolicy::x_arrayBaseOrd);
+            return std::make_pair(true /*success*/, static_cast<uint32_t>(val - 1 + ArrayGrowthPolicy::x_arrayBaseOrd));
         }
         else if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
         {
             // Edge case: no butterfly array part
             //
-            return 0;
+            return std::make_pair(true /*success*/, 0);
         }
         else
         {
-            Butterfly* butterfly = self->m_butterfly;
-            TValue* tv = reinterpret_cast<TValue*>(butterfly);
-            uint32_t arrayStorageCap = butterfly->GetHeader()->m_arrayStorageCapacity;
-            if (arrayStorageCap > 0)
-            {
-                // The array has a vector storage of at least length 1
-                //
-                // Case 1: if slot 1 is nil, we found a valid length of '0'
-                //
-                if (tv[1].IsNil())
-                {
-                    return 0;
-                }
-                // Case 2: now we know slot 1 isn't nil. If the last slot 'cap' is nil,
-                // we can always use binary search to narrow down to a slot 'k' satisfying 'k' is not nil but 'k+1' is nil
-                // (the invariant is that at any moment, our range [l,r] satisfies slot 'l' is not nil and slot 'r' is nil)
-                //
-                if (tv[arrayStorageCap].IsNil())
-                {
-                    uint32_t lb = 1;
-                    uint32_t ub = arrayStorageCap;
-                    while (lb + 1 < ub)
-                    {
-                        uint32_t mid = (lb + ub) / 2;
-                        if (tv[mid].IsNil())
-                        {
-                            ub = mid;
-                        }
-                        else
-                        {
-                            lb = mid;
-                        }
-                    }
-                    assert(lb + 1 == ub);
-                    assert(!tv[lb].IsNil() && tv[lb + 1].IsNil());
-                    return lb;
-                }
-                // Case 3: the last slot 'cap' is not nil, we are not guaranteed to find an empty slot in vector range.
-                // Try to find in sparse map
-                //
-                if (unlikely(arrType.HasSparseMap()))
-                {
-                    ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
-                    return GetTableLengthWithLuaSemanticsSlowPath(sparseMap, arrayStorageCap);
-                }
-                else
-                {
-                    // The sparse map doesn't exist, so 'arrayStorageCap + 1' is nil
-                    //
-                    return arrayStorageCap;
-                }
-            }
-            else
-            {
-                // The array doesn't have vector part, now check the sparse map part
-                //
-                if (likely(!arrType.HasSparseMap()))
-                {
-                    // It doesn't have sparse map part either, so length is 0
-                    //
-                    return 0;
-                }
-                ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
-                TValue val = sparseMap->GetByVal(1);
-                if (val.IsNil())
-                {
-                    // slot '1' doesn't exist, so length is 0
-                    //
-                    return 0;
-                }
-                // Slot '1' exists, so we have an existent lower bound, we can call GetTableLengthWithLuaSemanticsSlowPath now
-                //
-                return GetTableLengthWithLuaSemanticsSlowPath(sparseMap, 1 /*existentLb*/);
-            }
+            return std::make_pair(false /*success*/, uint32_t());
         }
     }
 
@@ -2765,7 +2771,8 @@ struct TableObjectIterator
             else
             {
                 // TODO: support UncacheableDictionary
-                ReleaseAssert(false && "unimplemented");
+                assert(false && "unimplemented");
+                __builtin_unreachable();
             }
         }
 
@@ -2848,7 +2855,8 @@ try_find_and_get_cd_prop:
             else
             {
                 // TODO: support UncacheableDictionary
-                ReleaseAssert(false && "unimplemented");
+                assert(false && "unimplemented");
+                __builtin_unreachable();
             }
 
 try_start_iterating_vector_storage:

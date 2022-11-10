@@ -3,26 +3,10 @@
 
 #include "runtime_utils.h"
 
-namespace {
-
 template<bool passVariadicRes>
-void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
+static void NO_RETURN TailCallCheckMetamethodSlowPath(TValue* /*base*/, uint32_t /*numArgs*/, TValue* base, uint32_t numArgs, TValue func)
 {
-    TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
-
-    if (likely(func.Is<tFunction>()))
-    {
-        if constexpr(passVariadicRes)
-        {
-            MakeInPlaceTailCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs);
-        }
-        else
-        {
-            MakeInPlaceTailCall(func.As<tFunction>(), argStart, numArgs);
-        }
-    }
-
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
     {
@@ -39,7 +23,28 @@ void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
     }
 }
 
-}   // anonymous namespace
+template<bool passVariadicRes>
+static void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
+{
+    TValue func = base[0];
+    TValue* argStart = base + x_numSlotsForStackFrameHeader;
+
+    if (likely(func.Is<tFunction>()))
+    {
+        if constexpr(passVariadicRes)
+        {
+            MakeInPlaceTailCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs);
+        }
+        else
+        {
+            MakeInPlaceTailCall(func.As<tFunction>(), argStart, numArgs);
+        }
+    }
+    else
+    {
+        EnterSlowPath<TailCallCheckMetamethodSlowPath<passVariadicRes>>(base, numArgs, func);
+    }
+}
 
 DEEGEN_DEFINE_BYTECODE_TEMPLATE(TailCallOperation, bool passVariadicRes)
 {
