@@ -1,80 +1,97 @@
 #include "runtime_utils.h"
 #include "api_define_lib_function.h"
 
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_print);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_error);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_pcall);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_xpcall);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_getmetatable);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_setmetatable);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_rawget);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_rawset);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_pairs);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_next);
+#define LUA_LIB_BASE_FUNCTION_LIST  \
+    assert                          \
+  , collectgarbage                  \
+  , dofile                          \
+  , error                           \
+  , getmetatable                    \
+  , next                            \
+  , pairs                           \
+  , pcall                           \
+  , print                           \
+  , rawget                          \
+  , rawset                          \
+  , setmetatable                    \
+  , xpcall                          \
 
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(math_sqrt);
+#define LUA_LIB_MATH_FUNCTION_LIST  \
+    sqrt                            \
 
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(io_write);
+#define LUA_LIB_IO_FUNCTION_LIST    \
+    write                           \
 
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(debug_getmetatable);
-DEEGEN_FORWARD_DECLARE_LIB_FUNC(debug_setmetatable);
+#define LUA_LIB_DEBUG_FUNCTION_LIST \
+    getmetatable                    \
+  , setmetatable                    \
 
-UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
+// Create forward declaration for all the library functions
+//
+#define macro(libName, fnName) DEEGEN_FORWARD_DECLARE_LIB_FUNC(libName ## _ ## fnName);
+PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (base), (LUA_LIB_BASE_FUNCTION_LIST))
+PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (math), (LUA_LIB_MATH_FUNCTION_LIST))
+PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (io), (LUA_LIB_IO_FUNCTION_LIST))
+PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (debug), (LUA_LIB_DEBUG_FUNCTION_LIST))
+#undef macro
+
+struct CreateGlobalObjectHelper
 {
-#define LIB_FN DEEGEN_CODE_POINTER_FOR_LIB_FUNC
+    CreateGlobalObjectHelper(VM* vm_) : vm(vm_) { }
 
-    HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
-
-    auto insertField = [&](HeapPtr<TableObject> r, const char* propName, TValue value)
+    void InsertField(HeapPtr<TableObject> r, const char* propName, TValue value)
     {
         UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(propName, static_cast<uint32_t>(strlen(propName)));
         PutByIdICInfo icInfo;
         TableObject::PreparePutById(r, hs /*prop*/, icInfo /*out*/);
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
-    };
+    }
 
-    auto insertCFunc = [&](HeapPtr<TableObject> r, const char* propName, void* func) -> HeapPtr<FunctionObject>
+    HeapPtr<FunctionObject> InsertCFunc(HeapPtr<TableObject> r, const char* propName, void* func)
     {
         UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func));
-        insertField(r, propName, TValue::CreatePointer(funcObj));
+        InsertField(r, propName, TValue::CreatePointer(funcObj));
         return funcObj.As();
-    };
+    }
 
-    auto insertObject = [&](HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity) -> HeapPtr<TableObject>
+    HeapPtr<TableObject> InsertObject(HeapPtr<TableObject> r, const char* propName, uint8_t inlineCapacity)
     {
         SystemHeapPointer<Structure> initialStructure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapacity);
         UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, initialStructure.As()), 0 /*initialButterflyArrayPartCapacity*/);
-        insertField(r, propName, TValue::CreatePointer(o));
+        InsertField(r, propName, TValue::CreatePointer(o));
         return o.As();
-    };
+    }
 
-    insertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
+    VM* vm;
+};
 
-    insertCFunc(globalObject, "print", LIB_FN(base_print));
-    HeapPtr<FunctionObject> baseDotError = insertCFunc(globalObject, "error", LIB_FN(base_error));
-    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(baseDotError));
-    insertCFunc(globalObject, "pcall", LIB_FN(base_pcall));
-    insertCFunc(globalObject, "xpcall", LIB_FN(base_xpcall));
+UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
+{
+    CreateGlobalObjectHelper h(vm);
+    HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
+    h.InsertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
 
-    insertCFunc(globalObject, "pairs", LIB_FN(base_pairs));
-    HeapPtr<FunctionObject> nextFn = insertCFunc(globalObject, "next", LIB_FN(base_next));
-    vm->InitLibBaseDotNextFunctionObject(TValue::Create<tFunction>(nextFn));
+    HeapPtr<TableObject> libobj_base = globalObject;
+    HeapPtr<TableObject> libobj_math = h.InsertObject(globalObject, "math", 32 /*inlineCapacity*/);
+    HeapPtr<TableObject> libobj_io = h.InsertObject(globalObject, "io", 16 /*inlineCapacity*/);
+    HeapPtr<TableObject> libobj_debug = h.InsertObject(globalObject, "debug", 16 /*inlineCapacity*/);
 
-    insertCFunc(globalObject, "getmetatable", LIB_FN(base_getmetatable));
-    insertCFunc(globalObject, "setmetatable", LIB_FN(base_setmetatable));
-    insertCFunc(globalObject, "rawget", LIB_FN(base_rawget));
-    insertCFunc(globalObject, "rawset", LIB_FN(base_rawset));
+#define macro(libName, fnName)                                                      \
+    [[maybe_unused]] HeapPtr<FunctionObject> libfn_ ## libName ##_ ## fnName =      \
+        h.InsertCFunc(                                                              \
+            libobj_ ## libName /*object*/,                                          \
+            PP_STRINGIFY(fnName) /*propName*/,                                      \
+            DEEGEN_CODE_POINTER_FOR_LIB_FUNC(libName ## _ ## fnName) /*value*/);
 
-    HeapPtr<TableObject> mathObj = insertObject(globalObject, "math", 32);
-    insertCFunc(mathObj, "sqrt", LIB_FN(math_sqrt));
+    PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (base), (LUA_LIB_BASE_FUNCTION_LIST))
+    PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (math), (LUA_LIB_MATH_FUNCTION_LIST))
+    PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (io), (LUA_LIB_IO_FUNCTION_LIST))
+    PP_FOR_EACH_CARTESIAN_PRODUCT(macro, (debug), (LUA_LIB_DEBUG_FUNCTION_LIST))
 
-    HeapPtr<TableObject> ioObj = insertObject(globalObject, "io", 16);
-    insertCFunc(ioObj, "write", LIB_FN(io_write));
+#undef macro
 
-    HeapPtr<TableObject> debugObj = insertObject(globalObject, "debug", 16);
-    insertCFunc(debugObj, "getmetatable", LIB_FN(debug_getmetatable));
-    insertCFunc(debugObj, "setmetatable", LIB_FN(debug_setmetatable));
+    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(libfn_base_error));
+    vm->InitLibBaseDotNextFunctionObject(TValue::Create<tFunction>(libfn_base_next));
 
     return globalObject;
-#undef LIB_FN
 }

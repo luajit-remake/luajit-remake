@@ -959,4 +959,9 @@ TEST(LuaTest, PutByValInterpreterIC_5)
     RunSimpleLuaTest("luatests/putbyval_interpreter_ic_5.lua.json");
 }
 
+TEST(LuaLib, base_assert)
+{
+    RunSimpleLuaTest("luatests/lib_base_assert.lua.json");
+}
+
 }   // anonymous namespace

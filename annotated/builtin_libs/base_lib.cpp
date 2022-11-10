@@ -1,6 +1,59 @@
 #include "deegen_api.h"
 #include "runtime_utils.h"
 
+// base.assert -- https://www.lua.org/manual/5.1/manual.html#pdf-assert
+// Issues an error when the value of its argument v is false (i.e., nil or false);
+// otherwise, returns all its arguments. message is an error message;
+// when absent, it defaults to "assertion failed!"
+//
+DEEGEN_DEFINE_LIB_FUNC(base_assert)
+{
+    size_t numArgs = GetNumArgs();
+    if (numArgs == 0)
+    {
+        ThrowError("bad argument #1 to 'assert' (value expected)");
+    }
+
+    TValue v = GetArg(0);
+    if (unlikely(!v.IsTruthy()))
+    {
+        if (numArgs == 1)
+        {
+            ThrowError("assertion failed!");
+        }
+        TValue msg = GetArg(1);
+        if (msg.Is<tString>())
+        {
+            ThrowError(msg);
+        }
+        else if (msg.Is<tDouble>())
+        {
+            char buf[x_default_tostring_buffersize_double];
+            uint32_t msgLen = static_cast<uint32_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(buf, msg.As<tDouble>()) - buf);
+            TValue errObj = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, msgLen).As());
+            ThrowError(errObj);
+        }
+        else
+        {
+            // TODO: make error message consistent with Lua
+            //
+            ThrowError("bad argument #2 to 'assert' (string expected)");
+        }
+    }
+
+    ReturnValueRange(GetStackBase(), numArgs);
+}
+
+DEEGEN_DEFINE_LIB_FUNC(base_collectgarbage)
+{
+    ThrowError("Library function 'collectgarbage' is not implemented yet!");
+}
+
+DEEGEN_DEFINE_LIB_FUNC(base_dofile)
+{
+    ThrowError("Library function 'dofile' is not implemented yet!");
+}
+
 // Lua standard library base.print
 //
 DEEGEN_DEFINE_LIB_FUNC(base_print)
@@ -306,5 +359,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
         Return(kv.m_key, kv.m_value);
     }
 }
+
+
 
 DEEGEN_END_LIB_FUNC_DEFINITIONS
