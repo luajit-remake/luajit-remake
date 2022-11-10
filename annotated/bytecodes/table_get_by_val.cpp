@@ -31,7 +31,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
 
 // At this point, we know that 'base' is table and 'rawget(base, index)' is nil, and we need to check the metatable of 'base'
 //
-static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, int32_t index)
+static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base)
 {
     assert(base.Is<tTable>());
     HeapPtr<TableObject> tableObj = base.As<tTable>();
@@ -50,7 +50,7 @@ static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), TableGetByValMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -61,6 +61,10 @@ static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         {
             EnterSlowPath<HandleNotTableObjectSlowPath>(base);
         }
+
+        double idxDbl = tvIndex.ViewAsDouble();
+        int64_t index = static_cast<int64_t>(idxDbl);
+        assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
         tableObj = base.As<tTable>();
         GetByIntegerIndexICInfo icInfo;
@@ -73,9 +77,9 @@ static void NO_RETURN Int32IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
     }
 }
 
-// At this point we know that 'index' is not a double representing an int32_t value
+// At this point we know that 'index' is not a double representing an int64_t value
 //
-static void NO_RETURN HandleNotInt32IndexSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, double tvIndexViewAsDouble)
+static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, double tvIndexViewAsDouble)
 {
     if (likely(base.Is<tTable>()))
     {
@@ -294,29 +298,29 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
     }
 
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t idx32 = static_cast<int32_t>(idxDbl);
-    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(idx32))))
+    int64_t index = static_cast<int64_t>(idxDbl);
+    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(index))))
     {
-        // tvIndex is a double that represents a int32_t value
+        // tvIndex is a double that represents a int64_t value
         //
         assert(base.Is<tTable>());
         HeapPtr<TableObject> tableObj = base.As<tTable>();
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
-        TValue result = TableObject::GetByIntegerIndex(tableObj, idx32, icInfo);
+        TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
         if (likely(!icInfo.m_mayHaveMetatable || !result.Is<tNil>()))
         {
             Return(result);
         }
 
-        EnterSlowPath<Int32IndexCheckMetatableSlowPath>(base, idx32);
+        EnterSlowPath<Int64IndexCheckMetatableSlowPath>(base);
     }
     else
     {
-        // Now, we know 'tvIndex' is not a int32 value, we can delegate to HandleNotInt32IndexSlowPath.
+        // Now, we know 'tvIndex' is not a int64 value, we can delegate to HandleNotInt64IndexSlowPath.
         // Note that we already have made forward progress (by checking metatable of 'base'), so the recursion here is fine.
         //
-        EnterSlowPath<HandleNotInt32IndexSlowPath>(base, idxDbl);
+        EnterSlowPath<HandleNotInt64IndexSlowPath>(base, idxDbl);
     }
 }
 
@@ -330,8 +334,8 @@ enum class TableGetByValIcResultKind
 static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
 {
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t idx32 = static_cast<int32_t>(idxDbl);
-    // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int32 value. It is correct because:
+    int64_t idx32 = static_cast<int64_t>(idxDbl);
+    // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int64 value. It is correct because:
     // (1) If 'tvIndex' is a double, the correctness of the below check is clear.
     // (2) If 'tvIndex' is not a double, then 'idxDbl' will be NaN, so the below check is doomed to fail, also as desired.
     //
@@ -446,7 +450,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 {
                     Return(result);
                 }
-                EnterSlowPath<Int32IndexCheckMetatableSlowPath>(base, idx32);
+                EnterSlowPath<Int64IndexCheckMetatableSlowPath>(base);
             }
             }   /* switch resultKind*/
         }
@@ -457,7 +461,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
     }
     else
     {
-        EnterSlowPath<HandleNotInt32IndexSlowPath>(base, idxDbl);
+        EnterSlowPath<HandleNotInt64IndexSlowPath>(base, idxDbl);
     }
 }
 

@@ -9,10 +9,10 @@ static void NO_RETURN TablePutByValMetamethodCallContinuation(TValue /*base*/, T
     Return();
 }
 
-static void NO_RETURN HandleInt32IndexNoMetamethodSlowPathPut(TValue base, TValue tvIndex, TValue valueToPut)
+static void NO_RETURN HandleInt64IndexNoMetamethodSlowPathPut(TValue base, TValue tvIndex, TValue valueToPut)
 {
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t index = static_cast<int32_t>(idxDbl);
+    int64_t index = static_cast<int64_t>(idxDbl);
     assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     assert(base.Is<tTable>());
@@ -23,13 +23,13 @@ static void NO_RETURN HandleInt32IndexNoMetamethodSlowPathPut(TValue base, TValu
     Return();
 }
 
-// At this point we only know that 'tvIndex' is representable as a int32, and that the 'metamethod' shall be invoked to execute the PutByVal.
+// At this point we only know that 'tvIndex' is representable as a int64, and that the 'metamethod' shall be invoked to execute the PutByVal.
 // We do not know if 'base' is table!
 //
-static void NO_RETURN HandleInt32IndexMetamethodSlowPath(TValue base, TValue tvIndex, TValue valueToPut, TValue metamethod)
+static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvIndex, TValue valueToPut, TValue metamethod)
 {
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t index = static_cast<int32_t>(idxDbl);
+    int64_t index = static_cast<int64_t>(idxDbl);
     assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     // If 'metamethod' is a function, we should invoke the metamethod.
@@ -120,7 +120,7 @@ no_metamethod:
     }
 }
 
-static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt32Index(HeapPtr<TableObject> tableObj, double indexDouble)
+static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(HeapPtr<TableObject> tableObj, double indexDouble)
 {
     ArrayType arrType = TCGet(tableObj->m_arrayType);
     if (likely(!arrType.MayHaveMetatable()))
@@ -158,17 +158,17 @@ static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE Ch
     return std::make_pair(metamethod, true);
 }
 
-// At this point we know that 'base' is table and 'index' is not representable as a int32
+// At this point we know that 'base' is table and 'index' is not representable as a int64
 // Note that the 'base' might not equal the bytecode value here.
 //
-static void NO_RETURN HandleTableObjectNotInt32IndexSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue valueToPut, TValue base)
+static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue valueToPut, TValue base)
 {
     assert(base.Is<tTable>());
 
     if (tvIndex.Is<tDouble>())
     {
         double indexDouble = tvIndex.As<tDouble>();
-        assert(!UnsafeFloatEqual(indexDouble, static_cast<double>(static_cast<int32_t>(indexDouble))));
+        assert(!UnsafeFloatEqual(indexDouble, static_cast<double>(static_cast<int64_t>(indexDouble))));
 
         if (unlikely(IsNaN(indexDouble)))
         {
@@ -180,7 +180,7 @@ static void NO_RETURN HandleTableObjectNotInt32IndexSlowPath(TValue /*bc_base*/,
             assert(base.Is<tTable>());
             HeapPtr<TableObject> tableObj = base.As<tTable>();
 
-            auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt32Index(tableObj, indexDouble);
+            auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(tableObj, indexDouble);
             if (likely(!hasMetamethod))
             {
                 TableObject::RawPutByValDoubleIndex(tableObj, indexDouble, valueToPut);
@@ -282,9 +282,9 @@ property_index_handle_metamethod:
     }
 }
 
-// At this point we know that 'base' is not table and 'tvIndex' is not representable as int32
+// At this point we know that 'base' is not table and 'tvIndex' is not representable as int64
 //
-static void NO_RETURN HandleNotTableObjectNotInt32IndexSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue valueToPut, TValue base)
+static void NO_RETURN HandleNotTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue valueToPut, TValue base)
 {
     while (true)
     {
@@ -303,22 +303,22 @@ static void NO_RETURN HandleNotTableObjectNotInt32IndexSlowPath(TValue /*bc_base
         base = metamethod;
         if (base.Is<tTable>())
         {
-            EnterSlowPath<HandleTableObjectNotInt32IndexSlowPath>(base);
+            EnterSlowPath<HandleTableObjectNotInt64IndexSlowPath>(base);
         }
     }
 }
 
-// At this point we know that 'tvIndex' is not representable as int32
+// At this point we know that 'tvIndex' is not representable as int64
 //
-static void NO_RETURN HandleNotInt32IndexSlowPath(TValue base, TValue /*tvIndex*/, TValue /*valueToPut*/)
+static void NO_RETURN HandleNotInt64IndexSlowPath(TValue base, TValue /*tvIndex*/, TValue /*valueToPut*/)
 {
     if (base.Is<tTable>())
     {
-        EnterSlowPath<HandleTableObjectNotInt32IndexSlowPath>(base);
+        EnterSlowPath<HandleTableObjectNotInt64IndexSlowPath>(base);
     }
     else
     {
-        EnterSlowPath<HandleNotTableObjectNotInt32IndexSlowPath>(base);
+        EnterSlowPath<HandleNotTableObjectNotInt64IndexSlowPath>(base);
     }
 }
 
@@ -329,12 +329,12 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, TValue tvIndex, 
     assert(!base.Is<tTable>());
 
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t index = static_cast<int32_t>(idxDbl);
+    int64_t index = static_cast<int64_t>(idxDbl);
     if (!UnsafeFloatEqual(idxDbl, static_cast<double>(index)))
     {
-        // Not table object, not int32 index. We have a slow path for that.
+        // Not table object, not int64 index. We have a slow path for that.
         //
-        EnterSlowPath<HandleNotTableObjectNotInt32IndexSlowPath>(base);
+        EnterSlowPath<HandleNotTableObjectNotInt64IndexSlowPath>(base);
     }
 
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
@@ -342,9 +342,9 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, TValue tvIndex, 
     {
         ThrowError("bad type for TablePutByVal");
     }
-    // Index is int32 and we need to handle metamethod.
+    // Index is int64 and we need to handle metamethod.
     //
-    EnterSlowPath<HandleInt32IndexMetamethodSlowPath>(metamethod);
+    EnterSlowPath<HandleInt64IndexMetamethodSlowPath>(metamethod);
 }
 
 enum class TablePutByValIcResultKind
@@ -358,8 +358,8 @@ enum class TablePutByValIcResultKind
 static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valueToPut)
 {
     double idxDbl = tvIndex.ViewAsDouble();
-    int32_t index = static_cast<int32_t>(idxDbl);
-    // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int32 value. It is correct because:
+    int64_t index = static_cast<int64_t>(idxDbl);
+    // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int64 value. It is correct because:
     // (1) If 'tvIndex' is a double, the correctness of the below check is clear.
     // (2) If 'tvIndex' is not a double, then 'idxDbl' will be NaN, so the below check is doomed to fail, also as desired.
     //
@@ -603,11 +603,11 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
             }
             case ResKind::SlowPathPut:
             {
-                EnterSlowPath<HandleInt32IndexNoMetamethodSlowPathPut>();
+                EnterSlowPath<HandleInt64IndexNoMetamethodSlowPathPut>();
             }
             case ResKind::HandleMetamethod:
             {
-                EnterSlowPath<HandleInt32IndexMetamethodSlowPath>(metamethod);
+                EnterSlowPath<HandleInt64IndexMetamethodSlowPath>(metamethod);
             }
             case ResKind::NotTable: [[unlikely]]
             {
@@ -622,7 +622,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
     }
     else
     {
-        EnterSlowPath<HandleNotInt32IndexSlowPath>();
+        EnterSlowPath<HandleNotInt64IndexSlowPath>();
     }
 }
 
