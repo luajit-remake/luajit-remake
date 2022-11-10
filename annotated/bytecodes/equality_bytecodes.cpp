@@ -37,16 +37,21 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
     //
     if (likely(rhs.Is<tDouble>()))
     {
-        if (likely(lhs.Is<tDouble>()))
-        {
-            bool isEqualAsDouble = UnsafeFloatEqual(lhs.As<tDouble>(), rhs.As<tDouble>());
-            result = isEqualAsDouble ^ compareForNotEqual;
-            goto end;
-        }
-        else
-        {
-            goto not_equal;
-        }
+        // When RHS is a double, we can execute the comparison by simply doing 'lhs.ViewAsDouble() == rhs.As<tDouble>()'.
+        // Here is why it is correct: since RHS is a double,
+        // (1) If LHS is not a double, the equality is always false according to Lua rule.
+        // (2) If LHS is a double NaN, the equality is always false because NaN is not equal to any double.
+        //
+        // And when the LHS TValue is *viewed* as a double, all non-double value will become double NaN:
+        //     double -> double, comparison with RHS works as expected
+        //     double NaN -> double NaN, comparison with RHS yields false as expected
+        //     non-double -> double NaN, comparison with RHS yields false as expected
+        //
+        // In all three cases, doing a double-comparison with RHS yields the same result as Lua rule expects.
+        //
+        bool isEqualAsDouble = UnsafeFloatEqual(lhs.ViewAsDouble(), rhs.As<tDouble>());
+        result = isEqualAsDouble ^ compareForNotEqual;
+        goto end;
     }
 
     if (lhs.m_value == rhs.m_value)
