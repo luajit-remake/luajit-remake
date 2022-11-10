@@ -334,12 +334,12 @@ enum class TableGetByValIcResultKind
 static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
 {
     double idxDbl = tvIndex.ViewAsDouble();
-    int64_t idx32 = static_cast<int64_t>(idxDbl);
+    int64_t index = static_cast<int64_t>(idxDbl);
     // This is a hacky check that checks that whether 'tvIndex' is a double that represents an int64 value. It is correct because:
     // (1) If 'tvIndex' is a double, the correctness of the below check is clear.
     // (2) If 'tvIndex' is not a double, then 'idxDbl' will be NaN, so the below check is doomed to fail, also as desired.
     //
-    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(idx32))))
+    if (likely(UnsafeFloatEqual(idxDbl, static_cast<double>(index))))
     {
         if (likely(base.Is<tHeapEntity>()))
         {
@@ -349,7 +349,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
             ic->FuseICIntoInterpreterOpcode();
 
             using ResKind = TableGetByValIcResultKind;
-            auto [result, resultKind] = ic->Body([ic, heapEntity, idx32]() -> std::pair<TValue, ResKind> {
+            auto [result, resultKind] = ic->Body([ic, heapEntity, index]() -> std::pair<TValue, ResKind> {
                 if (unlikely(heapEntity->m_type != HeapEntityType::Table))
                 {
                     return std::make_pair(TValue(), ResKind::NotTable);
@@ -361,12 +361,12 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
 
                 if (likely(c_info.m_isContinuous))
                 {
-                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                    return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        bool isInRange = TableObject::CheckIndexFitsInContinuousArray(heapEntity, idx32);
+                        bool isInRange = TableObject::CheckIndexFitsInContinuousArray(heapEntity, index);
                         if (isInRange)
                         {
-                            TValue res = *(heapEntity->m_butterfly->UnsafeGetInVectorIndexAddr(idx32));
+                            TValue res = *(heapEntity->m_butterfly->UnsafeGetInVectorIndexAddr(index));
                             // We know that 'res' must not be nil thanks to the guarantee of continuous array, so no need to check metatable
                             //
                             assert(!res.Is<tNil>());
@@ -382,9 +382,9 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 switch (c_info.m_icKind)
                 {
                 case GetByIntegerIndexICInfo::ICKind::VectorStorage: {
-                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                    return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {
                             return std::make_pair(res, c_resKind);
@@ -399,17 +399,17 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                     });
                 }
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap: {
-                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                    return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
                         assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
-                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {
                             return std::make_pair(res, c_resKind);
                         }
-                        if (idx32 < ArrayGrowthPolicy::x_arrayBaseOrd || idx32 > ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
+                        if (index < ArrayGrowthPolicy::x_arrayBaseOrd || index > ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
                         {
-                            return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(idx32)), c_resKind);
+                            return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(index)), c_resKind);
                         }
                         else
                         {
@@ -420,15 +420,15 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                     });
                 }
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap: {
-                    return ic->Effect([heapEntity, idx32, c_resKind]() {
+                    return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
                         assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
-                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, idx32);
+                        auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {
                             return std::make_pair(res, c_resKind);
                         }
-                        return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(idx32)), c_resKind);
+                        return std::make_pair(TableObject::QueryArraySparseMap(heapEntity, static_cast<double>(index)), c_resKind);
                     });
                 }
                 } /* switch icKind */
