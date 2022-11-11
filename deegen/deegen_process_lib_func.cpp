@@ -453,7 +453,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         allInstances.push_back(std::make_unique<DeegenLibFuncInstance>(implFunc, wrapperFunc, item.m_isRc));
     }
 
-    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::PerFunctionSimplifyOnly);
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::InlineGeneralFunctions);
 
     for (auto& instance : allInstances)
     {

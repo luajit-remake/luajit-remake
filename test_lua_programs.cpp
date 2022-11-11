@@ -974,4 +974,9 @@ TEST(LuaLib, InitEnvironment)
     RunSimpleLuaTest("luatests/init_environment.lua.json");
 }
 
+TEST(LuaLib, math_sqrt)
+{
+    RunSimpleLuaTest("luatests/math_sqrt.lua.json");
+}
+
 }   // anonymous namespace

@@ -1,5 +1,7 @@
 #include "deegen_api.h"
+#include "lib_util.h"
 #include "runtime_utils.h"
+#include <emmintrin.h>
 
 // math.abs -- https://www.lua.org/manual/5.1/manual.html#pdf-math.abs
 //
@@ -256,36 +258,40 @@ DEEGEN_DEFINE_LIB_FUNC(math_sinh)
     ThrowError("Library function 'math.sinh' is not implemented yet!");
 }
 
+// C library's sqrt sets errno, which is unfortunately slow and inhibits compiler optimization
+// It seems like the only way to generate a sqrt without errno is to use Intel intrinsics, which is what this function does.
+//
+inline double WARN_UNUSED ALWAYS_INLINE sqrt_no_errno(double val)
+{
+    __m128d x; x[0] = val;
+    // dst = _mm_sqrt_sd(a, b):
+    //     dst[63:0] := SQRT(b[63:0])
+    //     dst[127:64] := a[127:64]
+    //
+    x = _mm_sqrt_sd(x, x);
+    return x[0];
+}
+
 // math.sqrt -- https://www.lua.org/manual/5.1/manual.html#pdf-math.sqrt
 //
 // math.sqrt (x)
 // Returns the square root of x. (You can also use the expression x^0.5 to compute this value.)
 //
-// TODO: we need to properly handle tonumber case (e.g., math.sqrt("123") should work)
-//
 DEEGEN_DEFINE_LIB_FUNC(math_sqrt)
 {
-    if (GetNumArgs() < 1)
+    if (unlikely(GetNumArgs() < 1))
     {
         ThrowError("bad argument #1 to 'sqrt' (number expected, got no value)");
     }
-    TValue input = GetArg(0);
-    if (likely(input.Is<tDouble>()))
+    auto [success, input] = LuaLib::ToNumber(GetArg(0));
+    if (unlikely(!success))
     {
-        double val = input.As<tDouble>();
-        Return(TValue::Create<tDouble>(sqrt(val)));
-    }
-#if 0
-    else if (input.Is<tInt32>())
-    {
-        double val = input.As<tInt32>();
-        Return(TValue::Create<tDouble>(sqrt(val)));
-    }
-#endif
-    else
-    {
+        // TODO: make error consistent with Lua
+        //
         ThrowError("bad argument #1 to 'sqrt' (number expected)");
     }
+
+    Return(TValue::Create<tDouble>(sqrt_no_errno(input)));
 }
 
 // math.tan -- https://www.lua.org/manual/5.1/manual.html#pdf-math.tan

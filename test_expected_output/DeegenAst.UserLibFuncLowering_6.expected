@@ -8,19 +8,19 @@ target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
 define dso_local ghccc void @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %5, i64 %6, i64 %7, i64 %8, i64 %9, double %10, double %11, double %12, double %13, double %14, double %15) #0 {
-  %17 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 1
-  %18 = load ptr, ptr %17, align 8, !tbaa !2
-  %19 = trunc i64 %6 to i32
-  %20 = sitofp i32 %19 to double
-  %.sroa.0.0.copyload = load i64, ptr %5, align 8, !tbaa.struct !9
-  store double %20, ptr %18, align 8
-  %21 = getelementptr inbounds i64, ptr %18, i64 1
-  store i64 %.sroa.0.0.copyload, ptr %21, align 8
-  %22 = getelementptr inbounds i64, ptr %18, i64 2
-  store i64 %9, ptr %22, align 8
-  %23 = getelementptr %class.StackFrameHeader, ptr %18, i64 -1, i32 2
-  %24 = load ptr, ptr %23, align 8, !tbaa !12
-  musttail call ghccc void %24(ptr %0, ptr nonnull %18, ptr undef, ptr undef, i64 %4, ptr nonnull %18, i64 2, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %17 = getelementptr i8, ptr %1, i64 -24
+  %.val = load ptr, ptr %17, align 8, !tbaa !2
+  %18 = trunc i64 %6 to i32
+  %19 = sitofp i32 %18 to double
+  %.sroa.0.0.copyload.i.i = load i64, ptr %5, align 8, !tbaa.struct !9
+  store double %19, ptr %.val, align 8
+  %20 = getelementptr inbounds i64, ptr %.val, i64 1
+  store i64 %.sroa.0.0.copyload.i.i, ptr %20, align 8
+  %21 = getelementptr inbounds i64, ptr %.val, i64 2
+  store i64 %9, ptr %21, align 8
+  %22 = getelementptr %class.StackFrameHeader, ptr %.val, i64 -1, i32 2
+  %23 = load ptr, ptr %22, align 8, !tbaa !12
+  musttail call ghccc void %23(ptr %0, ptr nonnull %.val, ptr undef, ptr undef, i64 %4, ptr nonnull %.val, i64 2, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
