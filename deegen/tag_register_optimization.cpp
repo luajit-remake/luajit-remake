@@ -118,8 +118,18 @@ static void TransformConstantToTagRegister(llvm::Function* target, llvm::Argumen
                         ReleaseAssert(replacement->getType() == c->getType());
                         ReleaseAssert(!operandReplacementMap.count(std::make_pair(&inst, operandOrd)));
                         operandReplacementMap[std::make_pair(&inst, operandOrd)] = replacement;
-                        auto& lis = insertionSet[&inst];
-                        for (llvm::Instruction* i : insBefore)
+                        // Normally we insert the arithmetic operation right before the original instruction, but this cannot work if the
+                        // original instruction is a PHI instruction as LLVM requires PHI instructions to precede any non-PHI in the BB.
+                        // So if the instruction is a PHI instruction, we insert the arithmetic at the function entry BB.
+                        // LLVM code sinking pass should gracefully sink that arithmetic instruction to the place it should be.
+                        //
+                        Instruction* insertionPoint = &inst;
+                        if (isa<PHINode>(insertionPoint))
+                        {
+                            insertionPoint = target->getEntryBlock().getTerminator();
+                        }
+                        auto& lis = insertionSet[insertionPoint];
+                        for (Instruction* i : insBefore)
                         {
                             lis.push_back(i);
                         }

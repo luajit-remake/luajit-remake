@@ -487,6 +487,8 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
     }
 
+    DesugarAndSimplifyLLVMModule(module, DesugaringLevel::Top);
+
     // Run tag register optimization pass
     //
     for (DeegenLibFuncInstanceInfo& item : allInfo)
