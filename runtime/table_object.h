@@ -2046,6 +2046,13 @@ public:
         return CreateEmptyTableObjectImpl(vm, emptyStructure, emptyStructure->m_inlineNamedStorageCapacity, initialButterflyArrayPartCapacity);
     }
 
+    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, uint32_t inlineCapcity, uint32_t initialButterflyArrayPartCapacity)
+    {
+        SystemHeapPointer<Structure> initialStructure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcity);
+        UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, initialStructure.As()), initialButterflyArrayPartCapacity);
+        return o.As();
+    }
+
     static HeapPtr<TableObject> WARN_UNUSED CreateEmptyGlobalObject(VM* vm)
     {
         uint8_t inlineCapacity = Structure::x_maxNumSlots;

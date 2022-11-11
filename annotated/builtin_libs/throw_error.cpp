@@ -226,7 +226,15 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowCStringErrorImpl)
     ThrowError(MakeErrorMessage(errorMsg));
 }
 
-// Lua standard library base.xpcall
+// base.xpcall -- https://www.lua.org/manual/5.1/manual.html#pdf-xpcall
+//
+// xpcall (f, err)
+// This function is similar to pcall, except that you can set a new error handler.
+//
+// xpcall calls function f in protected mode, using err as the error handler. Any error inside f is not propagated; instead,
+// xpcall catches the error, calls the err function with the original error object, and returns a status code. Its first result
+// is the status code (a boolean), which is true if the call succeeds without errors. In this case, xpcall also returns all
+// results from the call, after this first result. In case of any error, xpcall returns false plus the result from err.
 //
 DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
 {
@@ -299,7 +307,13 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
     }
 }
 
-// Lua standard library base.pcall
+// base.pcall -- https://www.lua.org/manual/5.1/manual.html#pdf-pcall
+//
+// pcall (f, arg1, ···)
+// Calls function f with the given arguments in protected mode. This means that any error inside f is not propagated; instead, pcall
+// catches the error and returns a status code. Its first result is the status code (a boolean), which is true if the call succeeds
+// without errors. In such case, pcall also returns all results from the call, after this first result. In case of any error, pcall
+// returns false plus the error message.
 //
 DEEGEN_DEFINE_LIB_FUNC(base_pcall)
 {
@@ -349,7 +363,15 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     MakeInPlaceCall(callFrameBegin + x_numSlotsForStackFrameHeader /*argsBegin*/, numCalleeArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
 }
 
-// Lua standard library base.error
+// base.error -- https://www.lua.org/manual/5.1/manual.html#pdf-error
+// error (message [, level])
+//     Terminates the last protected function called and returns message as the error message. Function error never returns.
+//     Usually, error adds some information about the error position at the beginning of the message. The level argument specifies
+//     how to get the error position. With level 1 (the default), the error position is where the error function was called. Level 2
+//     points the error to where the function that called error was called; and so on. Passing a level 0 avoids the addition of error
+//     position information to the message.
+//
+// TODO: the 'level' argument is unsupported yet.
 //
 DEEGEN_DEFINE_LIB_FUNC(base_error)
 {

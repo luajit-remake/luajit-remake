@@ -964,4 +964,14 @@ TEST(LuaLib, base_assert)
     RunSimpleLuaTest("luatests/lib_base_assert.lua.json");
 }
 
+TEST(LuaLib, RawsetReturnsOriginalTable)
+{
+    RunSimpleLuaTest("luatests/rawset_returns_original_table.lua.json");
+}
+
+TEST(LuaLib, InitEnvironment)
+{
+    RunSimpleLuaTest("luatests/init_environment.lua.json");
+}
+
 }   // anonymous namespace
