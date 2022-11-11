@@ -219,7 +219,7 @@ bool WARN_UNUSED MulWithOverflowCheck(T a, T b, T* c /*out*/)
 // A sign-extend cast: fill the high bits of Dst with the highest bit of Src
 //
 template<typename Dst, typename Src>
-Dst WARN_UNUSED SignExtendTo(Src src)
+constexpr Dst WARN_UNUSED SignExtendTo(Src src)
 {
     static_assert(std::is_integral_v<Dst> && std::is_integral_v<Src>, "must be integers");
     static_assert(sizeof(Dst) > sizeof(Src), "must be an extending cast");
@@ -229,7 +229,7 @@ Dst WARN_UNUSED SignExtendTo(Src src)
 // A zero-extend cast: fill the high bits of Dst with 0
 //
 template<typename Dst, typename Src>
-Dst WARN_UNUSED ZeroExtendTo(Src src)
+constexpr Dst WARN_UNUSED ZeroExtendTo(Src src)
 {
     static_assert(std::is_integral_v<Dst> && std::is_integral_v<Src>, "must be integers");
     static_assert(sizeof(Dst) > sizeof(Src), "must be an extending cast");
@@ -239,7 +239,7 @@ Dst WARN_UNUSED ZeroExtendTo(Src src)
 // A truncate cast: obtains the value represented by the low bits of Src
 //
 template<typename Dst, typename Src>
-Dst WARN_UNUSED BitwiseTruncateTo(Src src)
+constexpr Dst WARN_UNUSED BitwiseTruncateTo(Src src)
 {
     static_assert(std::is_integral_v<Dst> && std::is_integral_v<Src>, "must be integers");
     static_assert(!std::is_same_v<Dst, bool> && !std::is_same_v<Src, bool>, "must not be boolean");

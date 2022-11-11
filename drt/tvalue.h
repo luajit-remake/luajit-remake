@@ -14,56 +14,56 @@ struct MiscImmediateValue
     static constexpr uint64_t x_true = 3;
     static constexpr uint64_t x_impossible_value = 4;
 
-    MiscImmediateValue() : m_value(0) { }
-    MiscImmediateValue(uint64_t value)
+    constexpr MiscImmediateValue() = default;
+    constexpr MiscImmediateValue(uint64_t value)
         : m_value(value)
     {
         assert(m_value == x_nil || m_value == x_true || m_value == x_false || m_value == x_impossible_value);
     }
 
-    bool IsNil() const
+    constexpr bool IsNil() const
     {
         return m_value == 0;
     }
 
-    bool IsTrue() const
+    constexpr bool IsTrue() const
     {
         return m_value == x_true;
     }
 
-    bool IsBoolean() const
+    constexpr bool IsBoolean() const
     {
         return m_value != 0;
     }
 
-    bool GetBooleanValue() const
+    constexpr bool GetBooleanValue() const
     {
         assert(IsBoolean());
         return m_value & 1;
     }
 
-    MiscImmediateValue WARN_UNUSED FlipBooleanValue() const
+    constexpr MiscImmediateValue WARN_UNUSED FlipBooleanValue() const
     {
         assert(IsBoolean());
         return MiscImmediateValue { m_value ^ 1 };
     }
 
-    static MiscImmediateValue WARN_UNUSED CreateNil()
+    static constexpr MiscImmediateValue WARN_UNUSED CreateNil()
     {
         return MiscImmediateValue { x_nil };
     }
 
-    static MiscImmediateValue WARN_UNUSED CreateBoolean(bool v)
+    static constexpr MiscImmediateValue WARN_UNUSED CreateBoolean(bool v)
     {
         return MiscImmediateValue { v ? x_true : x_false };
     }
 
-    static MiscImmediateValue WARN_UNUSED CreateFalse()
+    static constexpr MiscImmediateValue WARN_UNUSED CreateFalse()
     {
         return MiscImmediateValue { x_false };
     }
 
-    static MiscImmediateValue WARN_UNUSED CreateTrue()
+    static constexpr MiscImmediateValue WARN_UNUSED CreateTrue()
     {
         return MiscImmediateValue { x_true };
     }
@@ -71,12 +71,12 @@ struct MiscImmediateValue
     // This value will never show up in the TValue computed by user program
     // This allows us to safely create a TValue which bit pattern is different from all TValues computable by user program
     //
-    static MiscImmediateValue WARN_UNUSED CreateImpossibleValue()
+    static constexpr MiscImmediateValue WARN_UNUSED CreateImpossibleValue()
     {
         return MiscImmediateValue { x_impossible_value };
     }
 
-    bool WARN_UNUSED operator==(const MiscImmediateValue& rhs) const
+    constexpr bool WARN_UNUSED operator==(const MiscImmediateValue& rhs) const
     {
         return m_value == rhs.m_value;
     }
@@ -107,15 +107,15 @@ struct TValue
     // but currently we don't need it either.
     //
 
-    ALWAYS_INLINE TValue() = default;
-    explicit ALWAYS_INLINE TValue(uint64_t value) : m_value(value) { }
+    constexpr ALWAYS_INLINE TValue() = default;
+    constexpr explicit ALWAYS_INLINE TValue(uint64_t value) : m_value(value) { }
 
     static constexpr uint64_t x_int32Tag = 0xFFFBFFFF00000000ULL;
     static constexpr uint64_t x_mivTag = 0xFFFCFFFF0000007FULL;
 
     // Translates to a single ANDN instruction with BMI1 support
     //
-    bool ALWAYS_INLINE IsInt32() const
+    constexpr bool ALWAYS_INLINE IsInt32() const
     {
         bool result = (m_value & x_int32Tag) == x_int32Tag;
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) == 0xFFFBFFFFU);
@@ -124,14 +124,14 @@ struct TValue
 
     // Translates to imm8 LEA instruction + ANDN instruction with BMI1 support
     //
-    bool ALWAYS_INLINE IsMIV() const
+    constexpr bool ALWAYS_INLINE IsMIV() const
     {
         bool result = (m_value & (x_mivTag - 0x7F)) == (x_mivTag - 0x7F);
         AssertIff(result, x_mivTag - 0x7F <= m_value && m_value <= x_mivTag);
         return result;
     }
 
-    bool ALWAYS_INLINE IsPointer() const
+    constexpr bool ALWAYS_INLINE IsPointer() const
     {
         bool result = (m_value > x_mivTag);
         AssertIff(result, static_cast<uint32_t>(m_value >> 32) >= 0xFFFFFFFCU &&
@@ -139,21 +139,21 @@ struct TValue
         return result;
     }
 
-    bool ALWAYS_INLINE IsDouble() const
+    constexpr bool ALWAYS_INLINE IsDouble() const
     {
         bool result = m_value < x_int32Tag;
         AssertIff(result, m_value <= 0xFFFAFFFFFFFFFFFFULL);
         return result;
     }
 
-    bool ALWAYS_INLINE IsDoubleNotNaN() const
+    constexpr bool ALWAYS_INLINE IsDoubleNotNaN() const
     {
         return !IsNaN(cxx2a_bit_cast<double>(m_value));
     }
 
-    bool ALWAYS_INLINE IsDoubleNaN() const
+    constexpr bool ALWAYS_INLINE IsDoubleNaN() const
     {
-        static constexpr uint64_t x_pureNaN = 0x7ff8000000000000ULL;
+        constexpr uint64_t x_pureNaN = 0x7ff8000000000000ULL;
         return m_value == x_pureNaN;
     }
 
@@ -163,18 +163,18 @@ struct TValue
     // This means that if it is indeed a double, its value will be returned.
     // If it is not a double, due to the boxing scheme, the returned value will be a double NaN.
     //
-    double ALWAYS_INLINE ViewAsDouble() const
+    constexpr double ALWAYS_INLINE ViewAsDouble() const
     {
         return cxx2a_bit_cast<double>(m_value);
     }
 
-    double ALWAYS_INLINE AsDouble() const
+    constexpr double ALWAYS_INLINE AsDouble() const
     {
         assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
         return cxx2a_bit_cast<double>(m_value);
     }
 
-    int32_t ALWAYS_INLINE AsInt32() const
+    constexpr int32_t ALWAYS_INLINE AsInt32() const
     {
         assert(IsInt32() && !IsMIV() && !IsPointer() && !IsDouble());
         return BitwiseTruncateTo<int32_t>(m_value);
@@ -182,7 +182,7 @@ struct TValue
 
     // Return true if the value is not 'nil' or 'false'
     //
-    bool ALWAYS_INLINE IsTruthy() const
+    constexpr bool ALWAYS_INLINE IsTruthy() const
     {
         // This is hacky and unfortunate, but it turns out that if written naively (like
         // the commented out line), LLVM will emit a switch with 2 cases and 1 default
@@ -218,20 +218,20 @@ struct TValue
         return UserHeapPointer<T> { reinterpret_cast<HeapPtr<T>>(m_value) };
     }
 
-    MiscImmediateValue ALWAYS_INLINE AsMIV() const
+    constexpr MiscImmediateValue ALWAYS_INLINE AsMIV() const
     {
         assert(IsMIV() && !IsDouble() && !IsInt32() && !IsPointer());
         return MiscImmediateValue { m_value ^ x_mivTag };
     }
 
-    static TValue WARN_UNUSED CreateInt32(int32_t value)
+    static constexpr TValue WARN_UNUSED CreateInt32(int32_t value)
     {
         TValue result { x_int32Tag | ZeroExtendTo<uint64_t>(value) };
         assert(result.AsInt32() == value);
         return result;
     }
 
-    static TValue WARN_UNUSED CreateDouble(double value)
+    static constexpr TValue WARN_UNUSED CreateDouble(double value)
     {
         TValue result { cxx2a_bit_cast<uint64_t>(value) };
         SUPRESS_FLOAT_EQUAL_WARNING(
@@ -258,39 +258,39 @@ struct TValue
         return result;
     }
 
-    static TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
+    static constexpr TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
     {
         TValue result { miv.m_value ^ x_mivTag };
         assert(result.AsMIV().m_value == miv.m_value);
         return result;
     }
 
-    static TValue CreateImpossibleValue()
+    static constexpr TValue CreateImpossibleValue()
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateImpossibleValue());
     }
 
-    static TValue CreateTrue()
+    static constexpr TValue CreateTrue()
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateTrue());
     }
 
-    static TValue CreateFalse()
+    static constexpr TValue CreateFalse()
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateFalse());
     }
 
-    static TValue CreateBoolean(bool v)
+    static constexpr TValue CreateBoolean(bool v)
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateBoolean(v));
     }
 
-    static TValue Nil()
+    static constexpr TValue Nil()
     {
         return TValue::CreateMIV(MiscImmediateValue::CreateNil());
     }
 
-    bool ALWAYS_INLINE IsNil() const
+    constexpr bool ALWAYS_INLINE IsNil() const
     {
         return m_value == Nil().m_value;
     }
