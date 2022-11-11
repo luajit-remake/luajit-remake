@@ -1,6 +1,6 @@
 SET(DEEGEN_USER_BUILTIN_LIB_SOURCES
   throw_error.cpp
-  base_lib.cpp
+  lib_base.cpp
   lib_coroutine.cpp
   lib_debug.cpp
   lib_io.cpp
