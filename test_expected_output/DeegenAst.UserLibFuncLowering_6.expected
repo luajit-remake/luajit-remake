@@ -17,7 +17,7 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionReturnContinuationTru
   %21 = getelementptr inbounds i64, ptr %18, i64 1
   store i64 %.sroa.0.0.copyload, ptr %21, align 8
   %22 = getelementptr inbounds i64, ptr %18, i64 2
-  store i64 -844429225099137, ptr %22, align 8
+  store i64 %9, ptr %22, align 8
   %23 = getelementptr %class.StackFrameHeader, ptr %18, i64 -1, i32 2
   %24 = load ptr, ptr %23, align 8, !tbaa !12
   musttail call ghccc void %24(ptr %0, ptr nonnull %18, ptr undef, ptr undef, i64 %4, ptr nonnull %18, i64 2, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1

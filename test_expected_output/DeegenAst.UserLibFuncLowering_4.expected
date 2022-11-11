@@ -15,7 +15,7 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
 .lr.ph.i:                                         ; preds = %.lr.ph.i, %16
   %.04.reg2mem.i.0 = phi i64 [ %20, %.lr.ph.i ], [ %17, %16 ]
   %19 = getelementptr inbounds i64, ptr %1, i64 %.04.reg2mem.i.0
-  store i64 -844429225099137, ptr %19, align 8, !tbaa !2
+  store i64 %9, ptr %19, align 8, !tbaa !2
   %20 = add i64 %.04.reg2mem.i.0, 1
   %exitcond.not.i = icmp eq i64 %20, 3
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit, label %.lr.ph.i, !llvm.loop !6

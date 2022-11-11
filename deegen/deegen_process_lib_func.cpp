@@ -3,6 +3,7 @@
 #include "api_define_lib_function.h"
 #include "deegen_ast_throw_error.h"
 #include "runtime_utils.h"
+#include "tag_register_optimization.h"
 
 namespace dast {
 
@@ -484,6 +485,15 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
         ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
         ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
+    }
+
+    // Run tag register optimization pass
+    //
+    for (DeegenLibFuncInstanceInfo& item : allInfo)
+    {
+        Function* func = module->getFunction(item.m_wrapperName);
+        ReleaseAssert(func != nullptr);
+        RunTagRegisterOptimizationPass(func);
     }
 }
 

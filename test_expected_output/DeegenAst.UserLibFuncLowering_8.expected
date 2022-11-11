@@ -14,9 +14,9 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   %17 = load ptr, ptr %16, align 8, !tbaa !2
   store i64 -844429225099140, ptr %1, align 8, !tbaa.struct !9
   %18 = getelementptr inbounds i64, ptr %1, i64 1
-  store i64 -844429225099137, ptr %18, align 8, !tbaa !10
+  store i64 %9, ptr %18, align 8, !tbaa !10
   %19 = getelementptr inbounds i64, ptr %1, i64 2
-  store i64 -844429225099137, ptr %19, align 8, !tbaa !10
+  store i64 %9, ptr %19, align 8, !tbaa !10
   %20 = getelementptr %class.StackFrameHeader, ptr %17, i64 -1, i32 2
   %21 = load ptr, ptr %20, align 8, !tbaa !12
   musttail call ghccc void %21(ptr %0, ptr %17, ptr undef, ptr undef, i64 %4, ptr nonnull %1, i64 1, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
