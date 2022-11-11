@@ -86,8 +86,13 @@ SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfsgsbase ")
 # Assume BMI1 support. BMI1 is particularly useful for our boxing scheme
 # it should be fine to assume the CPU supports them as they have been released for 10 years
 #
-SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mbmi ")
-SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mbmi ")
+# Also assume SSE4 support: they are older than BMI1, and it helps with the math library.
+#
+# We don't want to add AVX flag though: it produces tricky problems with vzeroupper that 
+# requires some work to get correct, and I don't think we are benefiting much from AVX anyway.
+#
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mbmi -msse4 ")
+SET(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mbmi -msse4 ")
 
 # -rdynamic so symbols are exposed to generated code
 # 

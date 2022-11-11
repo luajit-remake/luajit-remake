@@ -979,4 +979,9 @@ TEST(LuaLib, math_sqrt)
     RunSimpleLuaTest("luatests/math_sqrt.lua.json");
 }
 
+TEST(LuaLib, math_constants)
+{
+    RunSimpleLuaTest("luatests/math_constants.lua.json");
+}
+
 }   // anonymous namespace
