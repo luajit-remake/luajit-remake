@@ -3,6 +3,30 @@
 #include "runtime_utils.h"
 #include <emmintrin.h>
 
+// For math unary functions, get the first argument to the function as a double value and store it into 'argName',
+// throwing an error if the action cannot be performed ('funcName' is built into the error message)
+//
+#define MATH_LIB_UNARY_FN_GET_ARG(funcName, argName)                                \
+    if (unlikely(GetNumArgs() < 1))                                                 \
+    {                                                                               \
+        ThrowError("bad argument #1 to '"                                           \
+                   PP_STRINGIFY(funcName)                                           \
+                   "' (number expected, got no value)");                            \
+    }                                                                               \
+    double argName;                                                                 \
+    {                                                                               \
+        auto [macrotmp_success, macrotmp_result] = LuaLib::ToNumber(GetArg(0));     \
+        if (unlikely(!macrotmp_success))                                            \
+        {                                                                           \
+            /* TODO: make error consistent with Lua (need actual type) */           \
+            ThrowError("bad argument #1 to '"                                       \
+                       PP_STRINGIFY(funcName)                                       \
+                       "' (number expected)");                                      \
+        }                                                                           \
+        argName = macrotmp_result;                                                  \
+    }                                                                               \
+    assert(true)    /* end with a statement so a comma can be added */
+
 // math.abs -- https://www.lua.org/manual/5.1/manual.html#pdf-math.abs
 //
 // math.abs (x)
@@ -10,7 +34,8 @@
 //
 DEEGEN_DEFINE_LIB_FUNC(math_abs)
 {
-    ThrowError("Library function 'math.abs' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(abs, arg);
+    Return(TValue::Create<tDouble>(abs(arg)));
 }
 
 // math.acos -- https://www.lua.org/manual/5.1/manual.html#pdf-math.acos
@@ -20,7 +45,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_abs)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_acos)
 {
-    ThrowError("Library function 'math.acos' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(acos, arg);
+    Return(TValue::Create<tDouble>(acos(arg)));
 }
 
 // math.asin -- https://www.lua.org/manual/5.1/manual.html#pdf-math.asin
@@ -30,7 +56,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_acos)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_asin)
 {
-    ThrowError("Library function 'math.asin' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(asin, arg);
+    Return(TValue::Create<tDouble>(asin(arg)));
 }
 
 // math.atan -- https://www.lua.org/manual/5.1/manual.html#pdf-math.atan
@@ -40,7 +67,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_asin)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_atan)
 {
-    ThrowError("Library function 'math.atan' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(atan, arg);
+    Return(TValue::Create<tDouble>(atan(arg)));
 }
 
 // math.atan2 -- https://www.lua.org/manual/5.1/manual.html#pdf-math.atan2
@@ -61,7 +89,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_atan2)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_ceil)
 {
-    ThrowError("Library function 'math.ceil' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(ceil, arg);
+    Return(TValue::Create<tDouble>(ceil(arg)));
 }
 
 // math.cos -- https://www.lua.org/manual/5.1/manual.html#pdf-math.cos
@@ -71,7 +100,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_ceil)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_cos)
 {
-    ThrowError("Library function 'math.cos' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(cos, arg);
+    Return(TValue::Create<tDouble>(cos(arg)));
 }
 
 // math.cosh -- https://www.lua.org/manual/5.1/manual.html#pdf-math.cosh
@@ -81,7 +111,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_cos)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_cosh)
 {
-    ThrowError("Library function 'math.cosh' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(cosh, arg);
+    Return(TValue::Create<tDouble>(cosh(arg)));
 }
 
 // math.deg -- https://www.lua.org/manual/5.1/manual.html#pdf-math.deg
@@ -91,7 +122,9 @@ DEEGEN_DEFINE_LIB_FUNC(math_cosh)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_deg)
 {
-    ThrowError("Library function 'math.deg' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(deg, arg);
+    double result = arg * 57.29577951308232;
+    Return(TValue::Create<tDouble>(result));
 }
 
 // math.exp -- https://www.lua.org/manual/5.1/manual.html#pdf-math.exp
@@ -101,7 +134,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_deg)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_exp)
 {
-    ThrowError("Library function 'math.exp' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(exp, arg);
+    Return(TValue::Create<tDouble>(exp(arg)));
 }
 
 // math.floor -- https://www.lua.org/manual/5.1/manual.html#pdf-math.floor
@@ -111,7 +145,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_exp)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_floor)
 {
-    ThrowError("Library function 'math.floor' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(floor, arg);
+    Return(TValue::Create<tDouble>(floor(arg)));
 }
 
 // math.fmod -- https://www.lua.org/manual/5.1/manual.html#pdf-math.fmod
@@ -131,7 +166,10 @@ DEEGEN_DEFINE_LIB_FUNC(math_fmod)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_frexp)
 {
-    ThrowError("Library function 'math.frexp' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(frexp, arg);
+    int e;
+    double m = frexp(arg, &e /*out*/);
+    Return(TValue::Create<tDouble>(m), TValue::Create<tDouble>(e));
 }
 
 // math.ldexp -- https://www.lua.org/manual/5.1/manual.html#pdf-math.ldexp
@@ -151,7 +189,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_ldexp)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_log)
 {
-    ThrowError("Library function 'math.log' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(log, arg);
+    Return(TValue::Create<tDouble>(log(arg)));
 }
 
 // math.log10 -- https://www.lua.org/manual/5.1/manual.html#pdf-math.log10
@@ -161,7 +200,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_log)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_log10)
 {
-    ThrowError("Library function 'math.log10' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(log10, arg);
+    Return(TValue::Create<tDouble>(log10(arg)));
 }
 
 // math.max -- https://www.lua.org/manual/5.1/manual.html#pdf-math.max
@@ -191,7 +231,10 @@ DEEGEN_DEFINE_LIB_FUNC(math_min)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_modf)
 {
-    ThrowError("Library function 'math.modf' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(modf, arg);
+    double integralPart;
+    double fractionalPart = modf(arg, &integralPart /*out*/);
+    Return(TValue::Create<tDouble>(integralPart), TValue::Create<tDouble>(fractionalPart));
 }
 
 // math.pow -- https://www.lua.org/manual/5.1/manual.html#pdf-math.pow
@@ -211,7 +254,9 @@ DEEGEN_DEFINE_LIB_FUNC(math_pow)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_rad)
 {
-    ThrowError("Library function 'math.rad' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(rad, arg);
+    double result = arg * 0.017453292519943295;
+    Return(TValue::Create<tDouble>(result));
 }
 
 // math.random -- https://www.lua.org/manual/5.1/manual.html#pdf-math.random
@@ -245,7 +290,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_randomseed)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_sin)
 {
-    ThrowError("Library function 'math.sin' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(sin, arg);
+    Return(TValue::Create<tDouble>(sin(arg)));
 }
 
 // math.sinh -- https://www.lua.org/manual/5.1/manual.html#pdf-math.sinh
@@ -255,7 +301,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_sin)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_sinh)
 {
-    ThrowError("Library function 'math.sinh' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(sinh, arg);
+    Return(TValue::Create<tDouble>(sinh(arg)));
 }
 
 // C library's sqrt sets errno, which is unfortunately slow and inhibits compiler optimization
@@ -279,19 +326,8 @@ inline double WARN_UNUSED ALWAYS_INLINE sqrt_no_errno(double val)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_sqrt)
 {
-    if (unlikely(GetNumArgs() < 1))
-    {
-        ThrowError("bad argument #1 to 'sqrt' (number expected, got no value)");
-    }
-    auto [success, input] = LuaLib::ToNumber(GetArg(0));
-    if (unlikely(!success))
-    {
-        // TODO: make error consistent with Lua
-        //
-        ThrowError("bad argument #1 to 'sqrt' (number expected)");
-    }
-
-    Return(TValue::Create<tDouble>(sqrt_no_errno(input)));
+    MATH_LIB_UNARY_FN_GET_ARG(sqrt, arg);
+    Return(TValue::Create<tDouble>(sqrt_no_errno(arg)));
 }
 
 // math.tan -- https://www.lua.org/manual/5.1/manual.html#pdf-math.tan
@@ -301,7 +337,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_sqrt)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_tan)
 {
-    ThrowError("Library function 'math.tan' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(tan, arg);
+    Return(TValue::Create<tDouble>(tan(arg)));
 }
 
 // math.tanh -- https://www.lua.org/manual/5.1/manual.html#pdf-math.tanh
@@ -311,7 +348,10 @@ DEEGEN_DEFINE_LIB_FUNC(math_tan)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_tanh)
 {
-    ThrowError("Library function 'math.tanh' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(tanh, arg);
+    Return(TValue::Create<tDouble>(tanh(arg)));
 }
 
 DEEGEN_END_LIB_FUNC_DEFINITIONS
+
+#undef MATH_LIB_UNARY_FN_GET_ARG
