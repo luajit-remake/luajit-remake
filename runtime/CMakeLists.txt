@@ -3,6 +3,7 @@ add_library(runtime
   vm.cpp
   lj_bytecode_parser.cpp
   init_global_object.cpp
+  math_fast_pow.cpp
 )
 
 add_dependencies(runtime 

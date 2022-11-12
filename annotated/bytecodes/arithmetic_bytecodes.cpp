@@ -39,7 +39,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
         else
         {
             static_assert(opKind == LuaMetamethodKind::Pow, "unexpected opKind");
-            res = pow(ld, rd);
+            res = math_fast_pow(ld, rd);
         }
         Return(TValue::Create<tDouble>(res));
     }

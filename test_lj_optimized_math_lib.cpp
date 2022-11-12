@@ -1,11 +1,10 @@
 #include "gtest/gtest.h"
 #include "runtime_utils.h"
 
-// Test that we didn't screw up anything when porting LuaJIT's optimized arithmetic
-// modulus operator: it should exhibit identical behavior as Lua's original version
-//
-TEST(Misc, LJOptimizedModulus)
+static std::vector<double> GetInterestingDoubleValues(size_t scaleFactor)
 {
+    ReleaseAssert(scaleFactor > 0);
+
     std::vector<double> testValueList;
     // Make sure we cover all the special values
     //
@@ -26,9 +25,34 @@ TEST(Misc, LJOptimizedModulus)
     testValueList.push_back(std::numeric_limits<double>::round_error());
     testValueList.push_back(-std::numeric_limits<double>::round_error());
 
+    // Add some edge case values that could be interesting if the double is cast to integer
+    //
+    auto addValAround = [&](double v)
+    {
+        testValueList.push_back(v);
+        testValueList.push_back(v+1);
+        testValueList.push_back(v-1);
+    };
+    addValAround(static_cast<double>(std::numeric_limits<int8_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int8_t>::min()));
+    addValAround(static_cast<double>(std::numeric_limits<uint8_t>::max()));
+    addValAround(-static_cast<double>(std::numeric_limits<uint8_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int16_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int16_t>::min()));
+    addValAround(static_cast<double>(std::numeric_limits<uint16_t>::max()));
+    addValAround(-static_cast<double>(std::numeric_limits<uint16_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int32_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int32_t>::min()));
+    addValAround(static_cast<double>(std::numeric_limits<uint32_t>::max()));
+    addValAround(-static_cast<double>(std::numeric_limits<uint32_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int64_t>::max()));
+    addValAround(static_cast<double>(std::numeric_limits<int64_t>::min()));
+    addValAround(static_cast<double>(std::numeric_limits<uint64_t>::max()));
+    addValAround(-static_cast<double>(std::numeric_limits<uint64_t>::max()));
+
     // Push some integer values
     //
-    for (int i = -25; i < 25; i++)
+    for (int i = -static_cast<int>(scaleFactor); i < static_cast<int>(scaleFactor); i++)
     {
         testValueList.push_back(i);
     }
@@ -44,15 +68,18 @@ TEST(Misc, LJOptimizedModulus)
         }
     };
 
-    createRandomValuesInRange(25, -1, 1);
-    createRandomValuesInRange(25, -std::numeric_limits<double>::min(), std::numeric_limits<double>::min());
-    createRandomValuesInRange(25, -std::numeric_limits<double>::epsilon(), std::numeric_limits<double>::epsilon());
-    createRandomValuesInRange(25, 0, std::numeric_limits<double>::max());
-    createRandomValuesInRange(25, std::numeric_limits<double>::lowest(), 0);
-    createRandomValuesInRange(25, -1e14, 1e14);
-    createRandomValuesInRange(25, -1e18, 1e18);
-    createRandomValuesInRange(25, -1e28, 1e28);
-    createRandomValuesInRange(25, -1e100, 1e100);
+    createRandomValuesInRange(scaleFactor, -1, 1);
+    createRandomValuesInRange(scaleFactor, -std::numeric_limits<double>::min(), std::numeric_limits<double>::min());
+    createRandomValuesInRange(scaleFactor, -std::numeric_limits<double>::epsilon(), std::numeric_limits<double>::epsilon());
+    createRandomValuesInRange(scaleFactor, 0, std::numeric_limits<double>::max());
+    createRandomValuesInRange(scaleFactor, std::numeric_limits<double>::lowest(), 0);
+    createRandomValuesInRange(scaleFactor, -50, 50);
+    createRandomValuesInRange(scaleFactor, -1000, 1000);
+    createRandomValuesInRange(scaleFactor, -1e6, 1e6);
+    createRandomValuesInRange(scaleFactor, -1e14, 1e14);
+    createRandomValuesInRange(scaleFactor, -1e18, 1e18);
+    createRandomValuesInRange(scaleFactor, -1e28, 1e28);
+    createRandomValuesInRange(scaleFactor, -1e100, 1e100);
 
     auto createRandomValuesExpDist = [&](size_t num)
     {
@@ -69,7 +96,17 @@ TEST(Misc, LJOptimizedModulus)
         }
     };
 
-    createRandomValuesExpDist(25);
+    createRandomValuesExpDist(scaleFactor);
+
+    return testValueList;
+}
+
+// Test that we didn't screw up anything when porting LuaJIT's optimized arithmetic
+// modulus operator: it should exhibit identical behavior as Lua's original version
+//
+TEST(Misc, LJOptimizedModulus)
+{
+    std::vector<double> testValueList = GetInterestingDoubleValues(20 /*scaleFactor*/);
 
     // For each value, put some multiples of it into the list as well
     //
@@ -87,8 +124,6 @@ TEST(Misc, LJOptimizedModulus)
             testValueList.push_back(v);
         }
     }
-
-    ReleaseAssert(testValueList.size() == 1705);
 
     // Now run the test for each value pair in the list
     //
@@ -141,4 +176,79 @@ TEST(Misc, LJOptimizedModulus)
             }
         }
     }
+}
+
+TEST(Misc, LJOptimizedPow)
+{
+    std::vector<double> baseList = GetInterestingDoubleValues(25 /*scaleFactor*/);
+    std::vector<double> exponentList = GetInterestingDoubleValues(2 /*scaleFactor*/);
+    for (int i = -256; i <= 256; i++)
+    {
+        exponentList.push_back(i);
+        exponentList.push_back(i + 0.5);
+    }
+    exponentList.push_back(std::numeric_limits<int32_t>::max());
+
+    double maxRelDiff = 0;
+    for (double base : baseList)
+    {
+        for (double exponent : exponentList)
+        {
+            uint64_t baseBits = cxx2a_bit_cast<uint64_t>(base);
+            uint64_t exponentBits = cxx2a_bit_cast<uint64_t>(exponent);
+
+            if (baseBits == 0x7ff4000000000000 /*signaling NaN*/ && UnsafeFloatEqual(exponent, 0.0))
+            {
+                continue;
+            }
+
+            double gold = pow(base, exponent);
+            double res = math_fast_pow(base, exponent);
+
+            uint64_t resBits = cxx2a_bit_cast<uint64_t>(res);
+            uint64_t goldBits = cxx2a_bit_cast<uint64_t>(gold);
+
+            bool ok = false;
+            if (IsNaN(gold))
+            {
+                ok = IsNaN(res);
+            }
+            else if (std::isinf(gold))
+            {
+                ok = UnsafeFloatEqual(res, gold);
+            }
+            else
+            {
+                if (std::isinf(res) || IsNaN(res))
+                {
+                    ok = false;
+                }
+                else
+                {
+                    double diff = abs(gold - res);
+                    if (diff < std::numeric_limits<double>::min())
+                    {
+                        ok = true;
+                    }
+                    else
+                    {
+                        double magnitude = std::max(abs(gold), abs(res));
+                        ok = (diff <= magnitude * 2e-14);
+                        maxRelDiff = std::max(maxRelDiff, diff / magnitude);
+                    }
+                }
+            }
+            if (!ok)
+            {
+                fprintf(stderr, "Error detected! base = %.16e (bits = 0x%llx), exponent = %.16e (bits = 0x%llx), expected %.16e (bits = 0x%llx), got %.16e (bits = 0x%llx)\n",
+                        base, static_cast<unsigned long long>(baseBits),
+                        exponent, static_cast<unsigned long long>(exponentBits),
+                        gold, static_cast<unsigned long long>(goldBits),
+                        res, static_cast<unsigned long long>(resBits));
+                abort();
+            }
+        }
+    }
+    std::ignore = maxRelDiff;
+    // printf("max relative diff = %.16e\n", maxRelDiff);
 }

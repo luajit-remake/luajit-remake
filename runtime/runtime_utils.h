@@ -813,6 +813,11 @@ inline double WARN_UNUSED ALWAYS_INLINE ModulusWithLuaSemantics(double a, double
     return a;
 }
 
+// A wrapper around libm pow that provides a fastpath if the exponent is an integer that fits in [-128, 127).
+// If not, it runs ~3% slower than libm pow due to the extra check.
+//
+double WARN_UNUSED math_fast_pow(double b, double ex);
+
 struct DoBinaryOperationConsideringStringConversionResult
 {
     bool success;
