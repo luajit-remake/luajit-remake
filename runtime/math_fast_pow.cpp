@@ -152,8 +152,8 @@ double WARN_UNUSED math_fast_pow(double b, double ex)
         "movsbl %b[r0], %[r0];"             // only use fastpath if exponent is within [-128, 128)
         "cvtsi2sd %[r0], %[x2];"
         "ucomisd %[x1], %[x2];"
-        "jp %l[slowpath];"
         "jne %l[slowpath];"
+        "jp %l[slowpath];"
         :
             [r0] "=r"(e) /*out*/,
             [x2] "=&x"(fpr1) /*scratch*/
