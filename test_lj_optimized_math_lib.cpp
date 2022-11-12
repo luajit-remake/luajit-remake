@@ -197,13 +197,20 @@ TEST(Misc, LJOptimizedPow)
             uint64_t baseBits = cxx2a_bit_cast<uint64_t>(base);
             uint64_t exponentBits = cxx2a_bit_cast<uint64_t>(exponent);
 
-            if (baseBits == 0x7ff4000000000000 /*signaling NaN*/ && UnsafeFloatEqual(exponent, 0.0))
-            {
-                continue;
-            }
-
             double gold = pow(base, exponent);
             double res = math_fast_pow(base, exponent);
+
+            // I believe glibc 2.35 has a bug when computing SignalingNaN ^ 0.0
+            // According to standard (see https://en.cppreference.com/w/cpp/numeric/math/pow):
+            //      pow(base, ±0) returns 1 for any base, even when base is NaN
+            // so NaN^0.0 should yield 1, but for some reason glibc 2.35's pow returned quiet NaN.
+            // We skip this case for assertion.
+            //
+            if (baseBits == 0x7ff4000000000000 /*signaling NaN*/ && UnsafeFloatEqual(exponent, 0.0))
+            {
+                ReleaseAssert(UnsafeFloatEqual(res, 1.0));
+                continue;
+            }
 
             uint64_t resBits = cxx2a_bit_cast<uint64_t>(res);
             uint64_t goldBits = cxx2a_bit_cast<uint64_t>(gold);
