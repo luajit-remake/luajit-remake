@@ -184,7 +184,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_floor)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_fmod)
 {
-    ThrowError("Library function 'math.fmod' is not implemented yet!");
+    MATH_LIB_BINARY_FN_GET_ARGS(fmod, arg1, arg2);
+    Return(TValue::Create<tDouble>(fmod(arg1, arg2)));
 }
 
 // math.frexp -- https://www.lua.org/manual/5.1/manual.html#pdf-math.frexp
@@ -244,7 +245,27 @@ DEEGEN_DEFINE_LIB_FUNC(math_log10)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_max)
 {
-    ThrowError("Library function 'math.max' is not implemented yet!");
+    if (likely(GetNumArgs() == 2))
+    {
+        MATH_LIB_BINARY_FN_GET_ARGS(max, arg1, arg2);
+        Return(TValue::Create<tDouble>(std::max(arg1, arg2)));
+    }
+    else
+    {
+        MATH_LIB_UNARY_FN_GET_ARG(max, res);
+        size_t numArgs = GetNumArgs();
+        for (size_t i = 1; i < numArgs; i++)
+        {
+            auto [success, value] = LuaLib::ToNumber(GetArg(i));
+            if (unlikely(!success))
+            {
+                /* TODO: make error consistent with Lua (need actual type) */
+                ThrowError("bad argument #k to 'max' (number expected)");
+            }
+            res = std::max(res, value);
+        }
+        Return(TValue::Create<tDouble>(res));
+    }
 }
 
 // math.min -- https://www.lua.org/manual/5.1/manual.html#pdf-math.min
@@ -254,7 +275,27 @@ DEEGEN_DEFINE_LIB_FUNC(math_max)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_min)
 {
-    ThrowError("Library function 'math.min' is not implemented yet!");
+    if (likely(GetNumArgs() == 2))
+    {
+        MATH_LIB_BINARY_FN_GET_ARGS(min, arg1, arg2);
+        Return(TValue::Create<tDouble>(std::min(arg1, arg2)));
+    }
+    else
+    {
+        MATH_LIB_UNARY_FN_GET_ARG(min, res);
+        size_t numArgs = GetNumArgs();
+        for (size_t i = 1; i < numArgs; i++)
+        {
+            auto [success, value] = LuaLib::ToNumber(GetArg(i));
+            if (unlikely(!success))
+            {
+                /* TODO: make error consistent with Lua (need actual type) */
+                ThrowError("bad argument #k to 'min' (number expected)");
+            }
+            res = std::min(res, value);
+        }
+        Return(TValue::Create<tDouble>(res));
+    }
 }
 
 // math.modf -- https://www.lua.org/manual/5.1/manual.html#pdf-math.modf

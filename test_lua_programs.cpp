@@ -994,4 +994,9 @@ TEST(LuaLib, math_misc_fn)
     RunSimpleLuaTest("luatests/math_lib_misc.lua.json");
 }
 
+TEST(LuaLib, math_min_max)
+{
+    RunSimpleLuaTest("luatests/math_lib_min_max.lua.json");
+}
+
 }   // anonymous namespace

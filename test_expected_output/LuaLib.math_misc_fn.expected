@@ -46,6 +46,30 @@ false
 false
 false
 false
+-- fmod --
+0	0	nan
+-0	0	nan
+0	-0	nan
+-0	-0	nan
+1.23	0	nan
+0	1.23	0
+2.34	1.23	1.11
+-1.23	2.34	-1.23
+nan	0	nan
+0	nan	nan
+nan	nan	nan
+0	inf	0
+0	-inf	0
+inf	0	nan
+inf	nan	nan
+0xAB	12	3
+34	0xAB	34
+  0xFE 	  5.43    	4.22
+1	2	3	1
+false
+false
+false
+false
 -- ldexp --
 0	-3	0
 -0	-3	-0

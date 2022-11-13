@@ -30,6 +30,9 @@ testfn(math.atan2)
 print('-- pow --')
 testfn(math.pow)
 
+print('-- fmod --')
+testfn(math.fmod)
+
 function testldexp(f)
 	for k = -3, 3 do
 		print(0, k, f(0, k))
