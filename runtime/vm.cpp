@@ -301,6 +301,8 @@ bool WARN_UNUSED VM::InitializeVMGlobalData()
     m_metatableForFunction = UserHeapPointer<void>();
     m_metatableForCoroutine = UserHeapPointer<void>();
 
+    m_usrPRNG = nullptr;
+
     CreateRootCoroutine();
     return true;
 }

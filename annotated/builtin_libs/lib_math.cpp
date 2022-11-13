@@ -27,6 +27,33 @@
     }                                                                               \
     assert(true)    /* end with a statement so a comma can be added */
 
+// Similar to above, but for math binary functions
+//
+#define MATH_LIB_BINARY_FN_GET_ARGS(funcName, argName1, argName2)                   \
+    if (unlikely(GetNumArgs() < 2))                                                 \
+    {                                                                               \
+        ThrowError("bad argument #2 to '" PP_STRINGIFY(funcName)                    \
+                   "' (number expected, got no value)");                            \
+    }                                                                               \
+    double argName1 = GetArg(0).ViewAsDouble();                                     \
+    double argName2 = GetArg(1).ViewAsDouble();                                     \
+    if (unlikely(IsNaN(argName1) || IsNaN(argName2)))                               \
+    {                                                                               \
+        if (!LuaLib::TVDoubleViewToNumberSlow(argName1 /*inout*/))                  \
+        {                                                                           \
+            /* TODO: make error consistent with Lua (need actual type) */           \
+            ThrowError("bad argument #1 to '" PP_STRINGIFY(funcName)                \
+                       "' (number expected)");                                      \
+        }                                                                           \
+        if (!LuaLib::TVDoubleViewToNumberSlow(argName2 /*inout*/))                  \
+        {                                                                           \
+            /* TODO: make error consistent with Lua (need actual type) */           \
+            ThrowError("bad argument #2 to '" PP_STRINGIFY(funcName)                \
+                       "' (number expected)");                                      \
+        }                                                                           \
+    }                                                                               \
+    assert(true)    /* end with a statement so a comma can be added */
+
 // math.abs -- https://www.lua.org/manual/5.1/manual.html#pdf-math.abs
 //
 // math.abs (x)
@@ -79,7 +106,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_atan)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_atan2)
 {
-    ThrowError("Library function 'math.atan2' is not implemented yet!");
+    MATH_LIB_BINARY_FN_GET_ARGS(atan2, arg1, arg2);
+    Return(TValue::Create<tDouble>(atan2(arg1, arg2)));
 }
 
 // math.ceil -- https://www.lua.org/manual/5.1/manual.html#pdf-math.ceil
@@ -179,7 +207,12 @@ DEEGEN_DEFINE_LIB_FUNC(math_frexp)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_ldexp)
 {
-    ThrowError("Library function 'math.ldexp' is not implemented yet!");
+    MATH_LIB_BINARY_FN_GET_ARGS(ldexp, arg1, arg2);
+    // Lua 5.1 throws no error if arg2 is not integer. It just static cast it to integer (confirmed by source code).
+    // Later lua versions throw error if arg2 is not integer, but we are targeting 5.1 right now.
+    //
+    int ex = static_cast<int>(arg2);
+    Return(TValue::Create<tDouble>(ldexp(arg1, ex)));
 }
 
 // math.log -- https://www.lua.org/manual/5.1/manual.html#pdf-math.log
@@ -244,7 +277,8 @@ DEEGEN_DEFINE_LIB_FUNC(math_modf)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_pow)
 {
-    ThrowError("Library function 'math.pow' is not implemented yet!");
+    MATH_LIB_BINARY_FN_GET_ARGS(pow, arg1, arg2);
+    Return(TValue::Create<tDouble>(math_fast_pow(arg1, arg2)));
 }
 
 // math.rad -- https://www.lua.org/manual/5.1/manual.html#pdf-math.rad
@@ -270,7 +304,44 @@ DEEGEN_DEFINE_LIB_FUNC(math_rad)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_random)
 {
-    ThrowError("Library function 'math.random' is not implemented yet!");
+    std::mt19937* gen = VM::GetUserPRNG();
+    static_assert(std::mt19937::word_size == 32);
+    // Lua 5.1 official implementation always call the generator before checking parameter validity
+    //
+    double value = static_cast<double>(static_cast<int32_t>((*gen)() >> 1)) / 2147483648.0;
+    size_t numArgs = GetNumArgs();
+    if (numArgs == 0)
+    {
+        Return(TValue::Create<tDouble>(value));
+    }
+    else if (numArgs == 1)
+    {
+        MATH_LIB_UNARY_FN_GET_ARG(random, ub);
+        if (unlikely(!(ub >= 1.0)))   // different from ub < 1.0 in the presense of NaN!
+        {
+            ThrowError("bad argument #1 to 'random' (interval is empty)");
+        }
+        // This is what official Lua 5.1 does
+        //
+        double result = floor(value * ub) + 1.0;
+        Return(TValue::Create<tDouble>(result));
+    }
+    else if (numArgs == 2)
+    {
+        MATH_LIB_BINARY_FN_GET_ARGS(random, lb, ub);
+        if (unlikely(!(lb <= ub)))
+        {
+            ThrowError("bad argument #2 to 'random' (interval is empty)");
+        }
+        // This is what official Lua 5.1 does
+        //
+        double result = floor(value * (ub - lb + 1)) + lb;
+        Return(TValue::Create<tDouble>(result));
+    }
+    else
+    {
+        ThrowError("wrong number of arguments to 'random'");
+    }
 }
 
 // math.randomseed -- https://www.lua.org/manual/5.1/manual.html#pdf-math.randomseed
@@ -280,7 +351,10 @@ DEEGEN_DEFINE_LIB_FUNC(math_random)
 //
 DEEGEN_DEFINE_LIB_FUNC(math_randomseed)
 {
-    ThrowError("Library function 'math.randomseed' is not implemented yet!");
+    MATH_LIB_UNARY_FN_GET_ARG(randomseed, arg);
+    std::mt19937* gen = VM::GetUserPRNG();
+    gen->seed(static_cast<uint32_t>(HashPrimitiveTypes(arg)));
+    Return();
 }
 
 // math.sin -- https://www.lua.org/manual/5.1/manual.html#pdf-math.sin
@@ -355,3 +429,4 @@ DEEGEN_DEFINE_LIB_FUNC(math_tanh)
 DEEGEN_END_LIB_FUNC_DEFINITIONS
 
 #undef MATH_LIB_UNARY_FN_GET_ARG
+#undef MATH_LIB_BINARY_FN_GET_ARGS

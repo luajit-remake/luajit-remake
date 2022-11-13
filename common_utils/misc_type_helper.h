@@ -170,6 +170,9 @@ constexpr uint64_t offsetof_member_impl()
 template<auto member_object_ptr>
 constexpr uint64_t offsetof_member_v = internal::offsetof_member_impl<member_object_ptr>();
 
+template<auto member_object_ptr>
+using typeof_member_t = value_type_of_member_object_pointer_t<decltype(member_object_ptr)>;
+
 // The C++ placement-new is not type-safe: the pointer to 'new' is taken as a void*, so it will silently corrupt memory if
 // the pointer type does not match the object type (e.g. if you accidentally pass in a T** instead of T*). Fix this problem.
 //

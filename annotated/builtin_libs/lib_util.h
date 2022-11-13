@@ -47,4 +47,20 @@ inline std::pair<bool /*success*/, double> WARN_UNUSED ALWAYS_INLINE ToNumber(TV
     return ToNumberSlowPath(val.ViewAsDouble());
 }
 
+inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE TVDoubleViewToNumberSlowImpl(double tvDoubleView)
+{
+    TValue tv; tv.m_value = cxx2a_bit_cast<uint64_t>(tvDoubleView);
+    return ToNumber(tv);
+}
+
+// It's ugly: TVDoubleViewToNumberSlowImpl takes the argument in FPR because we want to
+// avoid unnecessary register shuffles between FPR and GPR (LLVM is very bad at that..)
+//
+inline bool WARN_UNUSED ALWAYS_INLINE TVDoubleViewToNumberSlow(double& tvDoubleView /*inout*/)
+{
+    auto [success, res] = TVDoubleViewToNumberSlowImpl(tvDoubleView);
+    tvDoubleView = res;
+    return success;
+}
+
 }   // namespace LuaLib

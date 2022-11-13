@@ -748,6 +748,18 @@ public:
         return -1;
     }
 
+    static std::mt19937* WARN_UNUSED ALWAYS_INLINE GetUserPRNG()
+    {
+        constexpr size_t offset = offsetof_member_v<&VM::m_usrPRNG>;
+        using T = typeof_member_t<&VM::m_usrPRNG>;
+        std::mt19937* res = *reinterpret_cast<HeapPtr<T>>(offset);
+        if (likely(res != nullptr))
+        {
+            return res;
+        }
+        return GetUserPRNGSlow();
+    }
+
     static constexpr size_t OffsetofStringNameForMetatableKind()
     {
         return offsetof_member_v<&VM::m_stringNameForMetatableKind>;
@@ -853,6 +865,14 @@ private:
     template<typename Iterator>
     UserHeapPointer<HeapString> WARN_UNUSED InsertMultiPieceString(Iterator iterator);
 
+    static std::mt19937* WARN_UNUSED NO_INLINE GetUserPRNGSlow()
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        assert(vm->m_usrPRNG == nullptr);
+        vm->m_usrPRNG = new std::mt19937();
+        return vm->m_usrPRNG;
+    }
+
     bool WARN_UNUSED InitializeVMBase();
     bool WARN_UNUSED InitializeVMStringManager();
     void CleanupVMStringManager();
@@ -932,6 +952,10 @@ private:
     // Even if the global variable 'error' is overwritten, this will not be changed
     //
     TValue m_ljrLibBaseDotErrorFunctionObject;
+
+    // The PRNG exposed to the user program. Internal VM logic must not use this PRNG.
+    //
+    std::mt19937* m_usrPRNG;
 
     // Allow unit test to hook stdout and stderr to a custom temporary file
     //

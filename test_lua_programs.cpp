@@ -989,4 +989,9 @@ TEST(LuaLib, math_unary_fn)
     RunSimpleLuaTest("luatests/math_lib_unary.lua.json");
 }
 
+TEST(LuaLib, math_misc_fn)
+{
+    RunSimpleLuaTest("luatests/math_lib_misc.lua.json");
+}
+
 }   // anonymous namespace

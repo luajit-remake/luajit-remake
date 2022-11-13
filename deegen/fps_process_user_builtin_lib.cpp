@@ -1,5 +1,6 @@
 #include "fps_main.h"
 #include "deegen_process_lib_func.h"
+#include "llvm_fcmp_extra_optimizations.h"
 #include "transactional_output_file.h"
 #include "llvm/IRReader/IRReader.h"
 
@@ -27,6 +28,11 @@ void FPS_ProcessUserBuiltinLib()
 
     DeegenLibFuncProcessor::DoLowering(module.get());
     RunLLVMOptimizePass(module.get());
+
+    // Run our homebrewed simple rewrite passes (targetting some insufficiencies of LLVM's optimizations of FCmp) after the main LLVM optimization pass
+    //
+    DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(module.get());
+    DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(module.get());
 
     std::string contents = CompileLLVMModuleToAssemblyFile(module.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
     TransactionalOutputFile outFile(outputFileName);
