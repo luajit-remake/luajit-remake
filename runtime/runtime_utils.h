@@ -114,38 +114,90 @@ void WriteBarrier(T ptr)
     WriteBarrierImpl<x_offset>(ReinterpretCastPreservingAddressSpace<uint8_t*>(ptr));
 }
 
+struct CoroutineStatus
+{
+    // Must start with the coroutine distinguish-bit set because this class occupies the ArrayType field
+    //
+    constexpr CoroutineStatus() : m_asValue(ArrayType::x_coroutineTypeTag) { }
+    explicit constexpr CoroutineStatus(uint8_t value) : m_asValue(value) { }
+
+    // True iff it is legal to use 'coroutine.resume' on this coroutine.
+    //
+    using BFM_isResumable = BitFieldMember<uint8_t, bool /*type*/, 0 /*start*/, 1 /*width*/>;
+    constexpr bool IsResumable() { return BFM_isResumable::Get(m_asValue); }
+    constexpr void SetResumable(bool v) { return BFM_isResumable::Set(m_asValue, v); }
+
+    // True iff this coroutine is dead (has either finished execution or thrown an error)
+    // Note that if IsDead() == true, IsResumable() must be false
+    //
+    using BFM_isDead = BitFieldMember<uint8_t, bool /*type*/, 1 /*start*/, 1 /*width*/>;
+    constexpr bool IsDead() { return BFM_isDead::Get(m_asValue); }
+    constexpr void SetDead(bool v) { return BFM_isDead::Set(m_asValue, v); }
+
+    constexpr bool IsCoroutineObject() { return (m_asValue & ArrayType::x_coroutineTypeTag) > 0; }
+
+    static constexpr CoroutineStatus CreateInitStatus()
+    {
+        CoroutineStatus res;
+        res.SetResumable(true);
+        res.SetDead(false);
+        return res;
+    }
+
+    // Load the ArrayType field of any object, and use this function to validate that the object is
+    // indeed a coroutine object and the coroutine object is resumable in one branch
+    //
+    static constexpr bool WARN_UNUSED IsCoroutineObjectAndResumable(uint8_t arrTypeField)
+    {
+        constexpr uint8_t maskToCheck = (ArrayType::x_coroutineTypeTag | BFM_isResumable::x_maskForGet);
+        bool result = (arrTypeField & maskToCheck) == maskToCheck;
+        AssertIff(result, CoroutineStatus { arrTypeField }.IsCoroutineObject() && CoroutineStatus { arrTypeField }.IsResumable());
+        return result;
+    }
+
+    uint8_t m_asValue;
+};
+// Must be one byte because it occupies the ArrayType field
+//
+static_assert(sizeof(CoroutineStatus) == 1);
+
 class alignas(8) CoroutineRuntimeContext
 {
 public:
     static constexpr uint32_t x_hiddenClassForCoroutineRuntimeContext = 0x10;
-    static constexpr size_t x_defaultStackSlots = 10000;
+    static constexpr size_t x_defaultStackSlots = 4096;
+    static constexpr size_t x_rootCoroutineDefaultStackSlots = 16384;
+    static constexpr size_t x_stackOverflowProtectionAreaSize = 65536;
+    static_assert(x_stackOverflowProtectionAreaSize % VM::x_pageSize == 0);
 
-    static CoroutineRuntimeContext* Create(VM* vm, UserHeapPointer<TableObject> globalObject)
-    {
-        CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
-        UserHeapGcObjectHeader::Populate(r);
-        r->m_hiddenClass = x_hiddenClassForCoroutineRuntimeContext;
-        r->m_invalidArrayType = ArrayType::x_invalidArrayType;
-        r->m_globalObject = globalObject;
-        r->m_numVariadicRets = 0;
-        r->m_variadicRetSlotBegin = 0;
-        r->m_upvalueList.m_value = 0;
-        r->m_stackBegin = new TValue[x_defaultStackSlots];
-        return r;
-    }
+    static CoroutineRuntimeContext* Create(VM* vm, UserHeapPointer<TableObject> globalObject, size_t numStackSlots = x_defaultStackSlots);
 
     void CloseUpvalues(TValue* base);
 
     uint32_t m_hiddenClass;  // Always x_hiddenClassForCoroutineRuntimeContext
     HeapEntityType m_type;
     GcCellState m_cellState;
-
     uint8_t m_reserved1;
-    uint8_t m_invalidArrayType;
+    CoroutineStatus m_coroutineStatus;
 
-    // The global object, if interpreter
+    // The stack base of the suspend point.
+    // This field is valid for all non-dead coroutine except the currently running one.
     //
-    UserHeapPointer<TableObject> m_globalObject;
+    // The call frame corresponding to the stack base must be one of the following:
+    // A coroutine_resume call frame, for coroutines that suspended itself by resuming another coroutine
+    // A coroutine_yield call frame, for coroutines that actively suspended itself by yielding
+    // A coroutine_init dummy call frame, for couroutines that have not yet started running
+    //
+    // The arguments passed to reenter the coroutine should always be stored starting at m_suspendPointStackBase.
+    // To reenter the coroutine, one should call the return continuation of the StackFrameHeader.
+    //
+    TValue* m_suspendPointStackBase;
+
+    // If this coroutine is in the stack of active coroutines (that is, !IsDead() && !IsResumable()),
+    // this stores the coroutine that resumed this coroutine. For the root coroutine, this is nullptr.
+    // For non-active coroutines, the value in this field is undefined.
+    //
+    CoroutineRuntimeContext* m_parent;
 
     // slot [m_variadicRetSlotBegin + ord] holds variadic return value 'ord'
     //
@@ -155,6 +207,10 @@ public:
     // The linked list head of the list of open upvalues
     //
     UserHeapPointer<Upvalue> m_upvalueList;
+
+    // The global object of this coroutine
+    //
+    UserHeapPointer<TableObject> m_globalObject;
 
     // The beginning of the stack
     //
@@ -379,6 +435,19 @@ public:
         return r;
     }
 
+    static HeapPtr<Upvalue> WARN_UNUSED CreateClosed(VM* vm, TValue val)
+    {
+        HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
+        Upvalue* raw = TranslateToRawPointer(vm, r);
+        UserHeapGcObjectHeader::Populate(raw);
+        raw->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
+        raw->m_ptr = &raw->m_tv;
+        raw->m_tv = val;
+        raw->m_isClosed = true;
+        raw->m_isImmutable = true;
+        return r;
+    }
+
     static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
     {
         if (rc->m_upvalueList.m_value == 0 || rc->m_upvalueList.As()->m_ptr < dst)
@@ -530,10 +599,10 @@ public:
         return r;
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateCFunc(VM* vm, SystemHeapPointer<ExecutableCode> executable)
+    static UserHeapPointer<FunctionObject> WARN_UNUSED CreateCFunc(VM* vm, SystemHeapPointer<ExecutableCode> executable, uint8_t numUpvalues = 0)
     {
         assert(TranslateToRawPointer(executable.As())->IsUserCFunction());
-        UserHeapPointer<FunctionObject> r = CreateImpl(vm, 0 /*numUpvalues*/);
+        UserHeapPointer<FunctionObject> r = CreateImpl(vm, numUpvalues);
         TCSet(r.As()->m_executable, executable);
         return r;
     }

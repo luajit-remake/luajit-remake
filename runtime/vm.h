@@ -659,6 +659,11 @@ public:
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len);
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromRawString(const void* str, uint32_t len);
 
+    HeapPtr<HeapString> WARN_UNUSED CreateStringObjectFromRawCString(const char* str)
+    {
+        return CreateStringObjectFromRawString(str, static_cast<uint32_t>(strlen(str))).As();
+    }
+
     uint32_t GetGlobalStringHashConserCurrentHashTableSize() const
     {
         return m_hashTableSizeMask + 1;
@@ -700,30 +705,64 @@ public:
         return m_rootCoroutine;
     }
 
+    static CoroutineRuntimeContext* VM_GetRootCoroutine()
+    {
+        constexpr size_t offset = offsetof_member_v<&VM::m_rootCoroutine>;
+        using T = typeof_member_t<&VM::m_rootCoroutine>;
+        return *reinterpret_cast<HeapPtr<T>>(offset);
+    }
+
     HeapPtr<TableObject> GetRootGlobalObject();
 
-    void InitLibBaseDotNextFunctionObject(TValue val)
+    // The VM structure also stores several 'true' library functions that doesn't change even if the respective user-exposed
+    // global value is overwritten.
+    // This is mainly a convenience feature, as use of this feature could have been avoided by using upvalues instead,
+    // but by not using upvalue, our global environment initialization logic can be simpler.
+    //
+    enum class LibFn
     {
-        assert(val.IsPointer());
-        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function);
-        m_ljrLibBaseDotNextFunctionObject = val;
+        BaseNext,
+        BaseError,
+        // must be last member
+        //
+        X_END_OF_ENUM
+    };
+
+    enum class LibFnProto
+    {
+        CoroutineWrapCall,
+        // must be last member
+        //
+        X_END_OF_ENUM
+    };
+
+    template<LibFn fn>
+    void ALWAYS_INLINE InitializeLibFn(TValue val)
+    {
+        static_assert(fn != LibFn::X_END_OF_ENUM);
+        assert(val.Is<tFunction>());
+        m_vmLibFunctionObjects[static_cast<size_t>(fn)] = val;
     }
 
-    TValue GetLibBaseDotNextFunctionObject()
+    template<LibFn fn>
+    TValue WARN_UNUSED ALWAYS_INLINE GetLibFn()
     {
-        return m_ljrLibBaseDotNextFunctionObject;
+        static_assert(fn != LibFn::X_END_OF_ENUM);
+        return m_vmLibFunctionObjects[static_cast<size_t>(fn)];
     }
 
-    void InitLibBaseDotErrorFunctionObject(TValue val)
+    template<LibFnProto fn>
+    void ALWAYS_INLINE InitializeLibFnProto(SystemHeapPointer<ExecutableCode> val)
     {
-        assert(val.IsPointer());
-        assert(val.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Function);
-        m_ljrLibBaseDotErrorFunctionObject = val;
+        static_assert(fn != LibFnProto::X_END_OF_ENUM);
+        m_vmLibFnProtos[static_cast<size_t>(fn)] = val;
     }
 
-    TValue GetLibBaseDotErrorFunctionObject()
+    template<LibFnProto fn>
+    SystemHeapPointer<ExecutableCode> WARN_UNUSED ALWAYS_INLINE GetLibFnProto()
     {
-        return m_ljrLibBaseDotErrorFunctionObject;
+        static_assert(fn != LibFnProto::X_END_OF_ENUM);
+        return m_vmLibFnProtos[static_cast<size_t>(fn)];
     }
 
     UserHeapPointer<HeapString> GetStringNameForMetatableKind(LuaMetamethodKind kind)
@@ -765,15 +804,16 @@ public:
         return offsetof_member_v<&VM::m_stringNameForMetatableKind>;
     }
 
-    static constexpr size_t OffsetofLjrLibBaseDotNextFunctionObject()
+    static HeapPtr<TValue> ALWAYS_INLINE VM_LibFnArrayAddr()
     {
-        return offsetof_member_v<&VM::m_ljrLibBaseDotNextFunctionObject>;
+        return reinterpret_cast<HeapPtr<TValue>>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
     }
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
 
-private:
     static constexpr size_t x_pageSize = 4096;
+
+private:
     static constexpr size_t x_vmLayoutLength = 18ULL << 30;
     // The start address of the VM is always at 16GB % 32GB, this makes sure the VM base is aligned at 32GB
     //
@@ -943,15 +983,8 @@ private:
 
     std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings> m_initialStructureForDifferentInlineCapacity;
 
-    // The true Lua base library's 'next' function object ('next' is the name of the that function...)
-    // Even if the global variable 'next' is overwritten, this will not be changed
-    //
-    TValue m_ljrLibBaseDotNextFunctionObject;
-
-    // The true Lua base library's 'error' function object ('error' is the name of the that function...)
-    // Even if the global variable 'error' is overwritten, this will not be changed
-    //
-    TValue m_ljrLibBaseDotErrorFunctionObject;
+    TValue m_vmLibFunctionObjects[static_cast<size_t>(LibFn::X_END_OF_ENUM)];
+    SystemHeapPointer<ExecutableCode> m_vmLibFnProtos[static_cast<size_t>(LibFnProto::X_END_OF_ENUM)];
 
     // The PRNG exposed to the user program. Internal VM logic must not use this PRNG.
     //
@@ -985,8 +1018,11 @@ inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetametho
     return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
 }
 
-inline TValue VM_GetVMTrueBaseLibNextFunctionObject()
+template<VM::LibFn fn>
+inline TValue ALWAYS_INLINE VM_GetLibFunctionObject()
 {
-    constexpr size_t offset = VM::OffsetofLjrLibBaseDotNextFunctionObject();
-    return TCGet(*reinterpret_cast<HeapPtr<TValue>>(offset));
+    static_assert(fn != VM::LibFn::X_END_OF_ENUM);
+    HeapPtr<TValue> arrayStart = VM::VM_LibFnArrayAddr();
+    return TCGet(arrayStart[static_cast<size_t>(fn)]);
 }
+

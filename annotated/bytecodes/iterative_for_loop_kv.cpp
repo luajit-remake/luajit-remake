@@ -11,7 +11,7 @@ static void NO_RETURN ValidateIsNextAndBranchImpl(TValue* base)
     //   2. base[1] is a table
     //   3. base[2] is nil
     //
-    if (base[0].m_value == VM_GetVMTrueBaseLibNextFunctionObject().m_value)
+    if (base[0].m_value == VM_GetLibFunctionObject<VM::LibFn::BaseNext>().m_value)
     {
         if (base[1].Is<tTable>())
         {
@@ -87,7 +87,7 @@ static void NO_RETURN KVLoopIterNotNextFunctionSlowPath(TValue* /*base*/, uint8_
 
 static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
 {
-    if (likely(base[0].m_value == VM_GetVMTrueBaseLibNextFunctionObject().m_value))
+    if (likely(base[0].m_value == VM_GetLibFunctionObject<VM::LibFn::BaseNext>().m_value))
     {
         TableObjectIterator* iter = reinterpret_cast<TableObjectIterator*>(base + 2);
         HeapPtr<TableObject> table = base[1].As<tTable>();

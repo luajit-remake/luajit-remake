@@ -47,7 +47,7 @@ struct ArrayGrowthPolicy
 struct ArrayType
 {
     constexpr ArrayType() : m_asValue(0) { }
-    constexpr ArrayType(uint8_t value) : m_asValue(value) { }
+    explicit constexpr ArrayType(uint8_t value) : m_asValue(value) { }
 
     enum class Kind : uint8_t  // must fit in 2 bits
     {
@@ -113,17 +113,31 @@ struct ArrayType
 
     constexpr static BitFieldCarrierType x_usefulBitsMask = static_cast<BitFieldCarrierType>((1 << 6) - 1);
 
-    // bit 6-7: always zero for any valid array type
+    // bit 6: bool isCoroutine
+    // The ArrayType field in the object header is also used by coroutine objects to accomplish 'isCoroutine + status' check in one branch
+    // bit 6 is used to uniquely distinguish that the object is a coroutine.
+    // So for any valid array type, bit 6 must be 0.
+    //
+    constexpr static uint8_t x_coroutineTypeTag = 64;
+
+    // bit 7: bool isInvalid
+    // The ArrayType field of any non-table and non-coroutine object must have bit 7 == 1 and all other bits == 0
+    // So for any valid array type, bit 7 must be 0.
     //
     BitFieldCarrierType m_asValue;
 
-    // The ArrayType field of all non-table object must have invalid array type
+    // The ArrayType field of all objects that is not a table or coroutine must have the following invalid array type
     //
-    constexpr static uint8_t x_invalidArrayType = 255;
+    constexpr static uint8_t x_invalidArrayType = 128;
 
-    // This must be different from all valid array types and x_invalidArrayType
+    // This must be different from all valid array types, coroutine status types and x_invalidArrayType
     // This is a bit pattern where no heap object's ArrayType field can have
     //
-    constexpr static uint8_t x_impossibleArrayType = 128;
+    // All table objects: bit 6 == 0, bit 7 == 0
+    // All coroutine objects: bit 6 == 1, bit 7 == 0
+    // All other objects: bit 6 == 0, bit 7 == 1
+    // So bit 6 == 1, bit 7 == 1 is never possible
+    //
+    constexpr static uint8_t x_impossibleArrayType = 128 + 64;
 };
 static_assert(sizeof(ArrayType) == 1);

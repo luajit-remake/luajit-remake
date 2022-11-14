@@ -696,7 +696,9 @@ void VM::CreateRootCoroutine()
     // Create global object
     //
     UserHeapPointer<TableObject> globalObject = CreateGlobalObject(this);
-    m_rootCoroutine = CoroutineRuntimeContext::Create(this, globalObject);
+    m_rootCoroutine = CoroutineRuntimeContext::Create(this, globalObject, CoroutineRuntimeContext::x_rootCoroutineDefaultStackSlots);
+    m_rootCoroutine->m_coroutineStatus.SetResumable(false);
+    m_rootCoroutine->m_parent = nullptr;
 }
 
 HeapPtr<TableObject> VM::GetRootGlobalObject()

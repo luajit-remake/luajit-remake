@@ -205,6 +205,8 @@ struct CreateGlobalObjectHelper
     VM* vm;
 };
 
+DEEGEN_FORWARD_DECLARE_LIB_FUNC(coroutine_wrap_call);
+
 #define INSERT_LIBFN(libName, fnName)                                               \
     [[maybe_unused]] HeapPtr<FunctionObject> libfn_ ## libName ##_ ## fnName =      \
         h.InsertCFunc(                                                              \
@@ -224,14 +226,16 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     HeapPtr<TableObject> libobj_base = globalObject;
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (base), (LUA_LIB_BASE_FUNCTION_LIST))
 
-    vm->InitLibBaseDotErrorFunctionObject(TValue::Create<tFunction>(libfn_base_error));
-    vm->InitLibBaseDotNextFunctionObject(TValue::Create<tFunction>(libfn_base_next));
+    vm->InitializeLibFn<VM::LibFn::BaseError>(TValue::Create<tFunction>(libfn_base_error));
+    vm->InitializeLibFn<VM::LibFn::BaseNext>(TValue::Create<tFunction>(libfn_base_next));
 
     // Initialize coroutine library
     // The coroutine library has no non-function fields
     //
     HeapPtr<TableObject> libobj_coroutine = h.InsertObject(globalObject, "coroutine", x_num_functions_in_lib_coroutine);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (coroutine), (LUA_LIB_COROUTINE_FUNCTION_LIST))
+
+    vm->InitializeLibFnProto<VM::LibFnProto::CoroutineWrapCall>(ExecutableCode::CreateCFunction(vm, DEEGEN_CODE_POINTER_FOR_LIB_FUNC(coroutine_wrap_call)));
 
     // Initialize debug library
     // The debug library has no non-function fields

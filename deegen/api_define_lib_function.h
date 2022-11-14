@@ -31,6 +31,12 @@ public:
     void NO_RETURN ThrowError(TValue msg);
     void NO_RETURN ThrowError(const char* msg);
     void NO_RETURN MakeInPlaceCall(TValue* argsBegin, size_t numArgs, void* returnContinuation);
+
+    // Yield the current coroutine and transfer control to the target coroutine.
+    // This function only transfer the control, it does not check anything or maintain anything.
+    // The user is responsible for doing all the bookkeeping that e.g., tracks if a coroutine is alive, etc.
+    //
+    void NO_RETURN ALWAYS_INLINE CoroSwitch(CoroutineRuntimeContext* coro, TValue* coroStackBase, size_t numArgs);
 };
 
 template<typename CRTP>
@@ -62,6 +68,11 @@ protected:
     StackFrameHeader* GetStackFrameHeader()
     {
         return reinterpret_cast<StackFrameHeader*>(m_stackBase - x_numSlotsForStackFrameHeader);
+    }
+
+    CoroutineRuntimeContext* GetCurrentCoroutine()
+    {
+        return m_coroCtx;
     }
 
 private:
@@ -113,6 +124,11 @@ protected:
     size_t GetNumReturnValues()
     {
         return m_numRets;
+    }
+
+    CoroutineRuntimeContext* GetCurrentCoroutine()
+    {
+        return m_coroCtx;
     }
 
 private:

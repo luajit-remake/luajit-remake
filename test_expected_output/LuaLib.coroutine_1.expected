@@ -1,0 +1,501 @@
+-- coroutine.running --
+nil
+true	running
+true
+dead
+-- return value passing (coroutine.create) --
+true
+true
+true
+true
+true
+true	nil
+true	11
+true	12
+true	14
+true	17
+true	nil	nil
+true	11	nil
+true	12	13
+true	14	15
+true	17	18
+true	nil	nil	nil
+true	11	nil	nil
+true	12	13	nil
+true	14	15	16
+true	17	18	19
+-- return value passing (coroutine.wrap) --
+nil
+1
+2
+4
+7
+nil	nil
+1	nil
+2	3
+4	5
+7	8
+nil	nil	nil
+1	nil	nil
+2	3	nil
+4	5	6
+7	8	9
+nil	nil	nil	nil
+1	nil	nil	nil
+2	3	nil	nil
+4	5	6	nil
+7	8	9	10
+-- argument passing (coroutine.create) --
+arg:	nil
+true
+arg:	nil	nil
+true
+arg:	nil	nil	nil
+true
+arg:	nil	nil	nil	nil
+true
+arg:	10000
+true
+arg:	10000	nil
+true
+arg:	10000	nil	nil
+true
+arg:	10000	nil	nil	nil
+true
+arg:	20000
+true
+arg:	20000	20001
+true
+arg:	20000	20001	nil
+true
+arg:	20000	20001	nil	nil
+true
+arg:	30000
+true
+arg:	30000	30001
+true
+arg:	30000	30001	30002
+true
+arg:	30000	30001	30002	nil
+true
+arg:	40000
+true
+arg:	40000	40001
+true
+arg:	40000	40001	40002
+true
+arg:	40000	40001	40002	40003
+true
+-- argument passing (coroutine.wrap) --
+arg:	nil
+
+arg:	nil	nil
+
+arg:	nil	nil	nil
+
+arg:	nil	nil	nil	nil
+
+arg:	10
+
+arg:	10	nil
+
+arg:	10	nil	nil
+
+arg:	10	nil	nil	nil
+
+arg:	20
+
+arg:	20	21
+
+arg:	20	21	nil
+
+arg:	20	21	nil	nil
+
+arg:	30
+
+arg:	30	31
+
+arg:	30	31	32
+
+arg:	30	31	32	nil
+
+arg:	40
+
+arg:	40	41
+
+arg:	40	41	42
+
+arg:	40	41	42	43
+
+-- return value passing (coroutine.create + coroutine.yield) --
+suspended	true
+dead	true
+suspended	true
+dead	true
+suspended	true
+dead	true
+suspended	true
+dead	true
+suspended	true
+dead	true
+suspended	true	nil
+dead	true	nil
+suspended	true	1000
+dead	true	2000
+suspended	true	3000
+dead	true	4000
+suspended	true	5000
+dead	true	6000
+suspended	true	7000
+dead	true	8000
+suspended	true	nil	nil
+dead	true	nil	nil
+suspended	true	1000	nil
+dead	true	2000	nil
+suspended	true	3000	3001
+dead	true	4000	4001
+suspended	true	5000	5001
+dead	true	6000	6001
+suspended	true	7000	7001
+dead	true	8000	8001
+suspended	true	nil	nil	nil
+dead	true	nil	nil	nil
+suspended	true	1000	nil	nil
+dead	true	2000	nil	nil
+suspended	true	3000	3001	nil
+dead	true	4000	4001	nil
+suspended	true	5000	5001	5002
+dead	true	6000	6001	6002
+suspended	true	7000	7001	7002
+dead	true	8000	8001	8002
+-- return value passing (coroutine.wrap + coroutine.yield) --
+nil
+nil
+100
+200
+300
+400
+500
+600
+700
+800
+nil	nil
+nil	nil
+100	nil
+200	nil
+300	301
+400	401
+500	501
+600	601
+700	701
+800	801
+nil	nil	nil
+nil	nil	nil
+100	nil	nil
+200	nil	nil
+300	301	nil
+400	401	nil
+500	501	502
+600	601	602
+700	701	702
+800	801	802
+nil	nil	nil	nil
+nil	nil	nil	nil
+100	nil	nil	nil
+200	nil	nil	nil
+300	301	nil	nil
+400	401	nil	nil
+500	501	502	nil
+600	601	602	nil
+700	701	702	703
+800	801	802	803
+-- argument passing (coroutine.create + coroutine.yield) --
+arg:	nil
+true
+yield:	nil
+true
+arg:	nil	nil
+true
+yield:	nil	nil
+true
+arg:	nil	nil	nil
+true
+yield:	nil	nil	nil
+true
+arg:	nil	nil	nil	nil
+true
+yield:	nil	nil	nil	nil
+true
+arg:	50
+true
+yield:	60
+true
+arg:	50	nil
+true
+yield:	60	nil
+true
+arg:	50	nil	nil
+true
+yield:	60	nil	nil
+true
+arg:	50	nil	nil	nil
+true
+yield:	60	nil	nil	nil
+true
+arg:	40
+true
+yield:	30
+true
+arg:	40	41
+true
+yield:	30	31
+true
+arg:	40	41	nil
+true
+yield:	30	31	nil
+true
+arg:	40	41	nil	nil
+true
+yield:	30	31	nil	nil
+true
+arg:	20
+true
+yield:	10
+true
+arg:	20	21
+true
+yield:	10	11
+true
+arg:	20	21	22
+true
+yield:	10	11	12
+true
+arg:	20	21	22	nil
+true
+yield:	10	11	12	nil
+true
+arg:	0
+true
+yield:	100
+true
+arg:	0	1
+true
+yield:	100	101
+true
+arg:	0	1	2
+true
+yield:	100	101	102
+true
+arg:	0	1	2	3
+true
+yield:	100	101	102	103
+true
+-- argument passing (coroutine.wrap + coroutine.yield) --
+arg:	nil
+
+yield:	nil
+
+arg:	nil	nil
+
+yield:	nil	nil
+
+arg:	nil	nil	nil
+
+yield:	nil	nil	nil
+
+arg:	nil	nil	nil	nil
+
+yield:	nil	nil	nil	nil
+
+arg:	50
+
+yield:	60
+
+arg:	50	nil
+
+yield:	60	nil
+
+arg:	50	nil	nil
+
+yield:	60	nil	nil
+
+arg:	50	nil	nil	nil
+
+yield:	60	nil	nil	nil
+
+arg:	70
+
+yield:	80
+
+arg:	70	71
+
+yield:	80	81
+
+arg:	70	71	nil
+
+yield:	80	81	nil
+
+arg:	70	71	nil	nil
+
+yield:	80	81	nil	nil
+
+arg:	90
+
+yield:	100
+
+arg:	90	91
+
+yield:	100	101
+
+arg:	90	91	92
+
+yield:	100	101	102
+
+arg:	90	91	92	nil
+
+yield:	100	101	102	nil
+
+arg:	110
+
+yield:	120
+
+arg:	110	111
+
+yield:	120	121
+
+arg:	110	111	112
+
+yield:	120	121	122
+
+arg:	110	111	112	113
+
+yield:	120	121	122	123
+
+-- yield sanity (coroutine.create) --
+suspended	suspended
+coro0 enter	0
+true	1
+coro1 enter	5
+true	6
+suspended	suspended
+coro0 yield	1
+true	2
+coro1 yield	6
+true	7
+suspended	suspended
+coro0 yield	2
+true	3
+coro1 yield	7
+true	8
+suspended	suspended
+coro0 yield	3
+true	4
+coro1 yield	8
+true	9
+suspended	suspended
+coro0 yield	4
+true	5
+coro1 yield	9
+true	10
+suspended	suspended
+coro0 yield	5
+true	6
+coro1 yield	10
+true	10
+suspended	dead
+coro0 yield	6
+true	7
+false	cannot resume dead coroutine
+suspended	dead
+coro0 yield	7
+true	8
+false	cannot resume dead coroutine
+suspended	dead
+coro0 yield	8
+true	9
+false	cannot resume dead coroutine
+suspended	dead
+coro0 yield	9
+true	10
+false	cannot resume dead coroutine
+suspended	dead
+coro0 yield	10
+true	10
+false	cannot resume dead coroutine
+dead	dead
+false	cannot resume dead coroutine
+false	cannot resume dead coroutine
+dead	dead
+-- yield sanity (coroutine.wrap) --
+coro0 enter	0
+1
+coro1 enter	5
+6
+coro0 yield	1
+2
+coro1 yield	6
+7
+coro0 yield	2
+3
+coro1 yield	7
+8
+coro0 yield	3
+4
+coro1 yield	8
+9
+coro0 yield	4
+5
+coro1 yield	9
+10
+coro0 yield	5
+6
+coro1 yield	10
+10
+coro0 yield	6
+7
+coro0 yield	7
+8
+coro0 yield	8
+9
+coro0 yield	9
+10
+coro0 yield	10
+10
+false
+false
+-- yield sanity (coroutine.create + call) --
+In coro	1
+In f	2
+true	3
+In f 2	4
+true	5
+Returning from f
+In coro 2	6
+In f	7
+true	8
+In f 2	9
+true	10
+Returning from f
+Returning from coro
+true	11
+dead
+false	cannot resume dead coroutine
+dead
+false	cannot resume dead coroutine
+dead
+-- yield sanity (coroutine.wrap + call) --
+In coro	1
+In f	2
+3
+In f 2	4
+5
+Returning from f
+In coro 2	6
+In f	7
+8
+In f 2	9
+10
+Returning from f
+Returning from coro
+11
+false

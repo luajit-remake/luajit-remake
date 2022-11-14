@@ -289,7 +289,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
         // To workaround this, we will let ourselves call 'base.error' with our error object as argument.
         // Then 'base.error' will throw out that error for us, which will be protected and invoke our error handler, as desired.
         //
-        TValue baseDotError = VM::GetActiveVMForCurrentThread()->GetLibBaseDotErrorFunctionObject();
+        TValue baseDotError = VM_GetLibFunctionObject<VM::LibFn::BaseError>();
         assert(baseDotError.Is<tFunction>());
 
         callStart[0] = baseDotError;

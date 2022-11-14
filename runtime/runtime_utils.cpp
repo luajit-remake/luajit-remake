@@ -139,3 +139,30 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     }
     return r;
 }
+
+CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer<TableObject> globalObject, size_t numStackSlots)
+{
+    CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
+    UserHeapGcObjectHeader::Populate(r);
+    r->m_hiddenClass = x_hiddenClassForCoroutineRuntimeContext;
+    r->m_coroutineStatus = CoroutineStatus::CreateInitStatus();
+    r->m_globalObject = globalObject;
+    r->m_numVariadicRets = 0;
+    r->m_variadicRetSlotBegin = 0;
+    r->m_upvalueList.m_value = 0;
+    size_t bytesToAllocate = numStackSlots * sizeof(TValue);
+    bytesToAllocate = RoundUpToMultipleOf<VM::x_pageSize>(bytesToAllocate);
+    void* stackAreaWithOverflowProtection = mmap(nullptr, bytesToAllocate + x_stackOverflowProtectionAreaSize * 2,
+                                                 PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    VM_FAIL_WITH_ERRNO_IF(stackAreaWithOverflowProtection == MAP_FAILED,
+                          "Failed to reserve address range of length %llu",
+                          static_cast<unsigned long long>(bytesToAllocate + x_stackOverflowProtectionAreaSize * 2));
+
+    void* stackArea = mmap(reinterpret_cast<uint8_t*>(stackAreaWithOverflowProtection) + x_stackOverflowProtectionAreaSize,
+                           bytesToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    VM_FAIL_WITH_ERRNO_IF(stackArea == MAP_FAILED,
+                          "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(bytesToAllocate));
+    assert(stackArea == reinterpret_cast<uint8_t*>(stackAreaWithOverflowProtection) + x_stackOverflowProtectionAreaSize);
+    r->m_stackBegin = reinterpret_cast<TValue*>(stackArea);
+    return r;
+}

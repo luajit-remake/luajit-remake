@@ -178,7 +178,6 @@ TEST(LuaTest, TailCall)
     // Manually lower the stack size
     //
     CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
     vm->LaunchScript(module);
@@ -200,7 +199,6 @@ TEST(LuaTest, VariadicTailCall_1)
     // Manually lower the stack size
     //
     CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
     vm->LaunchScript(module);
@@ -222,7 +220,6 @@ TEST(LuaTest, VariadicTailCall_2)
     // Manually lower the stack size
     //
     CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
     vm->LaunchScript(module);
@@ -244,7 +241,6 @@ TEST(LuaTest, VariadicTailCall_3)
     // Manually lower the stack size
     //
     CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[200];
 
     vm->LaunchScript(module);
@@ -533,7 +529,6 @@ TEST(LuaBenchmark, Ack)
     // This benchmark needs a larger stack
     //
     CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    delete [] rc->m_stackBegin;
     rc->m_stackBegin = new TValue[1000000];
 
     vm->LaunchScript(module);
@@ -592,6 +587,11 @@ TEST(LuaBenchmark, NlgN_Sieve)
 TEST(LuaBenchmark, Spectral_Norm)
 {
     RunSimpleLuaTest("luatests/spectral-norm.lua.json");
+}
+
+TEST(LuaBenchmark, chameneos)
+{
+    RunSimpleLuaTest("luatests/chameneos.lua.json");
 }
 
 TEST(LuaTest, xpcall_1)
@@ -1002,6 +1002,26 @@ TEST(LuaLib, math_min_max)
 TEST(LuaLib, math_random)
 {
     RunSimpleLuaTest("luatests/math_lib_random.lua.json");
+}
+
+TEST(LuaLib, coroutine_1)
+{
+    RunSimpleLuaTest("luatests/coroutine_1.lua.json");
+}
+
+TEST(LuaLib, coroutine_2)
+{
+    RunSimpleLuaTest("luatests/coroutine_2.lua.json");
+}
+
+TEST(LuaLib, coroutine_3)
+{
+    RunSimpleLuaTest("luatests/coroutine_3.lua.json");
+}
+
+TEST(LuaLib, coroutine_ring)
+{
+    RunSimpleLuaTest("luatests/coroutine_ring.lua.json");
 }
 
 }   // anonymous namespace

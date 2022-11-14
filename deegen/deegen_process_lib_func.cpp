@@ -224,6 +224,56 @@ void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* fu
     }
 }
 
+void DeegenLibLowerCoroutineSwitchAPIs(DeegenLibFuncInstance* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    std::vector<CallInst*> listOfUses;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* callInst = dyn_cast<CallInst>(&inst);
+            if (callInst != nullptr)
+            {
+                Function* callee = callInst->getCalledFunction();
+                if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
+                {
+                    std::string demangledName = DemangleCXXSymbol(callee->getName().str());
+                    if (demangledName.starts_with("DeegenLibFuncCommonAPIs::CoroSwitch("))
+                    {
+                        listOfUses.push_back(callInst);
+                    }
+                }
+            }
+        }
+    }
+
+    for (CallInst* callInst : listOfUses)
+    {
+        ReleaseAssert(callInst->arg_size() == 4);
+        Value* dstCoro = callInst->getArgOperand(1);
+        ReleaseAssert(llvm_value_has_type<void*>(dstCoro));
+        Value* dstStackBase = callInst->getArgOperand(2);
+        ReleaseAssert(llvm_value_has_type<void*>(dstStackBase));
+        Value* numArgs = callInst->getArgOperand(3);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
+
+        Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackBase", { dstStackBase }, callInst);
+        InterpreterFunctionInterface::CreateDispatchToReturnContinuation(
+            retAddr,
+            dstCoro,
+            dstStackBase,
+            dstStackBase /*retStart*/,
+            numArgs /*numRets*/,
+            callInst /*insertBefore*/);
+
+        AssertInstructionIsFollowedByUnreachable(callInst);
+        Instruction* unreachableInst = callInst->getNextNode();
+        callInst->eraseFromParent();
+        unreachableInst->eraseFromParent();
+    }
+}
+
 void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* func)
 {
     using namespace llvm;
@@ -381,6 +431,7 @@ void DeegenLibFuncInstance::DoLowering()
 
     UserLibReturnAPI::LowerAllForFunction(this, m_target);
     DeegenLibLowerThrowErrorAPIs(this, m_target);
+    DeegenLibLowerCoroutineSwitchAPIs(this, m_target);
     DeegenLibLowerInPlaceCallAPIs(this, m_target);
 
     m_target->removeFnAttr(Attribute::AttrKind::NoReturn);

@@ -278,7 +278,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pairs)
         ThrowError("bad argument #1 to 'pairs' (table expected)");
     }
 
-    Return(VM::GetActiveVMForCurrentThread()->GetLibBaseDotNextFunctionObject(), input, TValue::Create<tNil>());
+    Return(VM_GetLibFunctionObject<VM::LibFn::BaseNext>(), input, TValue::Create<tNil>());
 }
 
 // base.print -- https://www.lua.org/manual/5.1/manual.html#pdf-print
