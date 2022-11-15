@@ -1,0 +1,202 @@
+{
+  "ChunkName": "@luatests/coroutine_5.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 10,
+      "SourceLineStart": 1,
+      "SourceLineEnd": 5,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KNIL",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 3, 3, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 4, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 2, 5 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 1, 4 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 0, 3 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 2 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 4 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 5
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "coroutine"
+        },
+        {
+          "Type": "String",
+          "Value": "yield"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 10,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 0, 0, 1 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 2, 2 ],
+          "SourceLine": 1
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 0, 3 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 4 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 0, 1, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 4 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 0, 1, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 8
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "coroutine"
+        },
+        {
+          "Type": "String",
+          "Value": "wrap"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "String",
+          "Value": "coro"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

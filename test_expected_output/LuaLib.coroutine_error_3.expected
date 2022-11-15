@@ -1,0 +1,29 @@
+-- yield in error handler (test 1) --
+in error handler, err=	false
+true	1	2
+suspended
+in error handler, err=	false	a=	10	b=	11
+true	11	12
+suspended
+in error handler, err=	false	a=	12	b=	13
+false	return from error handler
+true
+dead
+-- yield in error handler (test 2) --
+in error handler, err=	false
+1	2
+in error handler, err=	false	a=	10	b=	11
+11	12
+in error handler, err=	false	a=	12	b=	13
+false	return from error handler
+
+-- coroutine in error handler (test 3) --
+in error handler, err=	false
+in coro2
+in error handler, err=	false	a=	true	b=	1
+true	1
+in error handler, err=	false	a=	10	b=	11
+in coro2, a=	nil	b=	nil
+in error handler, err=	false	a=	true	b=	return from coro2
+false	return from error handler
+

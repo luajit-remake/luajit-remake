@@ -1019,9 +1019,34 @@ TEST(LuaLib, coroutine_3)
     RunSimpleLuaTest("luatests/coroutine_3.lua.json");
 }
 
+TEST(LuaLib, coroutine_4)
+{
+    RunSimpleLuaTest("luatests/coroutine_4.lua.json");
+}
+
+TEST(LuaLib, coroutine_5)
+{
+    RunSimpleLuaTest("luatests/coroutine_5.lua.json");
+}
+
 TEST(LuaLib, coroutine_ring)
 {
     RunSimpleLuaTest("luatests/coroutine_ring.lua.json");
+}
+
+TEST(LuaLib, coroutine_error_1)
+{
+    RunSimpleLuaTest("luatests/coroutine_error_1.lua.json");
+}
+
+TEST(LuaLib, coroutine_error_2)
+{
+    RunSimpleLuaTest("luatests/coroutine_error_2.lua.json");
+}
+
+TEST(LuaLib, coroutine_error_3)
+{
+    RunSimpleLuaTest("luatests/coroutine_error_3.lua.json");
 }
 
 }   // anonymous namespace

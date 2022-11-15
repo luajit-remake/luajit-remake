@@ -89,6 +89,13 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(OnProtectedCallErrorReturn)
     LongJump(hdr, stackbase /*retStart*/, 2 /*numRets*/);
 }
 
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_propagate_error_trampoline)
+{
+    assert(GetNumReturnValues() == 1);
+    TValue errorObject = GetReturnValuesBegin()[0];
+    ThrowError(errorObject);
+}
+
 // This is a fake library function that is used internally in deegen to implement the ThrowError API
 // This is never directly called from outside, and the name is hardcoded
 //
@@ -121,23 +128,93 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
     if (hdr == nullptr)
     {
         // There is no pcall/xpcall on the stack
-        // TODO: make the output message and behavior consistent with Lua in this case
+        // This means this coroutine encountered an uncaught error and should transition to "dead" state.
+        // The error should be propagated to the parent coroutine, either as an error (if the parent
+        // coroutine resumed this coroutine via coroutine.wrap), or as return value (if the parent coroutine
+        // resumed this coroutine via coroutine.resume).
         //
-        FILE* fp = VM::GetActiveVMForCurrentThread()->GetStderr();
-        fprintf(fp, "Uncaught error: ");
-        PrintTValue(fp, errorObject);
-        fprintf(fp, "\n");
-        fclose(fp);
-        // Also output to stderr if the VM's stderr is redirected to somewhere else
-        //
-        if (fp != stderr)
+        CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
+        assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
+
+        CoroutineRuntimeContext* parentCoro = currentCoro->m_parent;
+        if (unlikely(parentCoro == nullptr))
         {
-            fprintf(stderr, "Uncaught error: ");
-            PrintTValue(stderr, errorObject);
-            fprintf(stderr, "\n");
-            fflush(stderr);
+            // The current coroutine is already the root coroutine. This means the user did not
+            // use xpcall/pcall to launch the root coroutine, and the root coroutine errored out.
+            // In this case we should terminate execution.
+            //
+            // TODO: make the output message and behavior consistent with Lua in this case
+            //
+            FILE* fp = VM::GetActiveVMForCurrentThread()->GetStderr();
+            fprintf(fp, "Uncaught error: ");
+            PrintTValue(fp, errorObject);
+            fprintf(fp, "\n");
+            fclose(fp);
+            // Also output to stderr if the VM's stderr is redirected to somewhere else
+            //
+            if (fp != stderr)
+            {
+                fprintf(stderr, "Uncaught error: ");
+                PrintTValue(stderr, errorObject);
+                fprintf(stderr, "\n");
+                fflush(stderr);
+            }
+            abort();
         }
-        abort();
+
+        assert(!parentCoro->m_coroutineStatus.IsDead() && !parentCoro->m_coroutineStatus.IsResumable());
+
+        // Set the current coroutine dead
+        //
+        currentCoro->m_coroutineStatus.SetDead(true);
+
+        // Check if the parent coroutine resumed the current coroutine via coroutine.wrap or coroutine.resume
+        // DEVNOTE: this is currently accomplished by a hack that repurposes 'm_numVariadicArguments' of the
+        // suspension call frame as a matter of distinguishment. 0 means coroutine.resume and 1 mean coroutine.wrap
+        //
+        TValue* dstStackBase = parentCoro->m_suspendPointStackBase;
+        StackFrameHeader* dstHdr = StackFrameHeader::Get(dstStackBase);
+        if (dstHdr->m_numVariadicArguments == 0)
+        {
+            // For coroutine.resume, the error should not be propagated further.
+            // We should simply make coroutine.resume return 'false' plus the error object.
+            // Note that we also need to pad nils to x_minNilFillReturnValues, as required by our internal call scheme.
+            //
+            // TODO: we need to check for stack overflow here once we implement resizable stack
+            //
+            dstStackBase[0] = TValue::Create<tBool>(false);
+            dstStackBase[1] = errorObject;
+            for (size_t i = 2; i < x_minNilFillReturnValues; i++)
+            {
+                dstStackBase[i] = TValue::Create<tNil>();
+            }
+
+            CoroSwitch(parentCoro, dstStackBase, 2 /*numArgs*/);
+        }
+        else
+        {
+            assert(dstHdr->m_numVariadicArguments == 1);
+            // For coroutine.wrap, the error should be propagated as an error of coroutine.wrap
+            // We achieve this by set up a trampoline frame above coroutine.wrap, switch coroutine
+            // and return to the trampoline, and let the trampoline throw out the error again.
+            //
+            // This is not the most efficient implementation (clearly), but since this is the
+            // error path, it should be fine.
+            //
+            StackFrameHeader* newHdr = dstHdr + 1;
+            newHdr->m_func = nullptr;
+            newHdr->m_caller = newHdr;  // stackBase of the old frame is just dstHdr + 1
+            newHdr->m_retAddr = DEEGEN_LIB_FUNC_RETURN_CONTINUATION(coro_propagate_error_trampoline);
+            newHdr->m_callerBytecodePtr.m_value = 0;
+            newHdr->m_numVariadicArguments = 0;
+
+            // Pass the error object as the first argument to the trampoline
+            //
+            TValue* newStackBase = reinterpret_cast<TValue*>(newHdr + 1);
+            newStackBase[0] = errorObject;
+
+            CoroSwitch(parentCoro, newStackBase, 1 /*numArgs*/);
+        }
     }
 
     StackFrameHeader* protectedCallFrame = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;

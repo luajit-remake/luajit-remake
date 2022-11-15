@@ -134,6 +134,12 @@ struct CoroutineStatus
     constexpr bool IsDead() { return BFM_isDead::Get(m_asValue); }
     constexpr void SetDead(bool v) { return BFM_isDead::Set(m_asValue, v); }
 
+    // To summarize, the possible states are:
+    // (1) IsResumable() => suspended coroutine
+    // (2) IsDead() => dead coroutine (finished execution or errored out)
+    // (3) !IsResumable() && !IsDead() => a coroutine in the stack of the active coroutines
+    //
+
     constexpr bool IsCoroutineObject() { return (m_asValue & ArrayType::x_coroutineTypeTag) > 0; }
 
     static constexpr CoroutineStatus CreateInitStatus()

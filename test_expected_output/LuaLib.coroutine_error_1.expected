@@ -1,0 +1,47 @@
+-- protected error in coroutine (test 1) --
+starting coro
+inside coro
+throwing error
+false
+inside coro after pcall
+true	return value from coro
+dead
+-- protected error in coroutine (test 2) --
+starting coro
+inside coro
+throwing error
+inside error handler, err=	false
+false
+inside coro after pcall
+true	return value from coro
+dead
+-- protected error in coroutine (test 3) --
+starting coro
+inside coro
+throwing error
+false
+inside coro after pcall 1
+true	yield value from coro
+suspended
+inside coro after yield
+throwing error after yield
+false
+inside coro after pcall 2
+true	return value from coro
+dead
+-- protected error in coroutine (test 4) --
+starting coro
+inside coro
+throwing error
+inside error handler, err=	false
+false
+inside coro after pcall
+true	yield value from coro
+suspended
+inside coro after yield
+throwing error after yield
+inside error handler after yield, err=	false
+false
+inside coro after pcall
+true	return value from coro
+dead

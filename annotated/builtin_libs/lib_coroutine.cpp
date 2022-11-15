@@ -185,7 +185,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_resume)
         // TODO: we need to check for stack overflow here once we implement resizable stack
         //
         TValue* dstStackBase = targetCoro->m_suspendPointStackBase;
-        MoveArgumentsForCoroutine(dstStackBase, GetStackBase() + 1, GetNumArgs() - 1);
+        size_t numArgsToPass = GetNumArgs() - 1;
+        MoveArgumentsForCoroutine(dstStackBase, GetStackBase() + 1, numArgsToPass);
+        for (size_t i = 0; i < x_minNilFillReturnValues; i++) { dstStackBase[numArgsToPass + i] = TValue::Create<tNil>(); }
 
         // DEVNOTE: 'm_numVariadicArguments' is repurposed by us here to distinguish whether
         // it is a coroutine.wrap or a coroutine.resume... 0 means coroutine.resume and 1 mean coroutine.wrap
@@ -194,7 +196,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_resume)
 
         // Transfer control to the target coroutine, this function call never returns
         //
-        CoroSwitch(targetCoro, dstStackBase, GetNumArgs() - 1);
+        CoroSwitch(targetCoro, dstStackBase, numArgsToPass);
     }
 
 not_coroutine_object_or_not_resumable:
@@ -322,7 +324,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
     // TODO: we need to check for stack overflow here once we implement resizable stack
     //
     TValue* dstStackBase = targetCoro->m_suspendPointStackBase;
-    MoveArgumentsForCoroutine(dstStackBase, GetStackBase(), GetNumArgs());
+    size_t numArgsToPass = GetNumArgs();
+    MoveArgumentsForCoroutine(dstStackBase, GetStackBase(), numArgsToPass);
+    for (size_t i = 0; i < x_minNilFillReturnValues; i++) { dstStackBase[numArgsToPass + i] = TValue::Create<tNil>(); }
 
     // DEVNOTE: 'm_numVariadicArguments' is repurposed by us here to distinguish whether
     // it is a coroutine.wrap or a coroutine.resume... 0 means coroutine.resume and 1 mean coroutine.wrap
@@ -331,7 +335,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 
     // Transfer control to the target coroutine, this function call never returns
     //
-    CoroSwitch(targetCoro, dstStackBase, GetNumArgs());
+    CoroSwitch(targetCoro, dstStackBase, numArgsToPass);
 }
 
 // coroutine.wrap -- https://www.lua.org/manual/5.1/manual.html#pdf-coroutine.wrap

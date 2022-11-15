@@ -320,10 +320,10 @@ test_ret_passing_4(coro3())
 test_ret_passing_4(coro4())
 
 print('-- argument passing (coroutine.create + coroutine.yield) --')
-coro1 = function() return coroutine.create(function(a) print('arg:',a) a = coroutine.yield() print('yield:',a) end) end
-coro2 = function() return coroutine.create(function(a,b) print('arg:',a,b) a,b = coroutine.yield() print('yield:',a,b) end) end
-coro3 = function() return coroutine.create(function(a,b,c) print('arg:',a,b,c) a,b,c = coroutine.yield() print('yield:',a,b,c) end) end
-coro4 = function() return coroutine.create(function(a,b,c,d) print('arg:',a,b,c,d) a,b,c,d = coroutine.yield() print('yield:',a,b,c,d) end) end
+coro1 = function() return coroutine.create(function(a) print('arg:',a) a=a==a; a = coroutine.yield() print('yield:',a) end) end
+coro2 = function() return coroutine.create(function(a,b) print('arg:',a,b) a=a==a; b=b==b; a,b = coroutine.yield() print('yield:',a,b) end) end
+coro3 = function() return coroutine.create(function(a,b,c) print('arg:',a,b,c) a=a==a; b=b==b; c=c==c; a,b,c = coroutine.yield() print('yield:',a,b,c) end) end
+coro4 = function() return coroutine.create(function(a,b,c,d) print('arg:',a,b,c,d) a=a==a; b=b==b; c=c==c; d=d==d; a,b,c,d = coroutine.yield() print('yield:',a,b,c,d) end) end
 
 test_arg_passing_0 = function (c)
 	print(coroutine.resume(c))
@@ -372,10 +372,10 @@ test_arg_passing_4(coro3())
 test_arg_passing_4(coro4())
 
 print('-- argument passing (coroutine.wrap + coroutine.yield) --')
-coro1 = function() return coroutine.wrap(function(a) print('arg:',a) a = coroutine.yield() print('yield:',a) end) end
-coro2 = function() return coroutine.wrap(function(a,b) print('arg:',a,b) a,b = coroutine.yield() print('yield:',a,b) end) end
-coro3 = function() return coroutine.wrap(function(a,b,c) print('arg:',a,b,c) a,b,c = coroutine.yield() print('yield:',a,b,c) end) end
-coro4 = function() return coroutine.wrap(function(a,b,c,d) print('arg:',a,b,c,d) a,b,c,d = coroutine.yield() print('yield:',a,b,c,d) end) end
+coro1 = function() return coroutine.wrap(function(a) print('arg:',a) a=a==a; a = coroutine.yield() print('yield:',a) end) end
+coro2 = function() return coroutine.wrap(function(a,b) print('arg:',a,b) a=a==a; b=b==b; a,b = coroutine.yield() print('yield:',a,b) end) end
+coro3 = function() return coroutine.wrap(function(a,b,c) print('arg:',a,b,c) a=a==a; b=b==b; c=c==c; a,b,c = coroutine.yield() print('yield:',a,b,c) end) end
+coro4 = function() return coroutine.wrap(function(a,b,c,d) print('arg:',a,b,c,d) a=a==a; b=b==b; c=c==c; d=d==d; a,b,c,d = coroutine.yield() print('yield:',a,b,c,d) end) end
 
 test_arg_passing_0 = function (c)
 	print(c())
