@@ -235,6 +235,9 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     vm->InitializeLibFn<VM::LibFn::BaseError>(TValue::Create<tFunction>(libfn_base_error));
     vm->InitializeLibFn<VM::LibFn::BaseNext>(TValue::Create<tFunction>(libfn_base_next));
     vm->InitializeLibFn<VM::LibFn::BaseIPairsIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_ipairs_iterator))));
+    vm->InitializeLibFn<VM::LibFn::BaseToString>(TValue::Create<tFunction>(libfn_base_tostring));
+    vm->m_stringNameForToStringMetamethod = vm->CreateStringObjectFromRawCString("__tostring");
+    vm->m_toStringString = vm->CreateStringObjectFromRawCString("tostring");
 
     // Initialize coroutine library
     // The coroutine library has no non-function fields
@@ -303,6 +306,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
         HeapPtr<TableObject> string_type_metatable = TableObject::CreateEmptyTableObject(vm, 1 /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/);
         h.InsertField(string_type_metatable, "__index", TValue::Create<tTable>(libobj_string));
         vm->m_metatableForString = string_type_metatable;
+        vm->m_initialHiddenClassOfMetatableForString = TCGet(string_type_metatable->m_hiddenClass);
     }
 
     // Initialize table library

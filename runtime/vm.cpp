@@ -301,6 +301,10 @@ bool WARN_UNUSED VM::InitializeVMGlobalData()
     m_metatableForFunction = UserHeapPointer<void>();
     m_metatableForCoroutine = UserHeapPointer<void>();
 
+    m_toStringString.m_value = 0;
+    m_stringNameForToStringMetamethod.m_value = 0;
+    m_initialHiddenClassOfMetatableForString.m_value = 0;
+
     m_usrPRNG = nullptr;
 
     CreateRootCoroutine();

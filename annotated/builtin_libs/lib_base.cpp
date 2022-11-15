@@ -332,6 +332,219 @@ DEEGEN_DEFINE_LIB_FUNC(base_pairs)
     Return(VM_GetLibFunctionObject<VM::LibFn::BaseNext>(), input, TValue::Create<tNil>());
 }
 
+static std::pair<bool, TValue> WARN_UNUSED IsGlobalToStringFunctionUnchanged(VM* vm, HeapPtr<TableObject> globalObject)
+{
+    GetByIdICInfo info;
+    TableObject::PrepareGetByIdForGlobalObject(globalObject, vm->m_toStringString, info /*out*/);
+    TValue globalToString = TableObject::GetById(globalObject, UserHeapPointer<void> { vm->m_toStringString.As() }, info);
+    TValue expected = VM_GetLibFunctionObject<VM::LibFn::BaseToString>();
+    return std::make_pair(globalToString.m_value == expected.m_value, globalToString);
+}
+
+static bool WARN_UNUSED HasNoExoticToStringMetamethodForStringType(VM* vm)
+{
+    if (vm->m_metatableForString.m_value == 0)
+    {
+        return true;
+    }
+    HeapPtr<TableObject> tab = vm->m_metatableForString.As<TableObject>();
+    assert(tab->m_type == HeapEntityType::Table);
+    SystemHeapPointer<void> hiddenClass = TCGet(tab->m_hiddenClass);
+    return hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value;
+}
+
+// This function may only be called if both the 'IsGlobalToStringFunctionUnchanged' check and
+// the 'HasNoExoticToStringMetamethodForStringType' check have passed.
+//
+static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
+{
+    if (tv.Is<tDouble>())
+    {
+        if (unlikely(vm->m_metatableForNumber.m_value != 0))
+        {
+            return false;
+        }
+        double dbl = tv.As<tDouble>();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        fprintf(fp, "%s", buf);
+        return true;
+    }
+
+    if (tv.Is<tMIV>())
+    {
+        MiscImmediateValue miv = tv.AsMIV();
+        if (miv.IsNil())
+        {
+            if (unlikely(vm->m_metatableForNil.m_value != 0))
+            {
+                return false;
+            }
+            fprintf(fp, "nil");
+        }
+        else
+        {
+            assert(miv.IsBoolean());
+            if (unlikely(vm->m_metatableForBoolean.m_value != 0))
+            {
+                return false;
+            }
+            fprintf(fp, "%s", (miv.GetBooleanValue() ? "true" : "false"));
+        }
+        return true;
+    }
+
+    assert(tv.Is<tHeapEntity>());
+    HeapEntityType ty = tv.GetHeapEntityType();
+    void* p = TranslateToRawPointer(vm, tv.As<tHeapEntity>());
+    if (ty == HeapEntityType::String)
+    {
+        HeapString* hs = reinterpret_cast<HeapString*>(p);
+        fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
+        return true;
+    }
+
+    if (ty == HeapEntityType::Function)
+    {
+        if (unlikely(vm->m_metatableForFunction.m_value != 0))
+        {
+            return false;
+        }
+        fprintf(fp, "function: %p", static_cast<void*>(p));
+        return true;
+    }
+
+    if (ty == HeapEntityType::Thread)
+    {
+        if (unlikely(vm->m_metatableForCoroutine.m_value != 0))
+        {
+            return false;
+        }
+        fprintf(fp, "thread: %p", static_cast<void*>(p));
+        return true;
+    }
+
+    if (ty == HeapEntityType::Userdata)
+    {
+        // TODO: support userdata
+        //
+        assert(false && "unimplemented");
+        __builtin_unreachable();
+    }
+
+    assert(ty == HeapEntityType::Table);
+    HeapPtr<TableObject> tableObj = tv.As<tTable>();
+    UserHeapPointer<void> mt = TableObject::GetMetatable(tableObj).m_result;
+    if (unlikely(mt.m_value != 0))
+    {
+        return false;
+    }
+    fprintf(fp, "table: %p", static_cast<void*>(p));
+    return true;
+}
+
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_print_continuation)
+{
+    if (unlikely(GetNumReturnValues() == 0))
+    {
+        ThrowError("'tostring' must return a string to 'print'");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    FILE* fp = vm->GetStdout();
+
+    TValue valueToPrint = GetReturnValuesBegin()[0];
+    // Print the value returned from the 'tostring' function
+    // Lua only allows this value to be number or string, otherwise it will error out
+    //
+    if (valueToPrint.Is<tString>())
+    {
+        HeapString* hs = TranslateToRawPointer(vm, valueToPrint.As<tString>());
+        fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
+    }
+    else if (valueToPrint.Is<tDouble>())
+    {
+        double dbl = valueToPrint.As<tDouble>();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        fprintf(fp, "%s", buf);
+    }
+    else
+    {
+        ThrowError("'tostring' must return a string to 'print'");
+    }
+
+    // Having printed the current element, now we should continue to print the remaining elements.
+    // Load the information from the call frame to figure out what we should print next.
+    //
+    TValue* sb = GetStackBase();
+    assert(sb[0].Is<tInt32>());
+    size_t numElementsToPrint = static_cast<size_t>(sb[0].As<tInt32>());
+    assert(sb[numElementsToPrint].Is<tInt32>());
+    size_t curElementToPrint = static_cast<size_t>(sb[numElementsToPrint].As<tInt32>());
+    assert(0 < curElementToPrint && curElementToPrint <= numElementsToPrint);
+    if (curElementToPrint == numElementsToPrint)
+    {
+        fprintf(fp, "\n");
+        Return();
+    }
+
+    fprintf(fp, "\t");
+
+    // Having returned from a call (which can do anything), we need to re-validate the fast path conditions.
+    // However, we should not lookup the global 'tostring' again. Instead we should retrieve its cached value
+    // from the call frame. This is required to exhibit identical behavior as official Lua implementation.
+    //
+    TValue toStringFn = sb[numElementsToPrint + 1];
+    if (unlikely(toStringFn.m_value != vm->GetLibFn<VM::LibFn::BaseToString>().m_value))
+    {
+        goto make_call_slowpath;
+    }
+    if (unlikely(!HasNoExoticToStringMetamethodForStringType(vm)))
+    {
+        goto make_call_slowpath;
+    }
+
+    while (curElementToPrint < numElementsToPrint)
+    {
+        if (unlikely(!TryPrintUsingFastPath(vm, fp, sb[curElementToPrint])))
+        {
+            goto make_call_slowpath;
+        }
+        curElementToPrint++;
+        if (curElementToPrint < numElementsToPrint)
+        {
+            fprintf(fp, "\t");
+        }
+    }
+    fprintf(fp, "\n");
+    Return();
+
+make_call_slowpath:
+    valueToPrint = sb[curElementToPrint];
+    sb[numElementsToPrint] = TValue::Create<tInt32>(static_cast<int32_t>(curElementToPrint + 1));
+
+    TValue* callFrame = sb + numElementsToPrint + 2;
+    if (likely(toStringFn.Is<tFunction>()))
+    {
+        callFrame[0] = toStringFn;
+        callFrame[x_numSlotsForStackFrameHeader] = valueToPrint;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
+    }
+    else
+    {
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(toStringFn);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(toStringFn));
+        }
+        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        callFrame[x_numSlotsForStackFrameHeader] = toStringFn;
+        callFrame[x_numSlotsForStackFrameHeader + 1] = valueToPrint;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
+    }
+}
+
 // base.print -- https://www.lua.org/manual/5.1/manual.html#pdf-print
 //
 // print (···)
@@ -339,22 +552,87 @@ DEEGEN_DEFINE_LIB_FUNC(base_pairs)
 // print is not intended for formatted output, but only as a quick way to show a value, typically for debugging. For formatted
 // output, use string.format.
 //
-// TODO: we need to properly call the tostring metamethod as needed. Currently we are simply unaware of the tostring metamethod.
+// DEVNOTE: Lua 5.1-5.3 actually requires dynamically looking up the global value 'tostring', and invoke that function for
+// each value to print. And the 'tostring' function always needs to check for '__tostring' metamethod, even for primitive data type.
+// Therefore, we provide a fastpath for the common case that:
+// (1) The global 'tostring' function is not changed
+// (2) No exotic '__tostring' metamethod exists for non-table/userdata types.
+// We can stay on the fastpath until we make a call (for a table with __tostring metamethod). Since the call can do anything,
+// we need to recheck the fastpath condition after we get back from the call.
 //
 DEEGEN_DEFINE_LIB_FUNC(base_print)
 {
-    FILE* fp = VM::GetActiveVMForCurrentThread()->GetStdout();
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    FILE* fp = vm->GetStdout();
+
     size_t numArgs = GetNumArgs();
-    for (size_t i = 0; i < numArgs; i++)
+    if (numArgs == 0)
     {
-        if (i > 0)
+        fprintf(fp, "\n");
+        Return();
+    }
+
+    size_t cur = 0;
+    CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
+    auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, currentCoro->m_globalObject.As());
+    if (unlikely(!isToStringUnchanged))
+    {
+        goto make_call_slowpath;
+    }
+    if (unlikely(!HasNoExoticToStringMetamethodForStringType(vm)))
+    {
+        goto make_call_slowpath;
+    }
+
+    while (cur < numArgs)
+    {
+        if (cur > 0)
         {
             fprintf(fp, "\t");
         }
-        PrintTValue(fp, GetArg(i));
+        if (unlikely(!TryPrintUsingFastPath(vm, fp, GetArg(cur))))
+        {
+            goto make_call_slowpath;
+        }
+        cur++;
     }
     fprintf(fp, "\n");
     Return();
+
+make_call_slowpath:
+    TValue* sb = GetStackBase();
+    TValue valueToPrint = sb[cur];
+    // We store the # of arguments at slot 0 (this is fine since we don't need slot 0's value at this moment)
+    // the ordinal of the next value to print at slot numArg, the toString function at slot numArg + 1,
+    // so that these information can survive the call.
+    //
+    sb[0] = TValue::Create<tInt32>(static_cast<int32_t>(numArgs));
+    sb[numArgs] = TValue::Create<tInt32>(static_cast<int32_t>(cur + 1));
+    // This is required to exhibit the same behavior as official Lua. Official Lua will only lookup the global 'tostring'
+    // once, and cache it to print all values in this 'print' call, even if the global 'tostring' value is modified by
+    // user metamethod logic in between.
+    //
+    sb[numArgs + 1] = toStringFn;
+
+    TValue* callFrame = sb + numArgs + 2;
+    if (likely(toStringFn.Is<tFunction>()))
+    {
+        callFrame[0] = toStringFn;
+        callFrame[x_numSlotsForStackFrameHeader] = valueToPrint;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
+    }
+    else
+    {
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(toStringFn);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(toStringFn));
+        }
+        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        callFrame[x_numSlotsForStackFrameHeader] = toStringFn;
+        callFrame[x_numSlotsForStackFrameHeader + 1] = valueToPrint;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
+    }
 }
 
 // base.rawequal -- https://www.lua.org/manual/5.1/manual.html#pdf-rawequal
@@ -765,6 +1043,82 @@ base_10_conversion:
     }
 }
 
+static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
+{
+    if (value.Is<tDouble>())
+    {
+        double dbl = value.AsDouble();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        return TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
+    }
+    else if (value.Is<tMIV>())
+    {
+        MiscImmediateValue miv = value.AsMIV();
+        if (miv.IsNil())
+        {
+            return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("nil"));
+        }
+        else
+        {
+            assert(miv.IsBoolean());
+            if (miv.GetBooleanValue())
+            {
+                return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("true"));
+            }
+            else
+            {
+                return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("false"));
+            }
+        }
+    }
+    else
+    {
+        assert(value.Is<tHeapEntity>());
+        if (value.Is<tString>())
+        {
+            return value;
+        }
+
+        UserHeapGcObjectHeader* p = TranslateToRawPointer(vm, value.As<tHeapEntity>());
+        char buf[100];
+        if (p->m_type == HeapEntityType::Function)
+        {
+            sprintf(buf, "function: %p", static_cast<void*>(p));
+        }
+        else if (p->m_type == HeapEntityType::Table)
+        {
+            sprintf(buf, "table: %p", static_cast<void*>(p));
+        }
+        else if (p->m_type == HeapEntityType::Thread)
+        {
+            sprintf(buf, "thread: %p", static_cast<void*>(p));
+        }
+        else
+        {
+            // TODO: support userdata
+            //
+            assert(p->m_type == HeapEntityType::Userdata);
+            assert(false && "unimplemented");
+            __builtin_unreachable();
+        }
+
+        return TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
+    }
+}
+
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_tostring_continuation)
+{
+    if (GetNumReturnValues() == 0)
+    {
+        Return(TValue::Create<tNil>());
+    }
+    else
+    {
+        Return(GetReturnValuesBegin()[0]);
+    }
+}
+
 // base.tostring -- https://www.lua.org/manual/5.1/manual.html#pdf-tostring
 //
 // tostring (e)
@@ -776,7 +1130,48 @@ base_10_conversion:
 //
 DEEGEN_DEFINE_LIB_FUNC(base_tostring)
 {
-    ThrowError("Library function 'tostring' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'tostring' (value expected)");
+    }
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    TValue value = GetArg(0);
+    UserHeapPointer<void> mt = GetMetatableForValue(value);
+    if (likely(mt.m_value == 0))
+    {
+        Return(LuaDefaultStringifyValue(vm, value));
+    }
+
+    HeapPtr<TableObject> metatable = mt.As<TableObject>();
+    assert(metatable->m_type == HeapEntityType::Table);
+    GetByIdICInfo info;
+    TableObject::PrepareGetById(metatable, vm->m_stringNameForToStringMetamethod, info /*out*/);
+    TValue metamethod = TableObject::GetById(metatable, vm->m_stringNameForToStringMetamethod.As(), info);
+
+    if (likely(metamethod.Is<tNil>()))
+    {
+        Return(LuaDefaultStringifyValue(vm, value));
+    }
+
+    TValue* callFrame = GetStackBase();
+    if (likely(metamethod.Is<tFunction>()))
+    {
+        callFrame[0] = metamethod;
+        callFrame[x_numSlotsForStackFrameHeader] = value;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_tostring_continuation));
+    }
+    else
+    {
+        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        if (unlikely(callTarget == nullptr))
+        {
+            ThrowError(MakeErrorMessageForUnableToCall(metamethod));
+        }
+        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        callFrame[x_numSlotsForStackFrameHeader] = metamethod;
+        callFrame[x_numSlotsForStackFrameHeader + 1] = value;
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_tostring_continuation));
+    }
 }
 
 // base.type -- https://www.lua.org/manual/5.1/manual.html#pdf-type

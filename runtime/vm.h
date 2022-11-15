@@ -724,6 +724,7 @@ public:
         BaseNext,
         BaseError,
         BaseIPairsIter,
+        BaseToString,
         // must be last member
         //
         X_END_OF_ENUM
@@ -1005,6 +1006,21 @@ public:
     UserHeapPointer<void> m_metatableForString;
     UserHeapPointer<void> m_metatableForFunction;
     UserHeapPointer<void> m_metatableForCoroutine;
+
+    // The string 'tostring'
+    //
+    UserHeapPointer<HeapString> m_toStringString;
+
+    // The string '__tostring'
+    //
+    UserHeapPointer<HeapString> m_stringNameForToStringMetamethod;
+
+    // In Lua, the 'string' type initially has a non-nil metatable. This is the only per-type metatable that exists by default in Lua.
+    // This value records the initial hidden class for 'm_metatableForString', which allows us to quickly rule out existence
+    // of certain fields in that metatable. (Specifically, if the hidden class has not been changed, then we know for sure that
+    // the only string field in the metatable is '__index').
+    //
+    SystemHeapPointer<void> m_initialHiddenClassOfMetatableForString;
 };
 
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
