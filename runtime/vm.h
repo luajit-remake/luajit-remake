@@ -723,6 +723,7 @@ public:
     {
         BaseNext,
         BaseError,
+        BaseIPairsIter,
         // must be last member
         //
         X_END_OF_ENUM

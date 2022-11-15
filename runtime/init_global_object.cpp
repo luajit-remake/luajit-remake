@@ -181,11 +181,16 @@ struct CreateGlobalObjectHelper
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
     }
 
+    HeapPtr<FunctionObject> CreateCFunc(void* func)
+    {
+        return FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func)).As();
+    }
+
     HeapPtr<FunctionObject> InsertCFunc(HeapPtr<TableObject> r, const char* propName, void* func)
     {
-        UserHeapPointer<FunctionObject> funcObj = FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func));
-        InsertField(r, propName, TValue::CreatePointer(funcObj));
-        return funcObj.As();
+        HeapPtr<FunctionObject> funcObj = CreateCFunc(func);
+        InsertField(r, propName, TValue::Create<tFunction>(funcObj));
+        return funcObj;
     }
 
     HeapPtr<HeapString> InsertString(HeapPtr<TableObject> r, const char* propName, const char* stringValue)
@@ -206,6 +211,7 @@ struct CreateGlobalObjectHelper
 };
 
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(coroutine_wrap_call);
+DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_ipairs_iterator);
 
 #define INSERT_LIBFN(libName, fnName)                                               \
     [[maybe_unused]] HeapPtr<FunctionObject> libfn_ ## libName ##_ ## fnName =      \
@@ -228,6 +234,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 
     vm->InitializeLibFn<VM::LibFn::BaseError>(TValue::Create<tFunction>(libfn_base_error));
     vm->InitializeLibFn<VM::LibFn::BaseNext>(TValue::Create<tFunction>(libfn_base_next));
+    vm->InitializeLibFn<VM::LibFn::BaseIPairsIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_ipairs_iterator))));
 
     // Initialize coroutine library
     // The coroutine library has no non-function fields

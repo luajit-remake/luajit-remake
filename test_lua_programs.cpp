@@ -639,6 +639,11 @@ TEST(LuaTest, GetSetMetatable)
     RunSimpleLuaTest("luatests/get_set_metatable.lua.json");
 }
 
+TEST(LuaTest, getsetmetatable_2)
+{
+    RunSimpleLuaTest("luatests/getsetmetatable_2.lua.json");
+}
+
 TEST(LuaTest, metatable_call_1)
 {
     RunSimpleLuaTest("luatests/metatable_call_1.lua.json");
@@ -964,6 +969,11 @@ TEST(LuaLib, base_assert)
     RunSimpleLuaTest("luatests/lib_base_assert.lua.json");
 }
 
+TEST(LuaLib, base_assert_2)
+{
+    RunSimpleLuaTest("luatests/base_lib_assert_2.lua.json");
+}
+
 TEST(LuaLib, RawsetReturnsOriginalTable)
 {
     RunSimpleLuaTest("luatests/rawset_returns_original_table.lua.json");
@@ -1047,6 +1057,51 @@ TEST(LuaLib, coroutine_error_2)
 TEST(LuaLib, coroutine_error_3)
 {
     RunSimpleLuaTest("luatests/coroutine_error_3.lua.json");
+}
+
+TEST(LuaLib, base_ipairs)
+{
+    RunSimpleLuaTest("luatests/base_lib_ipairs.lua.json");
+}
+
+TEST(LuaLib, base_ipairs_2)
+{
+    RunSimpleLuaTest("luatests/base_lib_ipairs_2.lua.json");
+}
+
+TEST(LuaLib, base_rawequal)
+{
+    RunSimpleLuaTest("luatests/base_lib_rawequal.lua.json");
+}
+
+TEST(LuaLib, base_select_1)
+{
+    RunSimpleLuaTest("luatests/base_lib_select_1.lua.json");
+}
+
+TEST(LuaLib, base_select_2)
+{
+    RunSimpleLuaTest("luatests/base_lib_select_2.lua.json");
+}
+
+TEST(LuaLib, base_lib_type)
+{
+    RunSimpleLuaTest("luatests/base_lib_type.lua.json");
+}
+
+TEST(LuaLib, base_lib_next)
+{
+    RunSimpleLuaTest("luatests/base_lib_next.lua.json");
+}
+
+TEST(LuaLib, base_lib_pairs)
+{
+    RunSimpleLuaTest("luatests/base_lib_pairs.lua.json");
+}
+
+TEST(LuaLib, base_lib_pcall)
+{
+    RunSimpleLuaTest("luatests/base_lib_pcall.lua.json");
 }
 
 }   // anonymous namespace

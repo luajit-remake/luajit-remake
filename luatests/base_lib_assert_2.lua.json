@@ -1,0 +1,871 @@
+{
+  "ChunkName": "@luatests/base_lib_assert_2.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 1,
+      "SourceLineStart": 10,
+      "SourceLineEnd": 10,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 10
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 41,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "ISEQN",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "KNUM",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "ISEQN",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 2, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "ISEQV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 5, 3 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 2, 2 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "ISEQV",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 5, 4 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 3, 3 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 0, 3 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 1, 4 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 6, 5 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 5 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 5, 5 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 2, 5 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 2 ],
+          "SourceLine": 21
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "ISEQN",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 2 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 2 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 2 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 6 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 3, 3 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 1, 7 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 6 ],
+          "SourceLine": 34
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 34
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 34
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 6, 8 ],
+          "SourceLine": 34
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 3, 4 ],
+          "SourceLine": 34
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "ISEQS",
+          "OpData": [ 1, 8 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 9 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 10 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 0, 1, 2 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 39
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "assert"
+        },
+        {
+          "Type": "String",
+          "Value": "x"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "String",
+          "Value": "b"
+        },
+        {
+          "Type": "String",
+          "Value": "c"
+        },
+        {
+          "Type": "String",
+          "Value": "d"
+        },
+        {
+          "Type": "String",
+          "Value": "pcall"
+        },
+        {
+          "Type": "String",
+          "Value": "assertion failed!"
+        },
+        {
+          "Type": "String",
+          "Value": "msg"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "test end"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 3
+        },
+        {
+          "Type": "Double",
+          "Value": 1.5E0
+        },
+        {
+          "Type": "Int32",
+          "Value": 5
+        }
+      ]
+    }
+  ]
+}

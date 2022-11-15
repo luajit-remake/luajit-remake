@@ -11,7 +11,7 @@
 DEEGEN_DEFINE_LIB_FUNC(base_assert)
 {
     size_t numArgs = GetNumArgs();
-    if (numArgs == 0)
+    if (unlikely(numArgs == 0))
     {
         ThrowError("bad argument #1 to 'assert' (value expected)");
     }
@@ -97,7 +97,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_getfenv)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
 {
-    if (GetNumArgs() == 0)
+    if (unlikely(GetNumArgs() == 0))
     {
         ThrowError("bad argument #1 to 'getmetatable' (value expected)");
     }
@@ -127,6 +127,46 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
     }
 }
 
+// The iterator returned by ipairs
+//
+DEEGEN_DEFINE_LIB_FUNC(base_ipairs_iterator)
+{
+    if (unlikely(GetNumArgs() < 2))
+    {
+        ThrowError("bad argument #2 to 'ipairs iterator' (number expected, got no value)");
+    }
+    TValue arg1 = GetArg(0);
+    if (unlikely(!arg1.Is<tTable>()))
+    {
+        ThrowError("bad argument #1 to 'ipairs iterator' (table expected)");
+    }
+    HeapPtr<TableObject> tableObj = arg1.As<tTable>();
+    TValue arg2 = GetArg(1);
+    if (unlikely(!arg2.Is<tDouble>()))
+    {
+        ThrowError("bad argument #2 to 'ipairs iterator' (number expected)");
+    }
+    double idxDouble = arg2.As<tDouble>();
+    // Lua standard only enforce behavior on one use of this function, which is as the iterator for iterative for loop.
+    // So we may safely assume that 'idx' is a small and valid array index. If not, we can exhibit any behavior as long
+    // as we don't crash. Lua official implementation doesn't seem to error out in this case either.
+    //
+    int32_t idx = static_cast<int32_t>(idxDouble);
+    idx++;
+
+    GetByIntegerIndexICInfo icInfo;
+    TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
+    TValue res = TableObject::GetByIntegerIndex(tableObj, idx, icInfo);
+    if (res.Is<tNil>())
+    {
+        Return();
+    }
+    else
+    {
+        Return(TValue::Create<tDouble>(idx), res);
+    }
+}
+
 // base.ipairs -- https://www.lua.org/manual/5.1/manual.html#pdf-ipairs
 //
 // ipairs (t)
@@ -136,7 +176,17 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_ipairs)
 {
-    ThrowError("Library function 'ipairs' is not implemented yet!");
+    if (unlikely(GetNumArgs() < 1))
+    {
+        ThrowError("bad argument #1 to 'ipairs' (table expected, got no value)");
+    }
+    TValue arg1 = GetArg(0);
+    if (unlikely(!arg1.Is<tTable>()))
+    {
+        ThrowError("bad argument #1 to 'ipairs' (table expected)");
+    }
+    TValue iterFn = VM_GetLibFunctionObject<VM::LibFn::BaseIPairsIter>();
+    Return(iterFn, arg1, TValue::Create<tDouble>(0));
 }
 
 // base.load -- https://www.lua.org/manual/5.1/manual.html#pdf-load
@@ -214,13 +264,13 @@ DEEGEN_DEFINE_LIB_FUNC(base_module)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_next)
 {
-    if (GetNumArgs() == 0)
+    if (unlikely(GetNumArgs() == 0))
     {
         ThrowError("bad argument #1 to 'next' (table expected, got no value)");
     }
 
     TValue tab = GetArg(0);
-    if (!tab.Is<tTable>())
+    if (unlikely(!tab.Is<tTable>()))
     {
         ThrowError("bad argument #1 to 'next' (table expected)");
     }
@@ -238,7 +288,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
 
     TableObjectIterator::KeyValuePair kv;
     bool success = TableObjectIterator::GetNextFromKey(tableObj, key, kv /*out*/);
-    if (!success)
+    if (unlikely(!success))
     {
         ThrowError("invalid key to 'next'");
     }
@@ -268,12 +318,12 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_pairs)
 {
-    if (GetNumArgs() == 0)
+    if (unlikely(GetNumArgs() == 0))
     {
         ThrowError("bad argument #1 to 'pairs' (table expected, got no value)");
     }
     TValue input = GetArg(0);
-    if (!input.Is<tTable>())
+    if (unlikely(!input.Is<tTable>()))
     {
         ThrowError("bad argument #1 to 'pairs' (table expected)");
     }
@@ -313,7 +363,24 @@ DEEGEN_DEFINE_LIB_FUNC(base_print)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_rawequal)
 {
-    ThrowError("Library function 'rawequal' is not implemented yet!");
+    if (unlikely(GetNumArgs() < 2))
+    {
+        ThrowError("bad argument #2 to 'rawequal' (value expected)");
+    }
+    TValue lhs = GetArg(0);
+    TValue rhs = GetArg(1);
+    bool result;
+    // See equality_bytecodes.cpp for explanation
+    //
+    if (rhs.Is<tDouble>())
+    {
+        result = UnsafeFloatEqual(lhs.ViewAsDouble(), rhs.As<tDouble>());
+    }
+    else
+    {
+        result = (lhs.m_value == rhs.m_value);
+    }
+    Return(TValue::Create<tBool>(result));
 }
 
 // base.rawget -- https://www.lua.org/manual/5.1/manual.html#pdf-rawget
@@ -324,14 +391,14 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawequal)
 DEEGEN_DEFINE_LIB_FUNC(base_rawget)
 {
     size_t numArgs = GetNumArgs();
-    if (numArgs < 2)
+    if (unlikely(numArgs < 2))
     {
         ThrowError("bad argument #2 to 'rawget' (value expected)");
     }
 
     TValue base = GetArg(0);
     TValue index = GetArg(1);
-    if (!base.Is<tTable>())
+    if (unlikely(!base.Is<tTable>()))
     {
         ThrowError("bad argument #1 to 'rawget' (table expected)");
     }
@@ -405,7 +472,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawget)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_rawset)
 {
-    if (GetNumArgs() < 3)
+    if (unlikely(GetNumArgs() < 3))
     {
         ThrowError("bad argument #3 to 'rawset' (value expected)");
     }
@@ -413,7 +480,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
     TValue base = GetArg(0);
     TValue index = GetArg(1);
     TValue newValue = GetArg(2);
-    if (!base.Is<tTable>())
+    if (unlikely(!base.Is<tTable>()))
     {
         ThrowError("bad argument #1 to 'rawset' (table expected)");
     }
@@ -430,7 +497,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
     if (index.Is<tDouble>())
     {
         double indexDouble = index.As<tDouble>();
-        if (IsNaN(indexDouble))
+        if (unlikely(IsNaN(indexDouble)))
         {
             ThrowError("table index is NaN");
         }
@@ -445,7 +512,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
     else
     {
         assert(index.Is<tMIV>());
-        if (index.Is<tNil>())
+        if (unlikely(index.Is<tNil>()))
         {
             ThrowError("table index is nil");
         }
@@ -492,7 +559,50 @@ DEEGEN_DEFINE_LIB_FUNC(base_require)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_select)
 {
-    ThrowError("Library function 'select' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'select' (number expected, got no value)");
+    }
+
+    TValue selector = GetArg(0);
+    if (selector.Is<tDouble>())
+    {
+        // This is exactly official Lua's logic. This is required, otherwise we could exhibit
+        // different behavior regarding the "index out of range" error.
+        //
+        int64_t ord = static_cast<int64_t>(selector.As<tDouble>());
+        int64_t range = static_cast<int64_t>(numArgs);
+        if (ord < 0)
+        {
+            ord += range;
+        }
+        else if (ord > range)
+        {
+            ord = range;
+        }
+        if (unlikely(ord < 1))
+        {
+            ThrowError("bad argument #1 to 'select' (index out of range)");
+        }
+        ReturnValueRange(GetStackBase() + ord, static_cast<size_t>(range - ord));
+    }
+
+    bool isCountSelector = false;
+    if (likely(selector.Is<tString>()))
+    {
+        HeapPtr<HeapString> str = selector.As<tString>();
+        if (likely(str->m_length == 1 && str->m_string[0] == static_cast<uint8_t>('#')))
+        {
+            isCountSelector = true;
+        }
+    }
+    if (unlikely(!isCountSelector))
+    {
+        ThrowError("bad argument #1 to 'select' (number expected)");
+    }
+
+    Return(TValue::Create<tDouble>(static_cast<double>(numArgs - 1)));
 }
 
 // base.setfenv -- https://www.lua.org/manual/5.1/manual.html#pdf-setfenv
@@ -519,26 +629,26 @@ DEEGEN_DEFINE_LIB_FUNC(base_setfenv)
 DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
 {
     size_t numArgs = GetNumArgs();
-    if (numArgs == 0)
+    if (unlikely(numArgs == 0))
     {
         ThrowError("bad argument #1 to 'setmetatable' (table expected, got no value)");
     }
 
     TValue value = GetArg(0);
-    if (!value.Is<tTable>())
+    if (unlikely(!value.Is<tTable>()))
     {
         // TODO: make this error message consistent with Lua
         //
         ThrowError("bad argument #1 to 'setmetatable' (table expected)");
     }
 
-    if (numArgs == 1)
+    if (unlikely(numArgs == 1))
     {
         ThrowError("bad argument #2 to 'setmetatable' (nil or table expected)");
     }
 
     TValue mt = GetArg(1);
-    if (!mt.Is<tNil>() && !mt.Is<tTable>())
+    if (unlikely(!mt.Is<tNil>() && !mt.Is<tTable>()))
     {
         ThrowError("bad argument #2 to 'setmetatable' (nil or table expected)");
     }
@@ -554,7 +664,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
         TValue result = TableObject::GetById(existingMetatable, prop.As<void>(), icInfo);
-        if (!result.Is<tNil>())
+        if (unlikely(!result.Is<tNil>()))
         {
             ThrowError("cannot change a protected metatable");
         }
@@ -612,7 +722,57 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_type)
 {
-    ThrowError("Library function 'type' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'type' (value expected)");
+    }
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    TValue arg = GetArg(0);
+    if (arg.Is<tNil>())
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("nil")));
+    }
+    else if (arg.Is<tBool>())
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("boolean")));
+    }
+    else if (arg.Is<tDouble>())
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("number")));
+    }
+    else
+    {
+        assert(arg.Is<tHeapEntity>());
+        HeapEntityType ty = arg.GetHeapEntityType();
+        switch (ty)
+        {
+        case HeapEntityType::Table:
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("table")));
+        }
+        case HeapEntityType::Function:
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("function")));
+        }
+        case HeapEntityType::String:
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("string")));
+        }
+        case HeapEntityType::Thread:
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("thread")));
+        }
+        case HeapEntityType::Userdata:
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("userdata")));
+        }
+        default:
+        {
+            assert(false);
+            __builtin_unreachable();
+        }
+        }   /* switch ty*/
+    }
 }
 
 // base.unpack -- https://www.lua.org/manual/5.1/manual.html#pdf-unpack
