@@ -1017,29 +1017,45 @@ base_10_conversion:
         ThrowError("bad argument #2 to 'tonumber' (base out of range)");
     }
 
+    // When a non-10 base is explicitly given, even if a number is passed in, it is treated as a string
+    //
     if (input.Is<tDouble>())
     {
-        Return(input);
-    }
-
-    // Yes this is Lua behavior: if input is not string, and if base is not provided, is nil, or is 10,
-    // no error is thrown and the function returns nil.
-    // But if the base is explicitly provided to be a valid non-10 base, then an error is thrown if the input is not string.
-    //
-    if (!input.Is<tString>())
-    {
-        ThrowError("bad argument #1 to 'tonumber' (string expected)");
-    }
-    HeapString* str = TranslateToRawPointer(input.As<tString>());
-    StrScanResult res = TryConvertStringWithBaseToDoubleWithLuaSemantics(baseValue, str->m_string);
-    if (res.fmt == STRSCAN_ERROR)
-    {
-        Return(TValue::Create<tNil>());
+        double dbl = input.As<tDouble>();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        StrScanResult res = TryConvertStringWithBaseToDoubleWithLuaSemantics(baseValue, buf);
+        if (res.fmt == STRSCAN_ERROR)
+        {
+            Return(TValue::Create<tNil>());
+        }
+        else
+        {
+            assert(res.fmt == STRSCAN_NUM);
+            Return(TValue::Create<tDouble>(res.d));
+        }
     }
     else
     {
-        assert(res.fmt == STRSCAN_NUM);
-        Return(TValue::Create<tDouble>(res.d));
+        // Yes this is Lua behavior: if input is not string, and if base is not provided, is nil, or is 10,
+        // no error is thrown and the function returns nil.
+        // But if the base is explicitly provided to be a valid non-10 base, then an error is thrown if the input is not string.
+        //
+        if (!input.Is<tString>())
+        {
+            ThrowError("bad argument #1 to 'tonumber' (string expected)");
+        }
+        HeapString* str = TranslateToRawPointer(input.As<tString>());
+        StrScanResult res = TryConvertStringWithBaseToDoubleWithLuaSemantics(baseValue, str->m_string);
+        if (res.fmt == STRSCAN_ERROR)
+        {
+            Return(TValue::Create<tNil>());
+        }
+        else
+        {
+            assert(res.fmt == STRSCAN_NUM);
+            Return(TValue::Create<tDouble>(res.d));
+        }
     }
 }
 

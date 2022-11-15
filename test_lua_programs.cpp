@@ -1109,6 +1109,11 @@ TEST(LuaLib, base_lib_tonumber)
     RunSimpleLuaTest("luatests/base_lib_tonumber.lua.json");
 }
 
+TEST(LuaLib, base_lib_tonumber_2)
+{
+    RunSimpleLuaTest("luatests/base_lib_tonumber_2.lua.json");
+}
+
 TEST(LuaLib, base_lib_tostring)
 {
     RunSimpleLuaTest("luatests/base_lib_tostring.lua.json");
@@ -1137,6 +1142,16 @@ TEST(LuaLib, base_lib_tostring_5)
 TEST(LuaLib, base_lib_tostring_6)
 {
     RunSimpleLuaTest("luatests/base_lib_tostring_6.lua.json");
+}
+
+TEST(LuaLib, base_lib_print)
+{
+    RunSimpleLuaTest("luatests/base_lib_print.lua.json");
+}
+
+TEST(LuaLib, base_lib_print_2)
+{
+    RunSimpleLuaTest("luatests/base_lib_print_2.lua.json");
 }
 
 }   // anonymous namespace
