@@ -1154,4 +1154,9 @@ TEST(LuaLib, base_lib_print_2)
     RunSimpleLuaTest("luatests/base_lib_print_2.lua.json");
 }
 
+TEST(LuaLib, base_lib_unpack)
+{
+    RunSimpleLuaTest("luatests/base_lib_unpack.lua.json");
+}
+
 }   // anonymous namespace

@@ -1261,7 +1261,107 @@ DEEGEN_DEFINE_LIB_FUNC(base_type)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_unpack)
 {
-    ThrowError("Library function 'unpack' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'unpack' (table expected, got no value)");
+    }
+    TValue tvList = GetArg(0);
+    if (unlikely(!tvList.Is<tTable>()))
+    {
+        ThrowError("bad argument #1 to 'unpack' (table expected)");
+    }
+    HeapPtr<TableObject> tableObj = tvList.As<tTable>();
+
+    int64_t lb;
+    if (numArgs == 1)
+    {
+        lb = 1;
+    }
+    else
+    {
+        TValue tvLb = GetArg(1);
+        auto [success, val] = LuaLib::ToNumber(tvLb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #2 to 'unpack' (number expected)");
+        }
+        lb = static_cast<int64_t>(val);
+    }
+
+    int64_t ub;
+    if (numArgs < 3)
+    {
+        ub = TableObject::GetTableLengthWithLuaSemantics(tableObj);
+    }
+    else
+    {
+        TValue tvUb = GetArg(2);
+        auto [success, val] = LuaLib::ToNumber(tvUb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #3 to 'unpack' (number expected)");
+        }
+        ub = static_cast<int64_t>(val);
+    }
+
+    if (unlikely(lb > ub))
+    {
+        Return();
+    }
+
+    size_t numValues = static_cast<size_t>(ub - lb + 1);
+
+    GetByIntegerIndexICInfo info;
+    TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
+
+    TValue* sb = GetStackBase();
+    if (likely(info.m_isContinuous))
+    {
+        // Value exists iff index is in [1, endIdx]
+        //
+        TValue* butterfly = reinterpret_cast<TValue*>(tableObj->m_butterfly);
+        int64_t endIdx = tableObj->m_butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd - 1;
+
+        // Find the intersection interval between [1, endIdx] and [lb, ub]
+        //
+        int64_t intersectionStart = std::max(lb, static_cast<int64_t>(1));
+        int64_t intersectionEnd = std::min(ub, endIdx);
+
+        if (intersectionStart <= intersectionEnd)
+        {
+            // Populate the non-nil area by memcpy, and fill everything else with nil
+            //
+            for (int64_t i = 0; i < intersectionStart - lb; i++)
+            {
+                sb[i] = TValue::Create<tNil>();
+            }
+            for (int64_t i = intersectionEnd - lb + 1; i <= ub - lb; i++)
+            {
+                sb[i] = TValue::Create<tNil>();
+            }
+            memcpy(sb + intersectionStart - lb, butterfly + intersectionStart, sizeof(TValue) * static_cast<size_t>(intersectionEnd - intersectionStart + 1));
+        }
+        else
+        {
+            // The requested range has no intersection with the array, all nil
+            //
+            for (int64_t i = 0; i <= ub - lb; i++)
+            {
+                sb[i] = TValue::Create<tNil>();
+            }
+        }
+        ReturnValueRange(sb, numValues);
+    }
+
+    // For the non-continuous cases, for now we just use a naive implementation
+    // TODO: we could have done better
+    //
+    for (int64_t i = lb; i <= ub; i++)
+    {
+        sb[i - lb] = TableObject::GetByIntegerIndex(tableObj, i, info);
+    }
+    ReturnValueRange(sb, numValues);
 }
 
 // gcinfo -- deprecated in 5.1, removed in 5.2

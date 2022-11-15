@@ -2568,6 +2568,19 @@ public:
         }
     }
 
+    static uint32_t WARN_UNUSED GetTableLengthWithLuaSemantics(HeapPtr<TableObject> self)
+    {
+        auto [success, len] = TryGetTableLengthWithLuaSemanticsFastPath(self);
+        if (likely(success))
+        {
+            return len;
+        }
+        else
+        {
+            return GetTableLengthWithLuaSemanticsSlowPath(self);
+        }
+    }
+
     // Object header
     //
     SystemHeapPointer<void> m_hiddenClass;

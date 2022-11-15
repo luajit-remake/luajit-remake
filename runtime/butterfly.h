@@ -15,7 +15,7 @@ public:
     bool CanUseFastPathGetForContinuousArray(int64_t idx)
     {
         assert(IsContinuous());
-        // We want to compute 'ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous'
+        // We want to compute 'ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous + x_arrayBaseOrd'
         // but we do not want to emit two branches.
         //
         // The trick is to take advantage of the fact that m_arrayLengthIfContinuous >= 0.

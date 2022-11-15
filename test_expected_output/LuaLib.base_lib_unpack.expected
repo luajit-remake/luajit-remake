@@ -1,0 +1,23 @@
+a	b	c	d	e	f	g
+
+b	c	d	e	f	g
+nil	nil	a	b	c	d	e	f	g
+nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	a	b	c	d	e	f	g
+
+a	b
+c	d
+c	d	e	f	g	nil
+c	d	e	f	g	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil
+nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	a	b	c	d	e	f	g	nil	nil	nil
+nil	nil	nil	nil	nil	nil
+nil	nil	nil	nil	nil	nil	nil	nil	nil	nil	nil
+nil	nil	nil	nil	a
+nil	nil	nil	nil	a	b
+g	nil
+f	g	nil	nil
+d	e	f	g
+a	b	c
+c	d
+nil	a	b	c	d
+nil	a	b	c	d	nil	nil
+nil	f	g	nil
