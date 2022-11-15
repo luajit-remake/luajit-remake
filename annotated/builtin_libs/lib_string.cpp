@@ -1,4 +1,5 @@
 #include "deegen_api.h"
+#include "lib_util.h"
 #include "runtime_utils.h"
 
 // string.byte -- https://www.lua.org/manual/5.1/manual.html#pdf-string.byte
@@ -10,7 +11,100 @@
 //
 DEEGEN_DEFINE_LIB_FUNC(string_byte)
 {
-    ThrowError("Library function 'string.byte' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'byte' (string expected, got no value)");
+    }
+
+    TValue input = GetArg(0);
+
+    int64_t lb;
+    if (numArgs == 1)
+    {
+        lb = 1;
+    }
+    else
+    {
+        TValue tvLb = GetArg(1);
+        auto [success, val] = LuaLib::ToNumber(tvLb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #2 to 'byte' (number expected)");
+        }
+        lb = static_cast<int64_t>(val);
+    }
+
+    int64_t ub;
+    if (numArgs < 3)
+    {
+        ub = lb;
+    }
+    else
+    {
+        TValue tvUb = GetArg(2);
+        auto [success, val] = LuaLib::ToNumber(tvUb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #3 to 'byte' (number expected)");
+        }
+        ub = static_cast<int64_t>(val);
+    }
+
+    uint8_t* ptr;
+    int64_t len;
+    char buf[x_default_tostring_buffersize_double];
+
+    if (likely(input.Is<tString>()))
+    {
+        HeapString* str = TranslateToRawPointer(input.As<tString>());
+        ptr = str->m_string;
+        len = str->m_length;
+    }
+    else if (input.Is<tDouble>())
+    {
+        ptr = reinterpret_cast<uint8_t*>(buf);
+        len = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, input.As<tDouble>()) - buf;
+    }
+    else
+    {
+        ThrowError("bad argument #1 to 'byte' (string expected)");
+    }
+
+    if (ub < 0) { ub += len + 1; }
+    if (lb < 0) { lb += len + 1; }
+    if (lb <= 0) { lb = 1; }
+    if (ub > len) { ub = len; }
+
+    if (unlikely(lb > ub))
+    {
+        Return();
+    }
+
+    TValue* sb = GetStackBase();
+    ptr--;
+    for (int64_t i = lb; i <= ub; i++)
+    {
+        sb[i - lb] = TValue::Create<tDouble>(ptr[i]);
+    }
+    ReturnValueRange(sb, static_cast<size_t>(ub - lb + 1));
+}
+
+// Return -1 if not convertible to number, -2 if out of range
+//
+int64_t WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) TryConvertValueToStringCharNumericalCode(double tvDoubleView)
+{
+    TValue tv; tv.m_value = cxx2a_bit_cast<uint64_t>(tvDoubleView);
+    if (!LuaLib::TVDoubleViewToNumberSlow(tvDoubleView /*inout*/))
+    {
+        return -1;
+    }
+    int64_t i64 = static_cast<int64_t>(tvDoubleView);
+    if (i64 < 0 || i64 > 255)
+    {
+        return -2;
+    }
+    return i64;
 }
 
 // string.char -- https://www.lua.org/manual/5.1/manual.html#pdf-string.char
@@ -23,7 +117,57 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_char)
 {
-    ThrowError("Library function 'string.char' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    TValue* sb = GetStackBase();
+    constexpr size_t x_bufferSize = 2048;
+    uint8_t buffer[x_bufferSize];
+    uint8_t* dyn_arr = nullptr;
+    uint8_t* ptr;
+    if (unlikely(numArgs >= x_bufferSize))  // leave space for '\0'
+    {
+        dyn_arr = new uint8_t[numArgs + 1];
+        ptr = dyn_arr;
+    }
+    else
+    {
+        ptr = buffer;
+    }
+
+    for (size_t i = 0; i < numArgs; i++)
+    {
+        // If sb[i] is not a double, tvDoubleView will be NaN and i64 will never be within [0,255],
+        // so we will go to slow path that does the full check, as desired.
+        //
+        double tvDoubleView = sb[i].ViewAsDouble();
+        int64_t i64 = static_cast<int64_t>(tvDoubleView);
+        if (unlikely(i64 < 0 || i64 > 255))
+        {
+            i64 = TryConvertValueToStringCharNumericalCode(tvDoubleView);
+            if (unlikely(i64 < 0))
+            {
+                if (i64 == -1)
+                {
+                    ThrowError("bad argument to 'char' (number expected)");
+                }
+                else
+                {
+                    assert(i64 == -2);
+                    ThrowError("bad argument to 'char' (invalid value)");
+                }
+            }
+        }
+        assert(0 <= i64 && i64 <= 255);
+        ptr[i] = static_cast<uint8_t>(i64);
+    }
+
+    TValue res = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(ptr, static_cast<uint32_t>(numArgs) /*len*/).As());
+
+    if (unlikely(dyn_arr != nullptr))
+    {
+        delete [] dyn_arr;
+    }
+
+    Return(res);
 }
 
 // string.dump -- https://www.lua.org/manual/5.1/manual.html#pdf-string.dump
