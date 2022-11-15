@@ -64,3 +64,9 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleWithLuaSemantics(const void* s
 // The returned 'fmt' must be STRSCAN_ERROR or STRSCAN_NUM or STRSCAN_INT
 //
 StrScanResult WARN_UNUSED TryConvertStringToDoubleOrInt32WithLuaSemantics(const void* str, size_t len);
+
+// The returned 'fmt' must be STRSCAN_ERROR or STRSCAN_NUM
+// 'base' must be within [2, 36]
+// 'str' must be a null-terminated string
+//
+StrScanResult WARN_UNUSED TryConvertStringWithBaseToDoubleWithLuaSemantics(int32_t base, const void* str);

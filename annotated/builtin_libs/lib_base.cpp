@@ -1,4 +1,5 @@
 #include "deegen_api.h"
+#include "lib_util.h"
 #include "runtime_utils.h"
 
 // base.assert -- https://www.lua.org/manual/5.1/manual.html#pdf-assert
@@ -697,7 +698,71 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_tonumber)
 {
-    ThrowError("Library function 'tonumber' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'tonumber' (value expected)");
+    }
+    TValue input = GetArg(0);
+    if (likely(GetNumArgs() == 1))
+    {
+base_10_conversion:
+        auto [success, value] = LuaLib::ToNumber(input);
+        if (success)
+        {
+            Return(TValue::Create<tDouble>(value));
+        }
+        else
+        {
+            Return(TValue::Create<tNil>());
+        }
+    }
+
+    TValue tvBase = GetArg(1);
+    if (tvBase.Is<tNil>())
+    {
+        goto base_10_conversion;
+    }
+
+    auto [success, baseValueDouble] = LuaLib::ToNumber(tvBase);
+    if (unlikely(!success))
+    {
+        ThrowError("bad argument #2 to 'tonumber' (number expected)");
+    }
+    int32_t baseValue = static_cast<int32_t>(baseValueDouble);
+    if (baseValue == 10)
+    {
+        goto base_10_conversion;
+    }
+
+    if (unlikely(baseValue < 2 || baseValue > 36))
+    {
+        ThrowError("bad argument #2 to 'tonumber' (base out of range)");
+    }
+
+    if (input.Is<tDouble>())
+    {
+        Return(input);
+    }
+
+    // Yes this is Lua behavior: if input is not string, and if base is not provided, is nil, or is 10,
+    // no error is thrown and the function returns nil.
+    // But if the base is explicitly provided to be a valid non-10 base, then an error is thrown if the input is not string.
+    //
+    if (!input.Is<tString>())
+    {
+        ThrowError("bad argument #1 to 'tonumber' (string expected)");
+    }
+    HeapString* str = TranslateToRawPointer(input.As<tString>());
+    StrScanResult res = TryConvertStringWithBaseToDoubleWithLuaSemantics(baseValue, str->m_string);
+    if (res.fmt == STRSCAN_ERROR)
+    {
+        Return(TValue::Create<tNil>());
+    }
+    else
+    {
+        assert(res.fmt == STRSCAN_NUM);
+        Return(TValue::Create<tDouble>(res.d));
+    }
 }
 
 // base.tostring -- https://www.lua.org/manual/5.1/manual.html#pdf-tostring

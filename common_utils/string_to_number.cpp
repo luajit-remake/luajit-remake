@@ -611,6 +611,31 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleOrInt32WithLuaSemantics(const 
     return res;
 }
 
+StrScanResult WARN_UNUSED TryConvertStringWithBaseToDoubleWithLuaSemantics(int32_t base, const void* str)
+{
+    const char *p = reinterpret_cast<const char*>(str);
+    char *ep;
+    unsigned int neg = 0;
+    unsigned long ul;
+    while (lj_char_isspace((unsigned char)(*p))) p++;
+    if (*p == '-') { p++; neg = 1; } else if (*p == '+') { p++; }
+    if (lj_char_isalnum((unsigned char)(*p)))
+    {
+        ul = strtoul(p, &ep, base);
+        if (p != ep)
+        {
+            while (lj_char_isspace((unsigned char)(*ep))) ep++;
+            if (*ep == '\0')
+            {
+                double res = static_cast<double>(ul);
+                if (neg) { res = -res; }
+                return StrScanResult { .fmt = STRSCAN_NUM, .d = res };
+            }
+        }
+    }
+    return StrScanResult { .fmt = STRSCAN_ERROR };
+}
+
 #undef DNEXT
 #undef DPREV
 #undef DLEN

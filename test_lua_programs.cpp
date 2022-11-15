@@ -1104,4 +1104,9 @@ TEST(LuaLib, base_lib_pcall)
     RunSimpleLuaTest("luatests/base_lib_pcall.lua.json");
 }
 
+TEST(LuaLib, base_lib_tonumber)
+{
+    RunSimpleLuaTest("luatests/base_lib_tonumber.lua.json");
+}
+
 }   // anonymous namespace
