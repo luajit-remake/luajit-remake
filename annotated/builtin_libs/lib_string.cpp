@@ -1,6 +1,42 @@
 #include "deegen_api.h"
 #include "lib_util.h"
 #include "runtime_utils.h"
+#include "lj_strfmt.h"
+
+// Lua library generally performs a silent number-to-string cast if a number is passed in to an argument expected to be a string.
+// The easiest approach is of course to cast the number and create a heap string object.
+// However, in many cases, the string content is ephemeral, so creating a heap string object is wasteful.
+// We use this ugly macro to make the converted string's buffer live on the stack instead.
+//
+#define GET_ARG_AS_STRING(fnName, oneIndexedArgOrd, strPtrVar, strLenVar)                                                   \
+    char macro_argN2SBuf[std::max(x_default_tostring_buffersize_double, x_default_tostring_buffersize_int)];                \
+    const char* strPtrVar;                                                                                                  \
+    size_t strLenVar;                                                                                                       \
+    {                                                                                                                       \
+        TValue macro_tv = GetArg(oneIndexedArgOrd - 1);                                                                     \
+        if (likely(macro_tv.Is<tString>()))                                                                                 \
+        {                                                                                                                   \
+            strPtrVar = reinterpret_cast<char*>(TranslateToRawPointer(macro_tv.As<tString>()->m_string));                   \
+            strLenVar = macro_tv.As<tString>()->m_length;                                                                   \
+        }                                                                                                                   \
+        else if (macro_tv.Is<tDouble>())                                                                                    \
+        {                                                                                                                   \
+            strLenVar = static_cast<size_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(                                \
+                                                macro_argN2SBuf, macro_tv.As<tDouble>()) - macro_argN2SBuf);                \
+            strPtrVar = macro_argN2SBuf;                                                                                    \
+        }                                                                                                                   \
+        else if (macro_tv.Is<tInt32>())                                                                                     \
+        {                                                                                                                   \
+            strLenVar = static_cast<size_t>(StringifyInt32UsingDefaultLuaFormattingOptions(                                 \
+                                                macro_argN2SBuf, macro_tv.As<tInt32>()) - macro_argN2SBuf);                 \
+            strPtrVar = macro_argN2SBuf;                                                                                    \
+        }                                                                                                                   \
+        else                                                                                                                \
+        {                                                                                                                   \
+            ThrowError("bad argument #" PP_STRINGIFY(oneIndexedArgOrd) " to '" PP_STRINGIFY(fnName) "' (string expected)"); \
+        }                                                                                                                   \
+    }                                                                                                                       \
+    assert(true)        /* end with a statement so a comma can be added */
 
 // string.byte -- https://www.lua.org/manual/5.1/manual.html#pdf-string.byte
 //
@@ -17,7 +53,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
         ThrowError("bad argument #1 to 'byte' (string expected, got no value)");
     }
 
-    TValue input = GetArg(0);
+    GET_ARG_AS_STRING(byte, 1, ptr, ulen);
 
     int64_t lb;
     if (numArgs == 1)
@@ -51,26 +87,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
         ub = static_cast<int64_t>(val);
     }
 
-    uint8_t* ptr;
-    int64_t len;
-    char buf[x_default_tostring_buffersize_double];
-
-    if (likely(input.Is<tString>()))
-    {
-        HeapString* str = TranslateToRawPointer(input.As<tString>());
-        ptr = str->m_string;
-        len = str->m_length;
-    }
-    else if (input.Is<tDouble>())
-    {
-        ptr = reinterpret_cast<uint8_t*>(buf);
-        len = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, input.As<tDouble>()) - buf;
-    }
-    else
-    {
-        ThrowError("bad argument #1 to 'byte' (string expected)");
-    }
-
+    int64_t len = static_cast<int64_t>(ulen);
     if (ub < 0) { ub += len + 1; }
     if (lb < 0) { lb += len + 1; }
     if (lb <= 0) { lb = 1; }
@@ -85,7 +102,8 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
     ptr--;
     for (int64_t i = lb; i <= ub; i++)
     {
-        sb[i - lb] = TValue::Create<tDouble>(ptr[i]);
+        uint8_t charVal = static_cast<uint8_t>(ptr[i]);
+        sb[i - lb] = TValue::Create<tDouble>(charVal);
     }
     ReturnValueRange(sb, static_cast<size_t>(ub - lb + 1));
 }
@@ -119,20 +137,8 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
 {
     size_t numArgs = GetNumArgs();
     TValue* sb = GetStackBase();
-    constexpr size_t x_bufferSize = 2048;
-    uint8_t buffer[x_bufferSize];
-    uint8_t* dyn_arr = nullptr;
-    uint8_t* ptr;
-    if (unlikely(numArgs >= x_bufferSize))  // leave space for '\0'
-    {
-        dyn_arr = new uint8_t[numArgs + 1];
-        ptr = dyn_arr;
-    }
-    else
-    {
-        ptr = buffer;
-    }
-
+    SimpleTempStringStream ss;
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(ss.Reserve(numArgs + 1));
     for (size_t i = 0; i < numArgs; i++)
     {
         // If sb[i] is not a double, tvDoubleView will be NaN and i64 will never be within [0,255],
@@ -159,14 +165,10 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
         assert(0 <= i64 && i64 <= 255);
         ptr[i] = static_cast<uint8_t>(i64);
     }
+    ptr[numArgs] = 0;
 
     TValue res = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(ptr, static_cast<uint32_t>(numArgs) /*len*/).As());
-
-    if (unlikely(dyn_arr != nullptr))
-    {
-        delete [] dyn_arr;
-    }
-
+    ss.Destroy();
     Return(res);
 }
 
@@ -217,7 +219,42 @@ DEEGEN_DEFINE_LIB_FUNC(string_find)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_format)
 {
-    ThrowError("Library function 'string.format' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'format' (string expected, got no value)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    TValue* sb = GetStackBase();
+    GET_ARG_AS_STRING(format, 1, fmt, fmtLen);
+
+    SimpleTempStringStream ss;
+    StrFmtError resKind = StringFormatterWithLuaSemantics(&ss /*out*/, fmt, fmtLen, sb + 1 /*argBegin*/, numArgs - 1);
+    if (likely(resKind == StrFmtNoError))
+    {
+        HeapPtr<HeapString> s = vm->CreateStringObjectFromRawString(ss.m_bufferBegin, static_cast<uint32_t>(ss.m_bufferCur - ss.m_bufferBegin)).As();
+        TValue r = TValue::Create<tString>(s);
+        ss.Destroy();
+        Return(r);
+    }
+
+    ss.Destroy();
+
+    switch (resKind)
+    {
+    case StrFmtError_BadFmt:
+        ThrowError("bad format string to 'format'");
+    case StrFmtError_TooFewArgs:
+        ThrowError("not enough arguments for format string");
+    case StrFmtError_NotNumber:
+        ThrowError("bad argument to 'format' (number expected)");
+    case StrFmtError_NotString:
+        ThrowError("bad argument to 'format' (string expected)");
+    case StrFmtNoError:
+        assert(false);
+        __builtin_unreachable();
+    }   /* switch resKind */
 }
 
 // string.gmatch -- https://www.lua.org/manual/5.1/manual.html#pdf-string.gmatch
@@ -334,7 +371,29 @@ DEEGEN_DEFINE_LIB_FUNC(string_match)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_rep)
 {
-    ThrowError("Library function 'string.rep' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs < 2))
+    {
+        ThrowError("bad argument #2 to 'rep' (number expected, got no value)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    GET_ARG_AS_STRING(rep, 1, inputStr, inputStrLen);
+
+    auto [success, numCopiesDbl] = LuaLib::ToNumber(GetArg(1));
+    if (unlikely(!success))
+    {
+        ThrowError("bad argument #2 to 'rep' (number expected)");
+    }
+
+    int64_t numCopies = static_cast<int64_t>(numCopiesDbl);
+    if (unlikely(numCopies <= 0))
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString("", 0).As()));
+    }
+
+    HeapPtr<HeapString> res = vm->CreateStringObjectFromConcatenationOfSameString(inputStr, static_cast<uint32_t>(inputStrLen), static_cast<size_t>(numCopies)).As();
+    Return(TValue::Create<tString>(res));
 }
 
 // string.reverse -- https://www.lua.org/manual/5.1/manual.html#pdf-string.reverse
@@ -356,7 +415,61 @@ DEEGEN_DEFINE_LIB_FUNC(string_reverse)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_sub)
 {
-    ThrowError("Library function 'string.sub' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'sub' (string expected, got no value)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    GET_ARG_AS_STRING(sub, 1, ptr, ulen);
+
+    int64_t lb;
+    if (numArgs == 1)
+    {
+        lb = 1;
+    }
+    else
+    {
+        TValue tvLb = GetArg(1);
+        auto [success, val] = LuaLib::ToNumber(tvLb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #2 to 'sub' (number expected)");
+        }
+        lb = static_cast<int64_t>(val);
+    }
+
+    int64_t ub;
+    if (numArgs < 3)
+    {
+        ub = -1;
+    }
+    else
+    {
+        TValue tvUb = GetArg(2);
+        auto [success, val] = LuaLib::ToNumber(tvUb);
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #3 to 'sub' (number expected)");
+        }
+        ub = static_cast<int64_t>(val);
+    }
+
+    int64_t len = static_cast<int64_t>(ulen);
+    if (ub < 0) { ub += len + 1; }
+    if (lb < 0) { lb += len + 1; }
+    if (lb <= 0) { lb = 1; }
+    if (ub > len) { ub = len; }
+
+    if (unlikely(lb > ub))
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString("", 0 /*len*/).As()));
+    }
+    else
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(ptr + lb - 1, static_cast<uint32_t>(ub - lb + 1)).As()));
+    }
 }
 
 // string.upper -- https://www.lua.org/manual/5.1/manual.html#pdf-string.upper

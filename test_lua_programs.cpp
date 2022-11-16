@@ -1164,9 +1164,44 @@ TEST(LuaLib, string_lib_byte)
     RunSimpleLuaTest("luatests/string_lib_byte.lua.json");
 }
 
+TEST(LuaLib, string_lib_byte_2)
+{
+    RunSimpleLuaTest("luatests/string_lib_byte_2.lua.json");
+}
+
 TEST(LuaLib, string_lib_char)
 {
     RunSimpleLuaTest("luatests/string_lib_char.lua.json");
+}
+
+TEST(LuaLib, string_lib_char_2)
+{
+    RunSimpleLuaTest("luatests/string_lib_char_2.lua.json");
+}
+
+TEST(LuaLib, string_lib_rep)
+{
+    RunSimpleLuaTest("luatests/string_lib_rep.lua.json");
+}
+
+TEST(LuaLib, string_lib_rep_2)
+{
+    RunSimpleLuaTest("luatests/string_lib_rep_2.lua.json");
+}
+
+TEST(LuaLib, string_lib_sub)
+{
+    RunSimpleLuaTest("luatests/string_lib_sub.lua.json");
+}
+
+TEST(LuaLib, string_lib_sub_2)
+{
+    RunSimpleLuaTest("luatests/string_lib_sub_2.lua.json");
+}
+
+TEST(LuaLib, string_format)
+{
+    RunSimpleLuaTest("luatests/string_format.lua.json");
 }
 
 }   // anonymous namespace

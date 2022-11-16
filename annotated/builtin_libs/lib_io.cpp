@@ -143,6 +143,7 @@ DEEGEN_DEFINE_LIB_FUNC(io_write)
     for (uint32_t i = 0; i < numElementsToPrint; i++)
     {
         TValue val = GetArg(i);
+#if 0
         if (val.Is<tInt32>())
         {
             char buf[x_default_tostring_buffersize_int];
@@ -151,7 +152,9 @@ DEEGEN_DEFINE_LIB_FUNC(io_write)
             size_t written = fwrite(buf, 1, len, fp);
             if (unlikely(len != written)) { success = false; break; }
         }
-        else if (val.Is<tDouble>())
+        else
+#endif
+        if (val.Is<tDouble>())
         {
             double dbl = val.As<tDouble>();
             char buf[x_default_tostring_buffersize_double];

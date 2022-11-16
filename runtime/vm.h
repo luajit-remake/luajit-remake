@@ -664,6 +664,10 @@ public:
         return CreateStringObjectFromRawString(str, static_cast<uint32_t>(strlen(str))).As();
     }
 
+    // Create a string by concatenating n copies of 'str'
+    //
+    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenationOfSameString(const char* ptr, uint32_t len, size_t n);
+
     uint32_t GetGlobalStringHashConserCurrentHashTableSize() const
     {
         return m_hashTableSizeMask + 1;

@@ -2,29 +2,44 @@
 
 #include "common.h"
 
-// A simple stream that destroys the buffer on class destruction
+// A simple stream
+// One must call Destroy() manually to free the stream.
+// This is not done in the destructor due to a limitation of our framework (since our
+// framework use NO_RETURN function calls to model tail dispatches, destructors of the
+// currently alive local variables won't run, so having non-trivial destructor can be fragile.)
+//
+// TODO: this file should be moved to the 'runtime' folder
 //
 class SimpleTempStringStream
 {
+    MAKE_NONCOPYABLE(SimpleTempStringStream);
+    MAKE_NONMOVABLE(SimpleTempStringStream);
 public:
     SimpleTempStringStream()
     {
-        constexpr size_t initialSize = 128;
-        m_bufferBegin = new uint8_t[initialSize];
+        m_bufferBegin = m_internalBuffer;
         m_bufferCur = m_bufferBegin;
-        m_bufferEnd = m_bufferBegin + initialSize;
+        m_bufferEnd = m_bufferBegin + x_internalBufferSize;
     }
 
-    ~SimpleTempStringStream()
+    void Destroy()
     {
-        if (m_bufferBegin != nullptr)
+        if (unlikely(m_bufferBegin != m_internalBuffer))
         {
             delete [] m_bufferBegin;
-            m_bufferBegin = nullptr;
+            m_bufferBegin = m_internalBuffer;
+            m_bufferCur = m_bufferBegin;
+            m_bufferEnd = m_bufferBegin + x_internalBufferSize;
         }
     }
 
-    uint8_t* Reserve(size_t size)
+    void Update(char* newCurPtr)
+    {
+        assert(m_bufferCur <= newCurPtr && newCurPtr <= m_bufferEnd);
+        m_bufferCur = newCurPtr;
+    }
+
+    char* Reserve(size_t size)
     {
         if (likely(m_bufferEnd - m_bufferCur >= static_cast<ssize_t>(size)))
         {
@@ -34,16 +49,22 @@ public:
         size_t current = static_cast<size_t>(m_bufferCur - m_bufferBegin);
         size_t needed = current + size;
         while (cap < needed) { cap *= 2; }
-        uint8_t* newArray = new uint8_t[cap];
+        char* newArray = new char[cap];
         memcpy(newArray, m_bufferBegin, current);
-        delete [] m_bufferBegin;
+        if (m_bufferBegin != m_internalBuffer)
+        {
+            delete [] m_bufferBegin;
+        }
         m_bufferBegin = newArray;
         m_bufferCur = newArray + current;
         m_bufferEnd = newArray + cap;
         return m_bufferCur;
     }
 
-    uint8_t* m_bufferBegin;
-    uint8_t* m_bufferCur;
-    uint8_t* m_bufferEnd;
+    char* m_bufferBegin;
+    char* m_bufferCur;
+    char* m_bufferEnd;
+
+    static constexpr size_t x_internalBufferSize = 2000;
+    char m_internalBuffer[x_internalBufferSize];
 };

@@ -48,3 +48,5 @@ char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double 
 // Returns the address of the '\0'
 //
 char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t k);
+
+SimpleTempStringStream *lj_strfmt_putfnum(SimpleTempStringStream *sb, uint32_t sf, double n);

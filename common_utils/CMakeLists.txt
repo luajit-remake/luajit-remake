@@ -3,4 +3,5 @@ add_library(common_utils
   thirdparty_dragonbox_util.cpp
   string_to_number.cpp
   double_to_string.cpp
+  lj_strfmt.cpp
 )

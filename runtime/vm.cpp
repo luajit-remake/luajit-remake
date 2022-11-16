@@ -627,10 +627,10 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
     {
         Iterator(UserHeapPointer<HeapString> str1, TValue* start, size_t len, HeapPtrTranslator translator)
             : m_isFirst(true)
-              , m_firstString(str1)
-              , m_cur(start)
-              , m_end(start + len)
-              , m_translator(translator)
+            , m_firstString(str1)
+            , m_cur(start)
+            , m_end(start + len)
+            , m_translator(translator)
         { }
 
         bool HasMore()
@@ -671,8 +671,8 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromRawString(cons
     {
         Iterator(const void* str, uint32_t len)
             : m_str(str)
-              , m_len(len)
-              , m_isFirst(true)
+            , m_len(len)
+            , m_isFirst(true)
         { }
 
         bool HasMore()
@@ -693,6 +693,101 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromRawString(cons
     };
 
     return InsertMultiPieceString(Iterator(str, len));
+}
+
+UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenationOfSameString(const char* inputStringPtr, uint32_t inputStringLen, size_t n)
+{
+    if (unlikely(inputStringLen == 0 || n == 0))
+    {
+        return CreateStringObjectFromRawString("", 0);
+    }
+
+    // Gracefully handle overflow edge case. Note that we cannot compute n*inputStringLen before
+    // validating that it won't overflow, which is why we have two checks below.
+    //
+    VM_FAIL_IF(n >= std::numeric_limits<uint32_t>::max(),
+               "Cannot create a string longer than 4GB (attempted length: %llu*%llu bytes).",
+               static_cast<unsigned long long>(n), static_cast<unsigned long long>(inputStringLen));
+
+    VM_FAIL_IF(n * inputStringLen >= std::numeric_limits<uint32_t>::max(),
+               "Cannot create a string longer than 4GB (attempted length: %llu bytes).", static_cast<unsigned long long>(n * inputStringLen));
+
+    // If we are making a lot of copies of small strings (which is actually the common case),
+    // try to pre-coalesce them together to reduce the # of memcpy calls (and XXH streaming hash updates).
+    //
+    constexpr size_t x_directLimit = 2200;
+    uint64_t buffer64[x_directLimit / sizeof(uint64_t) + 1];
+    uint8_t* buf = reinterpret_cast<uint8_t*>(buffer64);
+
+    uint8_t* coalescedStringPtr;
+    uint32_t coalescedStringLen;
+
+    if (inputStringLen == 1)
+    {
+        // For length == 1 input string, we can simply create a coalesced string by memset
+        //
+        coalescedStringPtr = buf;
+        coalescedStringLen = static_cast<uint32_t>(std::min(x_directLimit, n));
+        memset(buf, inputStringPtr[0], coalescedStringLen);
+    }
+    else if (n >= 4 && inputStringLen * 4 <= x_directLimit)
+    {
+        // Otherwise, we create a coalesced string by doubling until we reach the limit, if beneficial
+        //
+        coalescedStringPtr = buf;
+        coalescedStringLen = inputStringLen;
+        size_t numCopiesInCoalescedString = 1;
+        memcpy(buf, inputStringPtr, inputStringLen);
+        while (coalescedStringLen * 2 <= x_directLimit && numCopiesInCoalescedString * 2 <= n)
+        {
+            memcpy(buf + coalescedStringLen, buf, coalescedStringLen);
+            coalescedStringLen *= 2;
+            numCopiesInCoalescedString *= 2;
+        }
+    }
+    else
+    {
+        // It is not beneficial or possible to create the coalesced string.
+        //
+        coalescedStringPtr = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(inputStringPtr));
+        coalescedStringLen = inputStringLen;
+    }
+
+    assert(coalescedStringLen > 0 && coalescedStringLen % inputStringLen == 0);
+#ifndef NDEBUG
+    for (size_t i = 0; i < coalescedStringLen; i++)
+    {
+        assert(coalescedStringPtr[i] == static_cast<uint8_t>(inputStringPtr[i % inputStringLen]));
+    }
+#endif
+
+    struct Iterator
+    {
+        Iterator(const uint8_t* ptr, uint32_t len, uint32_t totalLen)
+            : m_ptr(ptr)
+            , m_len(len)
+            , m_totalLen(totalLen)
+        { }
+
+        bool HasMore()
+        {
+            return m_totalLen > 0;
+        }
+
+        std::pair<const void*, uint32_t> GetAndAdvance()
+        {
+            assert(m_totalLen > 0);
+            uint32_t consume = std::min(m_len, m_totalLen);
+            m_totalLen -= consume;
+            return std::make_pair(m_ptr, consume);
+        }
+
+        const uint8_t* m_ptr;
+        uint32_t m_len;
+        uint32_t m_totalLen;
+    };
+
+    return InsertMultiPieceString(Iterator(coalescedStringPtr, coalescedStringLen, static_cast<uint32_t>(n * inputStringLen)));
 }
 
 void VM::CreateRootCoroutine()
