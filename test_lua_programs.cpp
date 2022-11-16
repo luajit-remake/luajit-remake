@@ -1204,4 +1204,9 @@ TEST(LuaLib, string_format)
     RunSimpleLuaTest("luatests/string_format.lua.json");
 }
 
+TEST(LuaLib, string_lib_len)
+{
+    RunSimpleLuaTest("luatests/string_lib_len.lua.json");
+}
+
 }   // anonymous namespace

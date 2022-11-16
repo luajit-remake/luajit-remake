@@ -1,0 +1,18 @@
+print(string.len(""))
+print(string.len("a"))
+print(string.len("ab"))
+print(string.len("abc"))
+print(string.len(string.rep("a", 10000)))
+print(string.len(123))
+print(string.len(-123))
+print(string.len(1.0000000000001))
+print(string.len(1.00000000000001))
+print(string.len("1.000000000001"))
+print(string.len("1.0000000000001"))
+
+print((pcall(function() string.len() end)))
+print((pcall(function() string.len({}) end)))
+print((pcall(function() string.len(nil) end)))
+print((pcall(function() string.len(true) end)))
+print((pcall(function() string.len(function() end) end)))
+

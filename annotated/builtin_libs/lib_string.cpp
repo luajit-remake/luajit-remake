@@ -153,11 +153,13 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
             {
                 if (i64 == -1)
                 {
+                    ss.Destroy();
                     ThrowError("bad argument to 'char' (number expected)");
                 }
                 else
                 {
                     assert(i64 == -2);
+                    ss.Destroy();
                     ThrowError("bad argument to 'char' (invalid value)");
                 }
             }
@@ -338,7 +340,13 @@ DEEGEN_DEFINE_LIB_FUNC(string_gsub)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_len)
 {
-    ThrowError("Library function 'string.len' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'len' (string expected, got no value)");
+    }
+    GET_ARG_AS_STRING(len, 1, ptr, length);
+    std::ignore = ptr;
+    Return(TValue::Create<tDouble>(static_cast<double>(length)));
 }
 
 // string.lower -- https://www.lua.org/manual/5.1/manual.html#pdf-string.lower
