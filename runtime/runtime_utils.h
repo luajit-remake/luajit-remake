@@ -1063,14 +1063,11 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
     //
     if (unlikely(lhsMetamethod.IsDouble()))
     {
-        if (!rhsMetamethod.IsDouble())
-        {
-            return TValue::Nil();
-        }
         // If both values are double, we must do a floating point comparison,
         // otherwise we will fail on edge cases like negative zero (-0 == 0) and NaN (NaN != NaN)
+        // If rhs is not double, ViewAsDouble() gives NaN and the below comparison will also fail as expected.
         //
-        if (UnsafeFloatEqual(lhsMetamethod.AsDouble(), rhsMetamethod.AsDouble()))
+        if (UnsafeFloatEqual(lhsMetamethod.AsDouble(), rhsMetamethod.ViewAsDouble()))
         {
             return lhsMetamethod;
         }

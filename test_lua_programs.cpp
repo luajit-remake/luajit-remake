@@ -1229,4 +1229,19 @@ TEST(LuaLib, string_lib_misc)
     RunSimpleLuaTest("luatests/string_lib_misc.lua.json");
 }
 
+TEST(LuaLib, table_sort_1)
+{
+    RunSimpleLuaTest("luatests/table_sort_1.lua.json");
+}
+
+TEST(LuaLib, table_sort_2)
+{
+    RunSimpleLuaTest("luatests/table_sort_2.lua.json");
+}
+
+TEST(LuaLib, table_sort_3)
+{
+    RunSimpleLuaTest("luatests/table_sort_3.lua.json");
+}
+
 }   // anonymous namespace
