@@ -1209,4 +1209,24 @@ TEST(LuaLib, string_lib_len)
     RunSimpleLuaTest("luatests/string_lib_len.lua.json");
 }
 
+TEST(LuaLib, string_lib_reverse)
+{
+    RunSimpleLuaTest("luatests/string_lib_reverse.lua.json");
+}
+
+TEST(LuaLib, string_lib_lower_upper)
+{
+    RunSimpleLuaTest("luatests/string_lib_lower_upper.lua.json");
+}
+
+TEST(LuaLib, string_lib_lower_upper_2)
+{
+    RunSimpleLuaTest("luatests/string_lib_lower_upper_2.lua.json");
+}
+
+TEST(LuaLib, string_lib_misc)
+{
+    RunSimpleLuaTest("luatests/string_lib_misc.lua.json");
+}
+
 }   // anonymous namespace

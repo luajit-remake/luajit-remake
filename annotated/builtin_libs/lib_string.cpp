@@ -169,9 +169,9 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
     }
     ptr[numArgs] = 0;
 
-    TValue res = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(ptr, static_cast<uint32_t>(numArgs) /*len*/).As());
+    HeapPtr<HeapString> res = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(ptr, static_cast<uint32_t>(numArgs) /*len*/).As();
     ss.Destroy();
-    Return(res);
+    Return(TValue::Create<tString>(res));
 }
 
 // string.dump -- https://www.lua.org/manual/5.1/manual.html#pdf-string.dump
@@ -236,9 +236,8 @@ DEEGEN_DEFINE_LIB_FUNC(string_format)
     if (likely(resKind == StrFmtNoError))
     {
         HeapPtr<HeapString> s = vm->CreateStringObjectFromRawString(ss.m_bufferBegin, static_cast<uint32_t>(ss.m_bufferCur - ss.m_bufferBegin)).As();
-        TValue r = TValue::Create<tString>(s);
         ss.Destroy();
-        Return(r);
+        Return(TValue::Create<tString>(s));
     }
 
     ss.Destroy();
@@ -357,7 +356,28 @@ DEEGEN_DEFINE_LIB_FUNC(string_len)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_lower)
 {
-    ThrowError("Library function 'string.lower' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'lower' (string expected, got no value)");
+    }
+
+    GET_ARG_AS_STRING(lower, 1, ptr, length);
+
+    // The 'lower' function is locale dependent so we cannot simply change 'A-Z' to 'a-z'
+    // TODO: provide a fastpath for the default C locale
+    //
+    SimpleTempStringStream ss;
+    char* buf = ss.Reserve(length);
+    for (size_t i = 0; i < length; i++)
+    {
+        buf[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(ptr[i])));
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    HeapPtr<HeapString> res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
+    ss.Destroy();
+    Return(TValue::Create<tString>(res));
 }
 
 // string.match -- https://www.lua.org/manual/5.1/manual.html#pdf-string.match
@@ -397,7 +417,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_rep)
     int64_t numCopies = static_cast<int64_t>(numCopiesDbl);
     if (unlikely(numCopies <= 0))
     {
-        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString("", 0).As()));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
 
     HeapPtr<HeapString> res = vm->CreateStringObjectFromConcatenationOfSameString(inputStr, static_cast<uint32_t>(inputStrLen), static_cast<size_t>(numCopies)).As();
@@ -411,7 +431,64 @@ DEEGEN_DEFINE_LIB_FUNC(string_rep)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_reverse)
 {
-    ThrowError("Library function 'string.reverse' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'reverse' (string expected, got no value)");
+    }
+    GET_ARG_AS_STRING(reverse, 1, ptr, length);
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    if (length == 0)
+    {
+        Return(TValue::Create<tString>(vm->m_emptyString));
+    }
+
+    SimpleTempStringStream ss;
+    char* out = ss.Reserve(length);
+
+    if (length <= 8)
+    {
+        // Since we always allocate 8-byte-aligned memory, the string starts at 8-byte-aligned address in HeapString,
+        // and the string is non-empty (we checked length == 0 case above), 8 bytes following the string is always
+        // dereferenceable even if string is less than 8 bytes long.
+        //
+        uint64_t originalVal = UnalignedLoad<uint64_t>(ptr);
+        uint64_t reversedVal = __builtin_bswap64(originalVal);
+        // The useful bytes are at the low bytes (due to little-endianness), and after bswap they go to the high bytes.
+        // Shift them to low bytes so we can store it as the result.
+        //
+        reversedVal = reversedVal >> (64 - length * 8);
+        UnalignedStore<uint64_t>(out, reversedVal);
+    }
+    else
+    {
+        // Byte swap and store all the 8-byte chunks
+        //
+        const char* src = ptr;
+        const char* end = ptr + length;
+        char* dst = out + length;
+        while (src + 8 <= end)
+        {
+            uint64_t originalVal = UnalignedLoad<uint64_t>(src);
+            uint64_t reversedVal = __builtin_bswap64(originalVal);
+            dst -= 8;
+            UnalignedStore<uint64_t>(dst, reversedVal);
+            src += 8;
+        }
+        // For the remaining tail, we read 8 bytes from 'end - 8', reverse it and store to the beginning.
+        // This is correct because length >= 8
+        //
+        if (src < end)
+        {
+            uint64_t originalVal = UnalignedLoad<uint64_t>(end - 8);
+            uint64_t reversedVal = __builtin_bswap64(originalVal);
+            UnalignedStore<uint64_t>(out, reversedVal);
+        }
+    }
+
+    HeapPtr<HeapString> res = vm->CreateStringObjectFromRawString(out, static_cast<uint32_t>(length)).As();
+    ss.Destroy();
+    Return(TValue::Create<tString>(res));
 }
 
 // string.sub -- https://www.lua.org/manual/5.1/manual.html#pdf-string.sub
@@ -472,7 +549,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
 
     if (unlikely(lb > ub))
     {
-        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString("", 0 /*len*/).As()));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
     else
     {
@@ -488,7 +565,28 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
 //
 DEEGEN_DEFINE_LIB_FUNC(string_upper)
 {
-    ThrowError("Library function 'string.upper' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'upper' (string expected, got no value)");
+    }
+
+    GET_ARG_AS_STRING(upper, 1, ptr, length);
+
+    // The 'upper' function is locale dependent so we cannot simply change 'a-z' to 'A-Z'
+    // TODO: provide a fastpath for the default C locale
+    //
+    SimpleTempStringStream ss;
+    char* buf = ss.Reserve(length);
+    for (size_t i = 0; i < length; i++)
+    {
+        buf[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(ptr[i])));
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    HeapPtr<HeapString> res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
+    ss.Destroy();
+    Return(TValue::Create<tString>(res));
 }
 
 DEEGEN_END_LIB_FUNC_DEFINITIONS

@@ -301,6 +301,7 @@ bool WARN_UNUSED VM::InitializeVMGlobalData()
     m_metatableForFunction = UserHeapPointer<void>();
     m_metatableForCoroutine = UserHeapPointer<void>();
 
+    m_emptyString = nullptr;
     m_toStringString.m_value = 0;
     m_stringNameForToStringMetamethod.m_value = 0;
     m_initialHiddenClassOfMetatableForString.m_value = 0;
@@ -699,7 +700,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenationO
 {
     if (unlikely(inputStringLen == 0 || n == 0))
     {
-        return CreateStringObjectFromRawString("", 0);
+        return VM_GetEmptyString();
     }
 
     // Gracefully handle overflow edge case. Note that we cannot compute n*inputStringLen before

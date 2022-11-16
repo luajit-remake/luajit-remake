@@ -223,6 +223,9 @@ DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_ipairs_iterator);
 UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
     CreateGlobalObjectHelper h(vm);
+
+    vm->m_emptyString = vm->CreateStringObjectFromRawCString("");
+
     HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
     h.InsertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
     h.InsertString(globalObject, "_VERSION", "Lua 5.1");

@@ -815,6 +815,13 @@ public:
         return reinterpret_cast<HeapPtr<TValue>>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
     }
 
+    static HeapPtr<HeapString> ALWAYS_INLINE VM_GetEmptyString()
+    {
+        constexpr size_t offset = offsetof_member_v<&VM::m_emptyString>;
+        using T = typeof_member_t<&VM::m_emptyString>;
+        return *reinterpret_cast<HeapPtr<T>>(offset);
+    }
+
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
 
     static constexpr size_t x_pageSize = 4096;
@@ -1010,6 +1017,10 @@ public:
     UserHeapPointer<void> m_metatableForString;
     UserHeapPointer<void> m_metatableForFunction;
     UserHeapPointer<void> m_metatableForCoroutine;
+
+    // The string ""
+    //
+    HeapPtr<HeapString> m_emptyString;
 
     // The string 'tostring'
     //
