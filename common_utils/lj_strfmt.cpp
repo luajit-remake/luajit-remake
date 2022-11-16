@@ -37,7 +37,7 @@
 #include "lj_char_trait_details.h"
 #include "double_to_string.h"
 #include "tvalue.h"
-#include "annotated/builtin_libs/lib_util.h"  // TODO: fix
+#include "lualib_tonumber_util.h"
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wold-style-cast"
@@ -510,7 +510,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
                     break;
                 }
 
-                auto [success, val] = LuaLib::ToNumber(o);
+                auto [success, val] = LuaLib_ToNumber(o);
                 if (unlikely(!success))
                 {
                     return StrFmtError_NotNumber;
@@ -526,7 +526,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
                     break;
                 }
 
-                auto [success, val] = LuaLib::ToNumber(o);
+                auto [success, val] = LuaLib_ToNumber(o);
                 if (unlikely(!success))
                 {
                     return StrFmtError_NotNumber;
@@ -536,7 +536,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
             }
             case STRFMT_NUM:
             {
-                auto [success, val] = LuaLib::ToNumber(o);
+                auto [success, val] = LuaLib_ToNumber(o);
                 if (unlikely(!success))
                 {
                     return StrFmtError_NotNumber;
@@ -577,7 +577,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
             }
             case STRFMT_CHAR:
             {
-                auto [success, val] = LuaLib::ToNumber(o);
+                auto [success, val] = LuaLib_ToNumber(o);
                 if (unlikely(!success))
                 {
                     return StrFmtError_NotNumber;

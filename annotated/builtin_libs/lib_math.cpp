@@ -1,5 +1,5 @@
 #include "deegen_api.h"
-#include "lib_util.h"
+#include "lualib_tonumber_util.h"
 #include "runtime_utils.h"
 #include <emmintrin.h>
 
@@ -15,7 +15,7 @@
     }                                                                               \
     double argName;                                                                 \
     {                                                                               \
-        auto [macrotmp_success, macrotmp_result] = LuaLib::ToNumber(GetArg(0));     \
+        auto [macrotmp_success, macrotmp_result] = LuaLib_ToNumber(GetArg(0));      \
         if (unlikely(!macrotmp_success))                                            \
         {                                                                           \
             /* TODO: make error consistent with Lua (need actual type) */           \
@@ -39,13 +39,13 @@
     double argName2 = GetArg(1).ViewAsDouble();                                     \
     if (unlikely(IsNaN(argName1) || IsNaN(argName2)))                               \
     {                                                                               \
-        if (!LuaLib::TVDoubleViewToNumberSlow(argName1 /*inout*/))                  \
+        if (!LuaLib_TVDoubleViewToNumberSlow(argName1 /*inout*/))                   \
         {                                                                           \
             /* TODO: make error consistent with Lua (need actual type) */           \
             ThrowError("bad argument #1 to '" PP_STRINGIFY(funcName)                \
                        "' (number expected)");                                      \
         }                                                                           \
-        if (!LuaLib::TVDoubleViewToNumberSlow(argName2 /*inout*/))                  \
+        if (!LuaLib_TVDoubleViewToNumberSlow(argName2 /*inout*/))                   \
         {                                                                           \
             /* TODO: make error consistent with Lua (need actual type) */           \
             ThrowError("bad argument #2 to '" PP_STRINGIFY(funcName)                \
@@ -256,7 +256,7 @@ DEEGEN_DEFINE_LIB_FUNC(math_max)
         size_t numArgs = GetNumArgs();
         for (size_t i = 1; i < numArgs; i++)
         {
-            auto [success, value] = LuaLib::ToNumber(GetArg(i));
+            auto [success, value] = LuaLib_ToNumber(GetArg(i));
             if (unlikely(!success))
             {
                 /* TODO: make error consistent with Lua (need actual type) */
@@ -286,7 +286,7 @@ DEEGEN_DEFINE_LIB_FUNC(math_min)
         size_t numArgs = GetNumArgs();
         for (size_t i = 1; i < numArgs; i++)
         {
-            auto [success, value] = LuaLib::ToNumber(GetArg(i));
+            auto [success, value] = LuaLib_ToNumber(GetArg(i));
             if (unlikely(!success))
             {
                 /* TODO: make error consistent with Lua (need actual type) */

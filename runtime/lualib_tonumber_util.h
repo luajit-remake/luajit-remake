@@ -3,9 +3,9 @@
 #include "common_utils.h"
 #include "runtime_utils.h"
 
-namespace LuaLib {
+namespace internal {
 
-inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE ToNumberSlowPath(double tvalueAsDouble)
+inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE LuaLib_ToNumberSlowPath(double tvalueAsDouble)
 {
     TValue val;
     val.m_value = cxx2a_bit_cast<uint64_t>(tvalueAsDouble);
@@ -33,7 +33,10 @@ inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE ToNumberSlowPat
     }
 }
 
-inline std::pair<bool /*success*/, double> WARN_UNUSED ALWAYS_INLINE ToNumber(TValue val)
+}   // namespace internal
+
+
+inline std::pair<bool /*success*/, double> WARN_UNUSED ALWAYS_INLINE LuaLib_ToNumber(TValue val)
 {
     // Check tDoubleNotNaN instead of tDouble because NaN is unlikely anyway, and it avoids an expensive GPR-to-FPR mov
     //
@@ -44,23 +47,25 @@ inline std::pair<bool /*success*/, double> WARN_UNUSED ALWAYS_INLINE ToNumber(TV
 
     // Similarly, pass the val in FPR to slow path, to make sure the expensive GPR-to-FPR won't happen in the fast path
     //
-    return ToNumberSlowPath(val.ViewAsDouble());
+    return internal::LuaLib_ToNumberSlowPath(val.ViewAsDouble());
 }
 
-inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE TVDoubleViewToNumberSlowImpl(double tvDoubleView)
+namespace internal {
+
+inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE LuaLib_TVDoubleViewToNumberSlowImpl(double tvDoubleView)
 {
     TValue tv; tv.m_value = cxx2a_bit_cast<uint64_t>(tvDoubleView);
-    return ToNumber(tv);
+    return LuaLib_ToNumber(tv);
 }
+
+}   // namespace internal
 
 // It's ugly: TVDoubleViewToNumberSlowImpl takes the argument in FPR because we want to
 // avoid unnecessary register shuffles between FPR and GPR (LLVM is very bad at that..)
 //
-inline bool WARN_UNUSED ALWAYS_INLINE TVDoubleViewToNumberSlow(double& tvDoubleView /*inout*/)
+inline bool WARN_UNUSED ALWAYS_INLINE LuaLib_TVDoubleViewToNumberSlow(double& tvDoubleView /*inout*/)
 {
-    auto [success, res] = TVDoubleViewToNumberSlowImpl(tvDoubleView);
+    auto [success, res] = internal::LuaLib_TVDoubleViewToNumberSlowImpl(tvDoubleView);
     tvDoubleView = res;
     return success;
 }
-
-}   // namespace LuaLib

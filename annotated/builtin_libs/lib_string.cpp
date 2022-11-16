@@ -1,5 +1,5 @@
 #include "deegen_api.h"
-#include "lib_util.h"
+#include "lualib_tonumber_util.h"
 #include "runtime_utils.h"
 #include "lj_strfmt.h"
 
@@ -63,7 +63,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
     else
     {
         TValue tvLb = GetArg(1);
-        auto [success, val] = LuaLib::ToNumber(tvLb);
+        auto [success, val] = LuaLib_ToNumber(tvLb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #2 to 'byte' (number expected)");
@@ -79,7 +79,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
     else
     {
         TValue tvUb = GetArg(2);
-        auto [success, val] = LuaLib::ToNumber(tvUb);
+        auto [success, val] = LuaLib_ToNumber(tvUb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #3 to 'byte' (number expected)");
@@ -113,7 +113,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_byte)
 int64_t WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) TryConvertValueToStringCharNumericalCode(double tvDoubleView)
 {
     TValue tv; tv.m_value = cxx2a_bit_cast<uint64_t>(tvDoubleView);
-    if (!LuaLib::TVDoubleViewToNumberSlow(tvDoubleView /*inout*/))
+    if (!LuaLib_TVDoubleViewToNumberSlow(tvDoubleView /*inout*/))
     {
         return -1;
     }
@@ -380,7 +380,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_rep)
     VM* vm = VM::GetActiveVMForCurrentThread();
     GET_ARG_AS_STRING(rep, 1, inputStr, inputStrLen);
 
-    auto [success, numCopiesDbl] = LuaLib::ToNumber(GetArg(1));
+    auto [success, numCopiesDbl] = LuaLib_ToNumber(GetArg(1));
     if (unlikely(!success))
     {
         ThrowError("bad argument #2 to 'rep' (number expected)");
@@ -432,7 +432,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
     else
     {
         TValue tvLb = GetArg(1);
-        auto [success, val] = LuaLib::ToNumber(tvLb);
+        auto [success, val] = LuaLib_ToNumber(tvLb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #2 to 'sub' (number expected)");
@@ -448,7 +448,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
     else
     {
         TValue tvUb = GetArg(2);
-        auto [success, val] = LuaLib::ToNumber(tvUb);
+        auto [success, val] = LuaLib_ToNumber(tvUb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #3 to 'sub' (number expected)");

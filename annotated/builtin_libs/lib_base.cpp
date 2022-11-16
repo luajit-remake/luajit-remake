@@ -1,5 +1,5 @@
 #include "deegen_api.h"
-#include "lib_util.h"
+#include "lualib_tonumber_util.h"
 #include "runtime_utils.h"
 
 // base.assert -- https://www.lua.org/manual/5.1/manual.html#pdf-assert
@@ -984,7 +984,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_tonumber)
     if (likely(GetNumArgs() == 1))
     {
 base_10_conversion:
-        auto [success, value] = LuaLib::ToNumber(input);
+        auto [success, value] = LuaLib_ToNumber(input);
         if (success)
         {
             Return(TValue::Create<tDouble>(value));
@@ -1001,7 +1001,7 @@ base_10_conversion:
         goto base_10_conversion;
     }
 
-    auto [success, baseValueDouble] = LuaLib::ToNumber(tvBase);
+    auto [success, baseValueDouble] = LuaLib_ToNumber(tvBase);
     if (unlikely(!success))
     {
         ThrowError("bad argument #2 to 'tonumber' (number expected)");
@@ -1281,7 +1281,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_unpack)
     else
     {
         TValue tvLb = GetArg(1);
-        auto [success, val] = LuaLib::ToNumber(tvLb);
+        auto [success, val] = LuaLib_ToNumber(tvLb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #2 to 'unpack' (number expected)");
@@ -1297,7 +1297,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_unpack)
     else
     {
         TValue tvUb = GetArg(2);
-        auto [success, val] = LuaLib::ToNumber(tvUb);
+        auto [success, val] = LuaLib_ToNumber(tvUb);
         if (unlikely(!success))
         {
             ThrowError("bad argument #3 to 'unpack' (number expected)");
