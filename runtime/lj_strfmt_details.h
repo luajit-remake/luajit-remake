@@ -34,6 +34,7 @@
 #endif
 
 #include "common.h"
+#include "simple_string_stream.h"
 
 typedef uint32_t SFormat;  /* Format indicator. */
 
@@ -100,3 +101,5 @@ typedef enum FormatType {
 #define STRFMT_MAXBUF_INT	(1+10)  /* Sign + int32_t in decimal. */
 #define STRFMT_MAXBUF_NUM	32  /* Must correspond with STRFMT_G14. */
 #define STRFMT_MAXBUF_PTR	(2+2*sizeof(ptrdiff_t))  /* "0x" + hex ptr. */
+
+SimpleTempStringStream *lj_strfmt_putfnum(SimpleTempStringStream *sb, uint32_t sf, double n);

@@ -31,7 +31,6 @@
 #pragma once
 
 #include "common.h"
-#include "simple_string_stream.h"
 
 /* Maximum buffer sizes for conversions. */
 constexpr size_t x_default_tostring_buffersize_xint = (1+22) + 1;  /* '0' prefix + uint64_t in octal. */
@@ -48,5 +47,3 @@ char* StringifyDoubleUsingDefaultLuaFormattingOptions(char* buf /*out*/, double 
 // Returns the address of the '\0'
 //
 char* StringifyInt32UsingDefaultLuaFormattingOptions(char* buf /*out*/, int32_t k);
-
-SimpleTempStringStream *lj_strfmt_putfnum(SimpleTempStringStream *sb, uint32_t sf, double n);

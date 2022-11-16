@@ -4,6 +4,9 @@ add_library(runtime
   lj_bytecode_parser.cpp
   init_global_object.cpp
   math_fast_pow.cpp
+  lj_strscan.cpp
+  lj_strfmt_num.cpp
+  lj_strfmt.cpp
 )
 
 add_dependencies(runtime 

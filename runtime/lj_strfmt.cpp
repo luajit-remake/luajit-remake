@@ -35,7 +35,7 @@
 #include "lj_strfmt.h"
 #include "lj_strfmt_details.h"
 #include "lj_char_trait_details.h"
-#include "double_to_string.h"
+#include "lj_strfmt_num.h"
 #include "tvalue.h"
 #include "lualib_tonumber_util.h"
 

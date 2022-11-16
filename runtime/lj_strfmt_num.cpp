@@ -30,7 +30,7 @@
 
 #define LJ_IMPORTED_SOURCE
 
-#include "double_to_string.h"
+#include "lj_strfmt_num.h"
 #include "lj_strfmt_details.h"
 
 #pragma clang diagnostic push

@@ -30,7 +30,7 @@
 
 #define LJ_IMPORTED_SOURCE
 
-#include "string_to_number.h"
+#include "lj_strscan.h"
 #include "lj_char_trait_details.h"
 
 #pragma clang diagnostic push

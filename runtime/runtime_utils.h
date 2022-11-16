@@ -1,6 +1,8 @@
 #pragma once
 
 #include "common_utils.h"
+#include "lj_strfmt_num.h"
+#include "lj_strscan.h"
 #include "memory_ptr.h"
 #include "vm.h"
 #include "structure.h"
