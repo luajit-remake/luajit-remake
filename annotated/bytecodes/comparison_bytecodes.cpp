@@ -179,9 +179,30 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
                 }
 
                 metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, GetMetamethodKind<opKind>());
-                if (metamethod.IsNil())
+                if (metamethod.Is<tNil>())
                 {
-                    goto fail;
+                    // According to Lua standard:
+                    //     In the absence of a "le" metamethod, Lua tries the "lt", assuming that a <= b is equivalent to not (b < a).
+                    //
+                    // So if the lookup for __le metamethod failed, but both tables have metatable (so __lt metamethod lookup might succeed),
+                    // we should lookup for the __lt metamethod.
+                    //
+                    if constexpr(GetMetamethodKind<opKind>() == LuaMetamethodKind::Le)
+                    {
+                        metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Lt);
+                        if (metamethod.Is<tNil>())
+                        {
+                            goto fail;
+                        }
+                        else
+                        {
+                            goto do_metamethod_call_lt_for_le;
+                        }
+                    }
+                    else
+                    {
+                        goto fail;
+                    }
                 }
                 goto do_metamethod_call;
             }
@@ -219,18 +240,37 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
         }
 
 do_metamethod_call:
-        if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
-        }
+            if (likely(metamethod.Is<tFunction>()))
+            {
+                MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
+            }
 
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
-        if (unlikely(callTarget == nullptr))
+            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            if (unlikely(callTarget == nullptr))
+            {
+                ThrowError(MakeErrorMessageForUnableToCall(metamethod));
+            }
+
+            MakeCall(callTarget, metamethod, lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
+        }
+do_metamethod_call_lt_for_le:
         {
-            ThrowError(MakeErrorMessageForUnableToCall(metamethod));
-        }
+            // We need to swap the order of 'lhs' and 'rhs', and also invert the result
+            //
+            if (likely(metamethod.Is<tFunction>()))
+            {
+                MakeCall(metamethod.As<tFunction>(), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
+            }
 
-        MakeCall(callTarget, metamethod, lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
+            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            if (unlikely(callTarget == nullptr))
+            {
+                ThrowError(MakeErrorMessageForUnableToCall(metamethod));
+            }
+
+            MakeCall(callTarget, metamethod, rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
+        }
     }
 fail:
     // TODO: make this error consistent with Lua

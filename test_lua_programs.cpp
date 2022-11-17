@@ -1249,4 +1249,9 @@ TEST(LuaLib, table_sort_4)
     RunSimpleLuaTest("luatests/table_sort_4.lua.json");
 }
 
+TEST(LuaTest, le_use_lt_metamethod)
+{
+    RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua.json");
+}
+
 }   // anonymous namespace

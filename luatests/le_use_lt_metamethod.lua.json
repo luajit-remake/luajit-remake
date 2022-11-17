@@ -1,0 +1,2166 @@
+{
+  "ChunkName": "@luatests/le_use_lt_metamethod.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 1,
+      "SourceLineEnd": 4,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 2 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 0, 4 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 1, 4 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 0, 4 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 2, 1, 0 ],
+          "SourceLine": 2
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 3
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "in lt metamethod, lhs = %s, rhs = %s"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 5,
+      "SourceLineEnd": 8,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 2 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 4 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 5 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 6 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 5 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 4 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 0, 1, 0 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 7
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "in lt2 metamethod, lhs = %s, rhs = %s"
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "b"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 9,
+      "SourceLineEnd": 12,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 2 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 4 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 5 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 6 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 5 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 4 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 0, 1, 0 ],
+          "SourceLine": 10
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 11
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "in le metamethod, lhs = %s, rhs = %s"
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "b"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 11,
+      "SourceLineStart": 13,
+      "SourceLineEnd": 16,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 2 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 9, 4 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 9, 9, 5 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 10, 6 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 10, 10, 5 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 0, 4 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 0, 1, 0 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 15
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 15
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "in le2 metamethod, lhs = %s, rhs = %s"
+        },
+        {
+          "Type": "String",
+          "Value": "a"
+        },
+        {
+          "Type": "String",
+          "Value": "name"
+        },
+        {
+          "Type": "String",
+          "Value": "b"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 22,
+      "SourceLineStart": 42,
+      "SourceLineEnd": 57,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 43
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 44
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 45
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 0, 1 ],
+          "SourceLine": 46
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 0, 2 ],
+          "SourceLine": 47
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 50
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 51
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 51
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 1, 1 ],
+          "SourceLine": 52
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 1, 2 ],
+          "SourceLine": 53
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 4 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 12, 12, 5 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 16, 6 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 4 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 18, 5 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 19, 6 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 20, 7 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 21, 2 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 12, 0, 7 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 8, 1, 0 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 12, 7 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 16, 3 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 2 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 12, 2, 3 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 8, 1, 2 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 57
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "(no mt)"
+        },
+        {
+          "Type": "String",
+          "Value": "ltName"
+        },
+        {
+          "Type": "String",
+          "Value": "leName"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "Executing test: a.lt = %s, a.le = %s, b.lt = %s, b.le = %s, op = %s"
+        },
+        {
+          "Type": "String",
+          "Value": "pcall"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 65,
+      "SourceLineEnd": 65,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "ISLT",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 65
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 66,
+      "SourceLineEnd": 66,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "ISLE",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 66
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 67,
+      "SourceLineEnd": 67,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "ISLT",
+          "OpData": [ 7, 6 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 67
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 68,
+      "SourceLineEnd": 68,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "ISLE",
+          "OpData": [ 7, 6 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 68
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 69,
+      "SourceLineEnd": 69,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 69
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 70,
+      "SourceLineEnd": 70,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 70
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 71,
+      "SourceLineEnd": 71,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 7, 6 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 71
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 72,
+      "SourceLineEnd": 72,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "GGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 7, 6 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 3 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 72
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "print"
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 12,
+      "SourceLineStart": 59,
+      "SourceLineEnd": 73,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 60
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 3 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 62
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 63
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 63
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 63
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 3 ],
+          "SourceLine": 63
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 4 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 5 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 65
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 6 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 7 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 66
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 8 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 9 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 67
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 10 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 11 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 12 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 13 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 14 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 15 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 16 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 17 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 10, 18 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 11, 19 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 1, 5 ],
+          "SourceLine": 72
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 73
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "a"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "setmetatable"
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "String",
+                "Value": "name"
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "b"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "String",
+          "Value": "run_test_impl"
+        },
+        {
+          "Type": "String",
+          "Value": "a<b"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 5
+        },
+        {
+          "Type": "String",
+          "Value": "a<=b"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 6
+        },
+        {
+          "Type": "String",
+          "Value": "a>b"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 7
+        },
+        {
+          "Type": "String",
+          "Value": "a>=b"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 8
+        },
+        {
+          "Type": "String",
+          "Value": "not(a<b)"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 9
+        },
+        {
+          "Type": "String",
+          "Value": "not(a<=b)"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 10
+        },
+        {
+          "Type": "String",
+          "Value": "not(a>b)"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 11
+        },
+        {
+          "Type": "String",
+          "Value": "not(a>=b)"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 12
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 24,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 81,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 1, 1 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 3, 3 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 4, 4 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 0, 4, 1 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 1, 4, 2 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 5, 5 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 6, 6 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 2, 6, 1 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 3, 6, 2 ],
+          "SourceLine": 19
+        },
+        {
+          "OpCode": "TDUP",
+          "OpData": [ 7, 7 ],
+          "SourceLine": 20
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 22
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 10, 24 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 14, 1 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 15, 3 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 16, 1 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 14, 19 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 18, 0 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 5, 13 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 19, 18, 8 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 4, 13 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 19, 0 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 19, 3 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 4, 13 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 19, 18, 9 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 7, 17 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 19, 18, 10 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 6, 17 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "ISEQP",
+          "OpData": [ 19, 0 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 19, 3 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 6, 17 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 19, 18, 11 ],
+          "SourceLine": 33
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 8, 8, 0 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 18, 9, 8 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 14, -17 ],
+          "SourceLine": 25
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 10, -22 ],
+          "SourceLine": 24
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 8, 8, 0 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 10, 9, 8 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 10, 12 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 10, 13 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 10, 14 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 10, 15 ],
+          "SourceLine": 59
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 8 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 10, 11 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 14, 1 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 15, 8 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 16, 1 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 14, 6 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 18, 15 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 22, 9, 13 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 9, 17 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 18, 1, 3 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 14, -4 ],
+          "SourceLine": 76
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 10, -9 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 79
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 1
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 2
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 3
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 1
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "lt"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 2
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "lt2"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 3
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "nil"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 4
+        },
+        {
+          "Type": "Table",
+          "Value": [],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 0
+        },
+        {
+          "Type": "Table",
+          "Value": [
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 1
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "le"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 2
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "le2"
+              }
+            },
+            {
+              "EntryKey": {
+                "Type": "Int32",
+                "Value": 3
+              },
+              "EntryValue": {
+                "Type": "String",
+                "Value": "nil"
+              }
+            }
+          ],
+          "AdditionalNamedKeys": 0,
+          "ArraySizeHint": 4
+        },
+        {
+          "Type": "String",
+          "Value": "ltName"
+        },
+        {
+          "Type": "String",
+          "Value": "__lt"
+        },
+        {
+          "Type": "String",
+          "Value": "leName"
+        },
+        {
+          "Type": "String",
+          "Value": "__le"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 4
+        },
+        {
+          "Type": "String",
+          "Value": "run_test_impl"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 13
+        },
+        {
+          "Type": "String",
+          "Value": "run_test"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    }
+  ]
+}
