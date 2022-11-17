@@ -348,6 +348,147 @@ DEEGEN_DEFINE_LIB_FUNC(string_len)
     Return(TValue::Create<tDouble>(static_cast<double>(length)));
 }
 
+// Perform the simple 'toupper' or 'tolower' that just changes 'a-z' to 'A-Z' or vice versa.
+// lb must be _mm_set1_epi8(0x60) for 'toupper' or _mm_set1_epi8(0x40) for 'tolower'
+// ub must be _mm_set1_epi8(0x7b) for 'toupper' or _mm_set1_epi8(0x5b) for 'tolower'
+// msk must be _mm_set1_epi8(0x20)
+//
+static __m128i ALWAYS_INLINE AlphabeticalToUpperOrLowerSimd(__m128i lb, __m128i ub, __m128i msk, __m128i input)
+{
+    __m128i x1 = _mm_cmpgt_epi8(input, lb);
+    __m128i x2 = _mm_cmplt_epi8(input, ub);
+    __m128i x3 = _mm_and_si128(x1, x2);
+    __m128i x4 = _mm_and_si128(msk, x3);
+    __m128i x5 = _mm_xor_si128(input, x4);
+    return x5;
+}
+
+// The behavior of toupper/tolower is locale dependent so we cannot simply change 'a-z' to 'A-Z' (or vice versa)
+// However, we can provide a fastpath for common locales where the rule is indeed changing 'a-z' to 'A-Z',
+// and a fastpath for the shared common case where the char code is < 128 (in which the locale does not affect the behavior).
+//
+template<bool isToUpper>
+static void ALWAYS_INLINE FastToUpperOrLower(const char* ptrIn, size_t length, char* ptrOut /*out*/)
+{
+    constexpr auto stdImplFn = isToUpper ? toupper : tolower;
+
+    // Only attempt to use the optimized implementation if the string is at least 16 bytes, as we need to
+    // check the locale, and initialize some SIMD registers...
+    // This also handles the edge case, so our vectorized implementation can safely assume length >= 16
+    //
+    if (length >= 16)
+    {
+        // When 'nullptr' is passed in to 'setlocale', it only returns the current locale
+        //
+        const char* locale = std::setlocale(LC_CTYPE, nullptr /*queryLocale*/);
+
+        // Check for the good case: locale is 'C' or 'en_US.UTF-8', where toupper/tolower has no bizzare behaviors.
+        //
+        bool isSimpleLocale = (locale[0] == 'C' && locale[1] == '\0') || strcmp(locale, "en_US.UTF-8") == 0;
+
+        __m128i lb = _mm_set1_epi8(isToUpper ? 0x60 : 0x40);   // 'a'/'A' - 1
+        __m128i ub = _mm_set1_epi8(isToUpper ? 0x7b : 0x5b);   // 'z'/'Z' + 1
+        __m128i msk = _mm_set1_epi8(0x20);
+
+        if (likely(isSimpleLocale))
+        {
+            // The rule is to simply change 'a-z' to 'A-Z'
+            //
+            const char* src = ptrIn;
+            const char* end = ptrIn + length;
+            char* dst = ptrOut;
+            while (src + 16 <= end)
+            {
+                __m128i input = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+                __m128i res = AlphabeticalToUpperOrLowerSimd(lb, ub, msk, input);
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), res);
+                src += 16;
+                dst += 16;
+            }
+            // This is correct since the string is at least 16 bytes
+            //
+            if (src < end)
+            {
+                __m128i input = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+                __m128i res = AlphabeticalToUpperOrLowerSimd(lb, ub, msk, input);
+                dst = ptrOut + length - 16;
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), res);
+            }
+        }
+        else
+        {
+            // We do not recognize the locale, but locale cannot change the toupper/tolower behavior for char code < 128.
+            // So we check this and use fastpath if possible.
+            //
+            const char* src = ptrIn;
+            const char* end = ptrIn + length;
+            char* dst = ptrOut;
+            while (src + 16 <= end)
+            {
+                __m128i input = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src));
+                // Collect the MSB of each byte. If 'mask == 0', we know all characters are < 128
+                //
+                int mask = _mm_movemask_epi8(input);
+                if (likely(mask == 0))
+                {
+                    __m128i res = AlphabeticalToUpperOrLowerSimd(lb, ub, msk, input);
+                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), res);
+                }
+                else
+                {
+                    // Just call std toupper/tolower
+                    //
+                    for (size_t i = 0; i < 16; i++)
+                    {
+                        dst[i] = static_cast<char>(stdImplFn(static_cast<unsigned char>(src[i])));
+                    }
+                }
+                src += 16;
+                dst += 16;
+            }
+            // This is correct since the string is at least 16 bytes
+            //
+            if (src < end)
+            {
+                __m128i input = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+                // Collect the MSB of each byte. If 'mask == 0', we know all characters are < 128
+                //
+                int mask = _mm_movemask_epi8(input);
+                if (likely(mask == 0))
+                {
+                    __m128i res = AlphabeticalToUpperOrLowerSimd(lb, ub, msk, input);
+                    dst = ptrOut + length - 16;
+                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), res);
+                }
+                else
+                {
+                    while (src < end)
+                    {
+                        *dst = static_cast<char>(stdImplFn(static_cast<unsigned char>(*src)));
+                        src++;
+                        dst++;
+                    }
+                }
+            }
+        }
+        // In debug mode, assert that our optimized implementation produced the same result as std toupper/tolower
+        //
+#ifndef NDEBUG
+        for (size_t i = 0; i < length; i++)
+        {
+            assert(ptrOut[i] == static_cast<char>(stdImplFn(static_cast<unsigned char>(ptrIn[i]))));
+        }
+#endif
+    }
+    else
+    {
+        for (size_t i = 0; i < length; i++)
+        {
+            ptrOut[i] = static_cast<char>(stdImplFn(static_cast<unsigned char>(ptrIn[i])));
+        }
+    }
+}
+
 // string.lower -- https://www.lua.org/manual/5.1/manual.html#pdf-string.lower
 //
 // string.lower (s)
@@ -364,15 +505,10 @@ DEEGEN_DEFINE_LIB_FUNC(string_lower)
 
     GET_ARG_AS_STRING(lower, 1, ptr, length);
 
-    // The 'lower' function is locale dependent so we cannot simply change 'A-Z' to 'a-z'
-    // TODO: provide a fastpath for the default C locale
-    //
     SimpleTempStringStream ss;
     char* buf = ss.Reserve(length);
-    for (size_t i = 0; i < length; i++)
-    {
-        buf[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(ptr[i])));
-    }
+
+    FastToUpperOrLower<false /*isToUpper*/>(ptr /*in*/, length, buf /*out*/);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapPtr<HeapString> res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
@@ -573,15 +709,10 @@ DEEGEN_DEFINE_LIB_FUNC(string_upper)
 
     GET_ARG_AS_STRING(upper, 1, ptr, length);
 
-    // The 'upper' function is locale dependent so we cannot simply change 'a-z' to 'A-Z'
-    // TODO: provide a fastpath for the default C locale
-    //
     SimpleTempStringStream ss;
     char* buf = ss.Reserve(length);
-    for (size_t i = 0; i < length; i++)
-    {
-        buf[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(ptr[i])));
-    }
+
+    FastToUpperOrLower<true /*isToUpper*/>(ptr /*in*/, length, buf /*out*/);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapPtr<HeapString> res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
