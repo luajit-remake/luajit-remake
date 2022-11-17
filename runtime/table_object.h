@@ -1859,13 +1859,6 @@ public:
         assert(didSomethingNontrivial);
     }
 
-    static void __attribute__((__preserve_most__)) NO_INLINE PutByIntegerIndexSlow(HeapPtr<TableObject> tableObj, int64_t index64, TValue value)
-    {
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        TableObject* raw = TranslateToRawPointer(vm, tableObj);
-        [[clang::always_inline]] raw->PutByIntegerIndexSlow(vm, index64, value);
-    }
-
     ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
     {
         assert(m_butterfly != nullptr);
@@ -1967,11 +1960,97 @@ public:
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
+    static bool WARN_UNUSED TryPutByValIntegerIndexFastNoIC(T self, int64_t index, TValue value)
+    {
+        ArrayType arrType = TCGet(self->m_arrayType);
+        AssertImp(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
+                  arrType.m_asValue == TCGet(self->m_hiddenClass).template As<Structure>()->m_arrayType.m_asValue);
+
+        if (arrType.IsContinuous())
+        {
+            switch (arrType.ArrayKind())
+            {
+            case ArrayType::Kind::Int32:
+            {
+                if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, PutByIntegerIndexICInfo::ValueCheckKind::Int32))
+                {
+                    return false;
+                }
+                break;
+            }
+            case ArrayType::Kind::Double:
+            {
+                if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, PutByIntegerIndexICInfo::ValueCheckKind::Double))
+                {
+                    return false;
+                }
+                break;
+            }
+            case ArrayType::Kind::Any:
+            {
+                if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, PutByIntegerIndexICInfo::ValueCheckKind::NotNil))
+                {
+                    return false;
+                }
+                break;
+            }
+            case ArrayType::Kind::NoButterflyArrayPart:
+            {
+                assert(false);
+                __builtin_unreachable();
+            }
+            }
+
+            return TryPutByIntegerIndexFastPath_ContinuousArray(self, index, value);
+        }
+
+        if (unlikely(arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart))
+        {
+            return false;
+        }
+        else
+        {
+            // In bound put
+            //
+            switch (arrType.ArrayKind())
+            {
+            case ArrayType::Kind::Int32:
+            {
+                if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, PutByIntegerIndexICInfo::ValueCheckKind::Int32OrNil))
+                {
+                    return false;
+                }
+                break;
+            }
+            case ArrayType::Kind::Double:
+            {
+                if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, PutByIntegerIndexICInfo::ValueCheckKind::DoubleOrNil))
+                {
+                    return false;
+                }
+                break;
+            }
+            case ArrayType::Kind::Any:
+            {
+                // For non-continuous array, writing 'nil' is fine as long as it's in bound, no check needed
+                //
+                break;
+            }
+            case ArrayType::Kind::NoButterflyArrayPart:
+            {
+                assert(false);
+                __builtin_unreachable();
+            }
+            }
+
+            return TryPutByIntegerIndexFastPath_InBoundPut(self, index, value);
+        }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void RawPutByValIntegerIndex(T self, int64_t index, TValue value)
     {
-        PutByIntegerIndexICInfo icInfo;
-        PreparePutByIntegerIndex(self, index, value, icInfo /*out*/);
-        if (!TryPutByIntegerIndexFast(self, index, value, icInfo))
+        if (unlikely(!TableObject::TryPutByValIntegerIndexFastNoIC(self, index, value)))
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
             TableObject* obj = TranslateToRawPointer(vm, self);

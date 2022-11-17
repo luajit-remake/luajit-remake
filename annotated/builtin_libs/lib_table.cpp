@@ -113,12 +113,7 @@ static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab
         TValue val = TValue::Create<tDouble>(ptr[i - 1]);
         // TODO: we could have done better here
         //
-        PutByIntegerIndexICInfo info;
-        TableObject::PreparePutByIntegerIndex(tab, i, val, info /*out*/);
-        if (!TableObject::TryPutByIntegerIndexFast(tab, i, val, info))
-        {
-            TableObject::PutByIntegerIndexSlow(tab, i, val);
-        }
+        TableObject::RawPutByValIntegerIndex(tab, i, val);
     }
 
     if (ptr != buf)
@@ -186,12 +181,7 @@ static void LuaLibTableSortStringNonContinuousArrayNoMM(HeapPtr<TableObject> tab
         TValue val = ptr[i - 1];
         // TODO: we could have done better here
         //
-        PutByIntegerIndexICInfo info;
-        TableObject::PreparePutByIntegerIndex(tab, i, val, info /*out*/);
-        if (!TableObject::TryPutByIntegerIndexFast(tab, i, val, info))
-        {
-            TableObject::PutByIntegerIndexSlow(tab, i, val);
-        }
+        TableObject::RawPutByValIntegerIndex(tab, i, val);
     }
 
     if (ptr != buf)
@@ -441,11 +431,11 @@ private:
 
     void PutIndex(int32_t idx, TValue val)
     {
-        PutByIntegerIndexICInfo icInfo;
-        TableObject::PreparePutByIntegerIndex(tab, idx, val, icInfo /*out*/);
-        if (!TableObject::TryPutByIntegerIndexFast(tab, idx, val, icInfo))
+        if (unlikely(!TableObject::TryPutByValIntegerIndexFastNoIC(tab, idx, val)))
         {
-            TableObject::PutByIntegerIndexSlow(tab, idx, val);
+            VM* vm = VM::GetActiveVMForCurrentThread();
+            TableObject* obj = TranslateToRawPointer(vm, tab);
+            obj->PutByIntegerIndexSlow(vm, idx, val);
             // If the user writes exotic code that changes the array in the comparator, it could result in ArrayType change.
             // Clearly this is undefined behavior, but we should not corrupt the VM. So compute GetByIntegerIndexICInfo again.
             //

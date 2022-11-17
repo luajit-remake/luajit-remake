@@ -49,10 +49,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
             {
                 HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
 
-                PutByIntegerIndexICInfo icInfo;
-                TableObject::PreparePutByIntegerIndex(tableObj, index, valueToPut, icInfo /*out*/);
-
-                if (likely(!icInfo.m_mayHaveMetatable))
+                if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
                 {
                     goto no_metamethod;
                 }
@@ -96,12 +93,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
                 }
 
 no_metamethod:
-                if (!TableObject::TryPutByIntegerIndexFast(tableObj, index, valueToPut, icInfo))
-                {
-                    VM* vm = VM::GetActiveVMForCurrentThread();
-                    TableObject* obj = TranslateToRawPointer(vm, tableObj);
-                    obj->PutByIntegerIndexSlow(vm, index, valueToPut);
-                }
+                TableObject::RawPutByValIntegerIndex(tableObj, index, valueToPut);
                 Return();
             }
         }
