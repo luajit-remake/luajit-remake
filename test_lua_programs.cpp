@@ -964,6 +964,21 @@ TEST(LuaTest, PutByValInterpreterIC_5)
     RunSimpleLuaTest("luatests/putbyval_interpreter_ic_5.lua.json");
 }
 
+TEST(LuaTest, istc_conditional_copy)
+{
+    RunSimpleLuaTest("luatests/istc_conditional_copy.lua.json");
+}
+
+TEST(LuaTest, isfc_conditional_copy)
+{
+    RunSimpleLuaTest("luatests/isfc_conditional_copy.lua.json");
+}
+
+TEST(LuaTest, le_use_lt_metamethod)
+{
+    RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua.json");
+}
+
 TEST(LuaLib, base_assert)
 {
     RunSimpleLuaTest("luatests/lib_base_assert.lua.json");
@@ -1249,14 +1264,84 @@ TEST(LuaLib, table_sort_4)
     RunSimpleLuaTest("luatests/table_sort_4.lua.json");
 }
 
-TEST(LuaTest, le_use_lt_metamethod)
-{
-    RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua.json");
-}
-
 TEST(LuaLib, table_lib_concat)
 {
     RunSimpleLuaTest("luatests/table_lib_concat.lua.json");
+}
+
+TEST(LuaBenchmark, array3d)
+{
+    RunSimpleLuaTest("luatests/array3d.lua.json");
+}
+
+TEST(LuaBenchmark, life)
+{
+    RunSimpleLuaTest("luatests/life.lua.json");
+}
+
+TEST(LuaBenchmark, mandel2)
+{
+    RunSimpleLuaTest("luatests/mandel2.lua.json");
+}
+
+TEST(LuaBenchmark, heapsort)
+{
+    RunSimpleLuaTest("luatests/heapsort.lua.json");
+}
+
+TEST(LuaBenchmark, nsieve)
+{
+    RunSimpleLuaTest("luatests/nsieve.lua.json");
+}
+
+TEST(LuaBenchmark, quadtree2)
+{
+    RunSimpleLuaTest("luatests/quadtree2.lua.json");
+}
+
+TEST(LuaBenchmark, ray)
+{
+    RunSimpleLuaTest("luatests/ray.lua.json");
+}
+
+TEST(LuaBenchmark, ray2)
+{
+    RunSimpleLuaTest("luatests/ray2.lua.json");
+}
+
+TEST(LuaBenchmark, series)
+{
+    RunSimpleLuaTest("luatests/series.lua.json");
+}
+
+TEST(LuaBenchmark, scimark_fft)
+{
+    RunSimpleLuaTest("luatests/scimark_fft.lua.json");
+}
+
+TEST(LuaBenchmark, scimark_lu)
+{
+    RunSimpleLuaTest("luatests/scimark_lu.lua.json");
+}
+
+TEST(LuaBenchmark, scimark_sor)
+{
+    RunSimpleLuaTest("luatests/scimark_sor.lua.json");
+}
+
+TEST(LuaBenchmark, scimark_sparse)
+{
+    RunSimpleLuaTest("luatests/scimark_sparse.lua.json");
+}
+
+TEST(LuaBenchmark, table_sort)
+{
+    RunSimpleLuaTest("luatests/table_sort.lua.json");
+}
+
+TEST(LuaBenchmark, table_sort_cmp)
+{
+    RunSimpleLuaTest("luatests/table_sort_cmp.lua.json");
 }
 
 }   // anonymous namespace

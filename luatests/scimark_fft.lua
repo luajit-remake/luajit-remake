@@ -1,91 +1,19 @@
 ------------------------------------------------------------------------------
--- Lua SciMark (2010-12-20).
+-- Lua SciMark (2010-03-15).
 --
 -- A literal translation of SciMark 2.0a, written in Java and C.
 -- Credits go to the original authors Roldan Pozo and Bruce Miller.
 -- See: http://math.nist.gov/scimark2/
 ------------------------------------------------------------------------------
--- Copyright (C) 2006-2010 Mike Pall. All rights reserved.
---
--- Permission is hereby granted, free of charge, to any person obtaining
--- a copy of this software and associated documentation files (the
--- "Software"), to deal in the Software without restriction, including
--- without limitation the rights to use, copy, modify, merge, publish,
--- distribute, sublicense, and/or sell copies of the Software, and to
--- permit persons to whom the Software is furnished to do so, subject to
--- the following conditions:
---
--- The above copyright notice and this permission notice shall be
--- included in all copies or substantial portions of the Software.
---
--- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
--- EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
--- MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
--- IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
--- CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
--- TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
--- SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
---
--- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
-------------------------------------------------------------------------------
 
-------------------------------------------------------------------------------
--- Modificatin to be compatible with Lua 5.3
-------------------------------------------------------------------------------
+local SCIMARK_VERSION = "2010-03-15"
 
-if table and table.unpack then
-    unpack = table.unpack
-end
-
-------------------------------------------------------------------------------
-
-local SCIMARK_VERSION = "2010-12-10"
-local SCIMARK_COPYRIGHT = "Copyright (C) 2006-2010 Mike Pall"
-
-local MIN_TIME = 2.0
 local RANDOM_SEED = 101009 -- Must be odd.
-local SIZE_SELECT = "small"
-
-local benchmarks = {
-  "FFT", "SOR", "MC", "SPARSE", "LU",
-  small = {
-    FFT		= { 1024 },
-    SOR		= { 100 },
-    MC		= { },
-    SPARSE	= { 1000, 5000 },
-    LU		= { 100 },
-  },
-  large = {
-    FFT		= { 1048576 },
-    SOR		= { 1000 },
-    MC		= { },
-    SPARSE	= { 100000, 1000000 },
-    LU		= { 1000 },
-  },
-}
 
 local abs, log, sin, floor = math.abs, math.log, math.sin, math.floor
 local pi, clock = math.pi, os.clock
-local format = string.format
 
-------------------------------------------------------------------------------
--- Select array type: Lua tables or native (FFI) arrays
-------------------------------------------------------------------------------
-
-local darray, iarray
-
-local function array_init()
-  if jit and jit.status and jit.status() then
-    local ok, ffi = pcall(require, "ffi")
-    if ok then
-      darray = ffi.typeof("double[?]")
-      iarray = ffi.typeof("int[?]")
-      return
-    end
-  end
-  function darray(n) return {} end
-  iarray = darray
-end
+local benchmarks = {}
 
 ------------------------------------------------------------------------------
 -- This is a Lagged Fibonacci Pseudo-random Number Generator with
@@ -94,50 +22,30 @@ end
 
 local rand, rand_init
 
-if jit and jit.status and jit.status() then
-  -- LJ2 has bit operations and zero-based arrays (internally).
-  local bit = require("bit")
-  local band, sar = bit.band, bit.arshift
-  function rand_init(seed)
-    local Rm, Rj, Ri = iarray(17), 16, 11
-    for i=0,16 do Rm[i] = 0 end
-    for i=16,0,-1 do
-      seed = band(seed*9069, 0x7fffffff)
-      Rm[i] = seed
-    end
-    function rand()
-      local i = band(Ri+1, sar(Ri-16, 31))
-      local j = band(Rj+1, sar(Rj-16, 31))
-      Ri, Rj = i, j
-      local k = band(Rm[i] - Rm[j], 0x7fffffff)
-      Rm[j] = k
-      return k * (1.0/2147483647.0)
-    end
-  end
-else
-  -- Better for standard Lua with one-based arrays and without bit operations.
-  function rand_init(seed)
-    local Rm, Rj = {}, 1
-    for i=1,17 do Rm[i] = 0 end
-    for i=17,1,-1 do
-      seed = (seed*9069) % (2^31)
-      Rm[i] = seed
-    end
-    function rand()
-      local j, m = Rj, Rm
-      local h = j - 5
-      if h < 1 then h = h + 17 end
-      local k = m[h] - m[j]
-      if k < 0 then k = k + 2147483647 end
-      m[j] = k
-      if j < 17 then Rj = j + 1 else Rj = 1 end
-      return k * (1.0/2147483647.0)
-    end
+-- Better for standard Lua with one-based arrays and without bit operations.
+local Rm, Rj = {}, 1
+for i=1,17 do Rm[i] = 0 end
+function rand_init(seed)
+  Rj = 1
+  for i=17,1,-1 do
+    seed = (seed*9069) % (2^31)
+    Rm[i] = seed
   end
 end
+function rand()
+  local j, m = Rj, Rm
+  local h = j - 5
+  if h < 1 then h = h + 17 end
+  local k = m[h] - m[j]
+  if k < 0 then k = k + 2147483647 end
+  m[j] = k
+  if j < 17 then Rj = j + 1 else Rj = 1 end
+  return k * (1.0/2147483647.0)
+end
+
 
 local function random_vector(n)
-  local v = darray(n+1)
+  local v = {}
   for x=1,n do v[x] = rand() end
   return v
 end
@@ -145,7 +53,7 @@ end
 local function random_matrix(m, n)
   local a = {}
   for y=1,m do
-    local v = darray(n+1)
+    local v = {}
     a[y] = v
     for x=1,n do v[x] = rand() end
   end
@@ -213,7 +121,7 @@ function benchmarks.FFT(n)
       fft_transform(v, n, 1)
       for i=1,n*2 do v[i] = v[i] * norm end
     end
-    return ((5*n-2)*l2n + 2*(n+1)) * cycles
+    return v
   end
 end
 
@@ -285,7 +193,7 @@ function benchmarks.SPARSE(n, nz)
   local anz = nr*n
   local vx = random_vector(n)
   local val = random_vector(anz)
-  local vy, col, row = darray(n+1), iarray(nz+1), iarray(n+2)
+  local vy, col, row = {}, {}, {}
   row[1] = 1
   for r=1,n do
     local step = floor(r/nr)
@@ -321,7 +229,7 @@ local function lu_factor(a, pivot, m, n)
     if j < m then
       local recp = 1.0 / a[j][j]
       for k=j+1,m do
-	local v = a[k]
+        local v = a[k]
 	v[j] = v[j] * recp
       end
     end
@@ -337,7 +245,7 @@ end
 
 local function matrix_alloc(m, n)
   local a = {}
-  for y=1,m do a[y] = darray(n+1) end
+  for y=1,m do a[y] = {} end
   return a
 end
 
@@ -351,7 +259,7 @@ end
 function benchmarks.LU(n)
   local mat = random_matrix(n, n)
   local tmp = matrix_alloc(n, n)
-  local pivot = iarray(n+1)
+  local pivot = {}
   return function(cycles)
     for i=1,cycles do
       matrix_copy(tmp, mat, n, n)
@@ -361,73 +269,9 @@ function benchmarks.LU(n)
   end
 end
 
-------------------------------------------------------------------------------
--- Main program.
-------------------------------------------------------------------------------
+rand_init(RANDOM_SEED)
 
-local function printf(...)
-  io.write(format(...))
-end
 
-local function fmtparams(p1, p2)
-  if p2 then return format("[%d, %d]", p1, p2)
-  elseif p1 then return format("[%d]", p1) end
-  return ""
-end
-
-local function measure(min_time, name, ...)
-  array_init()
-  rand_init(RANDOM_SEED)
-  local run = benchmarks[name](...)
-  local cycles = 1
-  repeat
-    local tm = clock()
-    local flops = run(cycles, ...)
-    tm = clock() - tm
-    if tm >= min_time then
-      local res = flops / tm * 1.0e-6
-      local p1, p2 = ...
-      printf("%-7s %8.2f  %s\n", name, res, fmtparams(...))
-      return res
-    end
-    cycles = cycles * 2
-  until false
-end
-
-printf("Lua SciMark %s based on SciMark 2.0a. %s.\n\n",
-       SCIMARK_VERSION, SCIMARK_COPYRIGHT)
-
-while arg and arg[1] do
-  local a = table.remove(arg, 1)
-  if a == "-noffi" then
-    package.preload.ffi = nil
-  elseif a == "-small" then
-    SIZE_SELECT = "small"
-  elseif a == "-large" then
-    SIZE_SELECT = "large"
-  elseif benchmarks[a] then
-    local p = benchmarks[SIZE_SELECT][a]
-    measure(MIN_TIME, a, tonumber(arg[1]) or p[1], tonumber(arg[2]) or p[2])
-    return
-  else
-    printf("Usage: scimark [-noffi] [-small|-large] [BENCH params...]\n\n")
-    printf("BENCH   -small         -large\n")
-    printf("---------------------------------------\n")
-    for _,name in ipairs(benchmarks) do
-      printf("%-7s %-13s %s\n", name,
-	     fmtparams(unpack(benchmarks.small[name])),
-	     fmtparams(unpack(benchmarks.large[name])))
-    end
-    printf("\n")
-    os.exit(1)
-  end
-end
-
-local params = benchmarks[SIZE_SELECT]
-local sum = 0
-for _,name in ipairs(benchmarks) do
-  sum = sum + measure(MIN_TIME, name, unpack(params[name]))
-end
-printf("\nSciMark %8.2f  [%s problem sizes]\n", sum / #benchmarks, SIZE_SELECT)
-io.flush()
+v = benchmarks.FFT(1024)(4)
+print(unpack(v))
 

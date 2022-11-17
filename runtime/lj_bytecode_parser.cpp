@@ -893,8 +893,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateCopyAndBranchIfTruthy({
-                    .value = local(opdata[1]),
+                BranchTargetPopulator p = bw.CreateSelectAndBranchIfTruthy({
+                    .testValue = local(opdata[1]),
+                    .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
                 jumpPatches.push_back(std::make_pair(brTarget, p));
@@ -904,8 +905,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateCopyAndBranchIfFalsy({
-                    .value = local(opdata[1]),
+                BranchTargetPopulator p = bw.CreateSelectAndBranchIfFalsy({
+                    .testValue = local(opdata[1]),
+                    .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
                 jumpPatches.push_back(std::make_pair(brTarget, p));
@@ -916,7 +918,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata.size() == 1);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
                 BranchTargetPopulator p = bw.CreateBranchIfTruthy({
-                    .value = local(opdata[0])
+                    .testValue = local(opdata[0])
                 });
                 jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
@@ -926,7 +928,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata.size() == 1);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
                 BranchTargetPopulator p = bw.CreateBranchIfFalsy({
-                    .value = local(opdata[0])
+                    .testValue = local(opdata[0])
                 });
                 jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;

@@ -1,0 +1,4135 @@
+{
+  "ChunkName": "@luatests/scimark_fft.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 6,
+      "SourceLineStart": 28,
+      "SourceLineEnd": 34,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "USETN",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 29
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 17 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, -1 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 1, 6 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 5, 0, 1 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "MODVN",
+          "OpData": [ 0, 5, 2 ],
+          "SourceLine": 31
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 0, 5, 4 ],
+          "SourceLine": 32
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 1, -4 ],
+          "SourceLine": 30
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 34
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 12,
+          "IsImmutable": false
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 11,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 9069
+        },
+        {
+          "Type": "Double",
+          "Value": 2.147483648E9
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 5,
+      "SourceLineStart": 35,
+      "SourceLineEnd": 44,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 1 ],
+          "SourceLine": 36
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 2, 0, 0 ],
+          "SourceLine": 37
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 2, 2, 1 ],
+          "SourceLine": 38
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 3, 1, 2 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 4, 1, 0 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 3, 3, 4 ],
+          "SourceLine": 39
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 3, 4 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 3, 3, 2 ],
+          "SourceLine": 40
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 3, 1, 0 ],
+          "SourceLine": 41
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 17 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 0, 4 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 4 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 4, 0, 3 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "USETV",
+          "OpData": [ 0, 4 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "USETN",
+          "OpData": [ 0, 3 ],
+          "SourceLine": 42
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 4, 3, 4 ],
+          "SourceLine": 43
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 43
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 12,
+          "IsImmutable": false
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 11,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 5
+        },
+        {
+          "Type": "Int32",
+          "Value": 17
+        },
+        {
+          "Type": "Int32",
+          "Value": 2147483647
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Double",
+          "Value": 4.656612875245797E-10
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 10,
+      "SourceLineStart": 47,
+      "SourceLineEnd": 51,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 48
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 2, 5 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 2, 1 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 6, 1, 5 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 2, -3 ],
+          "SourceLine": 49
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 50
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 9,
+          "IsImmutable": false
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 16,
+      "SourceLineStart": 53,
+      "SourceLineEnd": 61,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 54
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 3, 12 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 56
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 7, 2, 6 ],
+          "SourceLine": 57
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 8, 5 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 12, 0 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 12, 2, 1 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 12, 7, 11 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 8, -3 ],
+          "SourceLine": 58
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 3, -10 ],
+          "SourceLine": 55
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 60
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 9,
+          "IsImmutable": false
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 15,
+      "SourceLineStart": 67,
+      "SourceLineEnd": 77,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 68
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 4, 1, 0 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 4, 4, 1 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 3, 28 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 17 ],
+          "SourceLine": 70
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 7, 6, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 8, 6, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 9, 2, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 10, 2, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 11, 2, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 0, 11 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 12, 2, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 12, 0, 12 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 13, 6, 2 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 13, 0, 13 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 14, 6, 0 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 14, 0, 14 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 14, 0, 10 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 13, 0, 9 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 12, 0, 8 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 11, 0, 7 ],
+          "SourceLine": 71
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 73
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 8, 5 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "LOOP",
+          "OpData": [ 8, 4 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 2, 2, 7 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "DIVVN",
+          "OpData": [ 7, 7, 0 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 8, -5 ],
+          "SourceLine": 74
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 2, 2, 7 ],
+          "SourceLine": 75
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 3, -26 ],
+          "SourceLine": 69
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 77
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 2
+        },
+        {
+          "Type": "Int32",
+          "Value": 4
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 3,
+      "TakesVarArg": false,
+      "MaxFrameSize": 28,
+      "SourceLineStart": 79,
+      "SourceLineEnd": 108,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 80
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 1, 3 ],
+          "SourceLine": 80
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 80
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 80
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 3, 1, 3 ],
+          "SourceLine": 81
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 82
+        },
+        {
+          "OpCode": "LOOP",
+          "OpData": [ 4, 86 ],
+          "SourceLine": 83
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 4, 3, 0 ],
+          "SourceLine": 84
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 6, 1, 0 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 6, 6, 1 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 7, 4, 0 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 5, 19 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 9, 8, 4 ],
+          "SourceLine": 86
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 10, 0, 8 ],
+          "SourceLine": 87
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 11, 8, 1 ],
+          "SourceLine": 87
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 0, 11 ],
+          "SourceLine": 87
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 12, 0, 9 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 13, 9, 1 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 13, 0, 13 ],
+          "SourceLine": 88
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 14, 9, 1 ],
+          "SourceLine": 89
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 15, 10, 12 ],
+          "SourceLine": 89
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 16, 11, 13 ],
+          "SourceLine": 89
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 16, 0, 14 ],
+          "SourceLine": 89
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 15, 0, 9 ],
+          "SourceLine": 89
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 14, 8, 1 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 15, 10, 12 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 16, 11, 13 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 16, 0, 14 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 15, 0, 8 ],
+          "SourceLine": 90
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 5, -17 ],
+          "SourceLine": 85
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 92
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 5, 2, 5 ],
+          "SourceLine": 92
+        },
+        {
+          "OpCode": "DIVVV",
+          "OpData": [ 5, 5, 3 ],
+          "SourceLine": 92
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 5 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 2, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 11, 5, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 2, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "POW",
+          "OpData": [ 7, 7, 8 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 7, 7, 0 ],
+          "SourceLine": 93
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 94
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 3 ],
+          "SourceLine": 95
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 11, 4, 1 ],
+          "SourceLine": 95
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 2 ],
+          "SourceLine": 95
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 10, 41 ],
+          "SourceLine": 95
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 14, 6, 9 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 14, 8, 14 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 15, 7, 8 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 14, 14, 15 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 15, 6, 8 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 15, 9, 15 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 16, 7, 9 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 9, 15, 16 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 14 ],
+          "SourceLine": 96
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 14, 13 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 15, 1, 4 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 15, 15, 0 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 15, 13, 15 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 16, 4, 0 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 14, 25 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 18, 17, 4 ],
+          "SourceLine": 98
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 0, 18 ],
+          "SourceLine": 99
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 20, 18, 1 ],
+          "SourceLine": 99
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 20, 0, 20 ],
+          "SourceLine": 99
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 21, 8, 19 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 22, 9, 20 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 21, 21, 22 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 22, 8, 20 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 23, 9, 19 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 22, 22, 23 ],
+          "SourceLine": 100
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 0, 17 ],
+          "SourceLine": 101
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 24, 17, 1 ],
+          "SourceLine": 101
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 24, 0, 24 ],
+          "SourceLine": 101
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 25, 18, 1 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 26, 23, 21 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 27, 24, 22 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 27, 0, 25 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 26, 0, 18 ],
+          "SourceLine": 102
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 25, 17, 1 ],
+          "SourceLine": 103
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 26, 23, 21 ],
+          "SourceLine": 103
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 27, 24, 22 ],
+          "SourceLine": 103
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 27, 0, 25 ],
+          "SourceLine": 103
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 26, 0, 17 ],
+          "SourceLine": 103
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 14, -23 ],
+          "SourceLine": 97
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 10, -39 ],
+          "SourceLine": 95
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 3, 4 ],
+          "SourceLine": 106
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 1, 3 ],
+          "SourceLine": 107
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 10, -85 ],
+          "SourceLine": 107
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 108
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 15,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 6,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 4,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 2
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Double",
+          "Value": 5E-1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 117,
+      "SourceLineEnd": 125,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 118
+        },
+        {
+          "OpCode": "DIVNV",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 118
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 2, 23 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 120
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 120
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 120
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, -1 ],
+          "SourceLine": 120
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 4 ],
+          "SourceLine": 120
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 1, 4 ],
+          "SourceLine": 121
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 7, 7, 1 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 9 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 11, 11, 1 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 11, 10, 9 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 6, -5 ],
+          "SourceLine": 122
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 2, -21 ],
+          "SourceLine": 119
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 124
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 124
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 0,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 2
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 2
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 110,
+      "SourceLineEnd": 126,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 2, 2 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 2, 2 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "DIVVV",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 111
+        },
+        {
+          "OpCode": "MODVN",
+          "OpData": [ 2, 1, 0 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "ISEQN",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 2, 11 ],
+          "SourceLine": 112
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 2, 2, 1 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 2, 2, 2 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 7, 3 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 3 ],
+          "SourceLine": 113
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 4 ],
+          "SourceLine": 114
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 2, 2, 5 ],
+          "SourceLine": 114
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 114
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 2 ],
+          "SourceLine": 114
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 116
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 6, 0, 2 ],
+          "SourceLine": 116
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 2, 2 ],
+          "SourceLine": 116
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 3, 6 ],
+          "SourceLine": 125
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 125
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 125
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 13,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 16,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "io"
+        },
+        {
+          "Type": "String",
+          "Value": "stderr"
+        },
+        {
+          "Type": "String",
+          "Value": "write"
+        },
+        {
+          "Type": "String",
+          "Value": "Error: FFT data length is not a power of 2\n"
+        },
+        {
+          "Type": "String",
+          "Value": "os"
+        },
+        {
+          "Type": "String",
+          "Value": "exit"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 6
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 0
+        },
+        {
+          "Type": "Int32",
+          "Value": 2
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 5,
+      "TakesVarArg": false,
+      "MaxFrameSize": 25,
+      "SourceLineStart": 132,
+      "SourceLineEnd": 144,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 5, 4, 0 ],
+          "SourceLine": 133
+        },
+        {
+          "OpCode": "SUBNV",
+          "OpData": [ 6, 4, 1 ],
+          "SourceLine": 133
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 1, 1, 1 ],
+          "SourceLine": 134
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 2, 2, 1 ],
+          "SourceLine": 135
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 7, 31 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 11, 2 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 11, 26 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 15, 0, 14 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 16, 14, 1 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 16, 0, 16 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 17, 14, 1 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 17, 0, 17 ],
+          "SourceLine": 138
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 18, 2 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 19, 2 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 20, 1 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 18, 16 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 22, 16, 21 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 17, 21 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 22, 22, 23 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 23, 21, 1 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 15, 23 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 24, 21, 1 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 24, 15, 24 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 23, 23, 24 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 22, 22, 23 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 22, 5, 22 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 15, 21 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 23, 6, 23 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 22, 22, 23 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 22, 15, 21 ],
+          "SourceLine": 140
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 18, -14 ],
+          "SourceLine": 139
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 11, -24 ],
+          "SourceLine": 137
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 7, -29 ],
+          "SourceLine": 136
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 144
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Double",
+          "Value": 2.5E-1
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 10,
+      "SourceLineStart": 148,
+      "SourceLineEnd": 151,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "KNUM",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 6 ],
+          "SourceLine": 149
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 1, 1, 1 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 2, 2, 1 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 150
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 150
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 1
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 1,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 0,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Double",
+          "Value": 1.25E0
+        },
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 6
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 7,
+      "SourceLineStart": 146,
+      "SourceLineEnd": 152,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 147
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 147
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 147
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 2, 3 ],
+          "SourceLine": 147
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 151
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 151
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 14,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 17,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 9
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 12,
+      "SourceLineStart": 158,
+      "SourceLineEnd": 167,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 159
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 160
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 3, 13 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 162
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 2, 1 ],
+          "SourceLine": 162
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 163
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 8, 2, 1 ],
+          "SourceLine": 163
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 9, 7, 7 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 10, 8, 8 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 9, 9, 10 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "ISGT",
+          "OpData": [ 9, 10 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 9, 2 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 164
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 3, -11 ],
+          "SourceLine": 161
+        },
+        {
+          "OpCode": "DIVVV",
+          "OpData": [ 3, 1, 0 ],
+          "SourceLine": 166
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 3, 3, 1 ],
+          "SourceLine": 166
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 166
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 9,
+          "IsImmutable": false
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 4
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 12,
+      "SourceLineStart": 170,
+      "SourceLineEnd": 174,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 2, 2 ],
+          "SourceLine": 171
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 6, 2, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 3 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 4 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 11, 1, 11 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 7, 2, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 6, 6, 7 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 5 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "ISLT",
+          "OpData": [ 6, 7 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 6, 3 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 7, 5 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 1, 3 ],
+          "SourceLine": 172
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 2, 0, 0 ],
+          "SourceLine": 173
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 173
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 0
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "assert"
+        },
+        {
+          "Type": "String",
+          "Value": "math"
+        },
+        {
+          "Type": "String",
+          "Value": "sqrt"
+        },
+        {
+          "Type": "String",
+          "Value": "abs"
+        },
+        {
+          "Type": "String",
+          "Value": "pi"
+        },
+        {
+          "Type": "String",
+          "Value": "bad MC result"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 4
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": false,
+      "MaxFrameSize": 1,
+      "SourceLineStart": 169,
+      "SourceLineEnd": 175,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 174
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 174
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 0, 2 ],
+          "SourceLine": 174
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 18,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 12
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 7,
+      "TakesVarArg": false,
+      "MaxFrameSize": 22,
+      "SourceLineStart": 181,
+      "SourceLineEnd": 189,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 7, 21 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 183
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 0 ],
+          "SourceLine": 183
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 183
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 11, 16 ],
+          "SourceLine": 183
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 15, 0 ],
+          "SourceLine": 184
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 16, 4, 14 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 17, 14, 0 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 17, 4, 17 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 17, 17, 0 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 18, 1 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 16, 7 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 20, 5, 19 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 20, 6, 20 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 21, 3, 19 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 20, 20, 21 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 15, 15, 20 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 16, -5 ],
+          "SourceLine": 185
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 15, 2, 14 ],
+          "SourceLine": 186
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 11, -14 ],
+          "SourceLine": 183
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 7, -19 ],
+          "SourceLine": 182
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 189
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 12,
+      "SourceLineStart": 205,
+      "SourceLineEnd": 208,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 7, 2 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 8, 3 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 9, 4 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 5 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 6 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 1, 8 ],
+          "SourceLine": 206
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 7 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "MULVN",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 207
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 207
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 2
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 0,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 6,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 5,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 8,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 7,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 4,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 2
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 21,
+      "SourceLineStart": 191,
+      "SourceLineEnd": 209,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 192
+        },
+        {
+          "OpCode": "DIVVV",
+          "OpData": [ 6, 1, 0 ],
+          "SourceLine": 192
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 2, 2 ],
+          "SourceLine": 192
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 3, 2, 0 ],
+          "SourceLine": 193
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 4, 2, 2 ],
+          "SourceLine": 194
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 3 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 2, 2 ],
+          "SourceLine": 195
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 196
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 197
+        },
+        {
+          "OpCode": "TSETB",
+          "OpData": [ 9, 8, 1 ],
+          "SourceLine": 197
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 9, 22 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 13, 0 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "DIVVV",
+          "OpData": [ 17, 12, 2 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 13, 2, 2 ],
+          "SourceLine": 199
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 14, 1 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 13, 14 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 14, 2 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 200
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 14, 8, 12 ],
+          "SourceLine": 201
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 15, 12, 0 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 16, 14, 2 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 16, 8, 15 ],
+          "SourceLine": 202
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 15, 0 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "SUBVN",
+          "OpData": [ 16, 2, 0 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 17, 1 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 15, 6 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 19, 14, 18 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 20, 18, 13 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "ADDNV",
+          "OpData": [ 20, 20, 0 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 20, 7, 19 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 15, -4 ],
+          "SourceLine": 203
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 9, -20 ],
+          "SourceLine": 198
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 9, 0 ],
+          "SourceLine": 208
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 208
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 9, 2 ],
+          "SourceLine": 208
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 5,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 13,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 19,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 15
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 24,
+      "SourceLineStart": 215,
+      "SourceLineEnd": 244,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "ISTC",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 3 ],
+          "SourceLine": 216
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 4 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 5, 68 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 8 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 0 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 14, 0, 8 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 14, 14, 8 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 10, 2, 2 ],
+          "SourceLine": 218
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 11, 8, 0 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 2 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 11, 10 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 15, 0 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 0, 14 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 19, 19, 8 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 15, 2, 2 ],
+          "SourceLine": 220
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 10, 15 ],
+          "SourceLine": 221
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 16, 3 ],
+          "SourceLine": 221
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 14 ],
+          "SourceLine": 222
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 10, 15 ],
+          "SourceLine": 223
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 11, -8 ],
+          "SourceLine": 219
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 9, 1, 8 ],
+          "SourceLine": 226
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 0, 9 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 8 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "ISNEN",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 4 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 15, 1 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 11, 1, 2 ],
+          "SourceLine": 227
+        },
+        {
+          "OpCode": "ISEQV",
+          "OpData": [ 9, 8 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 5 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 0, 9 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 12, 0, 8 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 12, 0, 9 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 11, 0, 8 ],
+          "SourceLine": 228
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 8, 2 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 13 ],
+          "SourceLine": 229
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 0, 8 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 11, 11, 8 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "DIVNV",
+          "OpData": [ 11, 11, 0 ],
+          "SourceLine": 230
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 12, 8, 0 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 13, 2 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 14, 1 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 12, 6 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 16, 0, 15 ],
+          "SourceLine": 232
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 17, 16, 8 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 17, 17, 11 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 17, 16, 8 ],
+          "SourceLine": 233
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 12, -4 ],
+          "SourceLine": 231
+        },
+        {
+          "OpCode": "ISGE",
+          "OpData": [ 8, 4 ],
+          "SourceLine": 236
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 11, 19 ],
+          "SourceLine": 236
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 11, 8, 0 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 12, 2 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 11, 15 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 15, 0, 14 ],
+          "SourceLine": 238
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 16, 0, 8 ],
+          "SourceLine": 238
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 17, 15, 8 ],
+          "SourceLine": 239
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 18, 8, 0 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 19, 3 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 20, 1 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 18, 7 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 22, 15, 21 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 23, 16, 21 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 23, 17, 23 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "SUBVV",
+          "OpData": [ 22, 22, 23 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 22, 15, 21 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 18, -5 ],
+          "SourceLine": 240
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 11, -13 ],
+          "SourceLine": 237
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 5, -66 ],
+          "SourceLine": 217
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 244
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "error"
+        },
+        {
+          "Type": "String",
+          "Value": "zero pivot"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        },
+        {
+          "Type": "Int32",
+          "Value": 0
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 246,
+      "SourceLineEnd": 250,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 247
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 3, 4 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 7, 2, 6 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 3, -2 ],
+          "SourceLine": 248
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 249
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 4,
+      "TakesVarArg": false,
+      "MaxFrameSize": 15,
+      "SourceLineStart": 252,
+      "SourceLineEnd": 257,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 2 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 4, 11 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 8, 0, 7 ],
+          "SourceLine": 254
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 9, 1, 7 ],
+          "SourceLine": 254
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 10, 1 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 10, 4 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 14, 9, 13 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 14, 8, 13 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 10, -2 ],
+          "SourceLine": 255
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 4, -9 ],
+          "SourceLine": 253
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 257
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 13,
+      "SourceLineStart": 263,
+      "SourceLineEnd": 269,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 1, 1 ],
+          "SourceLine": 264
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 264
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 264
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 1, 14 ],
+          "SourceLine": 264
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 2 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 12, 3 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 1, 5 ],
+          "SourceLine": 265
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 5, 4 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 9, 1 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 10, 5 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 12, 3 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 5, 1, 5 ],
+          "SourceLine": 266
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 1, -12 ],
+          "SourceLine": 264
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 3 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "MULNV",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 3 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 2 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "MULVV",
+          "OpData": [ 1, 1, 0 ],
+          "SourceLine": 268
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 1, 2 ],
+          "SourceLine": 268
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 2
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 2,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 1,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 0,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": false,
+          "ParentUpvalueOrdinal": 3
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 3,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Double",
+          "Value": 6.666666666666666E-1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 1,
+      "TakesVarArg": false,
+      "MaxFrameSize": 8,
+      "SourceLineStart": 259,
+      "SourceLineEnd": 270,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "UGET",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 5, 0 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 1, 2, 3 ],
+          "SourceLine": 260
+        },
+        {
+          "OpCode": "UGET",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 6, 0 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 7, 0 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 2, 2, 3 ],
+          "SourceLine": 261
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 3, 0 ],
+          "SourceLine": 262
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 4, 0 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 269
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 4, 2 ],
+          "SourceLine": 269
+        }
+      ],
+      "Upvalues": [
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 14,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 21,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 22,
+          "IsImmutable": true
+        },
+        {
+          "IsParentLocal": true,
+          "ParentLocalOrdinal": 20,
+          "IsImmutable": true
+        }
+      ],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 20
+        }
+      ],
+      "NumberConstants": []
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 32,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 278,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 9
+        },
+        {
+          "OpCode": "KNUM",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 11
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 2, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 2, 2, 2 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 3, 3, 3 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 4, 4, 4 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 5, 5, 5 ],
+          "SourceLine": 13
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 6, 1 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 6, 6, 6 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 7 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 8 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 8, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "KNIL",
+          "OpData": [ 9, 10 ],
+          "SourceLine": 23
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 11, 0 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 12, 1 ],
+          "SourceLine": 26
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 13, 1 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 14, 17 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 15, 1 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 13, 4 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 17, 0 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 17, 11, 16 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 13, -2 ],
+          "SourceLine": 27
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 10, 9 ],
+          "SourceLine": 28
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 9, 10 ],
+          "SourceLine": 35
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 13, 11 ],
+          "SourceLine": 51
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 14, 12 ],
+          "SourceLine": 61
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 15, 13 ],
+          "SourceLine": 77
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 16, 14 ],
+          "SourceLine": 108
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 17, 16 ],
+          "SourceLine": 126
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 17, 8, 15 ],
+          "SourceLine": 110
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 17, 17 ],
+          "SourceLine": 144
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 18, 19 ],
+          "SourceLine": 152
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 18, 8, 18 ],
+          "SourceLine": 146
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 18, 20 ],
+          "SourceLine": 167
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 19, 22 ],
+          "SourceLine": 175
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 19, 8, 21 ],
+          "SourceLine": 169
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 19, 23 ],
+          "SourceLine": 189
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 20, 25 ],
+          "SourceLine": 209
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 20, 8, 24 ],
+          "SourceLine": 191
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 20, 26 ],
+          "SourceLine": 244
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 21, 27 ],
+          "SourceLine": 250
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 22, 28 ],
+          "SourceLine": 257
+        },
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 23, 30 ],
+          "SourceLine": 270
+        },
+        {
+          "OpCode": "TSETS",
+          "OpData": [ 23, 8, 29 ],
+          "SourceLine": 259
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 23, 10 ],
+          "SourceLine": 272
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 27, 1 ],
+          "SourceLine": 272
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 23, 1, 2 ],
+          "SourceLine": 272
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 23, 8, 15 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 27, 1024 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 23, 2, 2 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 27, 4 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 23, 2, 2 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "GSET",
+          "OpData": [ 23, 31 ],
+          "SourceLine": 275
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 23, 32 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 27, 33 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 31, 31 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 27, 0, 2 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 23, 1, 0 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "UCLO",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 276
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 276
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "String",
+          "Value": "2010-03-15"
+        },
+        {
+          "Type": "String",
+          "Value": "math"
+        },
+        {
+          "Type": "String",
+          "Value": "abs"
+        },
+        {
+          "Type": "String",
+          "Value": "log"
+        },
+        {
+          "Type": "String",
+          "Value": "sin"
+        },
+        {
+          "Type": "String",
+          "Value": "floor"
+        },
+        {
+          "Type": "String",
+          "Value": "pi"
+        },
+        {
+          "Type": "String",
+          "Value": "os"
+        },
+        {
+          "Type": "String",
+          "Value": "clock"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 1
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 2
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 3
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 4
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 5
+        },
+        {
+          "Type": "String",
+          "Value": "FFT"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 7
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 8
+        },
+        {
+          "Type": "String",
+          "Value": "SOR"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 10
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 11
+        },
+        {
+          "Type": "String",
+          "Value": "MC"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 13
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 14
+        },
+        {
+          "Type": "String",
+          "Value": "SPARSE"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 16
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 17
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 18
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 19
+        },
+        {
+          "Type": "String",
+          "Value": "LU"
+        },
+        {
+          "Type": "FunctionPrototype",
+          "Value": 21
+        },
+        {
+          "Type": "String",
+          "Value": "v"
+        },
+        {
+          "Type": "String",
+          "Value": "print"
+        },
+        {
+          "Type": "String",
+          "Value": "unpack"
+        }
+      ],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 101009
+        }
+      ]
+    }
+  ]
+}

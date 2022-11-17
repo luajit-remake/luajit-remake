@@ -3,48 +3,68 @@
 
 #include "runtime_utils.h"
 
-namespace {
-
-// When 'testForFalsy' is true, it branches if the value is falsy. Otherwise it branches if the variable is truthy.
-// If 'shouldCopy' is true, it also returns the original value passed in. Note that this implies that the copy unconditionally happens.
+// Perform a conditional branch depending on 'testValue'.
+// When 'testForFalsy' is true, the branch is taken if the value is falsy. Otherwise the branch is taken if it is truthy.
 //
-template<bool testForFalsy, bool shouldCopy>
-void NO_RETURN TestAndBranchOperationImpl(TValue value)
+template<bool testForFalsy>
+static void NO_RETURN TestAndBranchOperationImpl(TValue testValue)
 {
-    bool isTruthy = value.IsTruthy();
+    bool isTruthy = testValue.IsTruthy();
     bool shouldBranch = isTruthy ^ testForFalsy;
     if (shouldBranch)
     {
-        if constexpr(shouldCopy) { ReturnAndBranch(value); } else { ReturnAndBranch(); }
+        ReturnAndBranch();
     }
     else
     {
-        if constexpr(shouldCopy) { Return(value); } else { Return(); }
+        Return();
     }
 }
 
-}   // anonymous namespace
-
-DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestAndBranchOperation, bool testForFalsy, bool shouldCopy)
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestAndBranchOperation, bool testForFalsy)
 {
     Operands(
-        BytecodeSlot("value")
+        BytecodeSlot("testValue")
     );
-    if (shouldCopy)
-    {
-        Result(BytecodeValue, ConditionalBranch);
-    }
-    else
-    {
-        Result(ConditionalBranch);
-    }
-    Implementation(TestAndBranchOperationImpl<testForFalsy, shouldCopy>);
+    Result(ConditionalBranch);
+    Implementation(TestAndBranchOperationImpl<testForFalsy>);
     Variant();
 }
 
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfTruthy, TestAndBranchOperation, false /*testForFalsy*/, false /*shouldCopy*/);
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfFalsy, TestAndBranchOperation, true /*testForFalsy*/, false /*shouldCopy*/);
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CopyAndBranchIfTruthy, TestAndBranchOperation, false /*testForFalsy*/, true /*shouldCopy*/);
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CopyAndBranchIfFalsy, TestAndBranchOperation, true /*testForFalsy*/, true /*shouldCopy*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfTruthy, TestAndBranchOperation, false /*testForFalsy*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfFalsy, TestAndBranchOperation, true /*testForFalsy*/);
+
+// Performs a conditional branch depending on 'testValue', and simutanuously select a value based on whether the branch is taken.
+// When 'testForFalsy' is true, the branch is taken if 'testValue' is falsy. Otherwise the branch is taken if it is truthy.
+// If the branch is taken, return 'testValue'. Otherwise, return 'defaultValue'.
+//
+template<bool testForFalsy>
+static void NO_RETURN TestSelectAndBranchOperationImpl(TValue testValue, TValue defaultValue)
+{
+    bool isTruthy = testValue.IsTruthy();
+    bool shouldBranch = isTruthy ^ testForFalsy;
+    if (shouldBranch)
+    {
+        ReturnAndBranch(testValue);
+    }
+    else
+    {
+        Return(defaultValue);
+    }
+}
+
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestSelectAndBranchOperation, bool testForFalsy)
+{
+    Operands(
+        BytecodeSlot("testValue"),
+        BytecodeSlot("defaultValue")
+    );
+    Result(BytecodeValue, ConditionalBranch);
+    Implementation(TestSelectAndBranchOperationImpl<testForFalsy>);
+    Variant();
+}
+
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(SelectAndBranchIfTruthy, TestSelectAndBranchOperation, false /*testForFalsy*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(SelectAndBranchIfFalsy, TestSelectAndBranchOperation, true /*testForFalsy*/);
 
 DEEGEN_END_BYTECODE_DEFINITIONS

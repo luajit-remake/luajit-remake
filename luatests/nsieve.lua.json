@@ -1,0 +1,293 @@
+{
+  "ChunkName": "@luatests/nsieve.lua",
+  "FunctionPrototypes": [
+    {
+      "NumFixedParams": 2,
+      "TakesVarArg": false,
+      "MaxFrameSize": 12,
+      "SourceLineStart": 2,
+      "SourceLineEnd": 12,
+      "HasChildPrototype": false,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 3, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 2, 4 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 6, 2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 6, 0, 5 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 2, -2 ],
+          "SourceLine": 3
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 4
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 5, 1 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 3, 13 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "TGETV",
+          "OpData": [ 7, 0, 6 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "ISF",
+          "OpData": [ 7 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "JMP",
+          "OpData": [ 8, 9 ],
+          "SourceLine": 6
+        },
+        {
+          "OpCode": "ADDVV",
+          "OpData": [ 7, 6, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 8, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 9, 6 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 7, 4 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "KPRI",
+          "OpData": [ 11, 1 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "TSETV",
+          "OpData": [ 11, 0, 10 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 7, -2 ],
+          "SourceLine": 7
+        },
+        {
+          "OpCode": "ADDVN",
+          "OpData": [ 2, 2, 0 ],
+          "SourceLine": 8
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 3, -11 ],
+          "SourceLine": 5
+        },
+        {
+          "OpCode": "RET1",
+          "OpData": [ 2, 2 ],
+          "SourceLine": 11
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [],
+      "NumberConstants": [
+        {
+          "Type": "Int32",
+          "Value": 1
+        }
+      ]
+    },
+    {
+      "NumFixedParams": 0,
+      "TakesVarArg": true,
+      "MaxFrameSize": 23,
+      "SourceLineStart": 0,
+      "SourceLineEnd": 21,
+      "HasChildPrototype": true,
+      "UseFFI": false,
+      "Bytecode": [
+        {
+          "OpCode": "FNEW",
+          "OpData": [ 0, 0 ],
+          "SourceLine": 12
+        },
+        {
+          "OpCode": "TNEW",
+          "OpData": [ 1, 0 ],
+          "SourceLine": 14
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 2, 0 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 3, 2 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 4, 1 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "FORI",
+          "OpData": [ 2, 15 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "KSHORT",
+          "OpData": [ 6, 10000 ],
+          "SourceLine": 17
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 7, 1 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 7, 7, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "GGET",
+          "OpData": [ 11, 3 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "TGETS",
+          "OpData": [ 11, 11, 4 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "KSTR",
+          "OpData": [ 15, 5 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 16, 6 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 17, 0 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 21, 1 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "MOV",
+          "OpData": [ 22, 6 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "CALL",
+          "OpData": [ 17, 0, 3 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 11, 0, 2 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "CALLM",
+          "OpData": [ 7, 1, 0 ],
+          "SourceLine": 18
+        },
+        {
+          "OpCode": "FORL",
+          "OpData": [ 2, -13 ],
+          "SourceLine": 16
+        },
+        {
+          "OpCode": "RET0",
+          "OpData": [ 0, 1 ],
+          "SourceLine": 19
+        }
+      ],
+      "Upvalues": [],
+      "ObjectConstants": [
+        {
+          "Type": "FunctionPrototype",
+          "Value": 0
+        },
+        {
+          "Type": "String",
+          "Value": "io"
+        },
+        {
+          "Type": "String",
+          "Value": "write"
+        },
+        {
+          "Type": "String",
+          "Value": "string"
+        },
+        {
+          "Type": "String",
+          "Value": "format"
+        },
+        {
+          "Type": "String",
+          "Value": "Primes up to %8d %8d\n"
+        }
+      ],
+      "NumberConstants": []
+    }
+  ]
+}

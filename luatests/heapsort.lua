@@ -37,9 +37,9 @@ function heapsort(n, ra)
     end
 end
 
-local Num = tonumber((arg and arg[1])) or 4
+local Num = 4
 for i=1,Num do
-  local N = tonumber((arg and arg[2])) or 10000
+  local N = 1000
   local a = {}
   for i=1,N do a[i] = random() end
   heapsort(N, a)
