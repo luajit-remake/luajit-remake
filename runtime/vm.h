@@ -738,6 +738,7 @@ public:
         BaseError,
         BaseIPairsIter,
         BaseToString,
+        IoLinesIter,
         // must be last member
         //
         X_END_OF_ENUM

@@ -35,6 +35,124 @@ DEEGEN_DEFINE_LIB_FUNC(io_input)
     ThrowError("Library function 'io.input' is not implemented yet!");
 }
 
+// 'buf' must be 'limit + 1' bytes long
+// If -1 is returned, it means 'limit' bytes have been read but end-of-line is still not reached.
+// If -2 is returned, it means the file hit EOF without reading in any bytes
+// Otherwise, returns the length of the line, minus the '\n' if it exists.
+//
+static size_t WARN_UNUSED TryReadLineOnce(FILE* fp, char* buf, size_t limit)
+{
+    // Set up a sentry value so we know if 'fgets' read exactly 'limit' bytes
+    //
+    buf[limit] = 1;
+
+    // Let fgets read at most 'limit' bytes and append the '\0'
+    //
+    char* fgetsRet = fgets(buf, static_cast<int>(limit + 1), fp);
+    if (unlikely(fgetsRet == nullptr))
+    {
+        // EOF without any bytes read, or error. For error just treat it as EOF for now.
+        //
+        return static_cast<size_t>(-2);
+    }
+
+    // If our sentry value 1 is not overwritten, it means 'fgets' stopped short before reading 'x_internalBufferSize' characters.
+    // So a newline (or EOF) must have been encountered. We can quit now.
+    //
+    if (buf[limit] != '\0')
+    {
+        size_t len = strlen(buf);
+        assert(len < limit);
+        if (len >= 1 && buf[len - 1] == '\n')
+        {
+            len--;
+        }
+        return len;
+    }
+
+    // Now we know fgets has read exactly 'limit' characters.
+    //
+    if (buf[limit - 1] == '\n')
+    {
+        // The line (including '\n') happens to have exactly 'limit' bytes.
+        //
+        return limit - 1;
+    }
+
+    // The line might have more to read.
+    // (Note that it is possible that we have reached EOF here and the file doesn't end with a newline,
+    // but we won't know until we call fgets again).
+    //
+    return static_cast<size_t>(-1);
+}
+
+static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* firstChunk, size_t firstChunkLen)
+{
+    // Just use a vector for simplicity now
+    //
+    std::vector<std::pair<const void*, size_t>> chunkList;
+    chunkList.push_back(std::make_pair(firstChunk, firstChunkLen));
+
+    constexpr size_t x_chunkSize = 65280;
+    while (true)
+    {
+        char* buf = new char[x_chunkSize + 1];
+        size_t len = TryReadLineOnce(fp, buf, x_chunkSize);
+        if (len == static_cast<size_t>(-2))
+        {
+            // It means we reached EOF and the file did not end with a newline, we are done.
+            // We didn't read in anything useful in this iteration.
+            //
+            chunkList.push_back(std::make_pair(buf, 0));
+            break;
+        }
+        if (len == static_cast<size_t>(-1))
+        {
+            // We read in full x_chunkSize bytes but still may have more to read.
+            //
+            chunkList.push_back(std::make_pair(buf, x_chunkSize));
+            continue;
+        }
+
+        assert(len < x_chunkSize);
+        // We found a newline or EOF, we are done.
+        //
+        chunkList.push_back(std::make_pair(buf, len));
+        break;
+    }
+
+    HeapPtr<HeapString> result = vm->CreateStringObjectFromConcatenation(chunkList.data(), chunkList.size()).As();
+
+    // The first element in 'chunkList' is the internal buffer, we must not free it. Free everything else.
+    //
+    for (size_t i = 1; i < chunkList.size(); i++)
+    {
+        char* ptr = const_cast<char*>(reinterpret_cast<const char*>(chunkList[i].first));
+        delete [] ptr;
+    }
+
+    return result;
+}
+
+DEEGEN_DEFINE_LIB_FUNC(io_lines_iter)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    constexpr size_t x_internalBufferSize = 8192;
+    char internalBuf[x_internalBufferSize + 1];
+    size_t len = TryReadLineOnce(stdin, internalBuf, x_internalBufferSize);
+    if (len == static_cast<size_t>(-2))
+    {
+        Return(TValue::Create<tNil>());
+    }
+    if (len != static_cast<size_t>(-1))
+    {
+        assert(len < x_internalBufferSize);
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(internalBuf, static_cast<uint32_t>(len)).As()));
+    }
+    HeapPtr<HeapString> result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);
+    Return(TValue::Create<tString>(result));
+}
+
 // io.lines -- https://www.lua.org/manual/5.1/manual.html#pdf-io.lines
 //
 // io.lines ([filename])
@@ -47,9 +165,16 @@ DEEGEN_DEFINE_LIB_FUNC(io_input)
 // The call io.lines() (with no file name) is equivalent to io.input():lines(); that is, it iterates over the lines of the
 // default input file. In this case it does not close the file when the loop ends.
 //
+// TODO: This is a makeshift implementation. This is not standard conforming.
+// Currently we are always read from stdin and does not support file input.
+//
 DEEGEN_DEFINE_LIB_FUNC(io_lines)
 {
-    ThrowError("Library function 'io.lines' is not implemented yet!");
+    if (GetNumArgs() > 0 && !GetArg(0).Is<tNil>())
+    {
+        ThrowError("Library function 'io.lines' with file input is not implemented yet!");
+    }
+    Return(VM_GetLibFunctionObject<VM::LibFn::IoLinesIter>());
 }
 
 // io.open -- https://www.lua.org/manual/5.1/manual.html#pdf-io.open
@@ -132,7 +257,8 @@ DEEGEN_DEFINE_LIB_FUNC(io_type)
 // io.write (···)
 // Equivalent to io.output():write.
 //
-// TODO: Currently we are always printing to stdout. I don't think this fully agrees with Lua semantics.
+// TODO: This is a makeshift implementation. This is not standard conforming.
+// Currently we are always printing to stdout.
 //
 DEEGEN_DEFINE_LIB_FUNC(io_write)
 {

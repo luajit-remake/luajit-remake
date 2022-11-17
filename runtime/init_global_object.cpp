@@ -212,6 +212,7 @@ struct CreateGlobalObjectHelper
 
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(coroutine_wrap_call);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_ipairs_iterator);
+DEEGEN_FORWARD_DECLARE_LIB_FUNC(io_lines_iter);
 
 #define INSERT_LIBFN(libName, fnName)                                               \
     [[maybe_unused]] HeapPtr<FunctionObject> libfn_ ## libName ##_ ## fnName =      \
@@ -317,6 +318,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     //
     HeapPtr<TableObject> libobj_table = h.InsertObject(globalObject, "table", x_num_functions_in_lib_table);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (table), (LUA_LIB_TABLE_FUNCTION_LIST))
+    vm->InitializeLibFn<VM::LibFn::IoLinesIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(io_lines_iter))));
 
     return globalObject;
 }
