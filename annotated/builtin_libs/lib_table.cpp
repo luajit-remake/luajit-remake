@@ -221,17 +221,36 @@ struct QuickSortStateMachine
     //         i += 1
     //         j -= 1
     //
+    // function insertion_sort(A, lo, hi)
+    //     i = lo + 1
+    //     while i <= hi:
+    //         pivot = A[i]
+    //         j = i
+    //         while j > lo and pivot < A[j - 1]:
+    //             j -= 1
+    //         // A[j..i-1] should be moved by one slot, and A[i] should take position of A[j]
+    //         if j < i:
+    //             tmp = A[i]
+    //             for k = i - 1 downto j:
+    //                 A[k+1] = A[k]
+    //             A[j] = tmp
+    //         i += 1
+    //
     // function qsort(A, n)
     //     std::stack<std::pair<int, int>> s;
     //     s.push(<1, n>)
     //     while !s.empty():
     //         lo, hi = s.back()
-    //         pivot = partition(A, lo, hi)
-    //         s.pop()
-    //         if lo < pivot - 1:
-    //             s.push(<lo, pivot - 1>)
-    //         if pivot + 1 < hi:
-    //             s.push(<pivot + 1, hi>)
+    //         if hi - lo + 1 > limit_for_ins_sort:
+    //             pivot = partition(A, lo, hi)
+    //             s.pop()
+    //             if lo < pivot - 1:
+    //                 s.push(<lo, pivot - 1>)
+    //             if pivot + 1 < hi:
+    //                 s.push(<pivot + 1, hi>)
+    //         else:
+    //             insertion_sort(A, lo, hi)
+    //             s.pop()
     //
     // The physical stack (the Lua stack) is arranged as follows:
     // Slot 0: the table
@@ -240,27 +259,50 @@ struct QuickSortStateMachine
     // Slot 3: pivot
     // Slot 4: i
     // Slot 5: j
-    // Slot 6: 0 if executing the 'while A[i] < pivot' loop, 1 if executing the 'while pivot < A[j]' loop
+    // Slot 6: 0 if executing the 'while A[i] < pivot' loop,
+    //         1 if executing the 'while pivot < A[j]' loop,
+    //         2 if executing the insertion sort loop
     // Slot [7, 7 + 2 * h): the <lo, hi> of each item in 's'
     //
+    static constexpr int32_t x_limit_for_ins_sort = 8;
+
     static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, HeapPtr<TableObject> tableObj, int32_t n)
     {
         assert(n >= 2);
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
-        TValue pivot = TableObject::GetByIntegerIndex(tableObj, (1 + n) / 2, info);
-        stackBase[7] = TValue::Create<tInt32>(1);
-        stackBase[8] = TValue::Create<tInt32>(n);
-        return QuickSortStateMachine {
-            .sb = stackBase,
-            .tab = tableObj,
-            .pivot = pivot,
-            .h = 1,
-            .i = 1,
-            .j = n,
-            .state = 0,
-            .info = info
-        };
+        if (n > x_limit_for_ins_sort)
+        {
+            TValue pivot = TableObject::GetByIntegerIndex(tableObj, (1 + n) / 2, info);
+            stackBase[7] = TValue::Create<tInt32>(1);
+            stackBase[8] = TValue::Create<tInt32>(n);
+            return QuickSortStateMachine {
+                .sb = stackBase,
+                .tab = tableObj,
+                .pivot = pivot,
+                .h = 1,
+                .i = 1,
+                .j = n,
+                .state = 0,
+                .info = info
+            };
+        }
+        else
+        {
+            TValue pivot = TableObject::GetByIntegerIndex(tableObj, 2, info);
+            stackBase[7] = TValue::Create<tInt32>(1);
+            stackBase[8] = TValue::Create<tInt32>(n);
+            return QuickSortStateMachine {
+                .sb = stackBase,
+                .tab = tableObj,
+                .pivot = pivot,
+                .h = 1,
+                .i = 2,
+                .j = 2,
+                .state = 2,
+                .info = info
+            };
+        }
     }
 
     void PutToStack()
@@ -279,7 +321,7 @@ struct QuickSortStateMachine
         assert(stackBase[2].Is<tInt32>() && stackBase[2].As<tInt32>() > 0);
         assert(stackBase[4].Is<tInt32>());
         assert(stackBase[5].Is<tInt32>());
-        assert(stackBase[6].Is<tInt32>() && (stackBase[6].As<tInt32>() == 0 || stackBase[6].As<tInt32>() == 1));
+        assert(stackBase[6].Is<tInt32>() && 0 <= stackBase[6].As<tInt32>() && stackBase[6].As<tInt32>() <= 2);
         HeapPtr<TableObject> tableObj = stackBase[0].As<tTable>();
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
@@ -299,11 +341,15 @@ struct QuickSortStateMachine
     //
     Result WARN_UNUSED InitialAdvance()
     {
-        return Result {
-            .finish = false,
-            .lhs = TableObject::GetByIntegerIndex(tab, 1, info),
-            .rhs = pivot
-        };
+        assert(state == 0 || state == 2);
+        if (state == 0)
+        {
+            return FirstLoopCompare();
+        }
+        else
+        {
+            return ThirdLoopCompare();
+        }
     }
 
     // Advance the state machine after the comparison complete.
@@ -317,11 +363,22 @@ struct QuickSortStateMachine
                 i += 1;
                 return FirstLoopCompare();
             }
-            else
+            else if (state == 1)
             {
-                assert(state == 1);
                 j -= 1;
                 return SecondLoopCompare();
+            }
+            else
+            {
+                assert(state == 2);
+                j -= 1;
+                int32_t lo = sb[5 + 2 * h].As<tInt32>();
+                assert(j >= lo);
+                if (j > lo)
+                {
+                    return ThirdLoopCompare();
+                }
+                return ThirdInnerLoopFinished();
             }
         }
         else
@@ -330,10 +387,14 @@ struct QuickSortStateMachine
             {
                 return FirstPartitionInnerLoopFinished();
             }
+            else if (state == 1)
+            {
+                return SecondPartitionInnerLoopFinished();
+            }
             else
             {
-                assert(state == 1);
-                return SecondPartitionInnerLoopFinished();
+                assert(state == 2);
+                return ThirdInnerLoopFinished();
             }
         }
     }
@@ -364,6 +425,16 @@ private:
         };
     }
 
+    Result ThirdLoopCompare()
+    {
+        assert(state == 2);
+        return Result {
+            .finish = false,
+            .lhs = pivot,
+            .rhs = TableObject::GetByIntegerIndex(tab, j - 1, info)
+        };
+    }
+
     Result FirstPartitionInnerLoopFinished()
     {
         assert(state == 0);
@@ -388,6 +459,37 @@ private:
         return FirstLoopCompare();
     }
 
+    Result ThirdInnerLoopFinished()
+    {
+        assert(state == 2);
+        // A[j..i-1] should be moved by one slot, and A[i] should take position of A[j]
+        //
+        if (j < i)
+        {
+            TValue ai = TableObject::GetByIntegerIndex(tab, i, info);
+            for (int32_t k = i - 1; k >= j; k--)
+            {
+                TValue ak = TableObject::GetByIntegerIndex(tab, k, info);
+                PutIndex(k + 1, ak);
+            }
+            PutIndex(j, ai);
+        }
+
+        i += 1;
+        int32_t hi = sb[6 + 2 * h].As<tInt32>();
+        if (i <= hi)
+        {
+            pivot = TableObject::GetByIntegerIndex(tab, i, info);
+            j = i;
+            return ThirdLoopCompare();
+        }
+        else
+        {
+            assert(i == hi + 1);
+            return InsertionSortFinished();
+        }
+    }
+
     Result PartitionFunctionFinished(int32_t pv)
     {
         assert(h > 0);
@@ -410,6 +512,20 @@ private:
             sb[6 + 2 * h] = TValue::Create<tInt32>(hi);
         }
 
+        return GetNextWorkItem();
+    }
+
+    Result InsertionSortFinished()
+    {
+        assert(state == 2);
+        assert(h > 0);
+        assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
+        h--;
+        return GetNextWorkItem();
+    }
+
+    Result GetNextWorkItem()
+    {
         if (h == 0)
         {
             return Result {
@@ -418,15 +534,26 @@ private:
         }
 
         assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
-        lo = sb[5 + 2 * h].As<tInt32>();
-        hi = sb[6 + 2 * h].As<tInt32>();
+        int32_t lo = sb[5 + 2 * h].As<tInt32>();
+        int32_t hi = sb[6 + 2 * h].As<tInt32>();
         assert(lo < hi);
-        i = lo;
-        j = hi;
-        int32_t pivot_ord = (lo + hi) / 2;
-        pivot = TableObject::GetByIntegerIndex(tab, pivot_ord, info);
-        state = 0;
-        return FirstLoopCompare();
+        if (hi - lo + 1 > x_limit_for_ins_sort)
+        {
+            i = lo;
+            j = hi;
+            int32_t pivot_ord = (lo + hi) / 2;
+            pivot = TableObject::GetByIntegerIndex(tab, pivot_ord, info);
+            state = 0;
+            return FirstLoopCompare();
+        }
+        else
+        {
+            i = lo + 1;
+            j = i;
+            pivot = TableObject::GetByIntegerIndex(tab, i, info);
+            state = 2;
+            return ThirdLoopCompare();
+        }
     }
 
     void PutIndex(int32_t idx, TValue val)
@@ -682,7 +809,12 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
 
     if (numArgs > 1)
     {
-        if (!GetArg(1).Is<tFunction>())
+        TValue cmpFn = GetArg(1);
+        if (cmpFn.Is<tNil>())
+        {
+            goto no_usr_comparator;
+        }
+        if (!cmpFn.Is<tFunction>())
         {
             ThrowError("bad argument #2 to 'sort' (function expected)");
         }
@@ -708,6 +840,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
     }
     else
     {
+no_usr_comparator:
         uint32_t n = TableObject::GetTableLengthWithLuaSemantics(tab);
         if (n < 2)
         {
