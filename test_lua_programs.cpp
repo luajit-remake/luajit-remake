@@ -1254,9 +1254,4 @@ TEST(LuaTest, le_use_lt_metamethod)
     RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua.json");
 }
 
-TEST(XX, XX)
-{
-    printf("%s\n", setlocale(LC_CTYPE, nullptr));
-}
-
 }   // anonymous namespace

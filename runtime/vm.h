@@ -436,6 +436,10 @@ public:
     //
     int WARN_UNUSED Compare(HeapString* other)
     {
+        if (this == other)
+        {
+            return 0;
+        }
         uint8_t* selfStr = m_string;
         uint32_t selfLength = m_length;
         uint8_t* otherStr = other->m_string;
