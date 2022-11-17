@@ -1254,4 +1254,9 @@ TEST(LuaTest, le_use_lt_metamethod)
     RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua.json");
 }
 
+TEST(LuaLib, table_lib_concat)
+{
+    RunSimpleLuaTest("luatests/table_lib_concat.lua.json");
+}
+
 }   // anonymous namespace

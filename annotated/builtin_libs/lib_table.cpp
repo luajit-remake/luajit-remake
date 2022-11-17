@@ -1,5 +1,7 @@
 #include "deegen_api.h"
+#include "lualib_tonumber_util.h"
 #include "runtime_utils.h"
+#include "simple_string_stream.h"
 
 // table.concat -- https://www.lua.org/manual/5.1/manual.html#pdf-table.concat
 //
@@ -10,7 +12,195 @@
 //
 DEEGEN_DEFINE_LIB_FUNC(table_concat)
 {
-    ThrowError("Library function 'table.concat' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'concat' (table expected, got no value)");
+    }
+    if (!GetArg(0).Is<tTable>())
+    {
+        ThrowError("bad argument #1 to 'concat' (table expected)");
+    }
+    HeapPtr<TableObject> tab = GetArg(0).As<tTable>();
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    char separatorN2SBuf[std::max(x_default_tostring_buffersize_double, x_default_tostring_buffersize_int)];
+    const void* separator;
+    uint32_t separatorLength;
+    if (numArgs < 2 || GetArg(1).Is<tNil>())
+    {
+        separator = separatorN2SBuf;
+        separatorLength = 0;
+    }
+    else
+    {
+        TValue tvSep = GetArg(1);
+        if (tvSep.Is<tString>())
+        {
+            separator = TranslateToRawPointer(vm, tvSep.As<tString>()->m_string);
+            separatorLength = tvSep.As<tString>()->m_length;
+        }
+        else if (tvSep.Is<tDouble>())
+        {
+            separator = separatorN2SBuf;
+            separatorLength = static_cast<uint32_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(separatorN2SBuf, tvSep.As<tDouble>()) - separatorN2SBuf);
+        }
+        else if (tvSep.Is<tInt32>())
+        {
+            separator = separatorN2SBuf;
+            separatorLength = static_cast<uint32_t>(StringifyInt32UsingDefaultLuaFormattingOptions(separatorN2SBuf, tvSep.As<tInt32>()) - separatorN2SBuf);
+        }
+        else
+        {
+            ThrowError("bad argument #2 to 'concat' (string expected)");
+        }
+    }
+
+    bool isEmptySeparator = (separatorLength == 0);
+
+    int64_t start;
+    if (numArgs < 3 || GetArg(2).Is<tNil>())
+    {
+        start = 1;
+    }
+    else
+    {
+        auto [success, val] = LuaLib_ToNumber(GetArg(2));
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #3 to 'concat' (number expected)");
+        }
+        start = static_cast<int64_t>(val);
+    }
+
+    int64_t end;
+    if (numArgs < 4 || GetArg(3).Is<tNil>())
+    {
+        end = TableObject::GetTableLengthWithLuaSemantics(tab);
+    }
+    else
+    {
+        auto [success, val] = LuaLib_ToNumber(GetArg(3));
+        if (unlikely(!success))
+        {
+            ThrowError("bad argument #4 to 'concat' (number expected)");
+        }
+        end = static_cast<int64_t>(val);
+    }
+
+    if (start > end)
+    {
+        Return(TValue::Create<tString>(vm->m_emptyString));
+    }
+
+    // Try to avoid temp buffer allocation if possible
+    //
+    constexpr size_t x_internalStringBufferLimit = 200;
+    std::pair<const void* /*ptr*/, size_t /*len*/> internalStringBuffer[x_internalStringBufferLimit];
+    std::pair<const void* /*ptr*/, size_t /*len*/>* strings = nullptr;
+
+    size_t numItems = static_cast<size_t>(end - start + 1);
+    if (!isEmptySeparator)
+    {
+        numItems = numItems * 2 - 1;
+    }
+    if (numItems > x_internalStringBufferLimit)
+    {
+        strings = new std::pair<const void*, size_t>[numItems];
+    }
+    else
+    {
+        strings = internalStringBuffer;
+    }
+
+    size_t numNumbers = 0;
+    {
+        size_t ord = 0;
+        GetByIntegerIndexICInfo info;
+        TableObject::PrepareGetByIntegerIndex(tab, info /*out*/);
+        for (int64_t i = start; i <= end; i++)
+        {
+            TValue val = TableObject::GetByIntegerIndex(tab, i, info);
+            if (val.Is<tString>())
+            {
+                strings[ord].first = TranslateToRawPointer(vm, val.As<tString>()->m_string);
+                strings[ord].second = val.As<tString>()->m_length;
+            }
+            else if (val.Is<tDouble>() || val.Is<tInt32>())
+            {
+                strings[ord].first = nullptr;
+                strings[ord].second = val.m_value;
+                numNumbers++;
+            }
+            else
+            {
+                if (strings != internalStringBuffer)
+                {
+                    delete [] strings;
+                }
+                ThrowError("table contains invalid value for 'concat'");
+            }
+            ord++;
+            if (i < end && !isEmptySeparator)
+            {
+                strings[ord].first = separator;
+                strings[ord].second = separatorLength;
+                ord++;
+            }
+        }
+        assert(ord == numItems);
+    }
+
+    // Stringify all the numbers in the table
+    // Avoid creating heap objects for numbers stringified to string, as these objects won't be needed afterwards
+    //
+    SimpleTempStringStream tempBufferForStringifiedNumber;
+    if (numNumbers > 0)
+    {
+        size_t spaceForOne = std::max(x_default_tostring_buffersize_double, x_default_tostring_buffersize_int);
+        char* buf = tempBufferForStringifiedNumber.Reserve(spaceForOne * numNumbers);
+        DEBUG_ONLY(size_t numbersFound = 0;)
+        size_t gap = isEmptySeparator ? 1 : 2;
+        for (size_t i = 0; i < numItems; i += gap)
+        {
+            if (strings[i].first == nullptr)
+            {
+                TValue tv; tv.m_value = strings[i].second;
+                assert(tv.Is<tDouble>() || tv.Is<tInt32>());
+                strings[i].first = buf;
+                if (tv.Is<tDouble>())
+                {
+                    // note that 'newBuf' points at the '\0', same below
+                    //
+                    char* newBuf = StringifyDoubleUsingDefaultLuaFormattingOptions(buf, tv.As<tDouble>());
+                    strings[i].second = static_cast<size_t>(newBuf - buf);
+                    buf = newBuf + 1;
+                }
+                else
+                {
+                    char* newBuf = StringifyInt32UsingDefaultLuaFormattingOptions(buf, tv.As<tInt32>());
+                    strings[i].second = static_cast<size_t>(newBuf - buf);
+                    buf = newBuf + 1;
+                }
+                DEBUG_ONLY(numbersFound++;)
+            }
+        }
+        assert(numbersFound == numNumbers);
+        assert(buf <= tempBufferForStringifiedNumber.m_bufferEnd);
+    }
+
+    // Now, concat everything
+    //
+    HeapPtr<HeapString> result = vm->CreateStringObjectFromConcatenation(strings, numItems).As();
+
+    if (strings != internalStringBuffer)
+    {
+        delete [] strings;
+    }
+    tempBufferForStringifiedNumber.Destroy();
+
+    Return(TValue::Create<tString>(result));
 }
 
 // table.insert -- https://www.lua.org/manual/5.1/manual.html#pdf-table.insert

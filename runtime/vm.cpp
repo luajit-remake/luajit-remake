@@ -613,6 +613,34 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
     });
 }
 
+UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(std::pair<const void*, size_t>* start, size_t len)
+{
+    struct Iterator
+    {
+        bool HasMore()
+        {
+            return m_cur < m_end;
+        }
+
+        std::pair<const uint8_t*, uint32_t> GetAndAdvance()
+        {
+            assert(m_cur < m_end);
+            const uint8_t* ptr = reinterpret_cast<const uint8_t*>(m_cur->first);
+            uint32_t len = static_cast<uint32_t>(m_cur->second);
+            m_cur++;
+            return std::make_pair(ptr, len);
+        }
+
+        std::pair<const void*, size_t>* m_cur;
+        std::pair<const void*, size_t>* m_end;
+    };
+
+    return InsertMultiPieceString(Iterator {
+        .m_cur = start,
+        .m_end = start + len
+    });
+}
+
 UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len)
 {
 #ifndef NDEBUG

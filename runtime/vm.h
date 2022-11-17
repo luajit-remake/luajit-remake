@@ -657,6 +657,11 @@ public:
     //
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(TValue* start, size_t len);
 
+    // Create a string by concatenating start[0] ~ start[len-1]
+    // Each item is a string described by <ptr, len>
+    //
+    UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(std::pair<const void*, size_t>* start, size_t len);
+
     // Create a string by concatenating str1 .. start[0] ~ start[len-1]
     // str1 and each TValue must be a string
     //
