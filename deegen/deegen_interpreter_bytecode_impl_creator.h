@@ -9,17 +9,6 @@ class BytecodeVariantDefinition;
 class InterpreterBytecodeImplCreator
 {
 public:
-    struct ProcessBytecodeResult
-    {
-        std::unique_ptr<llvm::Module> m_module;
-        std::string m_mainFunctionName;
-        std::vector<std::string> m_affliatedFunctionNameList;
-    };
-
-    // The end-to-end API that does everything
-    //
-    static ProcessBytecodeResult WARN_UNUSED ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl);
-
     enum class ProcessKind
     {
         // This is the main entry of the bytecode variant
@@ -58,6 +47,8 @@ public:
     //
     void DoOptimization();
 
+    void TentativelyFinalizeBytecodeStructLength();
+
     bool IsReturnContinuation() const { return m_processKind == ProcessKind::ReturnContinuation; }
     BytecodeVariantDefinition* GetBytecodeDef() const { return m_bytecodeDef; }
     llvm::Module* GetModule() const { return m_module.get(); }
@@ -87,15 +78,20 @@ public:
         return CreateCallToDeegenRuntimeFunction(GetModule(), dcsName, args, insertBefore);
     }
 
+    // This is ugly, but this logic must be kept in sync with the logic in deegen_process_bytecode_definition_for_interpreter.cpp...
+    //
     std::unique_ptr<llvm::Module> WARN_UNUSED DoOptimizationAndLowering()
     {
         DoOptimization();
+        TentativelyFinalizeBytecodeStructLength();
         return DoLowering();
     }
 
     static std::string WARN_UNUSED GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef);
     static std::string WARN_UNUSED GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd);
     static bool WARN_UNUSED IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName);
+
+    std::string WARN_UNUSED GetResultFunctionName() { return m_resultFuncName; }
 
     static constexpr const char* x_hot_code_section_name = "deegen_interpreter_code_section_hot";
     static constexpr const char* x_cold_code_section_name = "deegen_interpreter_code_section_cold";

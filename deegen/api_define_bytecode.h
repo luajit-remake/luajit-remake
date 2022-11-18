@@ -536,6 +536,11 @@ template<> struct deegen_bytecode_definition_info<-1> {
     static constexpr std::array<const char*, 0> value { };
 };
 
+template<int v> struct deegen_bytecode_same_length_constraint_info : deegen_bytecode_same_length_constraint_info<v-1> { };
+template<> struct deegen_bytecode_same_length_constraint_info<-1> {
+    static constexpr std::array<const char*, 0> value { };
+};
+
 template<typename T>
 struct deegen_get_bytecode_def_list_impl;
 
@@ -569,6 +574,8 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
 #define DEEGEN_END_BYTECODE_DEFINITIONS_IMPL(counter)                                                                                                                                                       \
     static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value, "DEEGEN_END_BYTECODE_DEFINITIONS should only be used once per translation unit, after all DEEGEN_DEFINE_BYTECODE");  \
     namespace detail { template<> struct deegen_end_bytecode_definitions_macro_used<counter + 1> { static constexpr bool value = true; }; }                                                                 \
+    __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_same_length_constraints_in_this_tu = detail::std_array_to_llvm_friendly_array(                                               \
+        detail::deegen_bytecode_same_length_constraint_info<counter>::value);                                                                                                                               \
     __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_names_in_this_tu = detail::std_array_to_llvm_friendly_array(detail::deegen_bytecode_definition_info<counter>::value);        \
     __attribute__((__used__)) inline constexpr auto x_deegen_impl_all_bytecode_defs_in_this_tu = detail::std_array_to_llvm_friendly_array(detail::deegen_get_bytecode_def_list_impl<                        \
         typename detail::deegen_bytecode_definition_info<counter>::tuple_type>::value);                                                                                                                     \
@@ -630,6 +637,24 @@ struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
         };                                                                                                                                                                      \
     }   /* namespace detail */                                                                                                                                                  \
     static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value, "DEEGEN_DEFINE_BYTECODE should not be used after DEEGEN_END_BYTECODE_DEFINITIONS")
+
+// DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(bytecodeName1, bytecodeName2):
+//     Add a constraint that bytecodeName1 must have the same length as bytecodeName2
+//     This means that all variants of the two bytecode classes are forced to pad to the maximum length among them.
+//     This allows the frontend bytecode builder to late-replace a bytecode of type 'bytecodeName1' in the bytecode
+//     stream by a bytecode of type 'bytecodeName2' (or vice versa).
+//
+#define DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(bytecodeName1, bytecodeName2) DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT_IMPL(bytecodeName1, bytecodeName2, __COUNTER__)
+#define DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT_IMPL(bytecodeName1, bytecodeName2, counter)              \
+    namespace detail {                                                                                      \
+        template<> struct deegen_bytecode_same_length_constraint_info<counter> {                            \
+            static constexpr auto value = constexpr_std_array_concat(                                       \
+                deegen_bytecode_same_length_constraint_info<counter-1>::value, std::array<const char*, 2> { \
+                    PP_STRINGIFY(bytecodeName1), PP_STRINGIFY(bytecodeName2) });                            \
+        };                                                                                                  \
+    }   /* namespace detail */                                                                              \
+    static_assert(!detail::deegen_end_bytecode_definitions_macro_used<counter>::value,                      \
+    "DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT should not be used after DEEGEN_END_BYTECODE_DEFINITIONS")
 
 // Example usage:
 // DEEGEN_DEFINE_BYTECODE(add) { ... }

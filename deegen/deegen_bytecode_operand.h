@@ -578,11 +578,13 @@ public:
     }
 
     bool IsBytecodeStructLengthFinalized() { return m_bytecodeStructLengthFinalized; }
-    void FinalizeBytecodeStructLength()
+    bool IsBytecodeStructLengthTentativelyFinalized() { return m_bytecodeStructLengthTentativelyFinalized; }
+
+    void TentativelyFinalizeBytecodeStructLength()
     {
         ReleaseAssert(m_hasDecidedOperandWidth);
-        ReleaseAssert(!m_bytecodeStructLengthFinalized);
-        m_bytecodeStructLengthFinalized = true;
+        ReleaseAssert(!m_bytecodeStructLengthTentativelyFinalized);
+        m_bytecodeStructLengthTentativelyFinalized = true;
         if (m_bytecodeMetadataMaybeNull.get() != nullptr)
         {
             BytecodeMetadataStruct::StructInfo info = m_bytecodeMetadataMaybeNull->FinalizeStructAndAssignOffsets();
@@ -608,6 +610,21 @@ public:
                 m_bytecodeStructLength += 4;
             }
         }
+    }
+
+    size_t GetTentativeBytecodeStructLength()
+    {
+        ReleaseAssert(IsBytecodeStructLengthTentativelyFinalized());
+        return m_bytecodeStructLength;
+    }
+
+    void FinalizeBytecodeStructLength(size_t finalBytecodeStructLength)
+    {
+        ReleaseAssert(!IsBytecodeStructLengthFinalized());
+        ReleaseAssert(IsBytecodeStructLengthTentativelyFinalized());
+        ReleaseAssert(finalBytecodeStructLength >= m_bytecodeStructLength);
+        m_bytecodeStructLengthFinalized = true;
+        m_bytecodeStructLength = finalBytecodeStructLength;
     }
 
     bool HasBytecodeMetadata()
@@ -666,6 +683,7 @@ public:
 
     static constexpr const char* x_defListSymbolName = "x_deegen_impl_all_bytecode_defs_in_this_tu";
     static constexpr const char* x_nameListSymbolName = "x_deegen_impl_all_bytecode_names_in_this_tu";
+    static constexpr const char* x_sameLengthConstraintListSymbolName = "x_deegen_impl_all_bytecode_same_length_constraints_in_this_tu";
 
     size_t m_bytecodeOrdInTU;
     size_t m_variantOrd;
@@ -676,6 +694,7 @@ public:
     std::vector<std::unique_ptr<BcOperand>> m_list;
 
     bool m_hasDecidedOperandWidth;
+    bool m_bytecodeStructLengthTentativelyFinalized;
     bool m_bytecodeStructLengthFinalized;
 
     bool m_hasOutputValue;
@@ -707,6 +726,10 @@ public:
     // Populated if m_quickeningKind == QuickeningSelector, holds all except the first quickening
     //
     std::vector<std::vector<BytecodeOperandQuickeningDescriptor>> m_allOtherQuickenings;
+
+    // The length of this bytecode is enforced to be the maximum length of all bytecode variants in this list
+    //
+    std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
 
 private:
     void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)

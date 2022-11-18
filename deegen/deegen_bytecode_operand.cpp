@@ -197,6 +197,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
 
     ReleaseAssert(module->getGlobalVariable(x_defListSymbolName) != nullptr);
     ReleaseAssert(module->getGlobalVariable(x_nameListSymbolName) != nullptr);
+    ReleaseAssert(module->getGlobalVariable(x_sameLengthConstraintListSymbolName) != nullptr);
 
     Constant* defList;
     {
@@ -221,6 +222,98 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             bytecodeNamesInThisTU.push_back(GetValueFromLLVMConstantCString(cst));
         }
     }
+
+    std::unordered_map<std::string, size_t> bytecodeNameToBytecodeNameOrdInList;
+    for (size_t i = 0; i < bytecodeNamesInThisTU.size(); i++)
+    {
+        ReleaseAssert(!bytecodeNameToBytecodeNameOrdInList.count(bytecodeNamesInThisTU[i]));
+        bytecodeNameToBytecodeNameOrdInList[bytecodeNamesInThisTU[i]] = i;
+    }
+
+    std::vector<std::pair<std::string, std::string>> bytecodeSameLengthConstraints;
+    {
+        Constant* wrappedNameList = GetConstexprGlobalValue(module, x_sameLengthConstraintListSymbolName);
+        LLVMConstantStructReader readerTmp(module, wrappedNameList);
+        Constant* nameList = readerTmp.Dewrap();
+        LLVMConstantArrayReader reader(module, nameList);
+        size_t listLen = reader.GetNumElements<uint8_t*>();
+        ReleaseAssert(listLen % 2 == 0);
+        for (size_t i = 0; i < listLen; i += 2)
+        {
+            Constant* cst1 = reader.Get<uint8_t*>(i);
+            Constant* cst2 = reader.Get<uint8_t*>(i + 1);
+            bytecodeSameLengthConstraints.push_back(std::make_pair(GetValueFromLLVMConstantCString(cst1), GetValueFromLLVMConstantCString(cst2)));
+        }
+    }
+
+    for (auto& it : bytecodeSameLengthConstraints)
+    {
+        auto checkExists = [&](const std::string& s)
+        {
+            for (const std::string& t : bytecodeNamesInThisTU)
+            {
+                if (t == s)
+                {
+                    return;
+                }
+            }
+            fprintf(stderr, "Bytecode name '%s' specified in BytecodeSameLengthConstraint is not defined in this translation unit!\n", s.c_str());
+            abort();
+        };
+        checkExists(it.first);
+        checkExists(it.second);
+    }
+
+    std::unordered_map<std::string, std::string> dsu;
+    for (auto& it : bytecodeSameLengthConstraints)
+    {
+        dsu[it.first] = it.first;
+        dsu[it.second] = it.second;
+    }
+
+    std::function<std::string(const std::string&)> dsuFind = [&](const std::string& val) {
+        ReleaseAssert(dsu.count(val));
+        if (dsu[val] == val)
+        {
+            return val;
+        }
+        dsu[val] = dsuFind(dsu[val]);
+        return dsu[val];
+    };
+
+    auto dsuUnion = [&](const std::string& val1, const std::string& val2) {
+        std::string p1 = dsuFind(val1);
+        std::string p2 = dsuFind(val2);
+        ReleaseAssert(dsu.count(p1) && dsu[p1] == p1 && dsu.count(p2) && dsu[p2] == p2);
+        dsu[p1] = p2;
+    };
+
+    for (auto& it : bytecodeSameLengthConstraints)
+    {
+        dsuUnion(it.first, it.second);
+    }
+
+    std::unordered_map<std::string, std::vector<size_t /*bytecodeNameOrd*/>> bytecodeSameLengthConstraintGroup;
+    for (auto& it : dsu)
+    {
+        std::string bytecodeName = it.first;
+        std::string p = dsuFind(bytecodeName);
+        ReleaseAssert(bytecodeNameToBytecodeNameOrdInList.count(bytecodeName));
+        bytecodeSameLengthConstraintGroup[p].push_back(bytecodeNameToBytecodeNameOrdInList[bytecodeName]);
+    }
+
+    auto getBytecodeSameLengthConstraintGroup = [&](const std::string& bytecodeName) WARN_UNUSED -> std::vector<size_t>
+    {
+        if (!dsu.count(bytecodeName))
+        {
+            // No constraint is associated with this bytecode
+            //
+            return {};
+        }
+        std::string p = dsuFind(bytecodeName);
+        ReleaseAssert(bytecodeSameLengthConstraintGroup.count(p));
+        return bytecodeSameLengthConstraintGroup[p];
+    };
 
     auto readSpecializedOperand = [&](Constant* cst) -> SpecializedOperand {
         LLVMConstantStructReader spOperandReader(module, cst);
@@ -283,6 +376,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_opNames = operandNames;
             def->m_originalOperandTypes = operandTypes;
             def->m_hasDecidedOperandWidth = false;
+            def->m_bytecodeStructLengthTentativelyFinalized = false;
             def->m_bytecodeStructLengthFinalized = false;
             def->m_metadataStructInfoAssigned = false;
             def->m_isInterpreterCallIcEverUsed = false;
@@ -448,6 +542,28 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             listForCurrentBytecode.push_back(std::move(def));
         }
     }
+
+    ReleaseAssert(result.size() == numBytecodesInThisTU);
+
+    for (size_t curBytecodeOrd = 0; curBytecodeOrd < numBytecodesInThisTU; curBytecodeOrd++)
+    {
+        std::string bytecodeName = bytecodeNamesInThisTU[curBytecodeOrd];
+        std::vector<size_t> sameLengthConstraintGroup = getBytecodeSameLengthConstraintGroup(bytecodeName);
+        std::vector<BytecodeVariantDefinition*> list;
+        for (size_t ord : sameLengthConstraintGroup)
+        {
+            ReleaseAssert(ord < numBytecodesInThisTU);
+            for (std::unique_ptr<BytecodeVariantDefinition>& it : result[ord])
+            {
+                list.push_back(it.get());
+            }
+        }
+        for (std::unique_ptr<BytecodeVariantDefinition>& it : result[curBytecodeOrd])
+        {
+            it->m_sameLengthConstraintList = list;
+        }
+    }
+
     return result;
 }
 
@@ -461,12 +577,17 @@ void BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSym
     gv = module->getGlobalVariable(x_nameListSymbolName);
     ReleaseAssert(gv != nullptr);
     RemoveGlobalValueUsedAttributeAnnotation(gv);
+
+    gv = module->getGlobalVariable(x_sameLengthConstraintListSymbolName);
+    ReleaseAssert(gv != nullptr);
+    RemoveGlobalValueUsedAttributeAnnotation(gv);
 }
 
 void BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module)
 {
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_defListSymbolName) == nullptr);
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_nameListSymbolName) == nullptr);
+    ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_sameLengthConstraintListSymbolName) == nullptr);
 }
 
 }   // namespace dast

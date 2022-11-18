@@ -162,4 +162,8 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(EqualityOperation, bool compareForNotEqual, bool
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfEq, EqualityOperation, false /*compareForNotEqual*/, true /*shouldBranch*/);
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfNotEq, EqualityOperation, true /*compareForNotEqual*/, true /*shouldBranch*/);
 
+// The Eq and NotEq version must have identical bytecode length, as the bytecode builder frontend may need to late-flip the branch condition.
+//
+DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfEq, BranchIfNotEq);
+
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -625,6 +625,26 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     std::vector<std::unique_ptr<Module>> allBytecodeFunctions;
     std::vector<std::string> allReturnContinuationNames;
 
+    std::unordered_map<BytecodeVariantDefinition*, std::unique_ptr<InterpreterBytecodeImplCreator>> bvdImplMap;
+    for (auto& bytecodeDef : defs)
+    {
+        for (auto& bytecodeVariantDef : bytecodeDef)
+        {
+            // For now we just stay simple and unconditionally let all operands have 2 bytes, which is already stronger than LuaJIT's assumption
+            // Let's think about saving memory by providing 1-byte variants, or further removing limitations by allowing 4-byte operands later
+            //
+            bytecodeVariantDef->SetMaxOperandWidthBytes(2);
+            Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
+            ReleaseAssert(implFunc != nullptr);
+
+            ReleaseAssert(!bvdImplMap.count(bytecodeVariantDef.get()));
+            bvdImplMap[bytecodeVariantDef.get()] = std::make_unique<InterpreterBytecodeImplCreator>(bytecodeVariantDef.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
+            InterpreterBytecodeImplCreator* impl = bvdImplMap[bytecodeVariantDef.get()].get();
+            impl->DoOptimization();
+            impl->TentativelyFinalizeBytecodeStructLength();
+        }
+    }
+
     for (auto& bytecodeDef : defs)
     {
         std::string bytecodeBuilderFunctionReturnType;
@@ -692,18 +712,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         size_t currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
-            // For now we just stay simple and unconditionally let all operands have 2 bytes, which is already stronger than LuaJIT's assumption
-            // Let's think about saving memory by providing 1-byte variants, or further removing limitations by allowing 4-byte operands later
-            //
-            bytecodeVariantDef->SetMaxOperandWidthBytes(2);
-            Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
-            ReleaseAssert(implFunc != nullptr);
+            ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
+            InterpreterBytecodeImplCreator* bvdImpl = bvdImplMap[bytecodeVariantDef.get()].get();
+            std::unique_ptr<Module> resultModule = bvdImpl->DoLowering();
+            std::vector<std::string> m_affliatedFunctionNameList = bvdImpl->GetAffliatedBytecodeFunctionList();
+            std::string m_mainFunctionName = bvdImpl->GetResultFunctionName();
+            ReleaseAssert(m_mainFunctionName == InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
 
-            InterpreterBytecodeImplCreator::ProcessBytecodeResult res = InterpreterBytecodeImplCreator::ProcessBytecode(bytecodeVariantDef.get(), implFunc);
-            size_t totalSubVariantsInThisVariant = 1 + res.m_affliatedFunctionNameList.size();
+            size_t totalSubVariantsInThisVariant = 1 + m_affliatedFunctionNameList.size();
             totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
-            std::string variantMainFunctionName = res.m_mainFunctionName;
-            for (Function& func : *res.m_module.get())
+            std::string variantMainFunctionName = m_mainFunctionName;
+            for (Function& func : *resultModule.get())
             {
                 if (InterpreterBytecodeImplCreator::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
                 {
@@ -713,11 +732,11 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 }
             }
 
-            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(res.m_module.get())));
-            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(res.m_module.get())));
-            allBytecodeFunctions.push_back(std::move(res.m_module));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(resultModule.get())));
+            finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(resultModule.get())));
+            allBytecodeFunctions.push_back(std::move(resultModule));
             cdeclNameForVariants.push_back(variantMainFunctionName);
-            for (std::string& fnName : res.m_affliatedFunctionNameList)
+            for (std::string& fnName : m_affliatedFunctionNameList)
             {
                 cdeclNameForVariants.push_back(fnName);
             }

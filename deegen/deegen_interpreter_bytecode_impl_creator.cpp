@@ -900,19 +900,6 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     ValidateLLVMFunction(m_wrapper);
 }
 
-InterpreterBytecodeImplCreator::ProcessBytecodeResult WARN_UNUSED InterpreterBytecodeImplCreator::ProcessBytecode(BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl)
-{
-    // DEVNOTE: if you change this function, you likely need to correspondingly change how we process return continuations in DoLowering()
-    //
-    InterpreterBytecodeImplCreator ifi(bytecodeDef, impl, ProcessKind::Main);
-    ProcessBytecodeResult res;
-    res.m_module = ifi.DoOptimizationAndLowering();
-    res.m_mainFunctionName = ifi.m_resultFuncName;
-    ReleaseAssert(res.m_mainFunctionName == GetInterpreterBytecodeFunctionCName(bytecodeDef));
-    res.m_affliatedFunctionNameList = ifi.GetAffliatedBytecodeFunctionList();
-    return res;
-}
-
 void InterpreterBytecodeImplCreator::DoOptimization()
 {
     using namespace llvm;
@@ -984,12 +971,8 @@ void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
     }
 }
 
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
+void InterpreterBytecodeImplCreator::TentativelyFinalizeBytecodeStructLength()
 {
-    using namespace llvm;
-    ReleaseAssert(!m_generated);
-    m_generated = true;
-
     // Figure out whether this bytecode has metadata.
     // This is a bit tricky. We relying on the fact that the Main processor is executed before the other processors,
     // and that whether or not the bytecode metadata exists depends solely on the logic of the Main processor.
@@ -997,6 +980,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     //
     if (m_processKind == ProcessKind::Main)
     {
+        ReleaseAssert(!m_bytecodeDef->IsBytecodeStructLengthTentativelyFinalized());
+
         // Figure out if we need Call IC. We need it if there are any calls used in the main function.
         // Note that we must do this check here after all optimizations have happened, as optimizations could have
         // deduced that calls are unreachable and removed them.
@@ -1017,7 +1002,34 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
         // At this point we should have determined everything that needs to sit in the bytecode metadata (if any)
         //
-        m_bytecodeDef->FinalizeBytecodeStructLength();
+        m_bytecodeDef->TentativelyFinalizeBytecodeStructLength();
+    }
+}
+
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
+{
+    using namespace llvm;
+    ReleaseAssert(!m_generated);
+    m_generated = true;
+
+    if (m_processKind == ProcessKind::Main)
+    {
+        // Some of the unit tests won't call TentativelyFinalizeBytecodeStructLength().
+        // Be graceful and just call it for them. This doesn't matter, because we have ReleaseAssert() that
+        // guarantees that reading tentative length will fail if it is not set up yet.
+        //
+        if (!m_bytecodeDef->IsBytecodeStructLengthTentativelyFinalized())
+        {
+            TentativelyFinalizeBytecodeStructLength();
+        }
+
+        size_t finalLength = m_bytecodeDef->GetTentativeBytecodeStructLength();
+        for (BytecodeVariantDefinition* sameLengthConstraintVariant : m_bytecodeDef->m_sameLengthConstraintList)
+        {
+            size_t otherLength = sameLengthConstraintVariant->GetTentativeBytecodeStructLength();
+            finalLength = std::max(finalLength, otherLength);
+        }
+        m_bytecodeDef->FinalizeBytecodeStructLength(finalLength);
     }
 
     // Having decided the final bytecode metadata struct layout, we can lower all the metadata struct element getters
