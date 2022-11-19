@@ -159,8 +159,6 @@ struct MetadataFieldPatchRecord
 //
 uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, size_t bytecodeLen, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList);
 
-class BytecodeBuilder;
-
 template<typename MetadataTypeListInfo>
 class BytecodeBuilderBase
 {
@@ -170,7 +168,7 @@ class BytecodeBuilderBase
     static constexpr size_t x_numBytecodeMetadataKinds = MetadataTypeListInfo::numElements;
 
 public:
-    friend class BranchTargetPopulator;
+    friend class BytecodeBuilder;
 
     // We need at least 4 bytes of extra padding, since optimistic bytecode preloading can load up to 4 bytes immediately following the opcode.
     //

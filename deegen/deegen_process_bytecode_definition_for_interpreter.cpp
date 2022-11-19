@@ -1184,6 +1184,13 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         }
         fprintf(fp, " };\n");
 
+        // If the bytecode is not in a 'SameLengthConstraint' set, it is definitely not allowed to replace it.
+        // We will assert at runtime that the replacing bytecode has the same length as the replaced bytecode as well,
+        // but providing this information statically allows us to catch more errors statically.
+        //
+        fprintf(fp, "    static constexpr bool x_isPotentiallyReplaceable = %s;\n",
+                (bytecodeDef[0]->m_sameLengthConstraintList.size() > 0) ? "true" : "false");
+
         // Emit out the bytecode metadata type list for this bytecode
         //
         fprintf(preFp, "using %s_BytecodeMetadataInfo = std::tuple<", generatedClassName.c_str());
