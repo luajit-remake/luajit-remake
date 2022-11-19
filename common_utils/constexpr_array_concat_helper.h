@@ -38,21 +38,60 @@ struct counter_tuple<Size, Size>
     using type = num_tuple<>;
 };
 
+template<typename T, std::size_t Len>
+consteval std::array<T, Len> array_concat_1(std::array<T, Len> input) { return input; }
+
 template<typename T, std::size_t LL, std::size_t RL, std::size_t ... LLs, std::size_t ... RLs>
-constexpr std::array<T, LL+RL> array_concat(
+consteval std::array<T, LL+RL> array_concat_impl(
         const std::array<T, LL> lhs, const std::array<T, RL> rhs, num_tuple<LLs...>, num_tuple<RLs...>)
 {
     return {lhs[LLs]..., rhs[RLs]... };
 };
 
+template<typename T, std::size_t LL, std::size_t RL>
+consteval std::array<T, LL+RL> array_concat_2(std::array<T, LL> lhs, std::array<T, RL> rhs)
+{
+    return array_concat_impl(
+        lhs,
+        rhs,
+        typename constexpr_std_array_concat_internal::counter_tuple<LL>::type(),
+        typename constexpr_std_array_concat_internal::counter_tuple<RL>::type());
+}
+
+template<typename T, std::size_t LL, std::size_t RL, std::size_t... Rest>
+consteval std::array<T, ((LL + RL) + ... + Rest)> array_concat_mult(std::array<T, LL> lhs, std::array<T, RL> rhs, std::array<T, Rest>... rest)
+{
+    static_assert(sizeof...(Rest) > 0);
+    if constexpr(sizeof...(Rest) == 1)
+    {
+        return array_concat_2(array_concat_2(lhs, rhs), rest...);
+    }
+    else
+    {
+        return array_concat_mult(array_concat_2(lhs, rhs), rest...);
+    }
+}
+
 }   // namespace constexpr_std_array_concat_internal
 
-template<typename T, std::size_t LL, std::size_t RL>
-constexpr std::array<T, LL+RL> constexpr_std_array_concat(std::array<T, LL> lhs, std::array<T, RL> rhs)
+
+template<typename T, std::size_t... Len>
+consteval std::array<T, (0 + ... + Len)> constexpr_std_array_concat(std::array<T, Len>... inputs)
 {
-    return constexpr_std_array_concat_internal::array_concat(
-                lhs,
-                rhs,
-                typename constexpr_std_array_concat_internal::counter_tuple<LL>::type(),
-                typename constexpr_std_array_concat_internal::counter_tuple<RL>::type());
+    if constexpr(sizeof...(Len) == 0)
+    {
+        return std::array<T, 0> {};
+    }
+    else if constexpr(sizeof...(Len) == 1)
+    {
+        return constexpr_std_array_concat_internal::array_concat_1(inputs...);
+    }
+    else if constexpr(sizeof...(Len) == 2)
+    {
+        return constexpr_std_array_concat_internal::array_concat_2(inputs...);
+    }
+    else
+    {
+        return constexpr_std_array_concat_internal::array_concat_mult(inputs...);
+    }
 }

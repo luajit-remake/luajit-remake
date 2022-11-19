@@ -343,37 +343,4 @@ private:
     std::vector<MetadataFieldPatchRecord> m_metadataFieldPatchRecords;
 };
 
-class BranchTargetPopulator
-{
-public:
-    BranchTargetPopulator() : m_fillOffset(static_cast<uint64_t>(-1)) { }
-
-    BranchTargetPopulator(uint64_t fillOffset, uint64_t bytecodeBaseOffset)
-        : m_fillOffset(fillOffset), m_bytecodeBaseOffset(bytecodeBaseOffset)
-    { }
-
-    template<typename CRTP>
-    void PopulateBranchTarget(BytecodeBuilderBase<CRTP>& builder, uint64_t bytecodeLoc)
-    {
-        assert(m_fillOffset != static_cast<uint64_t>(-1));
-        assert(bytecodeLoc < builder.GetCurLength());
-        int64_t diff = static_cast<int64_t>(bytecodeLoc - m_bytecodeBaseOffset);
-        // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
-        //
-        using ValueType = int16_t;
-        if (unlikely(diff < std::numeric_limits<ValueType>::min() || diff > std::numeric_limits<ValueType>::max()))
-        {
-            fprintf(stderr, "[LOCKDOWN] Branch bytecode exceeded maximum branch offset limit. Maybe make your function smaller?\n");
-            abort();
-        }
-        ValueType val = static_cast<ValueType>(diff);
-        uint8_t* base = builder.GetBytecodeStart();
-        UnalignedStore<ValueType>(base + m_fillOffset, val);
-    }
-
-private:
-    uint64_t m_fillOffset;
-    uint64_t m_bytecodeBaseOffset;
-};
-
 }   // namespace DeegenBytecodeBuilder

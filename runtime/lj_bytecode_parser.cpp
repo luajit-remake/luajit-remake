@@ -464,7 +464,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         };
 
         std::vector<size_t> bytecodeLocation;
-        std::vector<std::pair<size_t /*targetBytecodeOrdinal*/, BranchTargetPopulator>> jumpPatches;
+        std::vector<std::pair<size_t /*targetBytecodeOrdinal*/, size_t /*jumpBytecodePos*/>> jumpPatches;
 
         BytecodeBuilder bw;
         TestAssert(j.count("Bytecode") && j["Bytecode"].is_array());
@@ -761,176 +761,176 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfLT({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfLT({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISGE:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNLT({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNLT({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISLE:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfLE({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfLE({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISGT:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNLE({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNLE({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISEQV:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfEq({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISNEV:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNotEq({
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISEQS:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfEq({
                     .lhs = local(opdata[0]),
                     .rhs = objCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISNES:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNotEq({
                     .lhs = local(opdata[0]),
                     .rhs = objCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISEQN:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfEq({
                     .lhs = local(opdata[0]),
                     .rhs = numCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISNEN:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNotEq({
                     .lhs = local(opdata[0]),
                     .rhs = numCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISEQP:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfEq({
                     .lhs = local(opdata[0]),
                     .rhs = priCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISNEP:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfNotEq({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfNotEq({
                     .lhs = local(opdata[0]),
                     .rhs = priCst(opdata[1])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISTC:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateSelectAndBranchIfTruthy({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateSelectAndBranchIfTruthy({
                     .testValue = local(opdata[1]),
                     .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISFC:
             {
                 TestAssert(opdata.size() == 2);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateSelectAndBranchIfFalsy({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateSelectAndBranchIfFalsy({
                     .testValue = local(opdata[1]),
                     .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::IST:
             {
                 TestAssert(opdata.size() == 1);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfTruthy({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfTruthy({
                     .testValue = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::ISF:
             {
                 TestAssert(opdata.size() == 1);
                 size_t brTarget = decodeAndSkipNextJumpBytecode();
-                BranchTargetPopulator p = bw.CreateBranchIfFalsy({
+                jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+                bw.CreateBranchIfFalsy({
                     .testValue = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(brTarget, p));
                 break;
             }
             case LJOpcode::GGET:
@@ -1338,10 +1338,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             {
                 TestAssert(opdata.size() == 2);
                 size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
-                BranchTargetPopulator p = bw.CreateUpvalueClose({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateUpvalueClose({
                     .base = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::FORI:
@@ -1354,10 +1354,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 //
                 TestAssert(opdata.size() == 2);
                 size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
-                BranchTargetPopulator p = bw.CreateForLoopInit({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateForLoopInit({
                     .base = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::FORL:
@@ -1369,10 +1369,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 //
                 TestAssert(opdata.size() == 2);
                 size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
-                BranchTargetPopulator p = bw.CreateForLoopStep({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateForLoopStep({
                     .base = local(opdata[0])
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::LOOP:
@@ -1386,9 +1386,9 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             {
                 TestAssert(opdata.size() == 2);
                 size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
                 // opdata[0] is unused for now (indicates stack frame size after jump)
-                BranchTargetPopulator p = bw.CreateBranch();
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
+                bw.CreateBranch();
                 break;
             }
             case LJOpcode::VARG:
@@ -1435,11 +1435,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 uint8_t numRets = SafeIntegerCast<uint8_t>(opdata[1] - 1);
                 TestAssert(1 <= numRets && numRets <= 2);
                 size_t jumpTarget = decodeAndSkipNextITERLBytecode();
-                BranchTargetPopulator p = bw.CreateKVLoopIter({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateKVLoopIter({
                     .base = local(opdata[0] - 3),
                     .numRets = numRets
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::ITERC:
@@ -1453,11 +1453,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata[0] >= 3);
                 uint16_t numRets = SafeIntegerCast<uint16_t>(opdata[1] - 1);
                 size_t jumpTarget = decodeAndSkipNextITERLBytecode();
-                BranchTargetPopulator p = bw.CreateForLoopIter({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateForLoopIter({
                     .base = local(opdata[0] - 3),
                     .numRets = numRets
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::ITERL:
@@ -1469,10 +1469,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 TestAssert(opdata.size() == 2);
                 TestAssert(opdata[0] >= 3);
                 size_t jumpTarget = getBytecodeOrdinalOfJump(opdata[1]);
-                BranchTargetPopulator p = bw.CreateValidateIsNextAndBranch({
+                jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+                bw.CreateValidateIsNextAndBranch({
                     .base = local(opdata[0] - 3)
                 });
-                jumpPatches.push_back(std::make_pair(jumpTarget, p));
                 break;
             }
             case LJOpcode::KCDATA:
@@ -1507,11 +1507,16 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
         for (auto& jumpPatch : jumpPatches)
         {
             size_t ljBytecodeOrd = jumpPatch.first;
-            BranchTargetPopulator p = jumpPatch.second;
+            size_t bcPos = jumpPatch.second;
             assert(ljBytecodeOrd < bytecodeLocation.size());
             size_t bytecodeOffset = bytecodeLocation[ljBytecodeOrd];
             assert(bytecodeOffset < bw.GetCurLength());
-            p.PopulateBranchTarget(bw, bytecodeOffset);
+            if (unlikely(!bw.SetBranchTarget(bcPos, bytecodeOffset)))
+            {
+                // TODO: gracefully handle
+                fprintf(stderr, "[LOCKDOWN] Branch bytecode exceeded maximum branch offset limit. Maybe make your function smaller?\n");
+                abort();
+            }
         }
 
         std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();

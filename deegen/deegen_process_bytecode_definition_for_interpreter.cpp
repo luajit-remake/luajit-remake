@@ -647,7 +647,6 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
     for (auto& bytecodeDef : defs)
     {
-        std::string bytecodeBuilderFunctionReturnType;
         std::string generatedClassName;
 
         size_t totalCreatedBytecodeFunctionsInThisBytecode = 0;
@@ -677,17 +676,9 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             }
             fprintf(fp, "    };\n");
 
-            if (def->m_hasConditionalBranchTarget)
-            {
-                bytecodeBuilderFunctionReturnType = "BranchTargetPopulator WARN_UNUSED";
-            }
-            else
-            {
-                bytecodeBuilderFunctionReturnType = "void";
-            }
             // Pass the operands with 'const&' since the Operands struct may contain sub-integer fields, which could require Clang to do weird ABI lowerings that hamper LLVM optimization
             //
-            fprintf(fp, "    %s ALWAYS_INLINE Create%s(%s) {\n", bytecodeBuilderFunctionReturnType.c_str(), def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "const Operands& ops" : "");
+            fprintf(fp, "    void ALWAYS_INLINE Create%s(%s) {\n", def->m_bytecodeName.c_str(), hasAnyOperandsToProvide ? "const Operands& ops" : "");
 
             {
                 std::vector<DeegenBytecodeOperandType> selectedTypes;
@@ -709,9 +700,28 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         std::vector<std::string> allBytecodeMetadataDefinitionNames;
 
+        struct BcTraitInfo
+        {
+            BcTraitInfo()
+                : m_length(static_cast<size_t>(-1))
+                , m_outputOperandOffset(static_cast<size_t>(-1))
+                , m_branchOperandOffset(static_cast<size_t>(-1))
+            { }
+
+            size_t m_length;
+            size_t m_outputOperandOffset;
+            size_t m_branchOperandOffset;
+        };
+
+        // Only contains the primitive (non-quickening) variants
+        //
+        std::unordered_map<size_t /*variantOrdinal*/, BcTraitInfo> bytecodeTraitInfoMap;
+
         size_t currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
+            BcTraitInfo traitInfo;
+
             ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
             InterpreterBytecodeImplCreator* bvdImpl = bvdImplMap[bytecodeVariantDef.get()].get();
             std::unique_ptr<Module> resultModule = bvdImpl->DoLowering();
@@ -786,7 +796,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             // Generate the implementation that emits the bytecode
             //
-            fprintf(fp, "    %s DeegenCreateImpl%u(", bytecodeBuilderFunctionReturnType.c_str(), SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "    void DeegenCreateImpl%u(", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             for (size_t i = 0; i < bytecodeVariantDef->m_originalOperandTypes.size(); i++)
             {
                 if (i > 0)
@@ -915,6 +925,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 ReleaseAssert(bytecodeVariantDef->m_outputOperand->GetKind() == BcOperandKind::Slot);
                 int numBitsInBytecodeStruct = static_cast<int>(bytecodeVariantDef->m_outputOperand->GetSizeInBytecodeStruct()) * 8;
                 fprintf(fp, "        UnalignedStore<uint%d_t>(base + %u, SafeIntegerCast<uint%d_t>(paramOut.m_localOrd));\n", numBitsInBytecodeStruct, SafeIntegerCast<unsigned int>(offset), numBitsInBytecodeStruct);
+                traitInfo.m_outputOperandOffset = offset;
             }
 
             ReleaseAssertIff(hasOutlinedMetadata, bytecodeVariantDef->m_metadataPtrOffset.get() != nullptr);
@@ -967,18 +978,21 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             if (bytecodeVariantDef->m_hasConditionalBranchTarget)
             {
                 size_t offset = bytecodeVariantDef->m_condBrTarget->GetOffsetInBytecodeStruct();
-                fprintf(fp, "        size_t curBytecodeOffset = crtp->GetCurLength();\n");
-                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
-                fprintf(fp, "        return BranchTargetPopulator(curBytecodeOffset + %u /*fillOffset*/, curBytecodeOffset /*bytecodeBaseOffset*/);\n", SafeIntegerCast<unsigned int>(offset));
+                // Initialize the unconditional jump to jump to itself, just so that we have no uninitialized value
+                //
+                assert(bytecodeVariantDef->m_condBrTarget->GetSizeInBytecodeStruct() == 2);
+                fprintf(fp, "        UnalignedStore<int16_t>(base + %u, 0);\n", SafeIntegerCast<unsigned int>(offset));
+                traitInfo.m_branchOperandOffset = offset;
             }
-            else
-            {
-                fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
-                fprintf(fp, "        return;\n");
-            }
+
+            fprintf(fp, "        crtp->MarkWritten(%d);\n", SafeIntegerCast<int>(bytecodeVariantDef->GetBytecodeStructLength()));
+            fprintf(fp, "        return;\n");
 
             fprintf(fp, "    }\n\n");
 
+            traitInfo.m_length = bytecodeVariantDef->GetBytecodeStructLength();
+            ReleaseAssert(!bytecodeTraitInfoMap.count(currentBytecodeVariantOrdinal));
+            bytecodeTraitInfoMap[currentBytecodeVariantOrdinal] = traitInfo;
             currentBytecodeVariantOrdinal += totalSubVariantsInThisVariant;
         }
 
@@ -987,6 +1001,61 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         fprintf(fp, "protected:\n");
         fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+
+        // Emit code that tells whether a variant is a primitive variant or a quickening variant
+        //
+        fprintf(fp, "    static constexpr std::array<bool, %d> x_isVariantEmittable = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            fprintf(fp, "%s", bytecodeTraitInfoMap.count(i) ? "true" : "false");
+        }
+        fprintf(fp, " };\n");
+
+        // Emit code that tells the length, output operand offset and branch operand offset of each primitive variant.
+        // We could have emitted info about the quickening variant as well, but since it is not needed, we just stay simple.
+        //
+        fprintf(fp, "    static constexpr std::array<uint8_t, %d> x_bytecodeLength = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            uint8_t len = 255;
+            if (bytecodeTraitInfoMap.count(i))
+            {
+                ReleaseAssert(bytecodeTraitInfoMap[i].m_length < 255);
+                len = static_cast<uint8_t>(bytecodeTraitInfoMap[i].m_length);
+            }
+            fprintf(fp, "%d", static_cast<int>(len));
+        }
+        fprintf(fp, " };\n");
+
+        fprintf(fp, "    static constexpr std::array<uint8_t, %d> x_bytecodeOutputOperandOffset = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            uint8_t val = 255;
+            if (bytecodeTraitInfoMap.count(i) && bytecodeTraitInfoMap[i].m_outputOperandOffset != static_cast<size_t>(-1))
+            {
+                ReleaseAssert(bytecodeTraitInfoMap[i].m_outputOperandOffset < 255);
+                val = static_cast<uint8_t>(bytecodeTraitInfoMap[i].m_outputOperandOffset);
+            }
+            fprintf(fp, "%d", static_cast<int>(val));
+        }
+        fprintf(fp, " };\n");
+
+        fprintf(fp, "    static constexpr std::array<uint8_t, %d> x_bytecodeBranchOperandOffset = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            uint8_t val = 255;
+            if (bytecodeTraitInfoMap.count(i) && bytecodeTraitInfoMap[i].m_branchOperandOffset != static_cast<size_t>(-1))
+            {
+                ReleaseAssert(bytecodeTraitInfoMap[i].m_branchOperandOffset < 255);
+                val = static_cast<uint8_t>(bytecodeTraitInfoMap[i].m_branchOperandOffset);
+            }
+            fprintf(fp, "%d", static_cast<int>(val));
+        }
+        fprintf(fp, " };\n");
 
         // Emit out the bytecode metadata type list for this bytecode
         //

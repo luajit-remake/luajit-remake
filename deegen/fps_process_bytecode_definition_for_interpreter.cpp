@@ -117,7 +117,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
         }
     }
 
-    fprintf(hdrOutFile.fp(), "#define GENERATED_ALL_BYTECODE_BUILDER_CLASS_NAMES ");
+    fprintf(hdrOutFile.fp(), "#define GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES ");
     for (size_t i = 0; i < allClassNames.size(); i++)
     {
         fprintf(hdrOutFile.fp(), "\\\n");
@@ -129,7 +129,9 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
         {
             fprintf(hdrOutFile.fp(), "  ");
         }
-        fprintf(hdrOutFile.fp(), "%s ", allClassNames[i].c_str());
+        std::string prefixToRemove = "DeegenGenerated_BytecodeBuilder_";
+        ReleaseAssert(allClassNames[i].starts_with(prefixToRemove));
+        fprintf(hdrOutFile.fp(), "%s ", allClassNames[i].substr(prefixToRemove.length()).c_str());
     }
 
     fprintf(hdrOutFile.fp(), "\n\n\n");
@@ -196,7 +198,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
 
             fprintf(cppOutFile.fp(), "        {\n");
             fprintf(cppOutFile.fp(), "            static_assert(BytecodeBuilder::GetNumVariantsOfBytecode<%s>() == %u);\n", className.c_str(), SafeIntegerCast<unsigned int>(lis.size()));
-            fprintf(cppOutFile.fp(), "            constexpr size_t base = BytecodeBuilder::GetBytecodeOpcodeBase<%s<BytecodeBuilder>>();\n", className.c_str());
+            fprintf(cppOutFile.fp(), "            constexpr size_t base = BytecodeBuilder::GetBytecodeOpcodeBase<%s<BytecodeBuilderImpl>>();\n", className.c_str());
             for (size_t k = 0; k < lis.size(); k++)
             {
                 fprintf(cppOutFile.fp(), "            ReleaseAssert(r[base + %d] == nullptr);\n", static_cast<int>(k));
