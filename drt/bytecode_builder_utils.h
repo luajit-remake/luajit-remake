@@ -13,6 +13,8 @@ namespace DeegenBytecodeBuilder
 struct Local
 {
     explicit Local(uint64_t ord) : m_localOrd(ord) { }
+    bool operator==(const Local& other) const { return m_localOrd == other.m_localOrd; }
+
     uint64_t m_localOrd;
 };
 
@@ -81,6 +83,9 @@ struct CstWrapper
         }
     }
 
+    bool operator==(const TValue& other) const { return m_value.m_value == other.m_value; }
+    bool operator==(const TValueWithKnownType& other) const { return m_value.m_value == other.m_value.m_value; }
+
     bool m_hasKnownTypeMask;
     TypeSpeculationMask m_knownTypeMask;
     TValue m_value;
@@ -94,6 +99,10 @@ struct LocalOrCstWrapper
 
     Local AsLocal() const { assert(m_isLocal); return Local(m_localOrd); }
     TValue AsConstant() const { assert(!m_isLocal); return m_value; }
+
+    bool operator==(const Local& other) const { return (m_isLocal && AsLocal() == other); }
+    bool operator==(const TValue& other) const { return (!m_isLocal && AsConstant().m_value == other.m_value); }
+    bool operator==(const TValueWithKnownType& other) const { return m_value.m_value == other.m_value.m_value; }
 
     template<typename T>
     bool IsConstantAndHasType() const
@@ -134,6 +143,8 @@ template<typename T>
 struct ForbidUninitialized
 {
     ForbidUninitialized(T v) : m_value(v) { }
+    bool operator==(const T& other) const { return m_value == other; }
+
     T m_value;
 };
 
@@ -286,6 +297,15 @@ protected:
         // Internally, to better fit our implementation, we store the constant table reversed, and index it with negative indices.
         //
         return -static_cast<int64_t>(constantTableOrd) - 1;
+    }
+
+    TValue GetConstantFromConstantTable(int64_t ord)
+    {
+        assert(ord < 0);
+        ord = -(ord + 1);
+        assert(static_cast<size_t>(ord) < m_constantTable.size());
+        TValue res; res.m_value = m_constantTable[static_cast<size_t>(ord)];
+        return res;
     }
 
     template<typename MetadataType>

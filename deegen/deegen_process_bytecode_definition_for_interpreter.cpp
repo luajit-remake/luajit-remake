@@ -715,7 +715,9 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         // Only contains the primitive (non-quickening) variants
         //
-        std::unordered_map<size_t /*variantOrdinal*/, BcTraitInfo> bytecodeTraitInfoMap;
+        std::unordered_map<size_t /*opcodeVariantOrdinal*/, BcTraitInfo> bytecodeTraitInfoMap;
+
+        std::unordered_map<size_t /*variantOrd*/, size_t /*opcodeVariantOrdinal*/> opcodeVariantOrdinalMap;
 
         size_t currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
@@ -990,6 +992,106 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             fprintf(fp, "    }\n\n");
 
+            // Generate the implementation that decodes the bytecode
+            //
+            fprintf(fp, "    Operands DeegenDecodeImpl%u(size_t bcPos)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "    {\n");
+
+            fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
+            fprintf(fp, "        [[maybe_unused]] uint8_t* base = crtp->GetBytecodeStart() + bcPos;\n");
+            fprintf(fp, "        assert(UnalignedLoad<uint16_t>(base) == CRTP::template GetBytecodeOpcodeBase<%s>() + %d);\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+
+            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            {
+                std::unique_ptr<BcOperand>& operand = bytecodeVariantDef->m_list[i];
+
+                if (operand->IsElidedFromBytecodeStruct())
+                {
+                    if (operand->GetKind() == BcOperandKind::SpecializedLiteral)
+                    {
+                        BcOpSpecializedLiteral* spLit = assert_cast<BcOpSpecializedLiteral*>(operand.get());
+                        uint64_t spVal64 = spLit->m_concreteValue;
+                        std::string spVal = GetSpecializedValueAsString(spLit->GetLiteralType(), spVal64);
+                        fprintf(fp, "        %s param%d = %s;\n",
+                                GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(),
+                                static_cast<int>(i),
+                                spVal.c_str());
+                    }
+                    else
+                    {
+                        ReleaseAssert(operand->GetKind() == BcOperandKind::Constant);
+                        BcOpConstant* cst = assert_cast<BcOpConstant*>(operand.get());
+                        ReleaseAssert(cst->m_typeMask == x_typeSpeculationMaskFor<tNil>);
+                        fprintf(fp, "        TValue param%d = TValue::Create<tNil>();\n",static_cast<int>(i));
+                    }
+                    continue;
+                }
+
+                std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
+                fprintf(fp, "        using StorageTypeForOperand%d = %s;\n", static_cast<int>(i), tyName.c_str());
+                fprintf(fp, "        StorageTypeForOperand%d storageVal%d = UnalignedLoad<StorageTypeForOperand%d>(base + %u);\n",
+                        static_cast<int>(i), static_cast<int>(i),
+                        static_cast<int>(i), static_cast<unsigned int>(operand->GetOffsetInBytecodeStruct()));
+
+                if (bytecodeVariantDef->m_originalOperandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
+                {
+                    if (operand->GetKind() == BcOperandKind::Slot)
+                    {
+                        fprintf(fp, "        Local param%d = Local { storageVal%d };\n", static_cast<int>(i), static_cast<int>(i));
+                    }
+                    else
+                    {
+                        ReleaseAssert(operand->GetKind() == BcOperandKind::Constant);
+                        fprintf(fp, "        TValue param%d = crtp->GetConstantFromConstantTable(storageVal%d);\n", static_cast<int>(i), static_cast<int>(i));
+                    }
+                }
+                else if (operand->GetKind() == BcOperandKind::Constant)
+                {
+                    fprintf(fp, "        TValue param%d = crtp->GetConstantFromConstantTable(storageVal%d);\n", static_cast<int>(i), static_cast<int>(i));
+                }
+                else
+                {
+                    fprintf(fp, "        %s param%d = %s { storageVal%d };\n",
+                            GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(),
+                            static_cast<int>(i),
+                            GetVariantCppTypeNameForDeegenBytecodeOperandType(bytecodeVariantDef->m_originalOperandTypes[i]).c_str(),
+                            static_cast<int>(i));
+                }
+            }
+
+            if (bytecodeVariantDef->m_hasOutputValue)
+            {
+                std::unique_ptr<BcOpSlot>& operand = bytecodeVariantDef->m_outputOperand;
+                std::string tyName = std::string(operand->IsSignedValue() ? "" : "u") + "int" + std::to_string(operand->GetSizeInBytecodeStruct() * 8) + "_t";
+                fprintf(fp, "        Local param_output = Local { UnalignedLoad<%s>(base + %u) };\n",
+                        tyName.c_str(), static_cast<unsigned int>(operand->GetOffsetInBytecodeStruct()));
+            }
+
+            fprintf(fp, "        return Operands {\n");
+            {
+                bool isFirstTerm = true;
+                for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                {
+                    if (!isFirstTerm) { fprintf(fp, ",\n"); }
+                    isFirstTerm = false;
+                    fprintf(fp, "            .%s = param%d", bytecodeVariantDef->m_opNames[i].c_str(), static_cast<int>(i));
+                }
+
+                if (bytecodeVariantDef->m_hasOutputValue)
+                {
+                    if (!isFirstTerm) { fprintf(fp, ",\n"); }
+                    isFirstTerm = false;
+                    fprintf(fp, "            .output = param_output");
+                }
+            }
+
+            fprintf(fp, "\n        };\n");
+
+            fprintf(fp, "    }\n\n");
+
+            ReleaseAssert(!opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
+            opcodeVariantOrdinalMap[bytecodeVariantDef->m_variantOrd] = currentBytecodeVariantOrdinal;
+
             traitInfo.m_length = bytecodeVariantDef->GetBytecodeStructLength();
             ReleaseAssert(!bytecodeTraitInfoMap.count(currentBytecodeVariantOrdinal));
             bytecodeTraitInfoMap[currentBytecodeVariantOrdinal] = traitInfo;
@@ -998,6 +1100,31 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         ReleaseAssert(currentBytecodeVariantOrdinal == totalCreatedBytecodeFunctionsInThisBytecode);
         ReleaseAssert(cdeclNameForVariants.size() == totalCreatedBytecodeFunctionsInThisBytecode);
+
+        fprintf(fp, "public:\n");
+        fprintf(fp, "    Operands WARN_UNUSED Decode%s(size_t bcPos)\n", bytecodeDef[0]->m_bytecodeName.c_str());
+        fprintf(fp, "    {\n");
+        fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
+        fprintf(fp, "        uint8_t* base = crtp->GetBytecodeStart() + bcPos;\n");
+        fprintf(fp, "        size_t opcode = UnalignedLoad<uint16_t>(base);\n");
+        fprintf(fp, "        assert(opcode >= CRTP::template GetBytecodeOpcodeBase<%s>());\n", generatedClassName.c_str());
+        fprintf(fp, "        opcode -= CRTP::template GetBytecodeOpcodeBase<%s>();\n", generatedClassName.c_str());
+        fprintf(fp, "        assert(opcode < %d);\n", static_cast<int>(currentBytecodeVariantOrdinal));
+        fprintf(fp, "        assert(x_isVariantEmittable[opcode]);\n");
+        fprintf(fp, "        switch (opcode)\n");
+        fprintf(fp, "        {\n");
+
+        for (auto& bytecodeVariantDef : bytecodeDef)
+        {
+            ReleaseAssert(opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "        case %d:\n", static_cast<int>(opcodeVariantOrdinalMap[bytecodeVariantDef->m_variantOrd]));
+            fprintf(fp, "            return DeegenDecodeImpl%d(bcPos);\n", static_cast<int>(bytecodeVariantDef->m_variantOrd));
+        }
+        fprintf(fp, "        default:\n");
+        fprintf(fp, "        assert(false && \"unexpected opcode\");\n");
+        fprintf(fp, "        __builtin_unreachable();\n");
+        fprintf(fp, "        } /*switch opcode*/\n");
+        fprintf(fp, "    }\n\n");
 
         fprintf(fp, "protected:\n");
         fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));

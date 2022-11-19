@@ -574,6 +574,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             }
             TestAssert(opdata.size() == b["OpData"].size());
 
+            size_t bcPosForCurBytecode = bw.GetCurLength();
+
             switch (opcode)
             {
             case LJOpcode::ADDVN:
@@ -584,6 +586,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = numCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeAdd(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == numCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::SUBVN:
@@ -594,6 +602,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = numCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSub(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == numCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MULVN:
@@ -604,6 +618,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = numCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMul(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == numCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::DIVVN:
@@ -614,6 +634,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = numCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeDiv(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == numCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MODVN:
@@ -624,6 +650,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = numCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMod(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == numCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::ADDNV:
@@ -634,6 +666,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeAdd(bcPosForCurBytecode);
+                assert(operands.lhs == numCst(opdata[2]));
+                assert(operands.rhs == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::SUBNV:
@@ -644,6 +682,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSub(bcPosForCurBytecode);
+                assert(operands.lhs == numCst(opdata[2]));
+                assert(operands.rhs == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MULNV:
@@ -654,6 +698,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMul(bcPosForCurBytecode);
+                assert(operands.lhs == numCst(opdata[2]));
+                assert(operands.rhs == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::DIVNV:
@@ -664,6 +714,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeDiv(bcPosForCurBytecode);
+                assert(operands.lhs == numCst(opdata[2]));
+                assert(operands.rhs == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MODNV:
@@ -674,6 +730,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMod(bcPosForCurBytecode);
+                assert(operands.lhs == numCst(opdata[2]));
+                assert(operands.rhs == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::ADDVV:
@@ -684,6 +746,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeAdd(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::SUBVV:
@@ -694,6 +762,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSub(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MULVV:
@@ -704,6 +778,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMul(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::DIVVV:
@@ -714,6 +794,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeDiv(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::MODVV:
@@ -724,6 +810,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMod(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::POW:
@@ -734,6 +826,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .rhs = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodePow(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[1]));
+                assert(operands.rhs == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::CAT:
@@ -746,6 +844,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .num = num,
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeConcat(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.num == num);
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::KSHORT:
@@ -755,6 +859,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .value = static_cast<int16_t>(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSetConstInt16(bcPosForCurBytecode);
+                assert(operands.value == static_cast<int16_t>(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::ISLT:
@@ -766,6 +875,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfLT(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISGE:
@@ -777,6 +891,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNLT(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISLE:
@@ -788,6 +907,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfLE(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISGT:
@@ -799,6 +923,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNLE(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISEQV:
@@ -810,6 +939,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISNEV:
@@ -821,6 +955,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISEQS:
@@ -832,6 +971,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = objCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == objCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISNES:
@@ -843,6 +987,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = objCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == objCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISEQN:
@@ -854,6 +1003,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = numCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == numCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISNEN:
@@ -865,6 +1019,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = numCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == numCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISEQP:
@@ -876,6 +1035,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = priCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == priCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISNEP:
@@ -887,6 +1051,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .lhs = local(opdata[0]),
                     .rhs = priCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
+                assert(operands.lhs == local(opdata[0]));
+                assert(operands.rhs == priCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::ISTC:
@@ -899,6 +1068,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSelectAndBranchIfTruthy(bcPosForCurBytecode);
+                assert(operands.testValue == local(opdata[1]));
+                assert(operands.defaultValue == local(opdata[0]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::ISFC:
@@ -911,6 +1086,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .defaultValue = local(opdata[0]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeSelectAndBranchIfFalsy(bcPosForCurBytecode);
+                assert(operands.testValue == local(opdata[1]));
+                assert(operands.defaultValue == local(opdata[0]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::IST:
@@ -921,6 +1102,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateBranchIfTruthy({
                     .testValue = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfTruthy(bcPosForCurBytecode);
+                assert(operands.testValue == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::ISF:
@@ -931,6 +1116,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateBranchIfFalsy({
                     .testValue = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeBranchIfFalsy(bcPosForCurBytecode);
+                assert(operands.testValue == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::GGET:
@@ -940,6 +1129,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = objCst(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeGlobalGet(bcPosForCurBytecode);
+                assert(operands.index == objCst(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::GSET:
@@ -950,6 +1144,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = objCst(opdata[1]),
                     .value = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeGlobalPut(bcPosForCurBytecode);
+                assert(operands.index == objCst(opdata[1]));
+                assert(operands.value == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::RETM:
@@ -962,6 +1161,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .retStart = local(opdata[0]),
                     .numRet = numReturnValues
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeRetM(bcPosForCurBytecode);
+                assert(operands.retStart == local(opdata[0]));
+                assert(operands.numRet == numReturnValues);
+#endif
                 break;
             }
             case LJOpcode::RET:
@@ -975,6 +1179,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .retStart = local(opdata[0]),
                     .numRet = numReturnValues
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeRet(bcPosForCurBytecode);
+                assert(operands.retStart == local(opdata[0]));
+                assert(operands.numRet == numReturnValues);
+#endif
                 break;
             }
             case LJOpcode::RET0:
@@ -989,6 +1198,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .retStart = local(opdata[0]),
                     .numRet = 1
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeRet(bcPosForCurBytecode);
+                assert(operands.retStart == local(opdata[0]));
+                assert(operands.numRet == 1);
+#endif
                 break;
             }
             case LJOpcode::CALLM:
@@ -1006,6 +1220,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .numArgs = numFixedParams,
                     .numRets = numResults
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeCallM(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+                assert(operands.numArgs == numFixedParams);
+                assert(operands.numRets == numResults);
+#endif
                 break;
             }
             case LJOpcode::CALL:
@@ -1023,6 +1243,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .numArgs = numFixedParams,
                     .numRets = numResults
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeCall(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+                assert(operands.numArgs == numFixedParams);
+                assert(operands.numRets == numResults);
+#endif
                 break;
             }
             case LJOpcode::CALLMT:
@@ -1035,6 +1261,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeCallMT(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+                assert(operands.numArgs == numFixedParams);
+#endif
                 break;
             }
             case LJOpcode::CALLT:
@@ -1045,6 +1276,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeCallT(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+                assert(operands.numArgs == numFixedParams);
+#endif
                 break;
             }
             case LJOpcode::MOV:
@@ -1054,6 +1290,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMov(bcPosForCurBytecode);
+                assert(operands.input == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::NOT:
@@ -1063,6 +1304,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .value = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeLogicalNot(bcPosForCurBytecode);
+                assert(operands.value == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::UNM:
@@ -1072,6 +1318,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUnaryMinus(bcPosForCurBytecode);
+                assert(operands.input == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::LEN:
@@ -1081,6 +1332,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = local(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeLengthOf(bcPosForCurBytecode);
+                assert(operands.input == local(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::KSTR:
@@ -1090,6 +1346,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = objCst(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMov(bcPosForCurBytecode);
+                assert(operands.input == objCst(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::KNUM:
@@ -1099,6 +1360,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = numCst(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMov(bcPosForCurBytecode);
+                assert(operands.input == numCst(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::KPRI:
@@ -1108,6 +1374,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .input = priCst(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeMov(bcPosForCurBytecode);
+                assert(operands.input == priCst(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::FNEW:
@@ -1117,6 +1388,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .unlinkedCb = objCst(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeNewClosure(bcPosForCurBytecode);
+                assert(operands.unlinkedCb == objCst(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TNEW:
@@ -1157,6 +1433,13 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .arrayPartSizeHint = static_cast<uint16_t>(arrayPartHint),
                     .output = local(opdata[0])
                 });
+
+#ifndef NDEBUG
+                auto operands = bw.DecodeTableNew(bcPosForCurBytecode);
+                assert(operands.inlineStorageSizeStepping == stepping);
+                assert(operands.arrayPartSizeHint == static_cast<uint16_t>(arrayPartHint));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TDUP:
@@ -1185,6 +1468,13 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                                     .hasButterfly = 0,
                                     .output = local(opdata[0])
                                 });
+#ifndef NDEBUG
+                                auto operands = bw.DecodeTableDup(bcPosForCurBytecode);
+                                assert(operands.src == tv);
+                                assert(operands.inlineCapacityStepping == stepping);
+                                assert(operands.hasButterfly == 0);
+                                assert(operands.output == local(opdata[0]));
+#endif
                             }
                         }
                         else
@@ -1198,6 +1488,13 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                                     .hasButterfly = 1,
                                     .output = local(opdata[0])
                                 });
+#ifndef NDEBUG
+                                auto operands = bw.DecodeTableDup(bcPosForCurBytecode);
+                                assert(operands.src == tv);
+                                assert(operands.inlineCapacityStepping == stepping);
+                                assert(operands.hasButterfly == 1);
+                                assert(operands.output == local(opdata[0]));
+#endif
                             }
                         }
                     }
@@ -1208,6 +1505,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         .src = tv,
                         .output = local(opdata[0])
                     });
+#ifndef NDEBUG
+                    auto operands = bw.DecodeTableDupGeneral(bcPosForCurBytecode);
+                    assert(operands.src == tv);
+                    assert(operands.output == local(opdata[0]));
+#endif
                 }
                 break;
             }
@@ -1219,6 +1521,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = local(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTableGetByVal(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == local(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TGETS:
@@ -1229,6 +1537,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = objCst(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTableGetById(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == objCst(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TSETV:
@@ -1239,6 +1553,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = local(opdata[2]),
                     .value = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTablePutByVal(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == local(opdata[2]));
+                assert(operands.value == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TSETS:
@@ -1249,6 +1569,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = objCst(opdata[2]),
                     .value = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTablePutById(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == objCst(opdata[2]));
+                assert(operands.value == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TGETB:
@@ -1259,6 +1585,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = SafeIntegerCast<int16_t>(opdata[2]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTableGetByImm(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TSETB:
@@ -1269,6 +1601,12 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .index = SafeIntegerCast<int16_t>(opdata[2]),
                     .value = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTablePutByImm(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[1]));
+                assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
+                assert(operands.value == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::TSETM:
@@ -1287,6 +1625,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(localSlot),
                     .index = Cst<tInt32>(idx)
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeTableVariadicPutBySeq(bcPosForCurBytecode);
+                assert(operands.base == local(localSlot));
+                assert(operands.index == Cst<tInt32>(idx));
+#endif
                 break;
             }
             case LJOpcode::UGET:
@@ -1296,6 +1639,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .ord = SafeIntegerCast<uint16_t>(opdata[1]),
                     .output = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvalueGet(bcPosForCurBytecode);
+                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[1]));
+                assert(operands.output == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::USETV:
@@ -1305,6 +1653,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .ord = SafeIntegerCast<uint16_t>(opdata[0]),
                     .value = local(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
+                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                assert(operands.value == local(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::USETS:
@@ -1314,6 +1667,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .ord = SafeIntegerCast<uint16_t>(opdata[0]),
                     .value = objCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
+                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                assert(operands.value == objCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::USETN:
@@ -1323,6 +1681,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .ord = SafeIntegerCast<uint16_t>(opdata[0]),
                     .value = numCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
+                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                assert(operands.value == numCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::USETP:
@@ -1332,6 +1695,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .ord = SafeIntegerCast<uint16_t>(opdata[0]),
                     .value = priCst(opdata[1])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
+                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                assert(operands.value == priCst(opdata[1]));
+#endif
                 break;
             }
             case LJOpcode::UCLO:
@@ -1342,6 +1710,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateUpvalueClose({
                     .base = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeUpvalueClose(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::FORI:
@@ -1358,6 +1730,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateForLoopInit({
                     .base = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeForLoopInit(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::FORL:
@@ -1373,6 +1749,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateForLoopStep({
                     .base = local(opdata[0])
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeForLoopStep(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+#endif
                 break;
             }
             case LJOpcode::LOOP:
@@ -1409,6 +1789,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                         .base = local(opdata[0]),
                         .numToPut = SafeIntegerCast<uint16_t>(fieldB - 1)
                     });
+#ifndef NDEBUG
+                    auto operands = bw.DecodeGetVarArgsPrefix(bcPosForCurBytecode);
+                    assert(operands.base == local(opdata[0]));
+                    assert(operands.numToPut == SafeIntegerCast<uint16_t>(fieldB - 1));
+#endif
                 }
                 break;
             }
@@ -1421,6 +1806,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(opdata[0]),
                     .numToPut = SafeIntegerCast<uint16_t>(numSlotsToFill)
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeRangeFillNils(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0]));
+                assert(operands.numToPut == SafeIntegerCast<uint16_t>(numSlotsToFill));
+#endif
                 break;
             }
             case LJOpcode::ITERN:
@@ -1440,6 +1830,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(opdata[0] - 3),
                     .numRets = numRets
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeKVLoopIter(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0] - 3));
+                assert(operands.numRets == numRets);
+#endif
                 break;
             }
             case LJOpcode::ITERC:
@@ -1458,6 +1853,11 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                     .base = local(opdata[0] - 3),
                     .numRets = numRets
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeForLoopIter(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0] - 3));
+                assert(operands.numRets == numRets);
+#endif
                 break;
             }
             case LJOpcode::ITERL:
@@ -1473,6 +1873,10 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 bw.CreateValidateIsNextAndBranch({
                     .base = local(opdata[0] - 3)
                 });
+#ifndef NDEBUG
+                auto operands = bw.DecodeValidateIsNextAndBranch(bcPosForCurBytecode);
+                assert(operands.base == local(opdata[0] - 3));
+#endif
                 break;
             }
             case LJOpcode::KCDATA:
@@ -1501,6 +1905,7 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
                 ReleaseAssert(false && "Unexpected opcode");
             }
             }
+            std::ignore = bcPosForCurBytecode;
         }
         ReleaseAssert(bytecodeLocation.size() == bytecodeList.size());
 
