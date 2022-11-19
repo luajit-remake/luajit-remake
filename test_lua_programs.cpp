@@ -513,6 +513,11 @@ TEST(LuaTest, TableVariadicPut)
     RunSimpleLuaTest("luatests/table_variadic_put.lua.json");
 }
 
+TEST(LuaTest, TableVariadicPut_2)
+{
+    RunSimpleLuaTest("luatests/table_variadic_put_2.lua.json");
+}
+
 TEST(LuaBenchmark, NBody)
 {
     RunSimpleLuaTest("luatests/n-body.lua.json");
