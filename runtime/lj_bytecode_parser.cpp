@@ -1924,6 +1924,8 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
             }
         }
 
+        assert(bw.CheckWellFormedness());
+
         std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();
         std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
 
