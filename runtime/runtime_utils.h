@@ -361,9 +361,11 @@ public:
         uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
         UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(addressBegin);
         SystemHeapGcObjectHeader::Populate(ucb);
+        ucb->m_uvFixUpCompleted = false;
         ucb->m_defaultGlobalObject = globalObject;
         ucb->m_rareGOtoCBMap = nullptr;
         ucb->m_parent = nullptr;
+        ucb->m_defaultCodeBlock = nullptr;
         return ucb;
     }
 
@@ -376,6 +378,7 @@ public:
     {
         if (likely(globalObject == m_defaultGlobalObject))
         {
+            assert(m_defaultCodeBlock != nullptr);
             return m_defaultCodeBlock;
         }
         return GetCodeBlockSlowPath(globalObject);
@@ -401,6 +404,9 @@ public:
         }
     }
 
+    // For assertion purpose only
+    //
+    bool m_uvFixUpCompleted;
     bool m_hasVariadicArguments;
     uint32_t m_numFixedArguments;
 

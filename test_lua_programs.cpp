@@ -4,6 +4,7 @@
 #include "json_utils.h"
 #include "test_util_helper.h"
 #include "test_vm_utils.h"
+#include "lj_parser_wrapper.h"
 
 namespace {
 
@@ -29,14 +30,30 @@ std::string LoadFile(std::string filename)
     return std::string { iter, end };
 }
 
-void RunSimpleLuaTest(const std::string& filename)
+void RunSimpleLuaTest(std::string filename)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile(filename));
-    vm->LaunchScript(module);
+    if (filename.ends_with(".json"))
+    {
+        filename = filename.substr(0, filename.length() - 5);
+        // ScriptModule* module = ScriptModule::ParseFromJSON(vm, LoadFile(filename));
+        // vm->LaunchScript(module);
+    }
+
+    {
+        std::string content = LoadFile(filename);
+        ParseResult res = ParseLuaScript(vm->GetRootCoroutine(), content);
+        if (res.m_scriptModule.get() == nullptr)
+        {
+            fprintf(stderr, "Parsing file '%s' failed with error = %d, token = %d, errmsg = %s\n",
+                    filename.c_str(), static_cast<int>(res.errorCode), static_cast<int>(res.errorTok), (res.errMsg ? res.errMsg : "(none)"));
+            abort();
+        }
+        vm->LaunchScript(res.m_scriptModule.get());
+    }
 
     std::string out = vmoutput.GetAndResetStdOut();
     std::string err = vmoutput.GetAndResetStdErr();
@@ -46,7 +63,7 @@ void RunSimpleLuaTest(const std::string& filename)
 
 TEST(LuaTest, Fib)
 {
-    RunSimpleLuaTest("luatests/fib.lua.json");
+    RunSimpleLuaTest("luatests/fib.lua");
 }
 
 TEST(LuaTest, TestPrint)
@@ -68,12 +85,12 @@ TEST(LuaTest, TestPrint)
 
 TEST(LuaTest, TestTableDup)
 {
-    RunSimpleLuaTest("luatests/table_dup.lua.json");
+    RunSimpleLuaTest("luatests/table_dup.lua");
 }
 
 TEST(LuaTest, TestTableDup2)
 {
-    RunSimpleLuaTest("luatests/table_dup2.lua.json");
+    RunSimpleLuaTest("luatests/table_dup2.lua");
 }
 
 TEST(LuaTest, TestTableDup3)

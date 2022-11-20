@@ -388,7 +388,9 @@ public:
     // This is the high 8 bits of the XXHash64 value, for quick comparison
     //
     uint8_t m_hashHigh;
-    // Always ArrayType::x_invalidArrayType
+    // The ArrayType::x_invalidArrayType bit msut always be set.
+    // Note that we also use the lower bits to represent if this string is a reserved word.
+    // This is fine as long as we have bit 7 (invalidArraType bit) set and bit 6 (isCoroutine bit) unset.
     //
     uint8_t m_invalidArrayType;
 
@@ -464,6 +466,30 @@ public:
         {
             return 0;
         }
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
+    static void SetReservedWord(T self, uint8_t reservedId)
+    {
+        assert(reservedId + 1 <= 63);
+        uint8_t arrTy = ArrayType::x_invalidArrayType + reservedId + 1;
+        TCSet(self->m_invalidArrayType, arrTy);
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
+    static bool WARN_UNUSED IsReservedWord(T self)
+    {
+        return self->m_invalidArrayType != ArrayType::x_invalidArrayType;
+    }
+
+    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
+    static uint8_t WARN_UNUSED GetReservedWordOrdinal(T self)
+    {
+        assert(IsReservedWord(self));
+        assert(self->m_invalidArrayType > ArrayType::x_invalidArrayType);
+        uint8_t ord = static_cast<uint8_t>(self->m_invalidArrayType - ArrayType::x_invalidArrayType - 1);
+        assert(ord + 1 <= 63);
+        return ord;
     }
 };
 static_assert(sizeof(HeapString) == 16);

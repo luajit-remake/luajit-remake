@@ -7,6 +7,8 @@ add_library(runtime
   lj_strscan.cpp
   lj_strfmt_num.cpp
   lj_strfmt.cpp
+  lj_lex.cpp
+  lj_parse.cpp
 )
 
 add_dependencies(runtime 

@@ -61,6 +61,22 @@ public:
         return m_bufferCur;
     }
 
+    char* Begin()
+    {
+        return m_bufferBegin;
+    }
+
+    size_t Len()
+    {
+        assert(m_bufferCur >= m_bufferBegin);
+        return static_cast<size_t>(m_bufferCur - m_bufferBegin);
+    }
+
+    void Clear()
+    {
+        m_bufferCur = m_bufferBegin;
+    }
+
     char* m_bufferBegin;
     char* m_bufferCur;
     char* m_bufferEnd;

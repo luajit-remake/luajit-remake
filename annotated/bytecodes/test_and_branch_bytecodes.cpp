@@ -67,31 +67,4 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestSelectAndBranchOperation, bool testForFalsy)
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(SelectAndBranchIfTruthy, TestSelectAndBranchOperation, false /*testForFalsy*/);
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(SelectAndBranchIfFalsy, TestSelectAndBranchOperation, true /*testForFalsy*/);
 
-// An unconditional branch. This bytecode has identical functionality as the 'Branch' bytecode,
-// but is enforced to have a bytecode length identical to the above CondBr/SelectAndCondBr bytecodes.
-// This allows the bytecode builder frontend can safely replace one of the above bytecodes to an
-// unconditional branch, without breaking the bytecode stream.
-//
-static void NO_RETURN UncondBrReducedFromCondBrImpl()
-{
-    ReturnAndBranch();
-}
-
-DEEGEN_DEFINE_BYTECODE(UncondBrReducedFromCondBr)
-{
-    Operands();
-    Result(ConditionalBranch);
-    Implementation(UncondBrReducedFromCondBrImpl);
-    Variant();
-}
-
-// BranchIfFalsy, BranchIfTruthy, SelectAndBranchIfTruthy, SelectAndBranchIfFalsy and UncondBrReducedFromCondBr must have the same length,
-// as the bytecode builder frontend needs to late-replace a 'SelectAndCondBr' with a 'CondBr', or replace a 'CondBr' with a 'UncondBr',
-// or to flip the branch condition.
-//
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfFalsy, BranchIfTruthy);
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfFalsy, SelectAndBranchIfTruthy);
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfFalsy, SelectAndBranchIfFalsy);
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfFalsy, UncondBrReducedFromCondBr);
-
 DEEGEN_END_BYTECODE_DEFINITIONS

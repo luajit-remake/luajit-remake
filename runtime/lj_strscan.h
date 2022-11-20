@@ -28,6 +28,8 @@
 ** [ MIT license: https://www.opensource.org/licenses/mit-license.php ]
 */
 
+#pragma once
+
 #include "common.h"
 
 /* Returned format. */

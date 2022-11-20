@@ -1,5 +1,6 @@
 #include "runtime_utils.h"
 #include "api_define_lib_function.h"
+#include "lj_parser_wrapper.h"
 #include <numbers>
 
 #define LUA_LIB_BASE_FUNCTION_LIST      \
@@ -230,6 +231,8 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
     h.InsertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
     h.InsertString(globalObject, "_VERSION", "Lua 5.1");
+
+    lj_lex_init(vm);
 
     // Insert the base library functions into the global object
     //

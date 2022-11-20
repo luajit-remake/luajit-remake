@@ -302,9 +302,4 @@ DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfNLT, ComparisonOperatio
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfLE, ComparisonOperation, true /*shouldBranch*/, ComparatorKind::LessEqual);
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfNLE, ComparisonOperation, true /*shouldBranch*/, ComparatorKind::NotLessEqual);
 
-// Each pair of opposite branch must have identical bytecode length, as the bytecode builder frontend may need to late-flip the branch condition.
-//
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfLT, BranchIfNLT);
-DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(BranchIfLE, BranchIfNLE);
-
 DEEGEN_END_BYTECODE_DEFINITIONS

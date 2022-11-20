@@ -123,16 +123,22 @@ public:
         UnalignedStore<uint16_t>(GetBytecodeStart() + bcPos + offset, static_cast<uint16_t>(value));
     }
 
-    // Update the branch target of the bytecode at 'bcPos', overwriting the old value.
-    // Return false if a overflow happened (currently our bytecode branch operand is only int16_t)
+    // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
     //
-    bool WARN_UNUSED SetBranchTarget(size_t bcPos, size_t destBcPos)
+    void SetBranchTargetOffset(size_t bcPos, int16_t destBcOffset)
     {
         assert(IsPrimitiveBytecode(bcPos));
         BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
         uint8_t branchOperandOffsetInBc = x_bcBranchOperandOffsetArray[opcode];
         assert(branchOperandOffsetInBc != 255);
+        UnalignedStore<int16_t>(GetBytecodeStart() + bcPos + branchOperandOffsetInBc, destBcOffset);
+    }
 
+    // Update the branch target of the bytecode at 'bcPos', overwriting the old value.
+    // Return false if a overflow happened (currently our bytecode branch operand is only int16_t)
+    //
+    bool WARN_UNUSED SetBranchTarget(size_t bcPos, size_t destBcPos)
+    {
         int64_t diff = static_cast<int64_t>(destBcPos - bcPos);
         // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
         //
@@ -141,8 +147,7 @@ public:
         {
             return false;
         }
-        ValueType val = static_cast<ValueType>(diff);
-        UnalignedStore<ValueType>(GetBytecodeStart() + bcPos + branchOperandOffsetInBc, val);
+        SetBranchTargetOffset(bcPos, static_cast<ValueType>(diff));
         return true;
     }
 
