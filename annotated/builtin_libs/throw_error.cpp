@@ -159,7 +159,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
                 fprintf(stderr, "\n");
                 fflush(stderr);
             }
-            abort();
+            exit(1);
         }
 
         assert(!parentCoro->m_coroutineStatus.IsDead() && !parentCoro->m_coroutineStatus.IsResumable());

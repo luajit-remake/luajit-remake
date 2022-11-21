@@ -203,6 +203,12 @@ if (op == 'make'):
     CreateDirIfNotExist(GetGeneratedDirFlavor(target))
     CreateDirIfNotExist(os.path.join(GetGeneratedDirFlavor(target), 'generated'))
     
+    # generate the git commit hash CPP file
+    cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project && bash gen_git_hash.sh __generated__/%s/generated/git_commit_hash.cpp'" % (base_dir, docker_image_name, docker_image_tag, target)
+    r = os.system(cmd)
+    if (r != 0):
+        sys.exit(r)
+        
     cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, docker_image_name, docker_image_tag, target, target.upper())
     r = os.system(cmd)
     if (r != 0):
@@ -233,6 +239,11 @@ if (op == 'make'):
         print('Copying built artifact to project root directory..')
         src = os.path.join(GetBuildDirFlavor(target), "main")
         dst = os.path.join(base_dir, "main")
+        p = Popen(['cp', '-p', '--preserve', src, dst])
+        p.wait()
+        
+        src = os.path.join(GetBuildDirFlavor(target), "luajitr")
+        dst = os.path.join(base_dir, "luajitr")
         p = Popen(['cp', '-p', '--preserve', src, dst])
         p.wait()
         print('Build completed successfully.') 
