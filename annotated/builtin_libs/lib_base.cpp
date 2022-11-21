@@ -1,6 +1,7 @@
 #include "deegen_api.h"
 #include "lualib_tonumber_util.h"
 #include "runtime_utils.h"
+#include "lj_parser_wrapper.h"
 
 // base.assert -- https://www.lua.org/manual/5.1/manual.html#pdf-assert
 //
@@ -66,6 +67,30 @@ DEEGEN_DEFINE_LIB_FUNC(base_collectgarbage)
     ThrowError("Library function 'collectgarbage' is not implemented yet!");
 }
 
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_dofile_continuation)
+{
+    ReturnValueRange(GetReturnValuesBegin(), GetNumReturnValues());
+}
+
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_dofile_read_stdin_continuation)
+{
+    // We need to execute the result returned by 'load', or throw out error if 'load' failed.
+    //
+    assert(GetNumReturnValues() >= 1);
+    TValue r1 = GetReturnValuesBegin()[0];
+    if (r1.Is<tNil>())
+    {
+        assert(GetNumReturnValues() == 2);
+        TValue errMsg = GetReturnValuesBegin()[1];
+        ThrowError(errMsg);
+    }
+
+    assert(r1.Is<tFunction>());
+    TValue* callFrame = GetStackBase();
+    callFrame[0] = r1;
+    MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
+}
+
 // base.dofile -- https://www.lua.org/manual/5.1/manual.html#pdf-dofile
 //
 // dofile ([filename])
@@ -75,7 +100,33 @@ DEEGEN_DEFINE_LIB_FUNC(base_collectgarbage)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_dofile)
 {
-    ThrowError("Library function 'dofile' is not implemented yet!");
+    if (GetNumArgs() < 1 || GetArg(0).Is<tNil>())
+    {
+        // Read from stdin, in this case we can just use io_lines_iter as the iterator function and do a load
+        //
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TValue* callframe = GetStackBase();
+        callframe[0] = vm->GetLibFn<VM::LibFn::BaseLoad>();
+        callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
+        MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_read_stdin_continuation));
+    }
+
+    GET_ARG_AS_STRING(dofile, 1, fileNamePtr, fileNameLen);
+    std::ignore = fileNameLen;
+
+    HeapPtr<FunctionObject> entryPoint;
+    {
+        ParseResult res = ParseLuaScriptFromFile(GetCurrentCoroutine(), fileNamePtr);
+        if (res.m_scriptModule.get() == nullptr)
+        {
+            ThrowError(res.errMsg);
+        }
+        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
+    }
+
+    TValue* callFrame = GetStackBase();
+    callFrame[0] = TValue::Create<tFunction>(entryPoint);
+    MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
 }
 
 // base.getfenv -- https://www.lua.org/manual/5.1/manual.html#pdf-getfenv
@@ -190,6 +241,90 @@ DEEGEN_DEFINE_LIB_FUNC(base_ipairs)
     Return(iterFn, arg1, TValue::Create<tDouble>(0));
 }
 
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
+{
+    if (GetNumReturnValues() == 0)
+    {
+        goto iter_end;
+    }
+    else
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TValue v = GetReturnValuesBegin()[0];
+        if (v.Is<tNil>())
+        {
+            goto iter_end;
+        }
+        else if (!v.Is<tString>())
+        {
+            if (v.Is<tInt32>())
+            {
+                char buf[x_default_tostring_buffersize_int];
+                StringifyInt32UsingDefaultLuaFormattingOptions(buf, v.As<tInt32>());
+                v = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
+            }
+            else if (v.Is<tDouble>())
+            {
+                char buf[x_default_tostring_buffersize_double];
+                StringifyDoubleUsingDefaultLuaFormattingOptions(buf, v.As<tDouble>());
+                v = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
+            }
+            else
+            {
+                TValue errMsg = TValue::Create<tString>(vm->CreateStringObjectFromRawCString("reader function must return a string"));
+                Return(TValue::Create<tNil>(), errMsg);
+            }
+        }
+
+        assert(v.Is<tString>());
+        if (v.As<tString>()->m_length == 0)
+        {
+            goto iter_end;
+        }
+
+        TValue* sb = GetStackBase();
+        assert(sb[2].Is<tTable>());
+        HeapPtr<TableObject> tab = sb[2].As<tTable>();
+        assert(sb[3].Is<tInt32>());
+        int32_t ord = sb[3].As<tInt32>();
+        assert(ord >= 0);
+        if (ord >= 1000000)
+        {
+            TValue errMsg = TValue::Create<tString>(vm->CreateStringObjectFromRawCString("'load' returned too many (>1000000) code pieces"));
+            Return(TValue::Create<tNil>(), errMsg);
+        }
+        ord++;
+        TableObject::RawPutByValIntegerIndex(tab, ord, v);
+        sb[3] = TValue::Create<tInt32>(ord);
+
+        TValue* callFrame = sb + 4;
+        assert(sb[0].Is<tFunction>());
+        callFrame[0] = sb[0];
+        MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
+    }
+
+iter_end:
+    HeapPtr<FunctionObject> entryPoint;
+
+    {
+        TValue* sb = GetStackBase();
+        assert(sb[2].Is<tTable>());
+        HeapPtr<TableObject> tab = sb[2].As<tTable>();
+        assert(sb[3].Is<tInt32>());
+        int32_t len = sb[3].As<tInt32>();
+        assert(len >= 0);
+
+        ParseResult res = ParseLuaScript(GetCurrentCoroutine(), tab, static_cast<uint32_t>(len));
+        if (res.m_scriptModule.get() == nullptr)
+        {
+            Return(TValue::Create<tNil>(), res.errMsg);
+        }
+        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
+    }
+
+    Return(TValue::Create<tFunction>(entryPoint));
+}
+
 // base.load -- https://www.lua.org/manual/5.1/manual.html#pdf-load
 //
 // load (func [, chunkname])
@@ -203,7 +338,32 @@ DEEGEN_DEFINE_LIB_FUNC(base_ipairs)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_load)
 {
-    ThrowError("Library function 'load' is not implemented yet!");
+    if (unlikely(GetNumArgs() < 1))
+    {
+        ThrowError("bad argument #1 to 'load' (function expected, got no value)");
+    }
+    if (!GetArg(0).Is<tFunction>())
+    {
+        ThrowError("bad argument #1 to 'load' (function expected)");
+    }
+    HeapPtr<FunctionObject> func = GetArg(0).As<tFunction>();
+
+    // Put all the string pieces into a table
+    //
+    TValue* sb = GetStackBase();
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    HeapPtr<TableObject> tab = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCap*/, 1 /*initialButterfly*/);
+    sb[2] = TValue::Create<tTable>(tab);
+    sb[3] = TValue::Create<tInt32>(0);
+
+    TValue* callFrame = sb + 4;
+    callFrame[0] = TValue::Create<tFunction>(func);
+    MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
+}
+
+DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_loadfile_continuation)
+{
+    ReturnValueRange(GetReturnValuesBegin(), GetNumReturnValues());
 }
 
 // base.loadfile -- https://www.lua.org/manual/5.1/manual.html#pdf-loadfile
@@ -213,7 +373,30 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
 {
-    ThrowError("Library function 'loadfile' is not implemented yet!");
+    if (GetNumArgs() < 1 || GetArg(0).Is<tNil>())
+    {
+        // Read from stdin, in this case we can just use io_lines_iter as the iterator function and do a load
+        //
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        TValue* callframe = GetStackBase();
+        callframe[0] = vm->GetLibFn<VM::LibFn::BaseLoad>();
+        callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
+        MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_loadfile_continuation));
+    }
+
+    GET_ARG_AS_STRING(loadfile, 1, fileNamePtr, fileNameLen);
+    std::ignore = fileNameLen;
+
+    HeapPtr<FunctionObject> entryPoint;
+    {
+        ParseResult res = ParseLuaScriptFromFile(GetCurrentCoroutine(), fileNamePtr);
+        if (res.m_scriptModule.get() == nullptr)
+        {
+            Return(TValue::Create<tNil>(), res.errMsg);
+        }
+        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
+    }
+    Return(TValue::Create<tFunction>(entryPoint));
 }
 
 // base.loadstring -- https://www.lua.org/manual/5.1/manual.html#pdf-loadstring
@@ -226,7 +409,24 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
 //
 DEEGEN_DEFINE_LIB_FUNC(base_loadstring)
 {
-    ThrowError("Library function 'loadstring' is not implemented yet!");
+    if (unlikely(GetNumArgs() < 1))
+    {
+        ThrowError("bad argument #1 to 'loadstring' (string expected, got no value)");
+    }
+    GET_ARG_AS_STRING(loadstring, 1, ptr, len);
+
+    HeapPtr<FunctionObject> entryPoint;
+
+    {
+        ParseResult res = ParseLuaScript(GetCurrentCoroutine(), ptr, len);
+        if (res.m_scriptModule.get() == nullptr)
+        {
+            Return(TValue::Create<tNil>(), res.errMsg);
+        }
+        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
+    }
+
+    Return(TValue::Create<tFunction>(entryPoint));
 }
 
 // base.module -- https://www.lua.org/manual/5.1/manual.html#pdf-module

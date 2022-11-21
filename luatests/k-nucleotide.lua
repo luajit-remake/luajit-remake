@@ -38,13 +38,31 @@ local function frequency(seq, k)
   io.write("\n")
 end
 
+
+local input = {
+"cttgaacaacaggatgcactagtaacatgtctcgttcatgcttccattaagttcttctta",
+"aacttacacaaactacctaatttagagttgacgagatggttgaacgtgttgtgacaaacg",
+"tttgcaaaatgcacagtatcgttaccaaaaagtacatttaagtgtgtgcgtaggaattct",
+"gctacgtccattgcaggccacattcacatcccacccctgaatatatggactgaatcacac",
+"acaccaaatttcatctaccttatcgtagcataactattaacaaacatatacagacttcgc",
+"ggtaaataaaatatattagtacacaaccgtatactggttgaactattgcccagctttaag",
+"acgcttttaactaggtgcttgatcaagaagtattattatatgacggcagtgtgtaatacc",
+"tgaatagatatagacgttagattgtctgaaaacacgccgtagagacatttttgttagata",
+"tgtatttctttttgacgagccagcatcttagtatctgaagacgagctatatgtttgtaga",
+"aaatcgactgacattgtatacgaggcggcgtaagattaaccaaattccccagaattagta",
+"atggcgccttatcgatttactaacgatatataacttgtgatgttgtctgcaatgtatacc",
+"cgtgtaggctgtgctcttatcgaaggaaacgcattgaagtccaggctggatgaaaccacc",
+"gcgtacttccatgcgtctatacatagcgtcaccgatactacgttttgctatgtaatccat",
+"tctaatgggtaagaggattcctcttatagtaaaatatgcttgactttttaagaaccattg",
+"ggagtggttggcaaaataatagtgggtgtctttctcagtgtatagttttctacaactacc",
+"cctattaggttacaagtaatctggctttcttgccacttggcgatgatagttagattcgta",
+"tttctacaacgcagttactgtatccatggcgcgagataat"
+}
+
 local function readseq()
   local sub = string.sub
-  for line in io.lines() do
-    if sub(line, 1, 1) == ">" and sub(line, 2, 6) == "THREE" then break end
-  end
   local lines, ln = {}, 0
-  for line in io.lines() do
+  for k, line in ipairs(input) do
     local c = sub(line, 1, 1)
     if c == ">" then
       break

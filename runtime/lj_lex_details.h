@@ -102,31 +102,55 @@ typedef struct VarInfo {
   uint8_t info;		/* Variable/goto/label info. */
 } VarInfo;
 
-#define LJ_ERR_XLINES -1
-#define LJ_ERR_XNUMBER -2
-#define LJ_ERR_XLSTR -3
-#define LJ_ERR_XLCOM -4
-#define LJ_ERR_XSTR -5
-#define LJ_ERR_XESC -6
-#define LJ_ERR_XLDELIM -7
-#define LJ_ERR_XTOKEN -8
-#define LJ_ERR_XLIMM -9
-#define LJ_ERR_XLIMF -10
-#define LJ_ERR_XJUMP -11
-#define LJ_ERR_XSLOTS -12
-#define LJ_ERR_XMATCH -13
-#define LJ_ERR_XGSCOPE 14
-#define LJ_ERR_XLUNDEF 15
-#define LJ_ERR_XFIXUP 16
-#define LJ_ERR_XAMBIG 17
-#define LJ_ERR_XFUNARG 18
-#define LJ_ERR_XSYMBOL 19
-#define LJ_ERR_XPARAM 20
-#define LJ_ERR_XDOTS 21
-#define LJ_ERR_XLEVELS 22
-#define LJ_ERR_XSYNTAX 23
-#define LJ_ERR_XLDUP 24
-#define LJ_ERR_XFOR 25
+#define LJ_PARSER_ERROR_LIST                                                \
+    (LJ_ERR_XLINES,     "chunk has too many lines")                         \
+  , (LJ_ERR_XNUMBER,	"malformed number")                                 \
+  , (LJ_ERR_XLSTR,	"unfinished long string")                           \
+  , (LJ_ERR_XLCOM,	"unfinished long comment")                          \
+  , (LJ_ERR_XSTR,	"unfinished string")                                \
+  , (LJ_ERR_XESC,	"invalid escape sequence")                          \
+  , (LJ_ERR_XLDELIM,	"invalid long string delimiter")                    \
+  , (LJ_ERR_XTOKEN,     "invalid token")                                    \
+  , (LJ_ERR_XLIMM,      "limitation exceeded")                              \
+  , (LJ_ERR_XLIMF,      "limitation exceeded")                              \
+  , (LJ_ERR_XJUMP,	"control structure too long")                       \
+  , (LJ_ERR_XSLOTS,	"function or expression too complex")               \
+  , (LJ_ERR_XMATCH,     "mismatched tokens pairs")                          \
+  , (LJ_ERR_XGSCOPE,	"goto jumps into the scope of local")               \
+  , (LJ_ERR_XLUNDEF,	"undefined label")                                  \
+  , (LJ_ERR_XFIXUP,     "function too long for return fixup")               \
+  , (LJ_ERR_XAMBIG,     "ambiguous syntax (function call x new statement)") \
+  , (LJ_ERR_XFUNARG,    "function arguments expected")                      \
+  , (LJ_ERR_XSYMBOL, 	"unexpected symbol")                                \
+  , (LJ_ERR_XPARAM,     "parameter name or '...' expected")                 \
+  , (LJ_ERR_XDOTS,      "cannot use '...' outside a vararg function")       \
+  , (LJ_ERR_XLEVELS,	"chunk has too many syntax levels")                 \
+  , (LJ_ERR_XSYNTAX,	"syntax error")                                     \
+  , (LJ_ERR_XLDUP,	"duplicate label ")                                 \
+  , (LJ_ERR_XFOR,	"'=' or 'in' expected")                             \
+
+enum LJ_PARSER_ERROR_KIND_ENUM
+{
+    LJ_PARSER_NO_ERROR
+#define macro(e) , PP_TUPLE_GET_1(e)
+PP_FOR_EACH(macro, LJ_PARSER_ERROR_LIST)
+#undef macro
+    , END_OF_ENUM_LJ_PARSER_ERROR
+};
+
+constexpr const char* x_lj_parser_error_name[END_OF_ENUM_LJ_PARSER_ERROR] = {
+    ""
+#define macro(e) , PP_STRINGIFY(PP_TUPLE_GET_1(e))
+    PP_FOR_EACH(macro, LJ_PARSER_ERROR_LIST)
+#undef macro
+};
+
+constexpr const char* x_lj_parser_error_msg[END_OF_ENUM_LJ_PARSER_ERROR] = {
+    ""
+#define macro(e) , PP_TUPLE_GET_2(e)
+    PP_FOR_EACH(macro, LJ_PARSER_ERROR_LIST)
+#undef macro
+};
 
 using lua_Reader = const char*(*)(CoroutineRuntimeContext*, void*, size_t*);
 

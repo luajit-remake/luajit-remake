@@ -38,8 +38,8 @@ std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& filename)
     ParseResult res = ParseLuaScript(vm->GetRootCoroutine(), content);
     if (res.m_scriptModule.get() == nullptr)
     {
-        fprintf(stderr, "Parsing file '%s' failed with error = %d, token = %d, errmsg = %s\n",
-                filename.c_str(), static_cast<int>(res.errorCode), static_cast<int>(res.errorTok), (res.errMsg ? res.errMsg : "(none)"));
+        fprintf(stderr, "Parsing file '%s' failed!\n", filename.c_str());
+        PrintTValue(stderr, res.errMsg);
         abort();
     }
     return std::move(res.m_scriptModule);
@@ -1377,6 +1377,66 @@ TEST(LuaBenchmark, table_sort)
 TEST(LuaBenchmark, table_sort_cmp)
 {
     RunSimpleLuaTest("luatests/table_sort_cmp.lua");
+}
+
+TEST(LuaLib, base_loadstring)
+{
+    RunSimpleLuaTest("luatests/base_loadstring.lua");
+}
+
+TEST(LuaLib, base_load)
+{
+    RunSimpleLuaTest("luatests/base_load.lua");
+}
+
+TEST(LuaLib, base_loadfile)
+{
+    RunSimpleLuaTest("luatests/base_loadfile.lua");
+}
+
+TEST(LuaLib, base_loadfile_nonexistent)
+{
+    RunSimpleLuaTest("luatests/base_loadfile_nonexistent.lua");
+}
+
+TEST(LuaLib, base_lib_dofile)
+{
+    RunSimpleLuaTest("luatests/base_lib_dofile.lua");
+}
+
+TEST(LuaLib, base_lib_dofile_nonexistent)
+{
+    RunSimpleLuaTest("luatests/base_lib_dofile_nonexistent.lua");
+}
+
+TEST(LuaLib, base_lib_dofile_bad_syntax)
+{
+    RunSimpleLuaTest("luatests/base_lib_dofile_bad_syntax.lua");
+}
+
+TEST(LuaLib, base_lib_dofile_throw)
+{
+    RunSimpleLuaTest("luatests/base_lib_dofile_throw.lua");
+}
+
+TEST(LuaBenchmark, fasta)
+{
+    RunSimpleLuaTest("luatests/fasta.lua");
+}
+
+TEST(LuaBenchmark, pidigits)
+{
+    RunSimpleLuaTest("luatests/pidigits-nogmp.lua");
+}
+
+TEST(LuaBenchmark, revcomp)
+{
+    RunSimpleLuaTest("luatests/revcomp.lua");
+}
+
+TEST(LuaBenchmark, knucleotide)
+{
+    RunSimpleLuaTest("luatests/k-nucleotide.lua");
 }
 
 }   // anonymous namespace

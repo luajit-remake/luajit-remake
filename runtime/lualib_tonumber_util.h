@@ -69,3 +69,39 @@ inline bool WARN_UNUSED ALWAYS_INLINE LuaLib_TVDoubleViewToNumberSlow(double& tv
     tvDoubleView = res;
     return success;
 }
+
+// Lua library generally performs a silent number-to-string cast if a number is passed in to an argument expected to be a string.
+// The easiest approach is of course to cast the number and create a heap string object.
+// However, in many cases, the string content is ephemeral, so creating a heap string object is wasteful.
+// We use this ugly macro to make the converted string's buffer live on the stack instead.
+//
+#define GET_ARG_AS_STRING(fnName, oneIndexedArgOrd, strPtrVar, strLenVar)                                                   \
+    char macro_argN2SBuf[std::max(x_default_tostring_buffersize_double, x_default_tostring_buffersize_int)];                \
+    const char* strPtrVar;                                                                                                  \
+    size_t strLenVar;                                                                                                       \
+    {                                                                                                                       \
+        TValue macro_tv = GetArg(oneIndexedArgOrd - 1);                                                                     \
+        if (likely(macro_tv.Is<tString>()))                                                                                 \
+        {                                                                                                                   \
+            strPtrVar = reinterpret_cast<char*>(TranslateToRawPointer(macro_tv.As<tString>()->m_string));                   \
+            strLenVar = macro_tv.As<tString>()->m_length;                                                                   \
+        }                                                                                                                   \
+        else if (macro_tv.Is<tDouble>())                                                                                    \
+        {                                                                                                                   \
+            strLenVar = static_cast<size_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(                                \
+            macro_argN2SBuf, macro_tv.As<tDouble>()) - macro_argN2SBuf);                                                    \
+            strPtrVar = macro_argN2SBuf;                                                                                    \
+        }                                                                                                                   \
+        else if (macro_tv.Is<tInt32>())                                                                                     \
+        {                                                                                                                   \
+            strLenVar = static_cast<size_t>(StringifyInt32UsingDefaultLuaFormattingOptions(                                 \
+            macro_argN2SBuf, macro_tv.As<tInt32>()) - macro_argN2SBuf);                                                     \
+            strPtrVar = macro_argN2SBuf;                                                                                    \
+        }                                                                                                                   \
+        else                                                                                                                \
+        {                                                                                                                   \
+            ThrowError("bad argument #" PP_STRINGIFY(oneIndexedArgOrd) " to '" PP_STRINGIFY(fnName) "' (string expected)"); \
+        }                                                                                                                   \
+    }                                                                                                                       \
+    assert(true)        /* end with a statement so a comma can be added */
+

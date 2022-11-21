@@ -764,6 +764,7 @@ public:
         BaseError,
         BaseIPairsIter,
         BaseToString,
+        BaseLoad,
         IoLinesIter,
         // must be last member
         //

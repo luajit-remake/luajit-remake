@@ -1,7 +1,5 @@
-jit.off()
-collectgarbage("stop")
-
 -- Start of dynamically compiled chunk.
+function create_chunk(radix)
 local chunk = [=[
 
 -- Factory function for multi-precision number (mpn) operations.
@@ -15,12 +13,12 @@ local function fmm(fa, fb)
       for i=1,n do -- Sum up all elements and propagate carry.
         local x = a[i] ]]..(fa == 2 and "*ka" or "")..
           (fb == 2 and "+b[i]*kb" or (fb == 1 and "+b[i]" or ""))..[[ + carry
-        if x < RADIX and x >= 0 then carry = 0; y[i] = x -- Check for overflow.
-        else local d = x % RADIX; carry = (x-d) / RADIX; y[i] = d end
+        if x < ]=] .. radix .. [=[ and x >= 0 then carry = 0; y[i] = x -- Check for overflow.
+        else local d = x % ]=] .. radix .. [=[; carry = (x-d) / ]=] .. radix .. [=[; y[i] = d end
       end
       y[n+1] = nil -- Truncate target. 1 element suffices here.
       if carry == 0 then while n > 0 and y[n] == 0 do y[n] = nil end
-      elseif carry == -1 then y[n] = y[n] - RADIX else y[n+1] = carry end
+      elseif carry == -1 then y[n] = y[n] - ]=] .. radix .. [=[ else y[n+1] = carry end
     ]]..(fb == 0 and "" or [[ -- Undo length adjustment.
       if na > nb then b[na] = nil elseif na < nb and y ~= a then a[nb] = nil end
     ]])..[[
@@ -59,8 +57,8 @@ local function extract(q,r,s,t, j)
   local nu, nv, y = #u, #v
   if nu == nv then
     if nu == 1 then y = u[1] / v[1]
-    else y = (u[nu]*RADIX + u[nu-1]) / (v[nv]*RADIX + v[nv-1]) end
-  elseif nu == nv+1 then y = (u[nu]*RADIX + u[nv]) / v[nv]
+    else y = (u[nu]*]=] .. radix .. [=[ + u[nu-1]) / (v[nv]*]=] .. radix .. [=[ + v[nv-1]) end
+  elseif nu == nv+1 then y = (u[nu]*]=] .. radix .. [=[ + u[nv]) / v[nv]
   else return 0 end
   return math.floor(y)
 end
@@ -81,12 +79,14 @@ return coroutine.wrap(function()
 end)
 
 ]=] -- End of dynamically compiled chunk.
+return chunk
+end -- function create_chunk(radix)
 
-local N = tonumber(arg and arg[1]) or 27
+local N = 100
 local RADIX = N < 6500 and 2^36 or 2^32 -- Avoid overflow.
 
 -- Substitute radix and compile chunk.
-local pidigit = loadstring(string.gsub(chunk, "RADIX", tostring(RADIX)))()
+local pidigit = loadstring(create_chunk(RADIX))()
 
 -- Print lines with 10 digits.
 for i=10,N,10 do
@@ -101,4 +101,3 @@ if n10 ~= 0 then
   io.write(string.rep(" ", 10-n10), "\t:", N, "\n")
 end
 
-print(collectgarbage("count"))

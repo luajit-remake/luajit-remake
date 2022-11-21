@@ -241,5 +241,3 @@ template<> struct deegen_lib_func_definition_info<-1> {
         };                                                                                                                                                                  \
     }   /* namespace detail */                                                                                                                                              \
     void NO_RETURN ALWAYS_INLINE DeegenUserLibFuncContinuationDefinitionImpl_ ## name :: Impl()
-
-#define DEEGEN_LIB_FUNC_CONTINUATION(name) (DeegenUserLibFuncContinuationDefinitionImpl_ ## name :: GetReturnContinuation())

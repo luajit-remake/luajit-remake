@@ -78,8 +78,14 @@
 
 #include "vm.h"
 
+#define TKSTR1(name) +1
+#define TKSTR2(name, sym) +1
+constexpr size_t x_num_tokens = 0 TKDEF(TKSTR1, TKSTR2);
+#undef TKSTR1
+#undef TKSTR2
+
 /* Lua lexer token names. */
-static const char *const tokennames[] = {
+static const char *const tokennames[x_num_tokens + 1] = {
 #define TKSTR1(name)		#name,
 #define TKSTR2(name, sym)	#sym,
     TKDEF(TKSTR1, TKSTR2)
@@ -702,44 +708,213 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* coroCtx, lua_Rea
         UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, chunkFn->GetCodeBlock(coroCtx->m_globalObject));
         module->m_defaultEntryPoint = entryPointFunc;
         return {
-            .m_scriptModule = std::move(module)
+            .m_scriptModule = std::move(module),
+            .errMsg = TValue::Create<tNil>()
         };
     }
     else
     {
+        // Try to produce some sort of error message...
+        //
+        constexpr size_t errorMsgBufLen = 1000;
+        char errorMsgBuf[errorMsgBufLen + 1];
+        size_t offset = 0;
+        auto check = [&](int res)
+        {
+            if (res < 0)
+            {
+                TestAssert(false);
+                return;
+            }
+            offset += static_cast<size_t>(res);
+            offset = std::min(offset, errorMsgBufLen - 1);
+        };
+        check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "Parser failed "));
+
+        if (ls.linenumber > 0)
+        {
+            check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "at line %u ", static_cast<unsigned int>(ls.linenumber)));
+        }
+
+        check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "with error %d", ls.errorCode));
+
+        if (ls.errorCode > 0 && ls.errorCode < END_OF_ENUM_LJ_PARSER_ERROR)
+        {
+            check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, " (%s, %s)", x_lj_parser_error_name[ls.errorCode], x_lj_parser_error_msg[ls.errorCode]));
+        }
+
+        if (ls.errorToken > 0)
+        {
+            check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, ", error token = "));
+            if (ls.errorToken > TK_OFS)
+            {
+                uint32_t tokenId = ls.errorToken-TK_OFS-1;
+                if (tokenId < x_num_tokens)
+                {
+                    check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "%s", tokennames[tokenId]));
+                }
+                else
+                {
+                    check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "(invalid token id %u)", static_cast<unsigned int>(tokenId)));
+                }
+            }
+            else
+            {
+                uint32_t tokenChar = ls.errorToken;
+                if (tokenChar < 256 && !lj_char_iscntrl(tokenChar))
+                {
+                    check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "'%c'", static_cast<char>(tokenChar)));
+                }
+                else
+                {
+                    check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "(char %u)", static_cast<unsigned int>(tokenChar)));
+                }
+            }
+        }
+
+        if (ls.errorMsg != nullptr)
+        {
+            check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, ", error msg = %s", ls.errorMsg));
+        }
+
+        check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "\n"));
+
+        HeapPtr<HeapString> msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
         return {
-            .errorCode = ls.errorCode,
-            .errorTok = ls.errorToken,
-            .errMsg = ls.errorMsg
+            .m_scriptModule = nullptr,
+            .errMsg = TValue::Create<tString>(msg)
         };
     }
 }
 
-struct LuaSimpleStdStringReaderState
+struct LuaSimpleStringReaderState
 {
-    const std::string* m_str;
+    const char* m_data;
+    size_t m_length;
     bool m_provided;
 };
 
-static const char* LuaSimpleStdStringReader(CoroutineRuntimeContext* /*ctx*/, void* stateVoid, size_t* size /*out*/)
+static const char* Parser_LuaSimpleStringReader(CoroutineRuntimeContext* /*ctx*/, void* stateVoid, size_t* size /*out*/)
 {
-    LuaSimpleStdStringReaderState* state = reinterpret_cast<LuaSimpleStdStringReaderState*>(stateVoid);
+    LuaSimpleStringReaderState* state = reinterpret_cast<LuaSimpleStringReaderState*>(stateVoid);
     if (state->m_provided)
     {
         *size = 0;
         return nullptr;
     }
     state->m_provided = true;
-    *size = state->m_str->length();
-    return state->m_str->c_str();
+    *size = state->m_length;
+    return state->m_data;
 }
 
 ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, const std::string& str)
 {
-    LuaSimpleStdStringReaderState state;
-    state.m_str = &str;
+    LuaSimpleStringReaderState state;
+    state.m_data = str.data();
+    state.m_length = str.length();
     state.m_provided = false;
-    return ParseLuaScript(ctx, LuaSimpleStdStringReader, &state);
+    return ParseLuaScript(ctx, Parser_LuaSimpleStringReader, &state);
+}
+
+ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, const char* data, size_t length)
+{
+    LuaSimpleStringReaderState state;
+    state.m_data = data;
+    state.m_length = length;
+    state.m_provided = false;
+    return ParseLuaScript(ctx, Parser_LuaSimpleStringReader, &state);
+}
+
+struct LuaStringArrayReaderState
+{
+    HeapPtr<TableObject> m_tab;
+    uint32_t m_cur;
+    uint32_t m_length;
+};
+
+static const char* Parser_LuaStringArrayReader(CoroutineRuntimeContext* /*ctx*/, void* stateVoid, size_t* size /*out*/)
+{
+    LuaStringArrayReaderState* state = reinterpret_cast<LuaStringArrayReaderState*>(stateVoid);
+    if (state->m_cur > state->m_length)
+    {
+        *size = 0;
+        return nullptr;
+    }
+    GetByIntegerIndexICInfo info;
+    TableObject::PrepareGetByIntegerIndex(state->m_tab, info /*out*/);
+    TValue tv = TableObject::GetByIntegerIndex(state->m_tab, state->m_cur, info);
+    state->m_cur++;
+    assert(tv.Is<tString>());
+    HeapString* s = TranslateToRawPointer(tv.As<tString>());
+    *size = s->m_length;
+    return reinterpret_cast<const char*>(s->m_string);
+}
+
+ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, HeapPtr<TableObject> tab, uint32_t length)
+{
+#ifndef NDEBUG
+    for (uint32_t i = 1; i <= length; i++)
+    {
+        GetByIntegerIndexICInfo info;
+        TableObject::PrepareGetByIntegerIndex(tab, info /*out*/);
+        TValue res = TableObject::GetByIntegerIndex(tab, i, info);
+        assert(res.Is<tString>());
+    }
+#endif
+    LuaStringArrayReaderState state;
+    state.m_tab = tab;
+    state.m_cur = 1;
+    state.m_length = length;
+    return ParseLuaScript(ctx, Parser_LuaStringArrayReader, &state);
+}
+
+struct LuaSimpleFileReaderState
+{
+    static constexpr size_t x_bufSize = 8192;
+    FILE* fp;
+    char buf[x_bufSize + 1];
+};
+
+static const char* Parser_LuaSimpleFileReader(CoroutineRuntimeContext* /*ctx*/, void* stateVoid, size_t* size /*out*/)
+{
+    LuaSimpleFileReaderState* state = reinterpret_cast<LuaSimpleFileReaderState*>(stateVoid);
+    if (feof(state->fp))
+    {
+        *size = 0;
+        return nullptr;
+    }
+    size_t sizeRead = fread(state->buf, 1, state->x_bufSize, state->fp);
+    if (sizeRead == 0)
+    {
+        *size = 0;
+        return nullptr;
+    }
+    *size = sizeRead;
+    return state->buf;
+}
+
+ParseResult WARN_UNUSED ParseLuaScriptFromFile(CoroutineRuntimeContext* ctx, const char* fileName)
+{
+    FILE* fp = fopen(fileName, "rb");
+    if (fp == nullptr)
+    {
+        int err = errno;
+        constexpr size_t errorMsgBufLen = 1000;
+        char errorMsgBuf[errorMsgBufLen + 1];
+        snprintf(errorMsgBuf, errorMsgBufLen, "Failed to open file '%s', error %d (%s)", fileName, err, strerror(err));
+        HeapPtr<HeapString> msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf);
+        return {
+            .m_scriptModule = nullptr,
+            .errMsg = TValue::Create<tString>(msg)
+        };
+    }
+
+    LuaSimpleFileReaderState state;
+    state.fp = fp;
+    ParseResult res = ParseLuaScript(ctx, Parser_LuaSimpleFileReader, &state);
+    fclose(fp);
+
+    return res;
 }
 
 #pragma clang diagnostic pop

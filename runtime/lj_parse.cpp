@@ -826,7 +826,7 @@ static BCPos bcemit_impl(FuncState *fs, BCIns ins)
         assert(fs->bcbase >= ls->bcstack.data());
         ptrdiff_t base = fs->bcbase - ls->bcstack.data();
         size_t newSize = std::max<uint64_t>(ls->bcstack.size() * 3 / 2, 16);
-        checklimit(fs, newSize, LJ_MAX_BCINS, "bytecode instructions");
+        checklimit(fs, newSize, LJ_MAX_BCINS, "too many bytecode instructions");
         ls->bcstack.resize(newSize);
         assert(newSize >= static_cast<size_t>(base));
         fs->bclim = (BCPos)(newSize - base);
@@ -1569,8 +1569,8 @@ static void var_new(LexState *ls, BCReg n, HeapPtr<HeapString> name)
 {
     FuncState *fs = ls->fs;
     MSize vtop = ls->vstack.size();
-    checklimit(fs, fs->nactvar+n, LJ_MAX_LOCVAR, "local variables");
-    checklimit(fs, vtop, LJ_MAX_VSTACK, "variable stack");
+    checklimit(fs, fs->nactvar+n, LJ_MAX_LOCVAR, "too many local variables");
+    checklimit(fs, vtop, LJ_MAX_VSTACK, "variable stack exceeded limit");
     ls->vstack.push_back(VarInfo { .name = name });
     fs->varmap[fs->nactvar+n] = (uint16_t)vtop;
 }
@@ -1626,7 +1626,7 @@ static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
         if (fs->uvmap[i] == vidx)
             return i;  /* Already exists. */
     /* Otherwise create a new one. */
-    checklimit(fs, fs->nuv, LJ_MAX_UPVAL, "upvalues");
+    checklimit(fs, fs->nuv, LJ_MAX_UPVAL, "too many upvalues");
     assert((e->k == VLOCAL || e->k == VUPVAL) && "bad expr type");
     fs->uvmap[n] = (uint16_t)vidx;
     fs->uvtmp[n] = (uint16_t)(e->k == VLOCAL ? vidx : LJ_MAX_VSTACK+e->u.s.info);
@@ -1673,7 +1673,7 @@ static MSize gola_new(LexState *ls, HeapPtr<HeapString> name, uint8_t info, BCPo
 {
     FuncState *fs = ls->fs;
     MSize vtop = ls->vstack.size();
-    checklimit(fs, vtop, LJ_MAX_VSTACK, "variable stack");
+    checklimit(fs, vtop, LJ_MAX_VSTACK, "variable stack exceeded limit");
     /* NOBARRIER: name is anchored in fs->kt and ls->vstack is not a GCobj. */
     ls->vstack.push_back(VarInfo {
         .name = name,
@@ -3715,7 +3715,7 @@ static void parse_assignment(LexState *ls, LHSVarList *lh, BCReg nvars)
         expr_primary(ls, &vl.v);
         if (vl.v.k == VLOCAL)
             assign_hazard(ls, lh, &vl.v);
-        checklimit(ls->fs, ls->level + nvars, LJ_MAX_XLEVEL, "variable names");
+        checklimit(ls->fs, ls->level + nvars, LJ_MAX_XLEVEL, "variable names exceeded limit");
         parse_assignment(ls, &vl, nvars+1);
     } else {  /* Parse RHS. */
         BCReg nexps;

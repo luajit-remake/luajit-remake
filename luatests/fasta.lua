@@ -100,7 +100,7 @@ local homosapiens = make_bisect{
   { "t", 0.3015094502008 },
 }
 
-local N = tonumber(arg and arg[1]) or 1000
+local N = 200
 make_repeat_fasta('ONE', 'Homo sapiens alu', alu, N*2)
 make_random_fasta('TWO', 'IUB ambiguity codes', iub, N*3)
 make_random_fasta('THREE', 'Homo sapiens frequency', homosapiens, N*5)
