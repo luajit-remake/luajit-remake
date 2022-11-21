@@ -214,6 +214,7 @@ set(UNIT_TEST_LINK_LIBRARIES
   gtest
   common_utils
   runtime
+  legacy_json_bc_dump_parser
   deegen_rt
   deegen_utils
   deegen_fps_lib

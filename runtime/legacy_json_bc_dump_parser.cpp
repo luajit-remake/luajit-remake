@@ -134,14 +134,15 @@ inline LJOpcode WARN_UNUSED GetOpcodeFromString(const std::string& s)
 
 constexpr bool x_json_parser_force_use_double = true;
 
-ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
+std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSONBytecodeDump(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content)
 {
     using namespace DeegenBytecodeBuilder;
 
     json module = json::parse(content);
     TestAssert(module.is_object());
     TestAssert(module.count("ChunkName") && module["ChunkName"].is_string());
-    ScriptModule* r = new ScriptModule;
+    std::unique_ptr<ScriptModule> smHolder = std::make_unique<ScriptModule>();
+    ScriptModule* r = smHolder.get();
     r->m_name = module["ChunkName"].get<std::string>();
     r->m_defaultGlobalObject = globalObject;
 
@@ -1969,5 +1970,5 @@ ScriptModule* WARN_UNUSED ScriptModule::ParseFromJSON(VM* vm, UserHeapPointer<Ta
     UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, chunkFn->GetCodeBlock(globalObject));
     r->m_defaultEntryPoint = entryPointFunc;
 
-    return r;
+    return smHolder;
 }

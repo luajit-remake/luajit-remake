@@ -662,12 +662,7 @@ public:
     UserHeapPointer<TableObject> m_defaultGlobalObject;
     UserHeapPointer<FunctionObject> m_defaultEntryPoint;
 
-    static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
-
-    static ScriptModule* WARN_UNUSED ParseFromJSON(VM* vm, const std::string& content)
-    {
-        return ParseFromJSON(vm, vm->GetRootGlobalObject(), content);
-    }
+    static std::unique_ptr<ScriptModule> WARN_UNUSED LegacyParseScriptFromJSONBytecodeDump(VM* vm, UserHeapPointer<TableObject> globalObject, const std::string& content);
 };
 
 // The return statement is required to fill nil up to x_minNilFillReturnValues values even if it returns less than that many values
