@@ -1,4 +1,8 @@
-Before we integrate LuaJIT's frontend into the source tree, the VM takes a hacky JSON-format bytecode dump as input. 
+Legacy JSON-format bytecode dump generator (for debugging purpose only)
+
+=========
+
+Before we had integrated LuaJIT's frontend into the source tree, the VM takes a hacky JSON-format bytecode dump as input. 
 
 This legacy tool 'ljfrontend' is a grossly hacked LuaJIT that generates this JSON-format bytecode dump.
 
