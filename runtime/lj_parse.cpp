@@ -101,6 +101,17 @@
     _(ISLE,	var,	___,	var,	le) \
     _(ISGT,	var,	___,	var,	le) \
   \
+    /* comparison ops with one side being constant number */ \
+    _(ISLTNV,	var,	___,	num,	lt) \
+    _(ISGENV,	var,	___,	num,	lt) \
+    _(ISLENV,	var,	___,	num,	le) \
+    _(ISGTNV,	var,	___,	num,	le) \
+  \
+    _(ISLTVN,	var,	___,	num,	lt) \
+    _(ISGEVN,	var,	___,	num,	lt) \
+    _(ISLEVN,	var,	___,	num,	le) \
+    _(ISGTVN,	var,	___,	num,	le) \
+  \
     _(ISEQV,	var,	___,	var,	eq) \
     _(ISNEV,	var,	___,	var,	eq) \
     _(ISEQS,	var,	___,	str,	eq) \
@@ -238,6 +249,12 @@ static_assert(((int)BC_ISEQP^1) == (int)BC_ISNEP);
 static_assert(((int)BC_ISLT^1) == (int)BC_ISGE);
 static_assert(((int)BC_ISLE^1) == (int)BC_ISGT);
 static_assert(((int)BC_ISLT^3) == (int)BC_ISGT);
+static_assert(((int)BC_ISLTVN^1) == (int)BC_ISGEVN);
+static_assert(((int)BC_ISLEVN^1) == (int)BC_ISGTVN);
+static_assert(((int)BC_ISLTVN^3) == (int)BC_ISGTVN);
+static_assert(((int)BC_ISLTNV^1) == (int)BC_ISGENV);
+static_assert(((int)BC_ISLENV^1) == (int)BC_ISGTNV);
+static_assert(((int)BC_ISLTNV^3) == (int)BC_ISGTNV);
 static_assert((int)BC_IST-(int)BC_ISTC == (int)BC_ISF-(int)BC_ISFC);
 static_assert((int)BC_CALLT-(int)BC_CALL == (int)BC_CALLMT-(int)BC_CALLM);
 static_assert((int)BC_CALLMT + 1 == (int)BC_CALLT);
@@ -1360,8 +1377,8 @@ static void bcemit_comp(FuncState *fs, BinOpr opr, ExpDesc *e1, ExpDesc *e2)
 {
     ExpDesc *eret = e1;
     BCIns ins;
-    expr_toval(fs, e1);
     if (opr == OPR_EQ || opr == OPR_NE) {
+        expr_toval(fs, e1);
         BCOp op = opr == OPR_EQ ? BC_ISEQV : BC_ISNEV;
         BCReg ra;
         if (expr_isk(e1)) { e1 = e2; e2 = eret; }  /* Need constant in 2nd arg. */
@@ -1383,18 +1400,90 @@ static void bcemit_comp(FuncState *fs, BinOpr opr, ExpDesc *e1, ExpDesc *e2)
         }
     } else {
         uint32_t op = opr-OPR_LT+BC_ISLT;
-        BCReg ra, rd;
         if ((op-BC_ISLT) & 1) {  /* GT -> LT, GE -> LE */
-            e1 = e2; e2 = eret;  /* Swap operands. */
+            // We need to swap operands and opcode
+            // e1 => rhs
+            // e2 => lhs
+            //
             op = ((op-BC_ISLT)^3)+BC_ISLT;
-            expr_toval(fs, e1);
-            ra = expr_toanyreg(fs, e1);
-            rd = expr_toanyreg(fs, e2);
+            ExpDesc* lhs = e2;
+            ExpDesc* rhs = e1;
+
+            // I have no idea if it is required to discharge e1 (i.e., rhs) before e2,
+            // but I just don't want to introduce any bug in the parser logic.
+            // So always discharge rhs (i.e., e1) first (as the original code is doing),
+            // and make our logic adapt to the constraint..
+            //
+            expr_toval(fs, rhs);
+
+            if (expr_isnumk(rhs))
+            {
+                // RHS is constant, use 'var op num' opcode
+                //
+                op += BC_ISLTVN - BC_ISLT;
+                expr_toval(fs, lhs);
+                BCReg lhsReg = expr_toanyreg(fs, lhs);
+                TValue rhsConstant = const_num(rhs);
+                ins = BCINS_AD(op, lhsReg, rhsConstant);
+            }
+            else
+            {
+                expr_toval(fs, lhs);
+                if (expr_isnumk(lhs))
+                {
+                    // LHS is constant, use 'num op var' opcode
+                    //
+                    op += BC_ISLTNV - BC_ISLT;
+                    TValue lhsConstant = const_num(lhs);
+                    BCReg rhsReg = expr_toanyreg(fs, rhs);
+                    ins = BCINS_AD(op, rhsReg, lhsConstant);
+                }
+                else
+                {
+                    // neither LHS nor RHS is constant
+                    //
+                    BCReg lhsReg = expr_toanyreg(fs, lhs);
+                    BCReg rhsReg = expr_toanyreg(fs, rhs);
+                    ins = BCINS_AD(op, lhsReg, rhsReg);
+                }
+            }
         } else {
-            rd = expr_toanyreg(fs, e2);
-            ra = expr_toanyreg(fs, e1);
+            ExpDesc* lhs = e1;
+            ExpDesc* rhs = e2;
+
+            expr_toval(fs, lhs);
+
+            if (expr_isnumk(lhs))
+            {
+                // LHS is constant, use 'num op var' opcode
+                //
+                op += BC_ISLTNV - BC_ISLT;
+                TValue lhsConstant = const_num(lhs);
+                BCReg rhsReg = expr_toanyreg(fs, rhs);
+                ins = BCINS_AD(op, rhsReg, lhsConstant);
+            }
+            else
+            {
+                expr_toval(fs, rhs);
+                if (expr_isnumk(rhs))
+                {
+                    // RHS is constant, use 'var op num' opcode
+                    //
+                    op += BC_ISLTVN - BC_ISLT;
+                    BCReg lhsReg = expr_toanyreg(fs, lhs);
+                    TValue rhsConstant = const_num(rhs);
+                    ins = BCINS_AD(op, lhsReg, rhsConstant);
+                }
+                else
+                {
+                   // neither LHS nor RHS is constant
+                   //
+                   BCReg rhsReg = expr_toanyreg(fs, rhs);
+                   BCReg lhsReg  = expr_toanyreg(fs, lhs);
+                   ins = BCINS_AD(op, lhsReg, rhsReg);
+                }
+            }
         }
-        ins = BCINS_AD(op, ra, rd);
     }
     /* Using expr_free might cause asserts if the order is wrong. */
     if (e1->k == VNONRELOC && e1->u.s.info >= fs->nactvar) fs->freereg--;
@@ -2145,6 +2234,86 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             bw.CreateBranchIfNLE({
                 .lhs = Local { bc_a(ins) },
                 .rhs = Local { bc_d(ins) }
+            });
+            break;
+        }
+        case BC_ISLTNV:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfLT({
+                .lhs = bc_cst(ins),
+                .rhs = Local { bc_a(ins) }
+            });
+            break;
+        }
+        case BC_ISGENV:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfNLT({
+                .lhs = bc_cst(ins),
+                .rhs = Local { bc_a(ins) }
+            });
+            break;
+        }
+        case BC_ISLENV:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfLE({
+                .lhs = bc_cst(ins),
+                .rhs = Local { bc_a(ins) }
+            });
+            break;
+        }
+        case BC_ISGTNV:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfNLE({
+                .lhs = bc_cst(ins),
+                .rhs = Local { bc_a(ins) }
+            });
+            break;
+        }
+        case BC_ISLTVN:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfLT({
+                .lhs = Local { bc_a(ins) },
+                .rhs = bc_cst(ins)
+            });
+            break;
+        }
+        case BC_ISGEVN:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfNLT({
+                .lhs = Local { bc_a(ins) },
+                .rhs = bc_cst(ins)
+            });
+            break;
+        }
+        case BC_ISLEVN:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfLE({
+                .lhs = Local { bc_a(ins) },
+                .rhs = bc_cst(ins)
+            });
+            break;
+        }
+        case BC_ISGTVN:
+        {
+            size_t brTarget = decodeAndSkipNextJumpBytecode();
+            jumpPatches.push_back(std::make_pair(brTarget, bw.GetCurLength()));
+            bw.CreateBranchIfNLE({
+                .lhs = Local { bc_a(ins) },
+                .rhs = bc_cst(ins)
             });
             break;
         }
