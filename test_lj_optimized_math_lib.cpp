@@ -131,8 +131,8 @@ TEST(Misc, LJOptimizedModulus)
     {
         for (double rhs : testValueList)
         {
-            double res = ModulusWithLuaSemantics(lhs, rhs);
-            double gold = NaiveModulusWithLuaSemantics_PUCLuaReference_5_1(lhs, rhs);
+            double res = ModulusWithLuaSemantics_5_1_NoSSE4(lhs, rhs);
+            double gold = ModulusWithLuaSemantics_PUCLuaReference_5_1(lhs, rhs);
 
             bool resIsNaN = IsNaN(res);
             bool goldIsNaN = IsNaN(gold);

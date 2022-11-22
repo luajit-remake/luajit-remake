@@ -1,3 +1,4 @@
+#!/bin/bash
 TASKSET_PIN_CPU_CORE=4
 
 # If this is the first time we run the benchmark, create the input data file 'FASTA_5000000' 
@@ -43,7 +44,7 @@ run_bench() {
 
 echo -n > benchmark.log
 
-run_bench array3d.lua 300
+run_bench array3d.lua 300 packed
 run_bench binary-trees-num.lua 16
 run_bench binary-trees-name.lua 15
 run_bench chameneos.lua 1e7

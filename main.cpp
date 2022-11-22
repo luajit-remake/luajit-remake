@@ -6,6 +6,8 @@
 
 #include "init_llvm_helper.h"
 
+extern const char* x_git_commit_hash;
+
 bool g_is_update_expected_mode = false;
 
 namespace {
@@ -18,6 +20,7 @@ void PrintInformation()
     printf("Host:         ");
     fflush(stdout);
     std::ignore = system("whoami | tr -d '\\n' && printf '@' && cat /etc/hostname");
+    printf("Commit hash:  %s\n", x_git_commit_hash);
     printf("Build flavor: %s\n", TOSTRING(BUILD_FLAVOR));
     printf("---------------------------------------------------\n");
 #undef TOSTRING

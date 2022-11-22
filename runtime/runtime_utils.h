@@ -819,7 +819,7 @@ inline double WARN_UNUSED ModulusWithLuaSemantics_PUCLuaReference_5_3(double a, 
 // This implementation here is for reference and test purpose only.
 // Internally, we use LuaJIT's a better implementation in hand-coded assembly (see a few lines below).
 //
-inline double WARN_UNUSED NaiveModulusWithLuaSemantics_PUCLuaReference_5_1(double a, double b)
+inline double WARN_UNUSED ModulusWithLuaSemantics_PUCLuaReference_5_1(double a, double b)
 {
     // Code from PUC Lua 5.2 luaconf.h:436
     //
@@ -831,7 +831,15 @@ inline double WARN_UNUSED NaiveModulusWithLuaSemantics_PUCLuaReference_5_1(doubl
 //
 // The assembly code is adapted from LuaJIT vm_x64.dasc
 //
-inline double WARN_UNUSED ALWAYS_INLINE ModulusWithLuaSemantics(double a, double b)
+// I realized that LuaJIT used this implementation only because it supports legacy CPU without
+// SSE4's roundsd instruction..
+// Since SSE4 is released back in 2006 and supported by most processors after 2008, it should be
+// reasonable to assume that we have SSE4 support.
+//
+// However, it seems like Lua 5.3/5.4's fmod semantics cannot be implemented by roundsd,
+// so I keep this assembly around for now in case we need to adapt it for fmod later..
+//
+inline double WARN_UNUSED ALWAYS_INLINE ModulusWithLuaSemantics_5_1_NoSSE4(double a, double b)
 {
     double fpr1, fpr2, fpr3, fpr4;
     uint64_t gpr1;
@@ -889,6 +897,11 @@ inline double WARN_UNUSED ALWAYS_INLINE ModulusWithLuaSemantics(double a, double
         :  "cc" /*clobber*/);
 
     return a;
+}
+
+inline double ALWAYS_INLINE WARN_UNUSED ModulusWithLuaSemantics(double a, double b)
+{
+    return ModulusWithLuaSemantics_PUCLuaReference_5_1(a, b);
 }
 
 // A wrapper around libm pow that provides a fastpath if the exponent is an integer that fits in [-128, 127).
