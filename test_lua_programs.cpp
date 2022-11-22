@@ -1439,4 +1439,9 @@ TEST(LuaBenchmark, knucleotide)
     RunSimpleLuaTest("luatests/k-nucleotide.lua");
 }
 
+TEST(LuaTest, comparison_one_side_constant)
+{
+    RunSimpleLuaTest("luatests/comparison_one_side_constant.lua");
+}
+
 }   // anonymous namespace
