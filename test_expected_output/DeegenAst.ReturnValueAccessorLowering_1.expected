@@ -36,10 +36,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test1_0_retcont_0(ptr %0, p
   %35 = zext i16 %34 to i64
   %36 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %35
   %37 = load ptr, ptr %36, align 8
-  %38 = getelementptr inbounds i8, ptr %23, i64 12
-  %39 = load i32, ptr %38, align 1
-  %40 = zext i32 %39 to i64
-  musttail call ghccc void %37(ptr %0, ptr %16, ptr nonnull %33, ptr %28, i64 %4, ptr undef, i64 undef, i64 undef, i64 %40, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  musttail call ghccc void %37(ptr %0, ptr %16, ptr nonnull %33, ptr %28, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 

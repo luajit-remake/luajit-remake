@@ -11,4 +11,4 @@
 // 1. The latency of the extra load would be shadowed by the indirect jump, so the load won't increase overall latency.
 // 2. The next bytecode can make use of the preloaded value to speed up the decoding of its operands.
 //
-constexpr bool x_deegen_enable_interpreter_optimistic_preloading = true;
+constexpr bool x_deegen_enable_interpreter_optimistic_preloading = false;
