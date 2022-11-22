@@ -24,6 +24,15 @@ The following figure illustrates our performance vs LuaJIT interpreter, normaliz
 
 The work for implementing the JIT tiers is ongoing...
 
+### Building and Testing
+
+To build the project, make sure you have `docker` and `python3` installed, and run:
+```
+python3 ljr-build make release
+```
+
+Once the build is complete, you should see an executable `luajitr` in the repository root directory. You can use it to run your Lua script, or run `bash run_bench.sh` to run all the benchmarks.  
+ 
 ### Caveats
 
 Please note that this is an ongoing project that is still far from production-ready. 
