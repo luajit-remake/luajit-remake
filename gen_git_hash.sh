@@ -1,7 +1,7 @@
 #!/bin/bash
 OUTPUT=$1
 DIRTY_FLAG="-dirty"
-if [ -z "$(git status --porcelain)" ]; then 
+if [ -z "$(git diff --stat HEAD)" ]; then 
   DIRTY_FLAG=""
 fi
  

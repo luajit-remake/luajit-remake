@@ -1,6 +1,17 @@
 #!/bin/bash
 TASKSET_PIN_CPU_CORE=4
 
+if [ ! -f "luajitr" ]; then
+	echo "[ERROR] Benchmark executable 'luajitr' not found! Did you run the build?"
+	exit
+fi
+
+if [ -z "$(./luajitr -v 2>&1 | grep 'release build')" ]; then 
+	echo "[ERROR] Benchmark executable 'luajitr' is not built in release mode!"
+	echo "[ERROR] You should only run benchmark using a release build."
+	exit
+fi 
+
 # If this is the first time we run the benchmark, create the input data file 'FASTA_5000000' 
 #
 if [ ! -f "luabench/FASTA_5000000" ]; then
