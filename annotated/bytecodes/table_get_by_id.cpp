@@ -11,11 +11,11 @@ static void NO_RETURN TableGetByIdMetamethodCallContinuation(TValue /*base*/, TV
 
 // Forward declaration due to mutual recursion
 //
-static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tviIndex*/, TValue base, HeapPtr<HeapString> index, TValue metamethod);
+static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tviIndex*/, TValue base, TValue metamethod);
 
 // At this point, we know that 'rawget(base, index)' is nil and 'base' might have a metatable
 //
-static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, HeapPtr<HeapString> index)
+static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_index*/, TValue base)
 {
     assert(base.Is<tTable>());
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
@@ -27,7 +27,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tvI
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
             if (!metamethod.Is<tNil>())
             {
-                EnterSlowPath<HandleMetatableSlowPath>(base, index, metamethod);
+                EnterSlowPath<HandleMetatableSlowPath>(base, metamethod);
             }
         }
     }
@@ -36,7 +36,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tvI
 
 // At this point, we know that 'base' is not a table
 //
-static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base, HeapPtr<HeapString> index)
+static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base)
 {
     assert(!base.Is<tTable>());
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
@@ -44,18 +44,18 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue /*
     {
         ThrowError("bad type for TableGetById");
     }
-    EnterSlowPath<HandleMetatableSlowPath>(base, index, metamethod);
+    EnterSlowPath<HandleMetatableSlowPath>(base, metamethod);
 }
 
 // At this point, we know that 'rawget(base, index)' is nil, and 'base' has a non-nil metamethod which we shall use
 //
-static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tviIndex*/, TValue base, HeapPtr<HeapString> index, TValue metamethod)
+static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base, TValue metamethod)
 {
     // If 'metamethod' is a function, we should invoke the metamethod
     //
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tString>(index), TableGetByIdMetamethodCallContinuation);
+        MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByIdMetamethodCallContinuation);
     }
 
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -64,8 +64,11 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tv
 
     if (unlikely(!base.Is<tTable>()))
     {
-        EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
+        EnterSlowPath<HandleNotTableObjectSlowPath>(base);
     }
+
+    assert(tvIndex.Is<tString>());
+    HeapPtr<HeapString> index = tvIndex.As<tString>();
 
     HeapPtr<TableObject> tableObj = base.As<tTable>();
     GetByIdICInfo icInfo;
@@ -73,7 +76,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tv
     TValue result = TableObject::GetById(tableObj, index, icInfo);
     if (unlikely(icInfo.m_mayHaveMetatable && result.Is<tNil>()))
     {
-        EnterSlowPath<CheckMetatableSlowPath>(base, index);
+        EnterSlowPath<CheckMetatableSlowPath>(base);
     }
     Return(result);
 }
@@ -160,7 +163,7 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
         }
         case ResKind::NotTable: [[unlikely]]
         {
-            EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
+            EnterSlowPath<HandleNotTableObjectSlowPath>(base);
         }
         case ResKind::MayHaveMetatable:
         {
@@ -168,13 +171,13 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
             {
                 Return(result);
             }
-            EnterSlowPath<CheckMetatableSlowPath>(base, index);
+            EnterSlowPath<CheckMetatableSlowPath>(base);
         }
         }   /* switch resultKind*/
     }
     else
     {
-        EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
+        EnterSlowPath<HandleNotTableObjectSlowPath>(base);
     }
 }
 

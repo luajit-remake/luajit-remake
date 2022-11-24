@@ -9,11 +9,13 @@ static void NO_RETURN GlobalPutMetamethodCallContinuation(TValue /*tvIndex*/, TV
     Return();
 }
 
-static void NO_RETURN HandleMetamethodSlowPath(TValue /*bc_tvIndex*/, TValue /*bc_valueToPut*/, TValue base, HeapPtr<HeapString> index, TValue valueToPut, TValue metamethod)
+static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_valueToPut*/, TValue base, TValue valueToPut, TValue metamethod)
 {
     // If 'metamethod' is a function, we should invoke the metamethod.
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
     //
+    assert(tvIndex.Is<tString>());
+    HeapPtr<HeapString> index = tvIndex.As<tString>();
     while (true)
     {
         assert(!metamethod.Is<tNil>());
@@ -22,7 +24,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue /*bc_tvIndex*/, TValue /*b
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tString>(index), valueToPut, GlobalPutMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, GlobalPutMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
@@ -139,7 +141,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
     }
 
     assert(!metamethod.Is<tNil>());
-    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), index, valueToPut, metamethod);
+    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), valueToPut, metamethod);
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalPut)
