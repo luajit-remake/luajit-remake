@@ -12,7 +12,7 @@ Currently we have implemented:
 
 ### Interpreter performance comparison
 
-On [a variety of benchmarks](luabench), we demonstrate that our interpreter is 28% faster than LuaJIT's interpreter, and 171% faster than the official PUC Lua5.1 interpreter[^1]. 
+On [a variety of benchmarks](luabench), we demonstrate that our interpreter is 34.6% faster than LuaJIT's interpreter, and 185% faster than the official PUC Lua5.1 interpreter[^1]. 
 
 The following figure illustrates our performance vs LuaJIT interpreter, normalized to PUC Lua's performance. Blue shadow indicates benchmarks where we do better than LuaJIT, and red shadow indicates benchmarks where LuaJIT does better than us. 
 
