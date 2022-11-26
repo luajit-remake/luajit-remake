@@ -21,7 +21,7 @@ bool WARN_UNUSED BcOperand::SupportsGetOperandValueFromBytecodeStruct()
     return true;
 }
 
-llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB, llvm::Value* preloadedOpValue)
+llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -35,47 +35,9 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(numBytesInBytecodeStruct * 8));
     Value* storageValue = nullptr;
 
-    bool obtainedValueFromPreloadedOpValue = false;
-    if (preloadedOpValue != nullptr)
-    {
-        ReleaseAssert(x_deegen_enable_interpreter_optimistic_preloading);
-        ReleaseAssert(llvm_value_has_type<uint32_t>(preloadedOpValue));
-        size_t preloadedOpByteIntervalStart = BytecodeVariantDefinition::x_opcodeSizeBytes;
-        size_t preloadedOpByteIntervalEnd = preloadedOpByteIntervalStart + sizeof(uint32_t);
-
-        if (preloadedOpByteIntervalStart <= offsetInBytecodeStruct && offsetInBytecodeStruct + numBytesInBytecodeStruct <= preloadedOpByteIntervalEnd)
-        {
-            // The bits of the operand is fully within the bits of the preloaded value
-            // We can extract the value of the operand from the preloaded value
-            //
-            // Do a right shift to move our desired bit chunk to the low bits. Note that this relies on little-endianness.
-            //
-            uint32_t bitsToRightShift = static_cast<uint32_t>(offsetInBytecodeStruct - preloadedOpByteIntervalStart) * 8;
-            ReleaseAssert(0 <= bitsToRightShift && bitsToRightShift < 32);
-            Value* shiftedValue = BinaryOperator::Create(Instruction::BinaryOps::LShr, preloadedOpValue, CreateLLVMConstantInt<uint32_t>(ctx, bitsToRightShift), "", targetBB);
-
-            // Truncate the value to obtain the final value if needed.
-            // Note that LLVM disallows no-op trunc, so we have to check here.
-            //
-            if (numBytesInBytecodeStruct < 4)
-            {
-                storageValue = new TruncInst(shiftedValue, storageTypeInBytecodeStruct, "", targetBB);
-            }
-            else
-            {
-                ReleaseAssert(numBytesInBytecodeStruct == 4);
-                storageValue = shiftedValue;
-            }
-            obtainedValueFromPreloadedOpValue = true;
-        }
-    }
-
-    if (!obtainedValueFromPreloadedOpValue)
-    {
-        GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecodeStruct, { CreateLLVMConstantInt<uint64_t>(ctx, offsetInBytecodeStruct) }, "", targetBB);
-        ReleaseAssert(llvm_value_has_type<uint8_t*>(gep));
-        storageValue = new LoadInst(storageTypeInBytecodeStruct, gep, "", false /*isVolatile*/, Align(1), targetBB);
-    }
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecodeStruct, { CreateLLVMConstantInt<uint64_t>(ctx, offsetInBytecodeStruct) }, "", targetBB);
+    ReleaseAssert(llvm_value_has_type<uint8_t*>(gep));
+    storageValue = new LoadInst(storageTypeInBytecodeStruct, gep, "", false /*isVolatile*/, Align(1), targetBB);
 
     ReleaseAssert(storageValue != nullptr && storageValue->getType() == storageTypeInBytecodeStruct);
 
@@ -177,16 +139,6 @@ llvm::Value* WARN_UNUSED BytecodeVariantDefinition::DecodeBytecodeOpcode(llvm::V
     ReleaseAssert(llvm_value_has_type<void*>(bytecode));
     Value* opcodeShort = new LoadInst(llvm_type_of<uint16_t>(ctx), bytecode, "", false /*isVolatile*/, Align(1), insertBefore);
     return new ZExtInst(opcodeShort, llvm_type_of<uint64_t>(ctx), "", insertBefore);
-}
-
-llvm::Value* WARN_UNUSED BytecodeVariantDefinition::OptimisticPreloadBytecodeOperands(llvm::Value* bytecode, llvm::Instruction* insertBefore)
-{
-    using namespace llvm;
-    LLVMContext& ctx = bytecode->getContext();
-    ReleaseAssert(llvm_value_has_type<void*>(bytecode));
-    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), bytecode, { CreateLLVMConstantInt<uint64_t>(ctx, x_opcodeSizeBytes) }, "", insertBefore);
-    Value* preloadedOpValue = new LoadInst(llvm_type_of<uint32_t>(ctx), gep, "", false /*isVolatile*/, Align(1), insertBefore);
-    return preloadedOpValue;
 }
 
 std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED BytecodeVariantDefinition::ParseAllFromModule(llvm::Module* module)

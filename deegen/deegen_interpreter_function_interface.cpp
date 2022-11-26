@@ -134,8 +134,6 @@ std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRLi
     // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
     // in the hope that it can reduce the likelihood of register shuffling when making C calls.
     //
-    // Note that the interpreter main function may use R9 to store the preloaded bytecode value, but it is never used for slow paths.
-    //
     return std::vector<uint64_t> { 8 /*R9*/, 7 /*R8*/, 5 /*RSI*/, 6 /*RDI*/ };
 }
 
@@ -191,24 +189,9 @@ static llvm::CallInst* InterpreterFunctionCreateDispatchToBytecodeImpl(llvm::Val
     return callInst;
 }
 
-llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Value* preloadedOpValue, llvm::Instruction* insertBefore)
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
 {
-    using namespace llvm;
-    LLVMContext& ctx = target->getContext();
-    CallInst* ci = InterpreterFunctionCreateDispatchToBytecodeImpl(target, coroutineCtx, stackbase, bytecodePtr, codeBlock, insertBefore);
-    if (x_deegen_enable_interpreter_optimistic_preloading)
-    {
-        ReleaseAssert(preloadedOpValue != nullptr);
-        ReleaseAssert(llvm_value_has_type<uint32_t>(preloadedOpValue));
-        preloadedOpValue = new ZExtInst(preloadedOpValue, llvm_type_of<uint64_t>(ctx), "", ci /*insertBefore*/);
-        ci->setArgOperand(8 /*R9*/, preloadedOpValue);
-    }
-    else
-    {
-        ReleaseAssert(preloadedOpValue == nullptr);
-    }
-
-    return ci;
+    return InterpreterFunctionCreateDispatchToBytecodeImpl(target, coroutineCtx, stackbase, bytecodePtr, codeBlock, insertBefore);
 }
 
 llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)

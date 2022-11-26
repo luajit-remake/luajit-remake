@@ -10,10 +10,7 @@ public:
     static llvm::FunctionType* WARN_UNUSED GetType(llvm::LLVMContext& ctx);
     static llvm::Function* WARN_UNUSED CreateFunction(llvm::Module* module, const std::string& name);
 
-    // If interpreter optimistic preloading is disabled, 'preloadedOpValue' should be nullptr.
-    // Otherwise, it should be an i32 that represents the 4 bytes immediately following the bytecode opcode
-    //
-    static llvm::CallInst* CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Value* preloadedOpValue, llvm::Instruction* insertBefore);
+    static llvm::CallInst* CreateDispatchToBytecode(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore);
 
     // Bytecode slow path may take additional arguments. These arguments are not specified here: caller should populate them as needed by themselves.
     //

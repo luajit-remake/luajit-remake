@@ -145,19 +145,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(module.get(), opcode, dummyInst /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
 
-    Value* preloadedOpValue = nullptr;
-    if (x_deegen_enable_interpreter_optimistic_preloading)
-    {
-        preloadedOpValue = BytecodeVariantDefinition::OptimisticPreloadBytecodeOperands(bytecodePtr, dummyInst /*insertBefore*/);
-    }
-
     InterpreterFunctionInterface::CreateDispatchToBytecode(
         targetFunction,
         coroutineCtx,
         stackBaseAfterFixUp,
         bytecodePtr,
         calleeCodeBlock,
-        preloadedOpValue,
         dummyInst /*insertBefore*/);
 
     dummyInst->eraseFromParent();

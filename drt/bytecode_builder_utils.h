@@ -170,7 +170,7 @@ class BytecodeBuilderBase
 public:
     friend class BytecodeBuilder;
 
-    // We need at least 4 bytes of extra padding, since optimistic bytecode preloading can load up to 4 bytes immediately following the opcode.
+    // Maybe we don't need this but it doesn't hurt anything either..
     //
     static constexpr size_t x_numExtraPaddingAtEnd = 4;
 

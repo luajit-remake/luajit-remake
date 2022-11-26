@@ -623,8 +623,6 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
-    Value* preloadedOpValue = nullptr;
-
     if (m_processKind != ProcessKind::ReturnContinuation)
     {
         // Note that we also set parameter names here.
@@ -645,23 +643,6 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         Value* codeBlock = m_wrapper->getArg(3);
         codeBlock->setName(x_codeBlock);
         m_valuePreserver.Preserve(x_codeBlock, codeBlock);
-
-        if ((m_processKind == ProcessKind::Main || m_processKind == ProcessKind::FusedInInlineCacheEffect) && x_deegen_enable_interpreter_optimistic_preloading)
-        {
-            Value* val = m_wrapper->getArg(8);
-            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
-
-            // Emit __builtin_assume(val <= MAX_UINT32)
-            // This is unfortunate: we cannot make the argument uint32 due to LLVM limitation of tail call,
-            // but the fits-in-uint32 information can help LLVM generate (slightly) better code.
-            // Since every instruction counts here, we do want LLVM to work at its full potential.
-            //
-            ICmpInst* assumeCond = new ICmpInst(*currentBlock /*insertAtEnd*/, CmpInst::Predicate::ICMP_ULT, val, CreateLLVMConstantInt<uint64_t>(ctx, 1ULL << 32));
-            Function* assumeIntrin = Intrinsic::getDeclaration(GetModule(), Intrinsic::assume, { });
-            CallInst::Create(assumeIntrin, { assumeCond }, "", currentBlock);
-
-            preloadedOpValue = new TruncInst(val, llvm_type_of<uint32_t>(ctx), "", currentBlock);
-        }
     }
     else
     {
@@ -713,13 +694,13 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         }
         else
         {
-            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue));
+            opcodeValues.push_back(operand->GetOperandValueFromBytecodeStruct(this, currentBlock));
         }
     }
 
     if (m_bytecodeDef->m_hasOutputValue)
     {
-        Value* outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
+        Value* outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBytecodeStruct(this, currentBlock);
         ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
         m_valuePreserver.Preserve(x_outputSlot, outputSlot);
         outputSlot->setName(x_outputSlot);
@@ -727,7 +708,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
 
     if (m_bytecodeDef->m_hasConditionalBranchTarget)
     {
-        Value* condBrTarget = m_bytecodeDef->m_condBrTarget->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
+        Value* condBrTarget = m_bytecodeDef->m_condBrTarget->GetOperandValueFromBytecodeStruct(this, currentBlock);
         ReleaseAssert(llvm_value_has_type<int32_t>(condBrTarget));
         m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
         condBrTarget->setName(x_condBrDest);
@@ -745,7 +726,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         }
         else
         {
-            Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock, preloadedOpValue);
+            Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
             ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
             Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
             GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);

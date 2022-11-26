@@ -124,19 +124,12 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
     Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(ifi->GetModule(), opcode, m_origin /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
 
-    Value* preloadedOpValue = nullptr;
-    if (x_deegen_enable_interpreter_optimistic_preloading)
-    {
-        preloadedOpValue = BytecodeVariantDefinition::OptimisticPreloadBytecodeOperands(bytecodeTarget, m_origin /*insertBefore*/);
-    }
-
     InterpreterFunctionInterface::CreateDispatchToBytecode(
         targetFunction,
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
         bytecodeTarget,
         ifi->GetCodeBlock(),
-        preloadedOpValue,
         m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
