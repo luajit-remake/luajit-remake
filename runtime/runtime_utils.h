@@ -285,6 +285,11 @@ class FLOCodeBlock;
 class UpvalueMetadata
 {
 public:
+#ifndef NDEBUG
+    // Whether 'm_isImmutable' field has been properly finalized, for assertion purpose only
+    //
+    bool m_immutabilityFieldFinalized;
+#endif
     // If true, m_slot should be interpreted as the slot ordinal in parent's stack frame.
     // If false, m_slot should be interpreted as the upvalue ordinal of the parent.
     //
@@ -350,6 +355,8 @@ public:
 //
 extern const size_t x_num_bytecode_metadata_struct_kinds_;
 
+namespace DeegenBytecodeBuilder { class BytecodeBuilder; }
+
 // This uniquely corresponds to a piece of source code that defines a function
 //
 class UnlinkedCodeBlock : public SystemHeapGcObjectHeader
@@ -366,6 +373,7 @@ public:
         ucb->m_rareGOtoCBMap = nullptr;
         ucb->m_parent = nullptr;
         ucb->m_defaultCodeBlock = nullptr;
+        ucb->m_parserUVGetFixupList = nullptr;
         return ucb;
     }
 
@@ -425,6 +433,12 @@ public:
     uint32_t m_numUpvalues;
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;
+
+    // Only used during parsing. Always nullptr at runtime.
+    // It doesn't have to sit in this struct but the memory consumption of this struct simply shouldn't matter.
+    //
+    DeegenBytecodeBuilder::BytecodeBuilder* m_bytecodeBuilder;
+    std::vector<uint32_t>* m_parserUVGetFixupList;
 
     // The actual length of this trailing array is always x_num_bytecode_metadata_struct_kinds_
     //
@@ -591,7 +605,7 @@ public:
     //
     static UserHeapPointer<FunctionObject> WARN_UNUSED CreateImpl(VM* vm, uint8_t numUpvalues)
     {
-        size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(GeneralHeapPointer<Upvalue>) * numUpvalues;
+        size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(TValue) * numUpvalues;
         sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
         HeapPtr<FunctionObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>();
         UserHeapGcObjectHeader::Populate(r);
@@ -621,13 +635,70 @@ public:
         return r;
     }
 
-    static GeneralHeapPointer<Upvalue> GetUpvalue(HeapPtr<FunctionObject> self, size_t ord)
+    // DEVNOTE: C library function must not use this function.
+    //
+    static bool ALWAYS_INLINE IsUpvalueImmutable(HeapPtr<FunctionObject> self, size_t ord)
+    {
+        assert(ord < self->m_numUpvalues);
+        assert(TranslateToRawPointer(TCGet(self->m_executable).As())->IsBytecodeFunction());
+        HeapPtr<CodeBlock> cb = static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As());
+        assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
+        assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
+        return cb->m_owner->m_upvalueInfo[ord].m_isImmutable;
+    }
+
+    // Get the upvalue ptr for a mutable upvalue
+    //
+    // DEVNOTE: C library function must not use this function.
+    //
+    static HeapPtr<Upvalue> ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
+    {
+        assert(ord < self->m_numUpvalues);
+        assert(!IsUpvalueImmutable(self, ord));
+        TValue tv = TCGet(self->m_upvalues[ord]);
+        assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
+        return tv.AsPointer().As<Upvalue>();
+    }
+
+    // Get the value of an immutable upvalue
+    //
+    // DEVNOTE: C library function must not use this function.
+    //
+    static TValue ALWAYS_INLINE GetImmutableUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    {
+        assert(ord < self->m_numUpvalues);
+        assert(IsUpvalueImmutable(self, ord));
+        TValue tv = TCGet(self->m_upvalues[ord]);
+        assert(!(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue));
+        return tv;
+    }
+
+    // Get the value of an upvalue, works no matter if the upvalue is mutable or immutable.
+    // Of course, this is also (quite) slow.
+    //
+    // DEVNOTE: C library function must not use this function.
+    //
+    static TValue ALWAYS_INLINE GetUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    {
+        assert(ord < self->m_numUpvalues);
+        if (IsUpvalueImmutable(self, ord))
+        {
+            return GetImmutableUpvalueValue(self, ord);
+        }
+        else
+        {
+            HeapPtr<Upvalue> uv = GetMutableUpvaluePtr(self, ord);
+            return *uv->m_ptr;
+        }
+    }
+
+    static TValue GetMutableUpvaluePtrOrImmutableUpvalue(HeapPtr<FunctionObject> self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         return TCGet(self->m_upvalues[ord]);
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent);
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame);
 
     static constexpr size_t GetTrailingArrayOffset()
     {
@@ -644,11 +715,20 @@ public:
     GcCellState m_cellState;
 
     uint8_t m_numUpvalues;
-    // Always 255 (invalid array type)
+    // Always ArrayType::x_invalidArrayType
     //
     uint8_t m_invalidArrayType;
 
-    GeneralHeapPointer<Upvalue> m_upvalues[0];
+    // The upvalue list.
+    // The interpretation of each element in the list depends on whether the upvalue is immutable
+    // (this information is recorded in the UnlinkedCodeBlock's upvalue metadata list):
+    //
+    // 1. If the upvalue is not immutable, then the TValue must be a HeapPtr<Upvalue> object,
+    //    and the value of the upvalue should be read from the Upvalue object.
+    // 2. If the upvalue is immutable, then the TValue must not be a HeapPtr<Upvalue> (since upvalue
+    //    objects are never exposed directly to user code). The TValue itself is simply the value of the upvalue.
+    //
+    TValue m_upvalues[0];
 };
 static_assert(sizeof(FunctionObject) == 8);
 

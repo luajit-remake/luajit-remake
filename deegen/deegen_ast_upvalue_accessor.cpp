@@ -7,21 +7,22 @@ struct LowerUpvalueAccessorApiPass final : public DeegenAbstractSimpleApiLowerin
 {
     virtual bool WARN_UNUSED IsMagicCXXSymbol(const std::string& symbolName) override
     {
-        return symbolName.starts_with(x_getApi) || symbolName.starts_with(x_putApi) || symbolName.starts_with(x_closeApi);
+        return symbolName.starts_with(x_getImmutableApi) || symbolName.starts_with(x_getMutableApi) || symbolName.starts_with(x_putApi) || symbolName.starts_with(x_closeApi);
     }
 
     virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         std::string demangledName = DemangleCXXSymbol(origin->getCalledFunction()->getName().str());
-        if (demangledName.starts_with(x_getApi))
+        if (demangledName.starts_with(x_getImmutableApi) || demangledName.starts_with(x_getMutableApi))
         {
             ReleaseAssert(origin->arg_size() == 1);
             Value* ord = origin->getArgOperand(0);
             ReleaseAssert(llvm_value_has_type<uint64_t>(ord));
             ReleaseAssert(llvm_value_has_type<uint64_t>(origin));
 
-            CallInst* replacement = ifi->CallDeegenCommonSnippet("GetUpvalue", { ifi->GetStackBase(), ord }, origin /*insertBefore*/);
+            const char* implFnName = demangledName.starts_with(x_getImmutableApi) ? "GetImmutableUpvalueValue" : "GetMutableUpvalueValue";
+            CallInst* replacement = ifi->CallDeegenCommonSnippet(implFnName, { ifi->GetStackBase(), ord }, origin /*insertBefore*/);
             ReleaseAssert(origin->getType() == replacement->getType());
             origin->replaceAllUsesWith(replacement);
             origin->eraseFromParent();
@@ -53,7 +54,8 @@ struct LowerUpvalueAccessorApiPass final : public DeegenAbstractSimpleApiLowerin
         }
     }
 
-    static constexpr const char* x_getApi = "DeegenImpl_UpvalueAccessor_Get(";
+    static constexpr const char* x_getImmutableApi = "DeegenImpl_UpvalueAccessor_GetImmutable(";
+    static constexpr const char* x_getMutableApi = "DeegenImpl_UpvalueAccessor_GetMutable(";
     static constexpr const char* x_putApi = "DeegenImpl_UpvalueAccessor_Put(";
     static constexpr const char* x_closeApi = "DeegenImpl_UpvalueAccessor_Close(";
 };

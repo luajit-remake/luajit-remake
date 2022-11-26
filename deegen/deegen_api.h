@@ -37,8 +37,10 @@ extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(TValue* retStart, size_t numRets);
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets);
-extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb);
-TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_Get(size_t ord);
+extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
+extern "C" size_t WARN_UNUSED ALWAYS_INLINE DeegenImpl_GetOutputBytecodeSlotOrdinal();
+TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetMutable(size_t ord);
+TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetImmutable(size_t ord);
 void DeegenImpl_UpvalueAccessor_Put(size_t ord, TValue valueToPut);
 void DeegenImpl_UpvalueAccessor_Close(const TValue* limit);
 extern "C" TValue* WARN_UNUSED DeegenImpl_GetVarArgsStart();
@@ -105,16 +107,33 @@ inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadic
     DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(retStart, numRets);
 }
 
-inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb)
+// 'selfBytecodeSlotOrdinal' is the bytecode slot ordinal where this closure is going to be stored to.
+// This is to solve a chicken-and-egg problem: the upvalues of the newly-created function are allowed to
+// reference the newly-created function itself, and the value may be read from the stack frame.
+// But at the moment the function is being created, its value hasn't been stored to the stack frame yet.
+//
+// Therefore, we must manually check if the upvalue is a self-reference and handle this case specially.
+//
+inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal)
 {
-    return DeegenImpl_CreateNewClosure(cb);
+    return DeegenImpl_CreateNewClosure(cb, selfBytecodeSlotOrdinal);
+}
+
+inline size_t WARN_UNUSED ALWAYS_INLINE GetOutputBytecodeSlotOrdinal()
+{
+    return DeegenImpl_GetOutputBytecodeSlotOrdinal();
 }
 
 struct UpvalueAccessor
 {
-    static TValue WARN_UNUSED ALWAYS_INLINE Get(size_t ord)
+    static TValue WARN_UNUSED ALWAYS_INLINE GetMutable(size_t ord)
     {
-        return DeegenImpl_UpvalueAccessor_Get(ord);
+        return DeegenImpl_UpvalueAccessor_GetMutable(ord);
+    }
+
+    static TValue WARN_UNUSED ALWAYS_INLINE GetImmutable(size_t ord)
+    {
+        return DeegenImpl_UpvalueAccessor_GetImmutable(ord);
     }
 
     static void ALWAYS_INLINE Put(size_t ord, TValue valueToPut)

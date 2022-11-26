@@ -1933,12 +1933,17 @@ static void fs_fixup_uv2(FuncState *fs, UnlinkedCodeBlock* ucb)
         uint32_t vidx = uv[i].m_slot;
         if (vidx >= LJ_MAX_VSTACK)
         {
+            // The m_isImmutable field will be populated in the final uv fixup step
+            //
+            assert(!uv[i].m_immutabilityFieldFinalized);
             uv[i].m_isParentLocal = false;
             uv[i].m_slot = vidx - LJ_MAX_VSTACK;
         }
         else
         {
             assert(vidx < fs->ls->vstack.size());
+            assert(!uv[i].m_immutabilityFieldFinalized);
+            DEBUG_ONLY(uv[i].m_immutabilityFieldFinalized = true;)
             if ((vstack[vidx].info & VSTACK_VAR_RW))
             {
                 uv[i].m_isParentLocal = true;
@@ -1962,6 +1967,9 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
 
     std::vector<size_t> bytecodeLocation;
     std::vector<std::pair<size_t, size_t>> jumpPatches;
+
+    assert(ucb->m_parserUVGetFixupList == nullptr);
+    ucb->m_parserUVGetFixupList = new std::vector<uint32_t>();
 
     size_t bcOrd;
     BCInsLine *base = fs->bcbase;
@@ -2754,7 +2762,8 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
         case BC_UGET:
         {
-            bw.CreateUpvalueGet({
+            ucb->m_parserUVGetFixupList->push_back(static_cast<uint32_t>(bw.GetCurLength()));
+            bw.CreateUpvalueGetMutable({
                 .ord = SafeIntegerCast<uint16_t>(bc_d(ins)),
                 .output = Local { bc_a(ins) }
             });
@@ -2954,25 +2963,6 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
     }
 
     assert(bw.CheckWellFormedness());
-
-    std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();
-    std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
-    if (constantTableData.second >= 0x7fff)
-    {
-        // TODO: gracefully handle
-        fprintf(stderr, "[LOCKDOWN] Bytecode contains too many constants. Limit 32766, got %llu.\n", static_cast<unsigned long long>(constantTableData.second));
-        abort();
-    }
-
-    ucb->m_cstTableLength = static_cast<uint32_t>(constantTableData.second);
-    ucb->m_cstTable = constantTableData.first;
-
-    ucb->m_bytecode = bytecodeData.first;
-    ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
-    ucb->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
-    const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
-    assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
-    memcpy(ucb->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
 }
 
 #if 0
@@ -3144,11 +3134,8 @@ static UnlinkedCodeBlock* fs_finish(LexState *ls, BCLine /*line*/)
     ucb->m_numFixedArguments = fs->numparams;
     ucb->m_hasVariadicArguments = (fs->flags & PROTO_VARARG) > 0;
     ucb->m_stackFrameNumSlots = fs->framesize;
-
-    {
-        BytecodeBuilder bw;
-        fs_fixup_bc(fs, ucb, bw, fs->pc);
-    }
+    ucb->m_bytecodeBuilder = new BytecodeBuilder();
+    fs_fixup_bc(fs, ucb, *ucb->m_bytecodeBuilder, fs->pc);
 
     // BCLine numline = line - fs->linedefined;
 
@@ -3157,6 +3144,7 @@ static UnlinkedCodeBlock* fs_finish(LexState *ls, BCLine /*line*/)
     ucb->m_upvalueInfo = new UpvalueMetadata[ucb->m_numUpvalues];
     for (uint32_t i = 0; i < numUpvalues; i++)
     {
+        DEBUG_ONLY(ucb->m_upvalueInfo[i].m_immutabilityFieldFinalized = false;)
         ucb->m_upvalueInfo[i].m_slot = fs->uvtmp[i];
     }
 
@@ -4419,11 +4407,109 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
     parse_chunk(ls);
     if (ls->tok != TK_eof)
         err_token(ls, TK_eof);
-    UnlinkedCodeBlock* ucb = fs_finish(ls, ls->linenumber);
+    UnlinkedCodeBlock* rootUcb = fs_finish(ls, ls->linenumber);
     assert((fs.prev == NULL && ls->fs == NULL) && "mismatched frame nesting");
-    assert(ucb->m_numUpvalues == 0 && "toplevel proto has upvalues");
-    ls->ucbList.push_back(ucb);
-    return ucb;
+    assert(rootUcb->m_numUpvalues == 0 && "toplevel proto has upvalues");
+    ls->ucbList.push_back(rootUcb);
+
+    // Due to how the parser is designed, the ucbList is already sorted in topological order.
+    // For sanity, assert this first.
+    //
+#ifndef NDEBUG
+    {
+        std::unordered_set<UnlinkedCodeBlock*> existentUcbList;
+        existentUcbList.insert(rootUcb);
+        for (size_t i = ls->ucbList.size() - 1; i-- > 0; /*no-op*/)
+        {
+            UnlinkedCodeBlock* u = ls->ucbList[i];
+            assert(u->m_parent != nullptr);
+            assert(existentUcbList.count(u->m_parent));
+            assert(!existentUcbList.count(u));
+            existentUcbList.insert(u);
+        }
+    }
+#endif
+
+    // Now, perform final fix up of upvalues.
+    // Populate the m_isImmutable field for all upvalues that inherits from the parent upvalue.
+    //
+    for (size_t ucbOrd = ls->ucbList.size() - 1; ucbOrd-- > 0; /*no-op*/)
+    {
+        UnlinkedCodeBlock* u = ls->ucbList[ucbOrd];
+        uint32_t numUv = u->m_numUpvalues;
+        for (size_t uvOrd = 0; uvOrd < numUv; uvOrd++)
+        {
+            UpvalueMetadata& uv = u->m_upvalueInfo[uvOrd];
+            if (uv.m_isParentLocal)
+            {
+                assert(uv.m_immutabilityFieldFinalized);
+            }
+            else
+            {
+                uint32_t parentSlot = uv.m_slot;
+                assert(!uv.m_immutabilityFieldFinalized);
+                assert(parentSlot < u->m_parent->m_numUpvalues);
+                UpvalueMetadata& parentUv = u->m_parent->m_upvalueInfo[parentSlot];
+                assert(parentUv.m_immutabilityFieldFinalized);
+                DEBUG_ONLY(uv.m_immutabilityFieldFinalized = true;)
+                uv.m_isImmutable = parentUv.m_isImmutable;
+            }
+        }
+    }
+
+    for (UnlinkedCodeBlock* u : ls->ucbList)
+    {
+        // It's REALLY ugly that we have to keep around all the BytecodeBuilders until here
+        // just to fix up the upvalue GETs after we have information on whether they are immutable...
+        // But let's just stay simple for now: it's only the parser...
+        //
+        BytecodeBuilder& bw = *u->m_bytecodeBuilder;
+
+        // Rewrite all UGET on immutable upvalue to ImmutableUpvalueGet (required for correctness!)
+        //
+        assert(u->m_parserUVGetFixupList != nullptr);
+        for (uint32_t offset : *u->m_parserUVGetFixupList)
+        {
+            assert(bw.GetBytecodeKind(offset) == BCKind::UpvalueGetMutable);
+            auto ops = bw.DecodeUpvalueGetMutable(offset);
+            uint16_t ord = ops.ord.m_value;
+            assert(ord < u->m_numUpvalues);
+            assert(u->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
+            if (u->m_upvalueInfo[ord].m_isImmutable)
+            {
+                bw.ReplaceBytecode<BCKind::UpvalueGetImmutable>(offset, { .ord = ord, .output = ops.output });
+            }
+        }
+
+        delete u->m_parserUVGetFixupList;
+        u->m_parserUVGetFixupList = nullptr;
+
+        // We are finally ready to emit the final bytecode...
+        //
+        std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();
+        std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
+        if (constantTableData.second >= 0x7fff)
+        {
+            // TODO: gracefully handle
+            fprintf(stderr, "[LOCKDOWN] Bytecode contains too many constants. Limit 32766, got %llu.\n", static_cast<unsigned long long>(constantTableData.second));
+            abort();
+        }
+
+        u->m_cstTableLength = static_cast<uint32_t>(constantTableData.second);
+        u->m_cstTable = constantTableData.first;
+
+        u->m_bytecode = bytecodeData.first;
+        u->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
+        u->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
+        const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
+        assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
+        memcpy(u->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
+
+        delete u->m_bytecodeBuilder;
+        u->m_bytecodeBuilder = nullptr;
+    }
+
+    return rootUcb;
 }
 
 #pragma clang diagnostic pop

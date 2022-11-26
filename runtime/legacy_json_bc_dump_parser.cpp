@@ -169,7 +169,10 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 ucb->m_upvalueInfo[i].m_isParentLocal = isParentLocal;
                 if (isParentLocal)
                 {
-                    ucb->m_upvalueInfo[i].m_isImmutable = JSONCheckedGet<bool>(u, "IsImmutable");
+                    // The old bc dump does not support optimization based on upvalue immutability
+                    // Always treat everything as mutable for compatibility
+                    //
+                    ucb->m_upvalueInfo[i].m_isImmutable = false;
                     ucb->m_upvalueInfo[i].m_slot = JSONCheckedGet<uint32_t>(u, "ParentLocalOrdinal");
                 }
                 else
@@ -1636,12 +1639,12 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
             case LJOpcode::UGET:
             {
                 TestAssert(opdata.size() == 2);
-                bw.CreateUpvalueGet({
+                bw.CreateUpvalueGetMutable({
                     .ord = SafeIntegerCast<uint16_t>(opdata[1]),
                     .output = local(opdata[0])
                 });
 #ifndef NDEBUG
-                auto operands = bw.DecodeUpvalueGet(bcPosForCurBytecode);
+                auto operands = bw.DecodeUpvalueGetMutable(bcPosForCurBytecode);
                 assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[1]));
                 assert(operands.output == local(opdata[0]));
 #endif

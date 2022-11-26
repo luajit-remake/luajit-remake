@@ -115,7 +115,7 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
     return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
 }
 
-UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent)
+UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
     HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
@@ -126,15 +126,32 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     for (uint32_t ord = 0; ord < numUpvalues; ord++)
     {
         UpvalueMetadata& uvmt = upvalueInfo[ord];
-        GeneralHeapPointer<Upvalue> uv;
+        assert(uvmt.m_immutabilityFieldFinalized);
+        TValue uv;
         if (uvmt.m_isParentLocal)
         {
-            uv = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
+            if (uvmt.m_isImmutable)
+            {
+                if (uvmt.m_slot == selfOrdinalInStackFrame)
+                {
+                    uv = TValue::Create<tFunction>(r);
+                }
+                else
+                {
+                    uv = stackFrameBase[uvmt.m_slot];
+                }
+            }
+            else
+            {
+                HeapPtr<Upvalue> uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
+                uv = TValue::CreatePointer(uvPtr);
+            }
         }
         else
         {
-            uv = GetUpvalue(parent, uvmt.m_slot);
+            uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
         }
+        AssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
         TCSet(r->m_upvalues[ord], uv);
     }
     return r;

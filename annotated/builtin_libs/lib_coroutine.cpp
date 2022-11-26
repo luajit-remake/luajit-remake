@@ -291,8 +291,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 {
     HeapPtr<FunctionObject> func = GetStackFrameHeader()->m_func;
     assert(func->m_numUpvalues == 1);
-    assert(TCGet(func->m_upvalues[0]).As()->m_isClosed);
-    TValue uv = TCGet(TCGet(func->m_upvalues[0]).As()->m_tv);
+    TValue uv = TCGet(func->m_upvalues[0]);
     assert(uv.Is<tThread>());
     CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(uv.As<tThread>());
 
@@ -360,8 +359,8 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapPtr<FunctionObject> wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
-    HeapPtr<Upvalue> uv = Upvalue::CreateClosed(vm, TValue::Create<tThread>(TranslateToHeapPtr(newCoro)));
-    TCSet(wrap->m_upvalues[0], GeneralHeapPointer<Upvalue>(uv));
+    TValue uv = TValue::Create<tThread>(TranslateToHeapPtr(newCoro));
+    TCSet(wrap->m_upvalues[0], uv);
     Return(TValue::Create<tFunction>(wrap));
 }
 

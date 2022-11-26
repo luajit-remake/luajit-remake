@@ -1,20 +1,39 @@
 #include "api_define_bytecode.h"
 #include "deegen_api.h"
 
-static void NO_RETURN UpvalueGetImpl(uint16_t ord)
+static void NO_RETURN MutableUpvalueGetImpl(uint16_t ord)
 {
-    Return(UpvalueAccessor::Get(ord));
+    Return(UpvalueAccessor::GetMutable(ord));
 }
 
-DEEGEN_DEFINE_BYTECODE(UpvalueGet)
+DEEGEN_DEFINE_BYTECODE(UpvalueGetMutable)
 {
     Operands(
         Literal<uint16_t>("ord")
     );
     Result(BytecodeValue);
-    Implementation(UpvalueGetImpl);
+    Implementation(MutableUpvalueGetImpl);
     Variant();
 }
+
+static void NO_RETURN ImmutableUpvalueGetImpl(uint16_t ord)
+{
+    Return(UpvalueAccessor::GetImmutable(ord));
+}
+
+DEEGEN_DEFINE_BYTECODE(UpvalueGetImmutable)
+{
+    Operands(
+        Literal<uint16_t>("ord")
+    );
+    Result(BytecodeValue);
+    Implementation(ImmutableUpvalueGetImpl);
+    Variant();
+}
+
+// Parser needs to late-replace between the two bytecodes
+//
+DEEGEN_ADD_BYTECODE_SAME_LENGTH_CONSTRAINT(UpvalueGetMutable, UpvalueGetImmutable);
 
 static void NO_RETURN UpvalueSetImpl(uint16_t ord, TValue valueToPut)
 {
