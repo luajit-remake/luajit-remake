@@ -726,14 +726,14 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             std::unique_ptr<Module> resultModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*bii);
             std::vector<std::string> m_affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
             std::string m_mainFunctionName = bii->m_mainComponent->m_resultFuncName;
-            ReleaseAssert(m_mainFunctionName == InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
+            ReleaseAssert(m_mainFunctionName == BytecodeIrInfo::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
 
             size_t totalSubVariantsInThisVariant = 1 + m_affliatedFunctionNameList.size();
             totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
             std::string variantMainFunctionName = m_mainFunctionName;
             for (Function& func : *resultModule.get())
             {
-                if (InterpreterBytecodeImplCreator::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
+                if (BytecodeIrInfo::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
                 {
                     ReleaseAssert(func.hasExternalLinkage());
                     ReleaseAssert(!func.empty());
