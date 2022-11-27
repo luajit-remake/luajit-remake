@@ -33,8 +33,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
-    return ifi.DoLowering();
+    BytecodeIrInfo bii = BytecodeIrInfo::Create(target.get(), implFunc);
+    return InterpreterBytecodeImplCreator::DoLoweringForAll(bii);
 }
 
 struct ExpectedResult

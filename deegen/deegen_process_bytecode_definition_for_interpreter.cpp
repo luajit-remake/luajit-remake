@@ -625,7 +625,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     std::vector<std::unique_ptr<Module>> allBytecodeFunctions;
     std::vector<std::string> allReturnContinuationNames;
 
-    std::unordered_map<BytecodeVariantDefinition*, std::unique_ptr<InterpreterBytecodeImplCreator>> bvdImplMap;
+    std::unordered_map<BytecodeVariantDefinition*, std::unique_ptr<BytecodeIrInfo>> bvdImplMap;
     for (auto& bytecodeDef : defs)
     {
         for (auto& bytecodeVariantDef : bytecodeDef)
@@ -638,10 +638,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             ReleaseAssert(implFunc != nullptr);
 
             ReleaseAssert(!bvdImplMap.count(bytecodeVariantDef.get()));
-            bvdImplMap[bytecodeVariantDef.get()] = std::make_unique<InterpreterBytecodeImplCreator>(bytecodeVariantDef.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
-            InterpreterBytecodeImplCreator* impl = bvdImplMap[bytecodeVariantDef.get()].get();
-            impl->DoOptimization();
-            impl->TentativelyFinalizeBytecodeStructLength();
+            bvdImplMap[bytecodeVariantDef.get()] = std::make_unique<BytecodeIrInfo>(BytecodeIrInfo::Create(bytecodeVariantDef.get(), implFunc));
         }
     }
 
@@ -725,10 +722,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             BcTraitInfo traitInfo;
 
             ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
-            InterpreterBytecodeImplCreator* bvdImpl = bvdImplMap[bytecodeVariantDef.get()].get();
-            std::unique_ptr<Module> resultModule = bvdImpl->DoLowering();
-            std::vector<std::string> m_affliatedFunctionNameList = bvdImpl->GetAffliatedBytecodeFunctionList();
-            std::string m_mainFunctionName = bvdImpl->GetResultFunctionName();
+            BytecodeIrInfo* bii = bvdImplMap[bytecodeVariantDef.get()].get();
+            std::unique_ptr<Module> resultModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*bii);
+            std::vector<std::string> m_affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
+            std::string m_mainFunctionName = bii->m_mainComponent->m_resultFuncName;
             ReleaseAssert(m_mainFunctionName == InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
 
             size_t totalSubVariantsInThisVariant = 1 + m_affliatedFunctionNameList.size();

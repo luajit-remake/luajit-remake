@@ -27,8 +27,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
-    InterpreterBytecodeImplCreator ifi(target.get(), implFunc, InterpreterBytecodeImplCreator::ProcessKind::Main);
-    std::unique_ptr<Module> m = ifi.DoLowering();
+    BytecodeIrInfo bii = BytecodeIrInfo::Create(target.get(), implFunc);
+    std::unique_ptr<Module> m = InterpreterBytecodeImplCreator::DoLoweringForAll(bii);
     TestOnly_StripLLVMIdentMetadata(m.get());
     return m;
 }

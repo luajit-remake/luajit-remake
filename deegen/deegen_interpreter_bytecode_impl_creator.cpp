@@ -207,22 +207,14 @@ static llvm::Function* CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(llvm
     return f;
 }
 
-InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(InterpreterBytecodeImplCreator::ProcessFusedInIcEffectTag,
-                                                               BytecodeVariantDefinition* bytecodeDef,
-                                                               llvm::Function* implTmp,
-                                                               size_t icEffectOrd)
-    : m_bytecodeDef(bytecodeDef)
-    , m_module(nullptr)
-    , m_processKind(ProcessKind::FusedInInlineCacheEffect)
-    , m_impl(nullptr)
-    , m_wrapper(nullptr)
-    , m_valuePreserver()
-    , m_generated(false)
+BytecodeIrComponent::BytecodeIrComponent(BytecodeIrComponent::ProcessFusedInIcEffectTag,
+                                         BytecodeVariantDefinition* bytecodeDef,
+                                         llvm::Function* implTmp,
+                                         size_t icEffectOrd)
+    : BytecodeIrComponent(bytecodeDef, implTmp, BytecodeIrComponentKind::FusedInInlineCacheEffect)
 {
     using namespace llvm;
-    m_module = llvm::CloneModule(*implTmp->getParent());
-    m_impl = m_module->getFunction(implTmp->getName());
-    ReleaseAssert(m_impl != nullptr);
+    ReleaseAssert(m_module != nullptr && m_impl != nullptr);
     LLVMContext& ctx = m_module->getContext();
 
     ReleaseAssert(m_impl->getLinkage() == GlobalValue::ExternalLinkage);
@@ -265,23 +257,20 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(InterpreterByteco
         CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
         ValidateLLVMFunction(func);
     }
+
+    DoOptimization();
 }
 
-InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, ProcessKind processKind)
-    : m_bytecodeDef(bytecodeDef)
+BytecodeIrComponent::BytecodeIrComponent(BytecodeVariantDefinition* bytecodeDef, llvm::Function* implTmp, BytecodeIrComponentKind processKind)
+    : m_processKind(processKind)
+    , m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
-    , m_processKind(processKind)
     , m_impl(nullptr)
-    , m_wrapper(nullptr)
-    , m_valuePreserver()
-    , m_generated(false)
 {
     using namespace llvm;
-    ReleaseAssert(m_processKind != ProcessKind::FusedInInlineCacheEffect);
     m_module = llvm::CloneModule(*implTmp->getParent());
     m_impl = m_module->getFunction(implTmp->getName());
     ReleaseAssert(m_impl != nullptr);
-    LLVMContext& ctx = m_module->getContext();
 
     if (m_impl->getLinkage() != GlobalValue::InternalLinkage)
     {
@@ -292,17 +281,9 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         abort();
     }
 
-    // For m_processKind != Main, our caller should have set up the desired function name for us
-    // Otherwise, we should rename by ourselves.
+    // Figure out the result function name
     //
-    if (m_processKind == ProcessKind::Main)
-    {
-        m_resultFuncName = GetInterpreterBytecodeFunctionCName(m_bytecodeDef);
-        std::string implFuncName = m_resultFuncName + "_impl";
-        ReleaseAssert(m_module->getNamedValue(implFuncName) == nullptr);
-        m_impl->setName(implFuncName);
-    }
-    else if (m_processKind == ProcessKind::SlowPath)
+    if (m_processKind == BytecodeIrComponentKind::SlowPath)
     {
         m_resultFuncName = AstSlowPath::GetPostProcessSlowPathFunctionNameForInterpreter(m_impl);
     }
@@ -312,113 +293,6 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
         ReleaseAssert(implFuncName.ends_with("_impl"));
         m_resultFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl"));
     }
-
-    // First step: if we are the main function (i.e., not return continuation), we shall parse out all the needed return
-    // continuations, in preparation of processing each of them later
-    //
-    if (m_processKind == ProcessKind::Main)
-    {
-        // Find all the return continuations and slow paths.
-        // For return continuations, give each of them a unique name right now, and create the declarations.
-        // This is necessary for us to later link them together.
-        // For slow paths, we will rename them in the end since that's easier.
-        //
-        // Note that return continuations and slow paths may arbitrarily call each other, so the search needs
-        // to be recursive.
-        //
-        ReturnContinuationAndSlowPathFinder finder(m_impl, false /*ignoreSlowPaths*/);
-
-        // Sort the return continuations by their original name for determinism
-        //
-        std::map<std::string /*fnName*/, Function*> sortedReturnContFns;
-        for (Function* fn : finder.m_returnContinuations)
-        {
-            std::string fnName = fn->getName().str();
-            ReleaseAssert(!sortedReturnContFns.count(fnName));
-            sortedReturnContFns[fnName] = fn;
-        }
-
-        std::vector<Function*> rcList;
-        {
-            size_t rcOrd = 0;
-            for (auto& it : sortedReturnContFns)
-            {
-                Function* rc = it.second;
-                rcList.push_back(rc);
-                std::string rcFinalName = GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, rcOrd);
-                std::string rcImplName = rcFinalName + "_impl";
-                ReleaseAssert(m_module->getNamedValue(rcFinalName) == nullptr);
-                ReleaseAssert(m_module->getNamedValue(rcImplName) == nullptr);
-                rc->setName(rcImplName);
-                rcOrd++;
-            }
-        }
-
-        // After all the renaming and function declarations, create the InterpreterBytecodeImplCreator class so we can process each of the return continuation later
-        // Note that creating the InterpreterBytecodeImplCreator also clones the module, so we want to do it after all the renaming but before our own processing begins
-        //
-        for (Function* targetRc : rcList)
-        {
-            ReleaseAssert(targetRc != nullptr);
-            m_allRetConts.push_back(std::make_unique<InterpreterBytecodeImplCreator>(m_bytecodeDef, targetRc, ProcessKind::ReturnContinuation));
-        }
-
-        // Process the quickening slow path if needed
-        //
-        if (m_bytecodeDef->HasQuickeningSlowPath())
-        {
-            // Temporarily change 'm_impl' to the function name for the slowpath
-            //
-            std::string oldName = m_impl->getName().str();
-            std::string desiredName = GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName) + "_impl";
-            m_impl->setName(desiredName);
-            ReleaseAssert(m_impl->getName().str() == desiredName);
-
-            // Construct the slowpath creator. This clones the module in the process, and the impl function in the cloned module has the new name, as desired.
-            //
-            m_quickeningSlowPath = std::make_unique<InterpreterBytecodeImplCreator>(m_bytecodeDef, m_impl, ProcessKind::QuickeningSlowPath);
-
-            // Revert the name
-            //
-            m_impl->setName(oldName);
-            ReleaseAssert(m_impl->getName().str() == oldName);
-        }
-
-        // Sanity check that all the slow path calls have the right types
-        //
-        for (Function* fn : finder.m_allResults)
-        {
-            std::vector<AstSlowPath> slowPaths = AstSlowPath::GetAllUseInFunction(fn);
-            for (AstSlowPath& sp : slowPaths)
-            {
-                sp.CheckWellFormedness(m_impl);
-            }
-        }
-
-        // Process the slow paths if any.
-        //
-        if (finder.m_slowPaths.size() > 0)
-        {
-            // Sort all the functions by function name and process them in sorted order for determinism
-            //
-            std::map<std::string /*fnName*/, Function*> sortedFns;
-            for (Function* fn : finder.m_slowPaths)
-            {
-                std::string fnName = fn->getName().str();
-                ReleaseAssert(!sortedFns.count(fnName));
-                sortedFns[fnName] = fn;
-            }
-
-            for (auto& it : sortedFns)
-            {
-                Function* implFn = it.second;
-                m_slowPaths.push_back(std::make_unique<InterpreterBytecodeImplCreator>(m_bytecodeDef, implFn, ProcessKind::SlowPath));
-            }
-        }
-    }
-
-    // Now, we can start processing our own module
-    //
 
     // At this stage we can drop the bytecode definition global symbol, which will render all bytecode definitions dead.
     // We temporarily change 'm_impl' to external linkage to keep it alive, then run DCE to strip the dead symbols,
@@ -441,157 +315,354 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeVariantDe
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::InlineGeneralFunctions);
     ReleaseAssert(m_module->getFunction(implNameBak) == m_impl);
 
-    // Handle inline caching APIs
+    // Assert that the inline caching APIs only show up where they are allowed to
     //
-    if (m_processKind == ProcessKind::Main)
-    {
-        std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(m_impl);
-
-        bool hasICFusedIntoInterpreterOpcode = false;
-        size_t numFusedIcEffects = static_cast<size_t>(-1);
-        for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
-        {
-            AstInlineCache& ic = allIcUses[icOrd];
-            if (ic.m_shouldFuseICIntoInterpreterOpcode)
-            {
-                if (hasICFusedIntoInterpreterOpcode)
-                {
-                    fprintf(stderr, "[ERROR] Function '%s' contained more than one IC with FuseICIntoInterpreterOpcode attribute!\n", m_resultFuncName.c_str());
-                    abort();
-                }
-                hasICFusedIntoInterpreterOpcode = true;
-                numFusedIcEffects = ic.m_totalEffectKinds;
-            }
-        }
-
-        if (hasICFusedIntoInterpreterOpcode && m_bytecodeDef->HasQuickeningSlowPath())
-        {
-            fprintf(stderr, "[LOCKDOWN] FuseICIntoInterpreterOpcode() currently cannot be used together with EnableHotColdSplitting().\n");
-            abort();
-        }
-
-        for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
-        {
-            AstInlineCache& ic = allIcUses[icOrd];
-
-            // Lower the inline caching APIs
-            //
-            ic.DoLoweringForInterpreter();
-
-            // Append required data into the bytecode metadata struct
-            //
-            bytecodeDef->AddBytecodeMetadata(std::move(ic.m_icStruct));
-
-            // Note that AstInlineCache::DoLoweringForInterpreter by design does not lower the GetIcPtr calls
-            // (and we cannot lower them at this stage because the relavent interpreter context isn't available yet).
-            // Therefore, here we only change the dummy function name to a special one, so we can locate them and lower them later.
-            //
-            CallInst* icPtrGetter = ic.m_icPtrOrigin;
-            ReleaseAssert(icPtrGetter->arg_size() == 0 && llvm_value_has_type<void*>(icPtrGetter));
-            ReleaseAssert(AstInlineCache::IsIcPtrGetterFunctionCall(icPtrGetter));
-            Function* replacementFn = CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(m_module.get());
-            icPtrGetter->setCalledFunction(replacementFn);
-
-            // Rename and record the IC body name. If LLVM chooses to not inline it, we need to extract it as well.
-            // Note that we don't need to do anything to the IC effect functions, since they have been marked always_inline
-            //
-            std::string icBodyNewName = m_resultFuncName + "_icbody_" + std::to_string(icOrd);
-            ReleaseAssert(m_module->getNamedValue(icBodyNewName) == nullptr);
-            ic.m_bodyFn->setName(icBodyNewName);
-            ReleaseAssert(ic.m_bodyFn->getName() == icBodyNewName);
-            ReleaseAssert(ic.m_bodyFn->getLinkage() == GlobalValue::InternalLinkage);
-            m_icBodyNames.push_back(icBodyNewName);
-
-            // Change the calling convention of the IC body to PreserveMost, since it's the slow path and we want it to be less intrusive
-            //
-            ic.m_bodyFn->setCallingConv(CallingConv::PreserveMost);
-            for (User* usr : ic.m_bodyFn->users())
-            {
-                CallInst* callInst = dyn_cast<CallInst>(usr);
-                if (callInst != nullptr)
-                {
-                    ReleaseAssert(callInst->getCalledFunction() == ic.m_bodyFn);
-                    callInst->setCallingConv(CallingConv::PreserveMost);
-                }
-            }
-
-            if (hasICFusedIntoInterpreterOpcode)
-            {
-                // The body fn should never be inlined since it's going to be called by multiple bytecodes
-                //
-                ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
-                ic.m_bodyFn->addFnAttr(Attribute::AttrKind::NoInline);
-            }
-            else
-            {
-                // We need to give it one more chance to inline, because previously when the inline pass was run,
-                // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.
-                //
-                LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
-            }
-        }
-
-        if (hasICFusedIntoInterpreterOpcode)
-        {
-            // Create the processors for each of the specialized implementation
-            //
-            for (size_t i = 0; i < numFusedIcEffects; i++)
-            {
-                std::unique_ptr<InterpreterBytecodeImplCreator> processor = std::make_unique<InterpreterBytecodeImplCreator>(
-                    ProcessFusedInIcEffectTag(), m_bytecodeDef, m_impl, i /*effectKindOrd*/);
-                m_affliatedBytecodeFnNames.push_back(processor->m_resultFuncName);
-                m_fusedICs.push_back(std::move(processor));
-            }
-
-            // Populate the implementation of the inline cache adaption placeholder functions
-            // Since we are only called for the empty IC case, we know that the IC hit check will always fail
-            //
-            {
-                Function* func = m_module->getFunction(x_adapt_ic_hit_check_behavior_placeholder_fn);
-                ReleaseAssert(func != nullptr);
-                ReleaseAssert(func->empty());
-                func->setLinkage(GlobalValue::InternalLinkage);
-                func->addFnAttr(Attribute::AttrKind::AlwaysInline);
-                BasicBlock* bb = BasicBlock::Create(ctx, "", func);
-                ReleaseAssert(func->arg_size() == 1);
-                ReleaseAssert(llvm_value_has_type<bool>(func->getArg(0)));
-                ReleaseAssert(llvm_type_has_type<bool>(func->getReturnType()));
-                ReturnInst::Create(ctx, CreateLLVMConstantInt<bool>(ctx, false), bb);
-                CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
-                ValidateLLVMFunction(func);
-            }
-
-            {
-                Function* func = m_module->getFunction(x_adapt_get_ic_effect_ord_behavior_placeholder_fn);
-                ReleaseAssert(func != nullptr);
-                ReleaseAssert(func->empty());
-                func->setLinkage(GlobalValue::InternalLinkage);
-                func->addFnAttr(Attribute::AttrKind::AlwaysInline);
-                BasicBlock* bb = BasicBlock::Create(ctx, "", func);
-                ReleaseAssert(func->arg_size() == 1);
-                Value* input = func->getArg(0);
-                ReleaseAssert(llvm_value_has_type<uint8_t>(input));
-                ReleaseAssert(llvm_type_has_type<uint8_t>(func->getReturnType()));
-                ReturnInst::Create(ctx, input, bb);
-                CopyFunctionAttributes(func /*dst*/, m_impl /*src*/);
-                ValidateLLVMFunction(func);
-            }
-        }
-    }
-    else if (m_processKind == ProcessKind::ReturnContinuation || m_processKind == ProcessKind::SlowPath)
+    if (m_processKind == BytecodeIrComponentKind::ReturnContinuation || m_processKind == BytecodeIrComponentKind::SlowPath)
     {
         // Inline caching API is not allowed in return continuations or in manual slow paths
         //
         ReleaseAssert(AstInlineCache::GetAllUseInFunction(m_impl).size() == 0);
     }
-    else
+    else if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath)
     {
-        ReleaseAssert(m_processKind == ProcessKind::QuickeningSlowPath);
         // TODO FIXME: for now we simply fail if inline caching API is used, but this is unreasonable.
         // Instead, we should lower them to a naive implementation (i.e., no inline caching actually happens)
         //
         ReleaseAssert(AstInlineCache::GetAllUseInFunction(m_impl).size() == 0);
     }
+
+    // For FusedInInlineCacheEffect, our caller constructor needs do something further
+    //
+    if (m_processKind != BytecodeIrComponentKind::FusedInInlineCacheEffect)
+    {
+        DoOptimization();
+    }
+}
+
+void BytecodeIrComponent::DoOptimization()
+{
+    using namespace llvm;
+    ReleaseAssert(m_impl != nullptr);
+
+    // Run TValue typecheck strength reduction
+    //
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugarUpToExcluding(DesugaringLevel::TypeSpecialization));
+    if (m_processKind == BytecodeIrComponentKind::Main || m_processKind == BytecodeIrComponentKind::FusedInInlineCacheEffect)
+    {
+        if (m_bytecodeDef->HasQuickeningSlowPath())
+        {
+            // In this case, we are the fast path
+            //
+            TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningFastPath(m_bytecodeDef, m_impl);
+        }
+        else
+        {
+            TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
+        }
+    }
+    else if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath)
+    {
+        TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPath(m_bytecodeDef, m_impl);
+    }
+    else if (m_processKind == BytecodeIrComponentKind::ReturnContinuation || m_processKind == BytecodeIrComponentKind::SlowPath)
+    {
+        TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
+    }
+    else
+    {
+        ReleaseAssert(false);
+    }
+
+    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
+}
+
+BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* bytecodeDef, llvm::Function* mainImplTmp)
+{
+    using namespace llvm;
+    std::unique_ptr<Module> module = CloneModule(*mainImplTmp->getParent());
+    Function* mainImplFn = module->getFunction(mainImplTmp->getName());
+    ReleaseAssert(mainImplFn != nullptr);
+    LLVMContext& ctx = module->getContext();
+
+    BytecodeIrInfo r;
+    r.m_bytecodeDef = bytecodeDef;
+
+    std::string resultMainFnName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeFunctionCName(bytecodeDef);
+    std::string implFuncName = resultMainFnName + "_impl";
+    ReleaseAssert(module->getNamedValue(implFuncName) == nullptr);
+    mainImplFn->setName(implFuncName);
+
+    // Parse out all the needed return continuations, in preparation of processing each of them later
+    //
+    {
+        // Find all the return continuations and slow paths.
+        // For return continuations, give each of them a unique name right now, and create the declarations.
+        // This is necessary for us to later link them together.
+        // For slow paths, we will rename them in the end since that's easier.
+        //
+        // Note that return continuations and slow paths may arbitrarily call each other, so the search needs
+        // to be recursive.
+        //
+        ReturnContinuationAndSlowPathFinder finder(mainImplFn, false /*ignoreSlowPaths*/);
+
+        // Sort the return continuations by their original name for determinism
+        //
+        std::map<std::string /*fnName*/, Function*> sortedReturnContFns;
+        for (Function* fn : finder.m_returnContinuations)
+        {
+            std::string fnName = fn->getName().str();
+            ReleaseAssert(!sortedReturnContFns.count(fnName));
+            sortedReturnContFns[fnName] = fn;
+        }
+
+        std::vector<Function*> rcList;
+        {
+            size_t rcOrd = 0;
+            for (auto& it : sortedReturnContFns)
+            {
+                Function* rc = it.second;
+                rcList.push_back(rc);
+                std::string rcFinalName = InterpreterBytecodeImplCreator::GetInterpreterBytecodeReturnContinuationFunctionCName(bytecodeDef, rcOrd);
+                std::string rcImplName = rcFinalName + "_impl";
+                ReleaseAssert(module->getNamedValue(rcFinalName) == nullptr);
+                ReleaseAssert(module->getNamedValue(rcImplName) == nullptr);
+                rc->setName(rcImplName);
+                rcOrd++;
+            }
+        }
+
+        // After all the renaming and function declarations, create the InterpreterBytecodeImplCreator class so we can process each of the return continuation later
+        // Note that creating the InterpreterBytecodeImplCreator also clones the module, so we want to do it after all the renaming but before our own processing begins
+        //
+        for (Function* targetRc : rcList)
+        {
+            ReleaseAssert(targetRc != nullptr);
+            r.m_allRetConts.push_back(std::make_unique<BytecodeIrComponent>(bytecodeDef, targetRc, BytecodeIrComponentKind::ReturnContinuation));
+        }
+
+        // Process the quickening slow path if needed
+        //
+        if (bytecodeDef->HasQuickeningSlowPath())
+        {
+            // Temporarily change 'm_impl' to the function name for the slowpath
+            //
+            std::string oldName = mainImplFn->getName().str();
+            std::string desiredName = GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(resultMainFnName) + "_impl";
+            mainImplFn->setName(desiredName);
+            ReleaseAssert(mainImplFn->getName().str() == desiredName);
+
+            // Construct the slowpath creator. This clones the module in the process, and the impl function in the cloned module has the new name, as desired.
+            //
+            r.m_quickeningSlowPath = std::make_unique<BytecodeIrComponent>(bytecodeDef, mainImplFn, BytecodeIrComponentKind::QuickeningSlowPath);
+
+            // Revert the name
+            //
+            mainImplFn->setName(oldName);
+            ReleaseAssert(mainImplFn->getName().str() == oldName);
+        }
+
+        // Sanity check that all the slow path calls have the right types
+        //
+        for (Function* fn : finder.m_allResults)
+        {
+            std::vector<AstSlowPath> slowPaths = AstSlowPath::GetAllUseInFunction(fn);
+            for (AstSlowPath& sp : slowPaths)
+            {
+                sp.CheckWellFormedness(mainImplFn);
+            }
+        }
+
+        // Process the slow paths if any.
+        //
+        if (finder.m_slowPaths.size() > 0)
+        {
+            // Sort all the functions by function name and process them in sorted order for determinism
+            //
+            std::map<std::string /*fnName*/, Function*> sortedFns;
+            for (Function* fn : finder.m_slowPaths)
+            {
+                std::string fnName = fn->getName().str();
+                ReleaseAssert(!sortedFns.count(fnName));
+                sortedFns[fnName] = fn;
+            }
+
+            for (auto& it : sortedFns)
+            {
+                Function* implFn = it.second;
+                r.m_slowPaths.push_back(std::make_unique<BytecodeIrComponent>(bytecodeDef, implFn, BytecodeIrComponentKind::SlowPath));
+            }
+        }
+    }
+
+    // Process all the inline caches
+    //
+    std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(mainImplFn);
+
+    bool hasICFusedIntoInterpreterOpcode = false;
+    size_t numFusedIcEffects = static_cast<size_t>(-1);
+    for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
+    {
+        AstInlineCache& ic = allIcUses[icOrd];
+        if (ic.m_shouldFuseICIntoInterpreterOpcode)
+        {
+            if (hasICFusedIntoInterpreterOpcode)
+            {
+                fprintf(stderr, "[ERROR] Function '%s' contained more than one IC with FuseICIntoInterpreterOpcode attribute!\n", resultMainFnName.c_str());
+                abort();
+            }
+            hasICFusedIntoInterpreterOpcode = true;
+            numFusedIcEffects = ic.m_totalEffectKinds;
+        }
+    }
+
+    if (hasICFusedIntoInterpreterOpcode && bytecodeDef->HasQuickeningSlowPath())
+    {
+        fprintf(stderr, "[LOCKDOWN] FuseICIntoInterpreterOpcode() currently cannot be used together with EnableHotColdSplitting().\n");
+        abort();
+    }
+
+    for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
+    {
+        AstInlineCache& ic = allIcUses[icOrd];
+
+        // Lower the inline caching APIs
+        //
+        ic.DoLoweringForInterpreter();
+
+        // Append required data into the bytecode metadata struct
+        //
+        bytecodeDef->AddBytecodeMetadata(std::move(ic.m_icStruct));
+
+        // Note that AstInlineCache::DoLoweringForInterpreter by design does not lower the GetIcPtr calls
+        // (and we cannot lower them at this stage because the relavent interpreter context isn't available yet).
+        // Therefore, here we only change the dummy function name to a special one, so we can locate them and lower them later.
+        //
+        CallInst* icPtrGetter = ic.m_icPtrOrigin;
+        ReleaseAssert(icPtrGetter->arg_size() == 0 && llvm_value_has_type<void*>(icPtrGetter));
+        ReleaseAssert(AstInlineCache::IsIcPtrGetterFunctionCall(icPtrGetter));
+        Function* replacementFn = CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(module.get());
+        icPtrGetter->setCalledFunction(replacementFn);
+
+        // Rename and record the IC body name. If LLVM chooses to not inline it, we need to extract it as well.
+        // Note that we don't need to do anything to the IC effect functions, since they have been marked always_inline
+        //
+        std::string icBodyNewName = resultMainFnName + "_icbody_" + std::to_string(icOrd);
+        ReleaseAssert(module->getNamedValue(icBodyNewName) == nullptr);
+        ic.m_bodyFn->setName(icBodyNewName);
+        ReleaseAssert(ic.m_bodyFn->getName() == icBodyNewName);
+        ReleaseAssert(ic.m_bodyFn->getLinkage() == GlobalValue::InternalLinkage);
+        r.m_icBodyNames.push_back(icBodyNewName);
+
+        // Change the calling convention of the IC body to PreserveMost, since it's the slow path and we want it to be less intrusive
+        //
+        ic.m_bodyFn->setCallingConv(CallingConv::PreserveMost);
+        for (User* usr : ic.m_bodyFn->users())
+        {
+            CallInst* callInst = dyn_cast<CallInst>(usr);
+            if (callInst != nullptr)
+            {
+                ReleaseAssert(callInst->getCalledFunction() == ic.m_bodyFn);
+                callInst->setCallingConv(CallingConv::PreserveMost);
+            }
+        }
+
+        if (hasICFusedIntoInterpreterOpcode)
+        {
+            // The body fn should never be inlined since it's going to be called by multiple bytecodes
+            //
+            ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
+            ic.m_bodyFn->addFnAttr(Attribute::AttrKind::NoInline);
+        }
+        else
+        {
+            // We need to give it one more chance to inline, because previously when the inline pass was run,
+            // the call from the bytecode implementation to the IC body was not visible: it only becomes visible after the lowering.
+            //
+            LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
+        }
+    }
+
+    if (hasICFusedIntoInterpreterOpcode)
+    {
+        // Create the processors for each of the specialized implementation
+        //
+        for (size_t i = 0; i < numFusedIcEffects; i++)
+        {
+            std::unique_ptr<BytecodeIrComponent> processor = std::make_unique<BytecodeIrComponent>(
+                BytecodeIrComponent::ProcessFusedInIcEffectTag(), bytecodeDef, mainImplFn, i /*effectKindOrd*/);
+            r.m_affliatedBytecodeFnNames.push_back(processor->m_resultFuncName);
+            r.m_fusedICs.push_back(std::move(processor));
+        }
+
+        // Populate the implementation of the inline cache adaption placeholder functions
+        // Since we are only called for the empty IC case, we know that the IC hit check will always fail
+        //
+        {
+            Function* func = module->getFunction(x_adapt_ic_hit_check_behavior_placeholder_fn);
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(func->empty());
+            func->setLinkage(GlobalValue::InternalLinkage);
+            func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+            ReleaseAssert(func->arg_size() == 1);
+            ReleaseAssert(llvm_value_has_type<bool>(func->getArg(0)));
+            ReleaseAssert(llvm_type_has_type<bool>(func->getReturnType()));
+            ReturnInst::Create(ctx, CreateLLVMConstantInt<bool>(ctx, false), bb);
+            CopyFunctionAttributes(func /*dst*/, mainImplFn /*src*/);
+            ValidateLLVMFunction(func);
+        }
+
+        {
+            Function* func = module->getFunction(x_adapt_get_ic_effect_ord_behavior_placeholder_fn);
+            ReleaseAssert(func != nullptr);
+            ReleaseAssert(func->empty());
+            func->setLinkage(GlobalValue::InternalLinkage);
+            func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+            ReleaseAssert(func->arg_size() == 1);
+            Value* input = func->getArg(0);
+            ReleaseAssert(llvm_value_has_type<uint8_t>(input));
+            ReleaseAssert(llvm_type_has_type<uint8_t>(func->getReturnType()));
+            ReturnInst::Create(ctx, input, bb);
+            CopyFunctionAttributes(func /*dst*/, mainImplFn /*src*/);
+            ValidateLLVMFunction(func);
+        }
+    }
+
+    r.m_mainComponent = std::make_unique<BytecodeIrComponent>(bytecodeDef, mainImplFn, BytecodeIrComponentKind::Main);
+
+    ReleaseAssert(!bytecodeDef->IsBytecodeStructLengthTentativelyFinalized());
+
+    // Figure out whether this bytecode has metadata.
+    // This is a bit tricky. We relying on the fact that whether or not the bytecode metadata exists depends
+    // solely on the logic of the Main processor.
+    // We probably should refactor it so that it's less tricky. But let's stay with it for now.
+    //
+    {
+        // Figure out if we need Call IC. We need it if there are any calls used in the main function.
+        // Note that we must do this check here after all optimizations have happened, as optimizations could have
+        // deduced that calls are unreachable and removed them.
+        //
+        bool needCallIc = false;
+        if (AstMakeCall::GetAllUseInFunction(r.m_mainComponent->m_impl).size() > 0)
+        {
+            needCallIc = true;
+        }
+        if (bytecodeDef->m_isInterpreterCallIcExplicitlyDisabled)
+        {
+            needCallIc = false;
+        }
+        if (needCallIc)
+        {
+            bytecodeDef->AddInterpreterCallIc();
+        }
+    }
+
+    // At this point we should have determined everything that needs to sit in the bytecode metadata (if any)
+    //
+    bytecodeDef->TentativelyFinalizeBytecodeStructLength();
+
+    return r;
 }
 
 void InterpreterBytecodeImplCreator::CreateWrapperFunction()
@@ -614,7 +685,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     //
     m_wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
     m_wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
-    if (m_processKind == ProcessKind::QuickeningSlowPath || m_processKind == ProcessKind::SlowPath)
+    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath || m_processKind == BytecodeIrComponentKind::SlowPath)
     {
         m_wrapper->addFnAttr(Attribute::AttrKind::NoInline);
     }
@@ -623,7 +694,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
-    if (m_processKind != ProcessKind::ReturnContinuation)
+    if (m_processKind != BytecodeIrComponentKind::ReturnContinuation)
     {
         // Note that we also set parameter names here.
         // These are not required, but just to make dumps more readable
@@ -675,7 +746,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> alreadyDecodedArgs;
-    if (m_processKind == ProcessKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
+    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
     {
         alreadyDecodedArgs = GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
     }
@@ -774,7 +845,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         ReleaseAssert(ord == opcodeValues.size() && ord == usageValues.size());
     }
 
-    if (m_processKind == ProcessKind::SlowPath)
+    if (m_processKind == BytecodeIrComponentKind::SlowPath)
     {
         std::vector<Value*> extraArgs = AstSlowPath::CreateCallArgsInSlowPathWrapperFunction(static_cast<uint32_t>(usageValues.size()), m_impl, currentBlock);
         for (Value* val : extraArgs)
@@ -793,7 +864,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         }
     }
 
-    if (m_processKind == ProcessKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
+    if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
     {
         // If we are the main function and we are a quickening bytecode, we need to check that the quickening condition holds.
         // We can only run 'm_impl' if the condition holds. If not, we must transfer control to the quickening slow path.
@@ -881,44 +952,6 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     ValidateLLVMFunction(m_wrapper);
 }
 
-void InterpreterBytecodeImplCreator::DoOptimization()
-{
-    using namespace llvm;
-    ReleaseAssert(!m_generated);
-    ReleaseAssert(m_impl != nullptr);
-
-    // Run TValue typecheck strength reduction
-    //
-    DesugarAndSimplifyLLVMModule(m_module.get(), DesugarUpToExcluding(DesugaringLevel::TypeSpecialization));
-    if (m_processKind == ProcessKind::Main || m_processKind == ProcessKind::FusedInInlineCacheEffect)
-    {
-        if (m_bytecodeDef->HasQuickeningSlowPath())
-        {
-            // In this case, we are the fast path
-            //
-            TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningFastPath(m_bytecodeDef, m_impl);
-        }
-        else
-        {
-            TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
-        }
-    }
-    else if (m_processKind == ProcessKind::QuickeningSlowPath)
-    {
-        TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPath(m_bytecodeDef, m_impl);
-    }
-    else if (m_processKind == ProcessKind::ReturnContinuation || m_processKind == ProcessKind::SlowPath)
-    {
-        TValueTypecheckOptimizationPass::DoOptimizationForBytecode(m_bytecodeDef, m_impl);
-    }
-    else
-    {
-        ReleaseAssert(false);
-    }
-
-    DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
-}
-
 void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
 {
     using namespace llvm;
@@ -952,93 +985,42 @@ void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
     }
 }
 
-void InterpreterBytecodeImplCreator::TentativelyFinalizeBytecodeStructLength()
-{
-    // Figure out whether this bytecode has metadata.
-    // This is a bit tricky. We relying on the fact that the Main processor is executed before the other processors,
-    // and that whether or not the bytecode metadata exists depends solely on the logic of the Main processor.
-    // We probably should refactor it so that it's less tricky. But let's stay with it for now.
-    //
-    if (m_processKind == ProcessKind::Main)
-    {
-        ReleaseAssert(!m_bytecodeDef->IsBytecodeStructLengthTentativelyFinalized());
-
-        // Figure out if we need Call IC. We need it if there are any calls used in the main function.
-        // Note that we must do this check here after all optimizations have happened, as optimizations could have
-        // deduced that calls are unreachable and removed them.
-        //
-        bool needCallIc = false;
-        if (AstMakeCall::GetAllUseInFunction(m_impl).size() > 0)
-        {
-            needCallIc = true;
-        }
-        if (GetBytecodeDef()->m_isInterpreterCallIcExplicitlyDisabled)
-        {
-            needCallIc = false;
-        }
-        if (needCallIc)
-        {
-            m_bytecodeDef->AddInterpreterCallIc();
-        }
-
-        // At this point we should have determined everything that needs to sit in the bytecode metadata (if any)
-        //
-        m_bytecodeDef->TentativelyFinalizeBytecodeStructLength();
-    }
-}
-
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowering()
+InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeIrComponent& bic)
 {
     using namespace llvm;
+    m_bytecodeDef = bic.m_bytecodeDef;
+    m_module = CloneModule(*bic.m_module.get());
+    m_processKind = bic.m_processKind;
+    m_impl = m_module->getFunction(bic.m_impl->getName());
+    ReleaseAssert(m_impl != nullptr);
+    ReleaseAssert(m_impl->getName() == bic.m_impl->getName());
+    m_wrapper = nullptr;
+    m_resultFuncName = bic.m_resultFuncName;
+    m_generated = false;
+}
+
+std::unique_ptr<InterpreterBytecodeImplCreator> WARN_UNUSED InterpreterBytecodeImplCreator::LowerOneComponent(BytecodeIrComponent& bic)
+{
+    std::unique_ptr<InterpreterBytecodeImplCreator> ifi = std::make_unique<InterpreterBytecodeImplCreator>(bic);
+    ifi->DoLowering();
+    return ifi;
+}
+
+void InterpreterBytecodeImplCreator::DoLowering()
+{
+    using namespace llvm;
+
     ReleaseAssert(!m_generated);
     m_generated = true;
 
-    if (m_processKind == ProcessKind::Main)
-    {
-        // Some of the unit tests won't call TentativelyFinalizeBytecodeStructLength().
-        // Be graceful and just call it for them. This doesn't matter, because we have ReleaseAssert() that
-        // guarantees that reading tentative length will fail if it is not set up yet.
-        //
-        if (!m_bytecodeDef->IsBytecodeStructLengthTentativelyFinalized())
-        {
-            TentativelyFinalizeBytecodeStructLength();
-        }
-
-        size_t finalLength = m_bytecodeDef->GetTentativeBytecodeStructLength();
-        for (BytecodeVariantDefinition* sameLengthConstraintVariant : m_bytecodeDef->m_sameLengthConstraintList)
-        {
-            size_t otherLength = sameLengthConstraintVariant->GetTentativeBytecodeStructLength();
-            finalLength = std::max(finalLength, otherLength);
-        }
-        m_bytecodeDef->FinalizeBytecodeStructLength(finalLength);
-    }
-
-    // Having decided the final bytecode metadata struct layout, we can lower all the metadata struct element getters
-    // Again, this relies on the fact that the metadata struct layout is solely determined by the Main processor
+    // DoLowering() is alwasy called after the bytecode struct has been finalized.
+    // Having decided the final bytecode metadata struct layout, we can lower all the metadata struct element getters.
+    // Again, this relies on the fact that the metadata struct layout is solely determined by the Main processor.
     //
     ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
     if (m_bytecodeDef->HasBytecodeMetadata())
     {
         m_bytecodeDef->m_bytecodeMetadataMaybeNull->LowerAll(m_module.get());
-    }
-
-    // If we are the main function, figure out the return continuations directly or transitively used by us
-    // These return continuations are considered hot, and will be put into the interpreter's hot code section
-    // The other return continuations (which are used by calls that can only happen in the slow paths) will
-    // be put into the cold code section.
-    //
-    std::unordered_set<std::string> fnNamesOfAllReturnContinuationsUsedByMainFn;
-    if (m_processKind == ProcessKind::Main)
-    {
-        ReturnContinuationAndSlowPathFinder rcFinder(m_impl, true /*ignoreSlowPaths*/);
-        for (Function* func : rcFinder.m_returnContinuations)
-        {
-            std::string rcImplName = func->getName().str();
-            ReleaseAssert(rcImplName.ends_with("_impl"));
-            std::string rcFinalName = rcImplName.substr(0, rcImplName.length() - strlen("_impl"));
-            ReleaseAssert(!fnNamesOfAllReturnContinuationsUsedByMainFn.count(rcFinalName));
-            fnNamesOfAllReturnContinuationsUsedByMainFn.insert(rcFinalName);
-        }
     }
 
     // Create the wrapper function 'm_wrapper'
@@ -1082,7 +1064,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
     //
     m_wrapper->removeFnAttr(Attribute::AttrKind::NoReturn);
-    if (m_processKind == ProcessKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
+    if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
     {
         std::string slowPathFnName = GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName);
         Function* slowPathFn = m_module->getFunction(slowPathFnName);
@@ -1128,14 +1110,66 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
     ReleaseAssert(!m_wrapper->empty());
 
-    // Extract the functions. We need to extract 'm_wrapper' and any IC body functions that didn't get inlined
+    // Extract the functions if m_processKind is not Main
+    // For the main component, our caller will do the extraction.
+    //
+    if (m_processKind != BytecodeIrComponentKind::Main)
+    {
+        m_module = ExtractFunction(m_module.get(), m_resultFuncName);
+
+        // After the extract, 'm_wrapper' is invalidated since a new module is returned. Refresh its value.
+        //
+        m_wrapper = m_module->getFunction(m_resultFuncName);
+        ReleaseAssert(m_wrapper != nullptr);
+    }
+}
+
+std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLoweringForAll(BytecodeIrInfo& bi)
+{
+    using namespace llvm;
+
+    BytecodeVariantDefinition* bytecodeDef = bi.m_bytecodeDef;
+
+    size_t finalLength = bytecodeDef->GetTentativeBytecodeStructLength();
+    for (BytecodeVariantDefinition* sameLengthConstraintVariant : bytecodeDef->m_sameLengthConstraintList)
+    {
+        size_t otherLength = sameLengthConstraintVariant->GetTentativeBytecodeStructLength();
+        finalLength = std::max(finalLength, otherLength);
+    }
+    bytecodeDef->FinalizeBytecodeStructLength(finalLength);
+
+    // Figure out the return continuations directly or transitively used by the main function.
+    // These return continuations are considered hot, and will be put into the interpreter's hot code section
+    // The other return continuations (which are used by calls that can only happen in the slow paths) will
+    // be put into the cold code section.
+    //
+    std::unordered_set<std::string> fnNamesOfAllReturnContinuationsUsedByMainFn;
+    ReturnContinuationAndSlowPathFinder rcFinder(bi.m_mainComponent->m_impl, true /*ignoreSlowPaths*/);
+    for (Function* func : rcFinder.m_returnContinuations)
+    {
+        std::string rcImplName = func->getName().str();
+        ReleaseAssert(rcImplName.ends_with("_impl"));
+        std::string rcFinalName = rcImplName.substr(0, rcImplName.length() - strlen("_impl"));
+        ReleaseAssert(!fnNamesOfAllReturnContinuationsUsedByMainFn.count(rcFinalName));
+        fnNamesOfAllReturnContinuationsUsedByMainFn.insert(rcFinalName);
+    }
+
+    std::unique_ptr<Module> module;
+
+    // Process the main component
     //
     {
+        std::unique_ptr<InterpreterBytecodeImplCreator> mainComponent = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_mainComponent.get());
+
+        // Extract the necessary functions from the main component
+        // We need to extract the result function and any IC body functions that didn't get inlined
+        //
         std::vector<std::string> extractTargets;
-        extractTargets.push_back(m_resultFuncName);
-        for (auto& icBodyFnName : m_icBodyNames)
+        ReleaseAssert(mainComponent->m_module->getFunction(mainComponent->m_resultFuncName) != nullptr);
+        extractTargets.push_back(mainComponent->m_resultFuncName);
+        for (auto& icBodyFnName : bi.m_icBodyNames)
         {
-            Function* icBodyFn = m_module->getFunction(icBodyFnName);
+            Function* icBodyFn = mainComponent->m_module->getFunction(icBodyFnName);
             if (icBodyFn != nullptr)
             {
                 extractTargets.push_back(icBodyFnName);
@@ -1146,218 +1180,217 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
             }
             else
             {
-                ReleaseAssert(m_module->getNamedValue(icBodyFnName) == nullptr);
+                ReleaseAssert(mainComponent->m_module->getNamedValue(icBodyFnName) == nullptr);
             }
         }
-        m_module = ExtractFunctions(m_module.get(), extractTargets);
+        module = ExtractFunctions(mainComponent->m_module.get(), extractTargets);
+
+        // Add section attribute to the main entry function
+        //
+        Function* mainEntryFn = module->getFunction(mainComponent->m_resultFuncName);
+        ReleaseAssert(mainEntryFn != nullptr);
+
+        ReleaseAssert(!mainEntryFn->hasSection());
+        mainEntryFn->setSection(x_hot_code_section_name);
     }
 
-    // After the extract, 'm_wrapper' is invalidated since a new module is returned. Refresh its value.
+    // Link in all the sub-components
     //
-    m_wrapper = m_module->getFunction(m_resultFuncName);
-    ReleaseAssert(m_wrapper != nullptr);
-
-    if (m_processKind == ProcessKind::Main)
+    // We also assign hot/cold section for each function.
+    // The main function and any return continuations directly/transitively used by the main function are hot,
+    // and everything else are cold.
+    //
+    // Link in the FuseICIntoInterpreterOpcode specializations, if any
+    //
+    ReleaseAssert(bi.m_affliatedBytecodeFnNames.size() == bi.m_fusedICs.size());
+    for (size_t fusedInIcOrd = 0; fusedInIcOrd < bi.m_fusedICs.size(); fusedInIcOrd++)
     {
-        // If we are the main function, we need to link in all the return continuations, and possibly the quickening slowpath.
-        //
-        // We also assign hot/cold section for each function.
-        // The main function and any return continuations directly/transitively used by the main function are hot,
-        // and everything else are cold.
-        //
-        ReleaseAssert(!m_wrapper->hasSection());
-        m_wrapper->setSection(x_hot_code_section_name);
+        std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_fusedICs[fusedInIcOrd].get());
 
-        // Link in the FuseICIntoInterpreterOpcode specializations, if any
+        std::unique_ptr<Module> spModule = std::move(component->m_module);
+        std::string expectedFnName = bi.m_fusedICs[fusedInIcOrd]->m_resultFuncName;
+        ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
+        ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
+        ReleaseAssert(expectedFnName == bi.m_affliatedBytecodeFnNames[fusedInIcOrd]);
+
+        Linker linker(*module.get());
+        // linkInModule returns true on error
         //
-        ReleaseAssert(m_affliatedBytecodeFnNames.size() == m_fusedICs.size());
-        for (size_t fusedInIcOrd = 0; fusedInIcOrd < m_fusedICs.size(); fusedInIcOrd++)
+        ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+        Function* linkedInFn = module->getFunction(expectedFnName);
+        ReleaseAssert(linkedInFn != nullptr);
+        ReleaseAssert(!linkedInFn->empty());
+        ReleaseAssert(!linkedInFn->hasSection());
+        linkedInFn->setSection(x_hot_code_section_name);
+    }
+
+    // Link in the quickening slow path if needed
+    // We link in the quickening slow path before the return continuations so that related code stay closer to each other.
+    // Though I guess the benefit of doing this is minimal, it doesn't hurt either, and it makes the assembly dump more readable..
+    //
+    ReleaseAssertIff(bi.m_bytecodeDef->HasQuickeningSlowPath(), bi.m_quickeningSlowPath.get() != nullptr);
+    if (bi.m_bytecodeDef->HasQuickeningSlowPath())
+    {
+        std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_quickeningSlowPath.get());
+
+        std::unique_ptr<Module> spModule = std::move(component->m_module);
+        std::string expectedSpName = bi.m_quickeningSlowPath->m_resultFuncName;
+        ReleaseAssert(expectedSpName == GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(bi.m_mainComponent->m_resultFuncName));
+        ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
+        ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
+
+        Linker linker(*module.get());
+        // linkInModule returns true on error
+        //
+        ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+        Function* linkedInFn = module->getFunction(expectedSpName);
+        ReleaseAssert(linkedInFn != nullptr);
+        ReleaseAssert(!linkedInFn->empty());
+        ReleaseAssert(!linkedInFn->hasSection());
+        linkedInFn->setSection(x_cold_code_section_name);
+    }
+
+    // Note that some of the return continuations could be dead (due to optimizations), however, since return continuations
+    // may arbitrarily call each other, we cannot know a return continuation is dead until we have linked in all the return continuations.
+    // So first we need to link in all return continuations.
+    //
+    for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
+    {
+        std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_allRetConts[rcOrdinal].get());
+
+        std::unique_ptr<Module> rcModule = std::move(component->m_module);
+        std::string expectedRcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        ReleaseAssert(expectedRcName == GetInterpreterBytecodeReturnContinuationFunctionCName(bytecodeDef, rcOrdinal));
+        ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
+        ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
+        // Optimization pass may have stripped the return continuation function if it's not directly used by the main function
+        // But if it exists, it should always be a declaration at this point
+        //
+        if (module->getFunction(expectedRcName) != nullptr)
         {
-            std::unique_ptr<Module> spModule = m_fusedICs[fusedInIcOrd]->DoOptimizationAndLowering();
-            std::string expectedFnName = m_fusedICs[fusedInIcOrd]->m_resultFuncName;
-            ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
-            ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
-            ReleaseAssert(expectedFnName == m_affliatedBytecodeFnNames[fusedInIcOrd]);
+            ReleaseAssert(module->getFunction(expectedRcName)->empty());
+        }
 
-            Linker linker(*m_module.get());
-            // linkInModule returns true on error
-            //
-            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+        Linker linker(*module.get());
+        // linkInModule returns true on error
+        //
+        ReleaseAssert(linker.linkInModule(std::move(rcModule)) == false);
 
-            Function* linkedInFn = m_module->getFunction(expectedFnName);
-            ReleaseAssert(linkedInFn != nullptr);
-            ReleaseAssert(!linkedInFn->empty());
-            ReleaseAssert(!linkedInFn->hasSection());
+        Function* linkedInFn = module->getFunction(expectedRcName);
+        ReleaseAssert(linkedInFn != nullptr);
+        ReleaseAssert(!linkedInFn->empty());
+        ReleaseAssert(!linkedInFn->hasSection());
+        if (fnNamesOfAllReturnContinuationsUsedByMainFn.count(expectedRcName))
+        {
+            fnNamesOfAllReturnContinuationsUsedByMainFn.erase(expectedRcName);
             linkedInFn->setSection(x_hot_code_section_name);
         }
-
-        // Link in the quickening slow path if needed
-        // We link in the quickening slow path before the return continuations so that related code stay closer to each other.
-        // Though I guess the benefit of doing this is minimal, it doesn't hurt either, and it makes the assembly dump more readable..
-        //
-        ReleaseAssertIff(m_bytecodeDef->HasQuickeningSlowPath(), m_quickeningSlowPath.get() != nullptr);
-        if (m_bytecodeDef->HasQuickeningSlowPath())
+        else
         {
-            std::unique_ptr<Module> spModule = m_quickeningSlowPath->DoOptimizationAndLowering();
-            std::string expectedSpName = m_quickeningSlowPath->m_resultFuncName;
-            ReleaseAssert(expectedSpName == GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName));
-            ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
-            ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
-
-            Linker linker(*m_module.get());
-            // linkInModule returns true on error
-            //
-            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
-
-            Function* linkedInFn = m_module->getFunction(expectedSpName);
-            ReleaseAssert(linkedInFn != nullptr);
-            ReleaseAssert(!linkedInFn->empty());
-            ReleaseAssert(!linkedInFn->hasSection());
             linkedInFn->setSection(x_cold_code_section_name);
-        }
-
-        // Note that some of the return continuations could be dead (due to optimizations), however, since return continuations
-        // may arbitrarily call each other, we cannot know a return continuation is dead until we have linked in all the return continuations.
-        // So first we need to link in all return continuations.
-        //
-        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
-        {
-            std::unique_ptr<Module> rcModule = m_allRetConts[rcOrdinal]->DoOptimizationAndLowering();
-            std::string expectedRcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
-            ReleaseAssert(expectedRcName == GetInterpreterBytecodeReturnContinuationFunctionCName(m_bytecodeDef, rcOrdinal));
-            ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
-            ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
-            // Optimization pass may have stripped the return continuation function if it's not directly used by the main function
-            // But if it exists, it should always be a declaration at this point
-            //
-            if (m_module->getFunction(expectedRcName) != nullptr)
-            {
-                ReleaseAssert(m_module->getFunction(expectedRcName)->empty());
-            }
-
-            Linker linker(*m_module.get());
-            // linkInModule returns true on error
-            //
-            ReleaseAssert(linker.linkInModule(std::move(rcModule)) == false);
-
-            Function* linkedInFn = m_module->getFunction(expectedRcName);
-            ReleaseAssert(linkedInFn != nullptr);
-            ReleaseAssert(!linkedInFn->empty());
-            ReleaseAssert(!linkedInFn->hasSection());
-            if (fnNamesOfAllReturnContinuationsUsedByMainFn.count(expectedRcName))
-            {
-                fnNamesOfAllReturnContinuationsUsedByMainFn.erase(expectedRcName);
-                linkedInFn->setSection(x_hot_code_section_name);
-            }
-            else
-            {
-                linkedInFn->setSection(x_cold_code_section_name);
-            }
-        }
-        ReleaseAssert(fnNamesOfAllReturnContinuationsUsedByMainFn.empty());
-
-        // Similarly, some slow paths could be dead. But we need to link in everything first.
-        //
-        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
-        {
-            std::unique_ptr<Module> spModule = m_slowPaths[slowPathOrd]->DoOptimizationAndLowering();
-            std::string expectedFnName = m_slowPaths[slowPathOrd]->m_resultFuncName;
-            ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
-            ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
-
-            Linker linker(*m_module.get());
-            // linkInModule returns true on error
-            //
-            ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
-
-            Function* linkedInFn = m_module->getFunction(expectedFnName);
-            ReleaseAssert(linkedInFn != nullptr);
-            ReleaseAssert(!linkedInFn->empty());
-            ReleaseAssert(!linkedInFn->hasSection());
-            linkedInFn->setSection(x_cold_code_section_name);
-        }
-
-        // Now, having linked in everything, we can strip dead return continuations and slow paths by
-        // changing the linkage of those functions to internal and run the DCE pass.
-        //
-        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
-        {
-            std::string rcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
-            Function* func = m_module->getFunction(rcName);
-            ReleaseAssert(func != nullptr);
-            ReleaseAssert(!func->empty());
-            ReleaseAssert(func->hasExternalLinkage());
-            func->setLinkage(GlobalValue::InternalLinkage);
-        }
-
-        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
-        {
-            std::string spName = m_slowPaths[slowPathOrd]->m_resultFuncName;
-            Function* func = m_module->getFunction(spName);
-            ReleaseAssert(func != nullptr);
-            ReleaseAssert(!func->empty());
-            ReleaseAssert(func->hasExternalLinkage());
-            func->setLinkage(GlobalValue::InternalLinkage);
-        }
-
-        RunLLVMDeadGlobalElimination(m_module.get());
-
-        // In theory it's fine to leave them with internal linkage now, since they are exclusively
-        // used by our bytecode, but some of our callers expects them to have external linkage.
-        // So we will change the surviving functions back to external linkage after DCE.
-        //
-        for (size_t rcOrdinal = 0; rcOrdinal < m_allRetConts.size(); rcOrdinal++)
-        {
-            std::string rcName = m_allRetConts[rcOrdinal]->m_resultFuncName;
-            Function* func = m_module->getFunction(rcName);
-            if (func != nullptr)
-            {
-                ReleaseAssert(func->hasInternalLinkage());
-                func->setLinkage(GlobalValue::ExternalLinkage);
-            }
-            else
-            {
-                ReleaseAssert(m_module->getNamedValue(rcName) == nullptr);
-            }
-        }
-
-        // Additionally, for slow paths, the function names are not unique across translational units.
-        // So at this stage, we will rename them and give each of the survived slow path a unique name
-        //
-        std::vector<Function*> survivedSlowPathFns;
-        for (size_t slowPathOrd = 0; slowPathOrd < m_slowPaths.size(); slowPathOrd++)
-        {
-            std::string spName = m_slowPaths[slowPathOrd]->m_resultFuncName;
-            Function* func = m_module->getFunction(spName);
-            if (func != nullptr)
-            {
-                ReleaseAssert(func->hasInternalLinkage());
-                func->setLinkage(GlobalValue::ExternalLinkage);
-                survivedSlowPathFns.push_back(func);
-            }
-            else
-            {
-                ReleaseAssert(m_module->getNamedValue(spName) == nullptr);
-            }
-        }
-
-        for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
-        {
-            Function* func = survivedSlowPathFns[ord];
-            std::string newFnName = m_resultFuncName + "_slow_path_" + std::to_string(ord);
-            ReleaseAssert(m_module->getNamedValue(newFnName) == nullptr);
-            func->setName(newFnName);
-            ReleaseAssert(func->getName() == newFnName);
         }
     }
-    else
+    ReleaseAssert(fnNamesOfAllReturnContinuationsUsedByMainFn.empty());
+
+    // Similarly, some slow paths could be dead. But we need to link in everything first.
+    //
+    for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
     {
-        ReleaseAssert(m_allRetConts.size() == 0);
+        std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_slowPaths[slowPathOrd].get());
+
+        std::unique_ptr<Module> spModule = std::move(component->m_module);
+        std::string expectedFnName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
+        ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
+
+        Linker linker(*module.get());
+        // linkInModule returns true on error
+        //
+        ReleaseAssert(linker.linkInModule(std::move(spModule)) == false);
+
+        Function* linkedInFn = module->getFunction(expectedFnName);
+        ReleaseAssert(linkedInFn != nullptr);
+        ReleaseAssert(!linkedInFn->empty());
+        ReleaseAssert(!linkedInFn->hasSection());
+        linkedInFn->setSection(x_cold_code_section_name);
     }
 
-    ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
-    m_wrapper = nullptr;
-    return std::move(m_module);
+    // Now, having linked in everything, we can strip dead return continuations and slow paths by
+    // changing the linkage of those functions to internal and run the DCE pass.
+    //
+    for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
+    {
+        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        Function* func = module->getFunction(rcName);
+        ReleaseAssert(func != nullptr);
+        ReleaseAssert(!func->empty());
+        ReleaseAssert(func->hasExternalLinkage());
+        func->setLinkage(GlobalValue::InternalLinkage);
+    }
+
+    for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
+    {
+        std::string spName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        Function* func = module->getFunction(spName);
+        ReleaseAssert(func != nullptr);
+        ReleaseAssert(!func->empty());
+        ReleaseAssert(func->hasExternalLinkage());
+        func->setLinkage(GlobalValue::InternalLinkage);
+    }
+
+    RunLLVMDeadGlobalElimination(module.get());
+
+    // In theory it's fine to leave them with internal linkage now, since they are exclusively
+    // used by our bytecode, but some of our callers expects them to have external linkage.
+    // So we will change the surviving functions back to external linkage after DCE.
+    //
+    for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
+    {
+        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        Function* func = module->getFunction(rcName);
+        if (func != nullptr)
+        {
+            ReleaseAssert(func->hasInternalLinkage());
+            func->setLinkage(GlobalValue::ExternalLinkage);
+        }
+        else
+        {
+            ReleaseAssert(module->getNamedValue(rcName) == nullptr);
+        }
+    }
+
+    // Additionally, for slow paths, the function names are not unique across translational units.
+    // So at this stage, we will rename them and give each of the survived slow path a unique name
+    //
+    std::vector<Function*> survivedSlowPathFns;
+    for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
+    {
+        std::string spName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        Function* func = module->getFunction(spName);
+        if (func != nullptr)
+        {
+            ReleaseAssert(func->hasInternalLinkage());
+            func->setLinkage(GlobalValue::ExternalLinkage);
+            survivedSlowPathFns.push_back(func);
+        }
+        else
+        {
+            ReleaseAssert(module->getNamedValue(spName) == nullptr);
+        }
+    }
+
+    for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
+    {
+        Function* func = survivedSlowPathFns[ord];
+        std::string newFnName = bi.m_mainComponent->m_resultFuncName + "_slow_path_" + std::to_string(ord);
+        ReleaseAssert(module->getNamedValue(newFnName) == nullptr);
+        func->setName(newFnName);
+        ReleaseAssert(func->getName() == newFnName);
+    }
+
+    return module;
 }
 
 }   // namespace dast
