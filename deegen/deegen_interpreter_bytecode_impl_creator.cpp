@@ -278,7 +278,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         //
         BasicBlock* slowpathBB;
         {
-            std::string slowpathName = BytecodeIrInfo::GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName);
+            std::string slowpathName = BytecodeIrInfo::GetQuickeningSlowPathFuncName(m_bytecodeDef);
             Function* slowpathFn = InterpreterFunctionInterface::CreateFunction(m_module.get(), slowpathName);
             slowpathFn->addFnAttr(Attribute::AttrKind::NoReturn);
             slowpathFn->addFnAttr(Attribute::AttrKind::NoInline);
@@ -470,7 +470,7 @@ void InterpreterBytecodeImplCreator::DoLowering()
     m_wrapper->removeFnAttr(Attribute::AttrKind::NoReturn);
     if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
     {
-        std::string slowPathFnName = BytecodeIrInfo::GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(m_resultFuncName);
+        std::string slowPathFnName = BytecodeIrInfo::GetQuickeningSlowPathFuncName(m_bytecodeDef);
         Function* slowPathFn = m_module->getFunction(slowPathFnName);
         ReleaseAssert(slowPathFn != nullptr);
         ReleaseAssert(slowPathFn->hasFnAttribute(Attribute::AttrKind::NoReturn));
@@ -640,7 +640,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
         std::unique_ptr<Module> spModule = std::move(component->m_module);
         std::string expectedSpName = bi.m_quickeningSlowPath->m_resultFuncName;
-        ReleaseAssert(expectedSpName == BytecodeIrInfo::GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(bi.m_mainComponent->m_resultFuncName));
+        ReleaseAssert(expectedSpName == BytecodeIrInfo::GetQuickeningSlowPathFuncName(bytecodeDef));
         ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
 
@@ -666,7 +666,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
         std::unique_ptr<Module> rcModule = std::move(component->m_module);
         std::string expectedRcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
-        ReleaseAssert(expectedRcName == BytecodeIrInfo::GetInterpreterBytecodeReturnContinuationFunctionCName(bytecodeDef, rcOrdinal));
+        ReleaseAssert(expectedRcName == BytecodeIrInfo::GetRetContFuncName(bytecodeDef, rcOrdinal));
         ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
         ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
         // Optimization pass may have stripped the return continuation function if it's not directly used by the main function
@@ -750,6 +750,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // used by our bytecode, but some of our callers expects them to have external linkage.
     // So we will change the surviving functions back to external linkage after DCE.
     //
+    // Also update 'bi' to remove all the dead return continuations, so that 'bi' doesn't contain
+    // unnecessary data and corresponds exactly to the situation in the module.
+    //
+    std::vector<std::unique_ptr<BytecodeIrComponent>> survivedRetConts;
     for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
     {
         std::string rcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
@@ -758,17 +762,19 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         {
             ReleaseAssert(func->hasInternalLinkage());
             func->setLinkage(GlobalValue::ExternalLinkage);
+            survivedRetConts.push_back(std::move(bi.m_allRetConts[rcOrdinal]));
         }
         else
         {
             ReleaseAssert(module->getNamedValue(rcName) == nullptr);
         }
     }
+    bi.m_allRetConts = std::move(survivedRetConts);
 
     // Additionally, for slow paths, the function names are not unique across translational units.
     // So at this stage, we will rename them and give each of the survived slow path a unique name
     //
-    std::vector<Function*> survivedSlowPathFns;
+    std::vector<std::pair<Function*, std::unique_ptr<BytecodeIrComponent>>> survivedSlowPathFns;
     for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
     {
         std::string spName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
@@ -777,7 +783,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         {
             ReleaseAssert(func->hasInternalLinkage());
             func->setLinkage(GlobalValue::ExternalLinkage);
-            survivedSlowPathFns.push_back(func);
+            survivedSlowPathFns.push_back(std::make_pair(func, std::move(bi.m_slowPaths[slowPathOrd])));
         }
         else
         {
@@ -785,13 +791,39 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         }
     }
 
+    // Similarly, update 'bi' to remove the dead slowpaths and make sure they have up-to-date names
+    //
+    bi.m_slowPaths.clear();
     for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
     {
-        Function* func = survivedSlowPathFns[ord];
+        Function* func = survivedSlowPathFns[ord].first;
         std::string newFnName = bi.m_mainComponent->m_resultFuncName + "_slow_path_" + std::to_string(ord);
         ReleaseAssert(module->getNamedValue(newFnName) == nullptr);
         func->setName(newFnName);
         ReleaseAssert(func->getName() == newFnName);
+        bi.m_slowPaths.push_back(std::move(survivedSlowPathFns[ord].second));
+        bi.m_slowPaths.back()->m_resultFuncName = newFnName;
+    }
+
+    // Rename the '__deegen_bytecode_' generic prefix to '__deegen_interpreter_op' to prevent
+    // name collision with the other execution tiers of the engine.
+    //
+    std::vector<Function*> allFunctionsToRename;
+    for (Function& func : *module)
+    {
+        if (func.getName().startswith("__deegen_bytecode_"))
+        {
+            allFunctionsToRename.push_back(&func);
+        }
+    }
+
+    for (Function* func : allFunctionsToRename)
+    {
+        std::string fnName = func->getName().str();
+        fnName = BytecodeIrInfo::ToInterpreterName(fnName);
+        ReleaseAssert(module->getNamedValue(fnName) == nullptr);
+        func->setName(fnName);
+        ReleaseAssert(func->getName() == fnName);
     }
 
     return module;

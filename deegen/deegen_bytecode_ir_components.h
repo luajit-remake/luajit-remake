@@ -110,38 +110,26 @@ struct BytecodeIrInfo
     static BytecodeIrInfo WARN_UNUSED Create(BytecodeVariantDefinition* bytecodeDef, llvm::Function* mainImpl);
 
     // Some misc naming-related utilities
-    // TODO: we should decouple the "interpreter" part and the rest of the naming scheme
     //
-    static std::string WARN_UNUSED GetInterpreterBytecodeFunctionCName(BytecodeVariantDefinition* bytecodeDef)
+    static std::string WARN_UNUSED ToInterpreterName(const std::string& genericName)
     {
-        return std::string("__deegen_interpreter_op_") + bytecodeDef->m_bytecodeName + "_" + std::to_string(bytecodeDef->m_variantOrd);
+        ReleaseAssert(genericName.starts_with("__deegen_bytecode_"));
+        return "__deegen_interpreter_op_" + genericName.substr(strlen("__deegen_bytecode_"));
     }
 
-    static std::string WARN_UNUSED GetInterpreterBytecodeReturnContinuationFunctionCName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd)
+    static std::string WARN_UNUSED GetBaseName(BytecodeVariantDefinition* bytecodeDef)
     {
-        return GetInterpreterBytecodeFunctionCName(bytecodeDef) + "_retcont_" + std::to_string(rcOrd);
+        return std::string("__deegen_bytecode_") + bytecodeDef->m_bytecodeName + "_" + std::to_string(bytecodeDef->m_variantOrd);
     }
 
-    static std::string GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(const std::string& bytecodeFnName)
+    static std::string WARN_UNUSED GetRetContFuncName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd)
     {
-        return bytecodeFnName + "_quickening_slowpath";
+        return GetBaseName(bytecodeDef) + "_retcont_" + std::to_string(rcOrd);
     }
 
-    static bool WARN_UNUSED IsFunctionReturnContinuationOfBytecode(llvm::Function* func, const std::string& bytecodeVariantMainFuncName)
+    static std::string GetQuickeningSlowPathFuncName(BytecodeVariantDefinition* bytecodeDef)
     {
-        std::string fnName = func->getName().str();
-        std::string expectedPrefix = bytecodeVariantMainFuncName + "_retcont_";
-        if (!fnName.starts_with(expectedPrefix))
-        {
-            return false;
-        }
-        fnName = fnName.substr(expectedPrefix.length());
-        ReleaseAssert(fnName.length() > 0);
-        for (size_t i = 0; i < fnName.length(); i++)
-        {
-            ReleaseAssert('0' <= fnName[i] && fnName[i] <= '9');
-        }
-        return true;
+        return GetBaseName(bytecodeDef) + "_quickening_slowpath";
     }
 };
 

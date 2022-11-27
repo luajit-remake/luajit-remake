@@ -280,7 +280,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
     BytecodeIrInfo r;
     r.m_bytecodeDef = bytecodeDef;
 
-    std::string resultMainFnName = GetInterpreterBytecodeFunctionCName(bytecodeDef);
+    std::string resultMainFnName = GetBaseName(bytecodeDef);
     std::string implFuncName = resultMainFnName + "_impl";
     ReleaseAssert(module->getNamedValue(implFuncName) == nullptr);
     mainImplFn->setName(implFuncName);
@@ -315,7 +315,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             {
                 Function* rc = it.second;
                 rcList.push_back(rc);
-                std::string rcFinalName = GetInterpreterBytecodeReturnContinuationFunctionCName(bytecodeDef, rcOrd);
+                std::string rcFinalName = GetRetContFuncName(bytecodeDef, rcOrd);
                 std::string rcImplName = rcFinalName + "_impl";
                 ReleaseAssert(module->getNamedValue(rcFinalName) == nullptr);
                 ReleaseAssert(module->getNamedValue(rcImplName) == nullptr);
@@ -340,7 +340,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             // Temporarily change 'm_impl' to the function name for the slowpath
             //
             std::string oldName = mainImplFn->getName().str();
-            std::string desiredName = GetQuickeningSlowPathFunctionNameFromBytecodeMainFunctionName(resultMainFnName) + "_impl";
+            std::string desiredName = GetQuickeningSlowPathFuncName(bytecodeDef) + "_impl";
             mainImplFn->setName(desiredName);
             ReleaseAssert(mainImplFn->getName().str() == desiredName);
 

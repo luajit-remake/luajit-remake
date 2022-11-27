@@ -724,30 +724,28 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
             BytecodeIrInfo* bii = bvdImplMap[bytecodeVariantDef.get()].get();
             std::unique_ptr<Module> resultModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*bii);
-            std::vector<std::string> m_affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
-            std::string m_mainFunctionName = bii->m_mainComponent->m_resultFuncName;
-            ReleaseAssert(m_mainFunctionName == BytecodeIrInfo::GetInterpreterBytecodeFunctionCName(bytecodeVariantDef.get()));
+            std::vector<std::string> affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
 
-            size_t totalSubVariantsInThisVariant = 1 + m_affliatedFunctionNameList.size();
+            size_t totalSubVariantsInThisVariant = 1 + affliatedFunctionNameList.size();
             totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
-            std::string variantMainFunctionName = m_mainFunctionName;
-            for (Function& func : *resultModule.get())
+            std::string variantMainFunctionName = BytecodeIrInfo::ToInterpreterName(bii->m_mainComponent->m_resultFuncName);
+            for (auto& it : bii->m_allRetConts)
             {
-                if (BytecodeIrInfo::IsFunctionReturnContinuationOfBytecode(&func, variantMainFunctionName))
-                {
-                    ReleaseAssert(func.hasExternalLinkage());
-                    ReleaseAssert(!func.empty());
-                    allReturnContinuationNames.push_back(func.getName().str());
-                }
+                std::string fnName = BytecodeIrInfo::ToInterpreterName(it->m_resultFuncName);
+                Function* func = resultModule->getFunction(fnName);
+                ReleaseAssert(func != nullptr);
+                ReleaseAssert(func->hasExternalLinkage());
+                ReleaseAssert(!func->empty());
+                allReturnContinuationNames.push_back(func->getName().str());
             }
 
             finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".s", DumpAuditFileAsm(resultModule.get())));
             finalRes.m_auditFiles.push_back(std::make_pair(variantMainFunctionName + ".ll", DumpAuditFileIR(resultModule.get())));
             allBytecodeFunctions.push_back(std::move(resultModule));
             cdeclNameForVariants.push_back(variantMainFunctionName);
-            for (std::string& fnName : m_affliatedFunctionNameList)
+            for (std::string& fnName : affliatedFunctionNameList)
             {
-                cdeclNameForVariants.push_back(fnName);
+                cdeclNameForVariants.push_back(BytecodeIrInfo::ToInterpreterName(fnName));
             }
 
             // If this variant has metadata, it's time to generate the corresponding definition now
