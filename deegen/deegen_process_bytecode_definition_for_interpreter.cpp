@@ -728,10 +728,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             size_t totalSubVariantsInThisVariant = 1 + affliatedFunctionNameList.size();
             totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
-            std::string variantMainFunctionName = BytecodeIrInfo::ToInterpreterName(bii->m_mainComponent->m_resultFuncName);
+            std::string variantMainFunctionName = BytecodeIrInfo::ToInterpreterName(bii->m_mainComponent->m_identFuncName);
             for (auto& it : bii->m_allRetConts)
             {
-                std::string fnName = BytecodeIrInfo::ToInterpreterName(it->m_resultFuncName);
+                std::string fnName = BytecodeIrInfo::ToInterpreterName(it->m_identFuncName);
                 Function* func = resultModule->getFunction(fnName);
                 ReleaseAssert(func != nullptr);
                 ReleaseAssert(func->hasExternalLinkage());

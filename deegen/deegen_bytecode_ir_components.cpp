@@ -98,7 +98,7 @@ BytecodeIrComponent::BytecodeIrComponent(BytecodeIrComponent::ProcessFusedInIcEf
     {
         std::string implFuncName = m_impl->getName().str();
         ReleaseAssert(implFuncName.ends_with("_impl"));
-        m_resultFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl")) + "_fused_ic_" + std::to_string(icEffectOrd);
+        m_identFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl")) + "_fused_ic_" + std::to_string(icEffectOrd);
     }
 
     // Populate the implementation of the inline cache adaption placeholder functions
@@ -161,13 +161,13 @@ BytecodeIrComponent::BytecodeIrComponent(BytecodeVariantDefinition* bytecodeDef,
     //
     if (m_processKind == BytecodeIrComponentKind::SlowPath)
     {
-        m_resultFuncName = AstSlowPath::GetPostProcessSlowPathFunctionNameForInterpreter(m_impl);
+        m_identFuncName = AstSlowPath::GetPostProcessSlowPathFunctionNameForInterpreter(m_impl);
     }
     else
     {
         std::string implFuncName = m_impl->getName().str();
         ReleaseAssert(implFuncName.ends_with("_impl"));
-        m_resultFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl"));
+        m_identFuncName = implFuncName.substr(0, implFuncName.length() - strlen("_impl"));
     }
 
     // At this stage we can drop the bytecode definition global symbol, which will render all bytecode definitions dead.
@@ -483,7 +483,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
         {
             std::unique_ptr<BytecodeIrComponent> processor = std::make_unique<BytecodeIrComponent>(
                 BytecodeIrComponent::ProcessFusedInIcEffectTag(), bytecodeDef, mainImplFn, i /*effectKindOrd*/);
-            r.m_affliatedBytecodeFnNames.push_back(processor->m_resultFuncName);
+            r.m_affliatedBytecodeFnNames.push_back(processor->m_identFuncName);
             r.m_fusedICs.push_back(std::move(processor));
         }
 

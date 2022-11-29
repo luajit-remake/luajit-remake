@@ -399,7 +399,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeIrCompone
     ReleaseAssert(m_impl != nullptr);
     ReleaseAssert(m_impl->getName() == bic.m_impl->getName());
     m_wrapper = nullptr;
-    m_resultFuncName = bic.m_resultFuncName;
+    m_resultFuncName = bic.m_identFuncName;
     m_generated = false;
 }
 
@@ -612,7 +612,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_fusedICs[fusedInIcOrd].get());
 
         std::unique_ptr<Module> spModule = std::move(component->m_module);
-        std::string expectedFnName = bi.m_fusedICs[fusedInIcOrd]->m_resultFuncName;
+        std::string expectedFnName = bi.m_fusedICs[fusedInIcOrd]->m_identFuncName;
         ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
         ReleaseAssert(expectedFnName == bi.m_affliatedBytecodeFnNames[fusedInIcOrd]);
@@ -639,7 +639,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_quickeningSlowPath.get());
 
         std::unique_ptr<Module> spModule = std::move(component->m_module);
-        std::string expectedSpName = bi.m_quickeningSlowPath->m_resultFuncName;
+        std::string expectedSpName = bi.m_quickeningSlowPath->m_identFuncName;
         ReleaseAssert(expectedSpName == BytecodeIrInfo::GetQuickeningSlowPathFuncName(bytecodeDef));
         ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
@@ -665,7 +665,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_allRetConts[rcOrdinal].get());
 
         std::unique_ptr<Module> rcModule = std::move(component->m_module);
-        std::string expectedRcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        std::string expectedRcName = bi.m_allRetConts[rcOrdinal]->m_identFuncName;
         ReleaseAssert(expectedRcName == BytecodeIrInfo::GetRetContFuncName(bytecodeDef, rcOrdinal));
         ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
         ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
@@ -705,7 +705,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_slowPaths[slowPathOrd].get());
 
         std::unique_ptr<Module> spModule = std::move(component->m_module);
-        std::string expectedFnName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        std::string expectedFnName = bi.m_slowPaths[slowPathOrd]->m_identFuncName;
         ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
 
@@ -726,7 +726,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     //
     for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
     {
-        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_identFuncName;
         Function* func = module->getFunction(rcName);
         ReleaseAssert(func != nullptr);
         ReleaseAssert(!func->empty());
@@ -736,7 +736,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
     for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
     {
-        std::string spName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        std::string spName = bi.m_slowPaths[slowPathOrd]->m_identFuncName;
         Function* func = module->getFunction(spName);
         ReleaseAssert(func != nullptr);
         ReleaseAssert(!func->empty());
@@ -756,7 +756,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     std::vector<std::unique_ptr<BytecodeIrComponent>> survivedRetConts;
     for (size_t rcOrdinal = 0; rcOrdinal < bi.m_allRetConts.size(); rcOrdinal++)
     {
-        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_resultFuncName;
+        std::string rcName = bi.m_allRetConts[rcOrdinal]->m_identFuncName;
         Function* func = module->getFunction(rcName);
         if (func != nullptr)
         {
@@ -777,7 +777,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     std::vector<std::pair<Function*, std::unique_ptr<BytecodeIrComponent>>> survivedSlowPathFns;
     for (size_t slowPathOrd = 0; slowPathOrd < bi.m_slowPaths.size(); slowPathOrd++)
     {
-        std::string spName = bi.m_slowPaths[slowPathOrd]->m_resultFuncName;
+        std::string spName = bi.m_slowPaths[slowPathOrd]->m_identFuncName;
         Function* func = module->getFunction(spName);
         if (func != nullptr)
         {
@@ -797,12 +797,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
     {
         Function* func = survivedSlowPathFns[ord].first;
-        std::string newFnName = bi.m_mainComponent->m_resultFuncName + "_slow_path_" + std::to_string(ord);
+        std::string newFnName = bi.m_mainComponent->m_identFuncName + "_slow_path_" + std::to_string(ord);
         ReleaseAssert(module->getNamedValue(newFnName) == nullptr);
         func->setName(newFnName);
         ReleaseAssert(func->getName() == newFnName);
         bi.m_slowPaths.push_back(std::move(survivedSlowPathFns[ord].second));
-        bi.m_slowPaths.back()->m_resultFuncName = newFnName;
+        bi.m_slowPaths.back()->m_identFuncName = newFnName;
     }
 
     // Rename the '__deegen_bytecode_' generic prefix to '__deegen_interpreter_op' to prevent
