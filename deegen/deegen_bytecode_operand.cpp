@@ -55,6 +55,49 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     return result;
 }
 
+json WARN_UNUSED BcOperand::SaveBaseToJSON()
+{
+    json j;
+    j["kind"] = StringifyBcOperandKind(GetKind());
+    j["name"] = m_name;
+    j["operand_ordinal"] = m_operandOrdinal;
+    j["offset_in_bcstruct"] = m_offsetInBytecodeStruct;
+    j["size_in_bcstruct"] = m_sizeInBytecodeStruct;
+    return j;
+}
+
+BcOperand::BcOperand(json& j)
+{
+    JSONCheckedGet(j, "name", m_name /*out*/);
+    JSONCheckedGet(j, "operand_ordinal", m_operandOrdinal /*out*/);
+    JSONCheckedGet(j, "offset_in_bcstruct", m_offsetInBytecodeStruct /*out*/);
+    JSONCheckedGet(j, "size_in_bcstruct", m_sizeInBytecodeStruct /*out*/);
+}
+
+std::unique_ptr<BcOperand> WARN_UNUSED BcOperand::LoadFromJSON(json& j)
+{
+    BcOperandKind opKind = GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind"));
+    switch (opKind)
+    {
+#define macro(e) case BcOperandKind::e: return std::make_unique< BcOp ## e >(j);
+        PP_FOR_EACH(macro, BC_OPERAND_KIND_LIST)
+#undef macro
+    }
+    ReleaseAssert(false);
+}
+
+BcOpSlot::BcOpSlot(json& j)
+    : BcOperand(j)
+{
+    ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Slot);
+}
+
+json WARN_UNUSED BcOpSlot::SaveToJSON()
+{
+    json j = SaveBaseToJSON();
+    return j;
+}
+
 llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     using namespace llvm;
@@ -66,6 +109,20 @@ llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(InterpreterBy
     bv->setAlignment(Align(8));
     ReleaseAssert(bv->getType() == GetUsageType(ctx));
     return bv;
+}
+
+BcOpConstant::BcOpConstant(json& j)
+    : BcOperand(j)
+{
+    ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Constant);
+    JSONCheckedGet(j, "typeMask", m_typeMask /*out*/);
+}
+
+json WARN_UNUSED BcOpConstant::SaveToJSON()
+{
+    json j = SaveBaseToJSON();
+    j["typeMask"] = m_typeMask;
+    return j;
 }
 
 llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
@@ -92,12 +149,45 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(Interpret
     }
 }
 
+BcOpLiteral::BcOpLiteral(json& j)
+    : BcOperand(j)
+{
+    // This class is not final and is inherited by SpecializedLiteral, so both class could be calling us
+    //
+    BcOperandKind opKind = GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind"));
+    ReleaseAssert(opKind == BcOperandKind::Literal || opKind == BcOperandKind::SpecializedLiteral);
+    JSONCheckedGet(j, "lit_is_signed", m_isSigned /*out*/);
+    JSONCheckedGet(j, "lit_num_bytes", m_numBytes /*out*/);
+}
+
+json WARN_UNUSED BcOpLiteral::SaveToJSON()
+{
+    json j = SaveBaseToJSON();
+    j["lit_is_signed"] = m_isSigned;
+    j["lit_num_bytes"] = m_numBytes;
+    return j;
+}
+
 llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* /*targetBB*/ /*out*/, llvm::Value* bytecodeValue)
 {
     ReleaseAssert(bytecodeValue != nullptr);
     ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(bytecodeValue->getContext()));
     ReleaseAssert(bytecodeValue->getType() == GetUsageType(bytecodeValue->getContext()));
     return bytecodeValue;
+}
+
+BcOpSpecializedLiteral::BcOpSpecializedLiteral(json& j)
+    : BcOpLiteral(j)
+{
+    ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::SpecializedLiteral);
+    JSONCheckedGet(j, "lit_concrete_value", m_concreteValue /*out*/);
+}
+
+json WARN_UNUSED BcOpSpecializedLiteral::SaveToJSON()
+{
+    json j = BcOpLiteral::SaveToJSON();
+    j["lit_concrete_value"] = m_concreteValue;
+    return j;
 }
 
 llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* /*ifi*/, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
@@ -110,6 +200,46 @@ llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue
     return res;
 }
 
+BcOpBytecodeRangeBase::BcOpBytecodeRangeBase(json& j)
+    : BcOperand(j)
+{
+    ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::BytecodeRangeBase);
+    JSONCheckedGet(j, "range_is_readonly", m_isReadOnly /*out*/);
+    JSONCheckedGet(j, "range_has_limit", m_hasRangeLimit /*out*/);
+    if (m_hasRangeLimit)
+    {
+        JSONCheckedGet(j, "range_limit_is_constant", m_isRangeLimitConstant /*out*/);
+        if (m_isRangeLimitConstant)
+        {
+            JSONCheckedGet(j, "range_constant_limit", m_constantRangeLimit /*out*/);
+        }
+        else
+        {
+            ReleaseAssert(false && "operand range limit is unimplemented yet!");
+        }
+    }
+}
+
+json WARN_UNUSED BcOpBytecodeRangeBase::SaveToJSON()
+{
+    json j = SaveBaseToJSON();
+    j["range_is_readonly"] = m_isReadOnly;
+    j["range_has_limit"] = m_hasRangeLimit;
+    if (m_hasRangeLimit)
+    {
+        j["range_limit_is_constant"] = m_isRangeLimitConstant;
+        if (m_isRangeLimitConstant)
+        {
+            j["range_constant_limit"] = m_constantRangeLimit;
+        }
+        else
+        {
+            ReleaseAssert(false && "operand range limit is unimplemented yet!");
+        }
+    }
+    return j;
+}
+
 llvm::Value* WARN_UNUSED BcOpBytecodeRangeBase::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
 {
     using namespace llvm;
@@ -118,6 +248,20 @@ llvm::Value* WARN_UNUSED BcOpBytecodeRangeBase::EmitUsageValueFromBytecodeValue(
     Value* res = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { bytecodeValue }, "", targetBB);
     ReleaseAssert(res->getType() == GetUsageType(ctx));
     return res;
+}
+
+BcOpInlinedMetadata::BcOpInlinedMetadata(json& j)
+    : BcOperand(j)
+{
+    ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::InlinedMetadata);
+    JSONCheckedGet(j, "inline_md_size", m_size /*out*/);
+}
+
+json WARN_UNUSED BcOpInlinedMetadata::SaveToJSON()
+{
+    json j = SaveBaseToJSON();
+    j["inline_md_size"] = m_size;
+    return j;
 }
 
 llvm::Value* WARN_UNUSED BcOpInlinedMetadata::EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue)
@@ -540,6 +684,144 @@ void BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemov
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_defListSymbolName) == nullptr);
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_nameListSymbolName) == nullptr);
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_sameLengthConstraintListSymbolName) == nullptr);
+}
+
+BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
+{
+    JSONCheckedGet(j, "bytecode_ord_in_tu", m_bytecodeOrdInTU);
+    JSONCheckedGet(j, "bytecode_variant_ord", m_variantOrd);
+    JSONCheckedGet(j, "bytecode_name", m_bytecodeName);
+    JSONCheckedGet(j, "impl_function_name", m_implFunctionName);
+    m_opNames = j["operand_name_list"];
+    {
+        ReleaseAssert(j.count("original_operand_type_list") && j["original_operand_type_list"].is_array());
+        std::vector<int> originalOperandTypes = j["original_operand_type_list"];
+        for (int val : originalOperandTypes) { m_originalOperandTypes.push_back(static_cast<DeegenBytecodeOperandType>(val)); }
+    }
+    {
+        ReleaseAssert(j.count("operand_list") && j["operand_list"].is_array());
+        std::vector<json> operand_list = j["operand_list"];
+        for (json& op_json : operand_list)
+        {
+            std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
+            m_list.push_back(std::move(op));
+        }
+    }
+    m_hasDecidedOperandWidth = true;
+    m_bytecodeStructLengthTentativelyFinalized = true;
+    m_bytecodeStructLengthFinalized = true;
+
+    JSONCheckedGet(j, "has_output_value", m_hasOutputValue);
+    if (m_hasOutputValue)
+    {
+        ReleaseAssert(j.count("output_operand"));
+        json op_json = j["output_operand"];
+        std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
+        ReleaseAssert(op->GetKind() == BcOperandKind::Slot);
+        m_outputOperand.reset(assert_cast<BcOpSlot*>(op.release()));
+    }
+
+    JSONCheckedGet(j, "has_cond_br_target", m_hasConditionalBranchTarget);
+    if (m_hasConditionalBranchTarget)
+    {
+        ReleaseAssert(j.count("cond_br_target_operand"));
+        json op_json = j["cond_br_target_operand"];
+        std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
+        ReleaseAssert(op->GetKind() == BcOperandKind::Literal);
+        m_condBrTarget.reset(assert_cast<BcOpLiteral*>(op.release()));
+    }
+
+    // The bytecode metadata info is currently not serialized since the JIT doesn't need it
+    //
+    m_metadataStructInfoAssigned = false;
+
+    JSONCheckedGet(j, "is_interpreter_call_ic_explicitly_disabled", m_isInterpreterCallIcExplicitlyDisabled);
+    JSONCheckedGet(j, "is_interpreter_call_ic_ever_used", m_isInterpreterCallIcEverUsed);
+
+    {
+        int quickeningKindInt = JSONCheckedGet<int>(j, "quickening_kind");
+        m_quickeningKind = static_cast<BytecodeQuickeningKind>(quickeningKindInt);
+    }
+
+    {
+        ReleaseAssert(j.count("quickening_descriptor") && j["quickening_descriptor"].is_array());
+        std::vector<std::vector<size_t>> serializedQuickeningDescList = j["quickening_descriptor"];
+        for (auto& item : serializedQuickeningDescList)
+        {
+            ReleaseAssert(item.size() == 2);
+            BytecodeOperandQuickeningDescriptor desc;
+            desc.m_operandOrd = item[0];
+            desc.m_speculatedMask = SafeIntegerCast<TypeSpeculationMask>(item[1]);
+            m_quickening.push_back(desc);
+        }
+    }
+
+    JSONCheckedGet(j, "bytecode_struct_length", m_bytecodeStructLength);
+}
+
+json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
+{
+    json j;
+    j["bytecode_ord_in_tu"] = m_bytecodeOrdInTU;
+    j["bytecode_variant_ord"] = m_variantOrd;
+    j["bytecode_name"] = m_bytecodeName;
+    j["impl_function_name"] = m_implFunctionName;
+    j["operand_name_list"] = m_opNames;
+    {
+        std::vector<int> originalOperandTypes;
+        for (DeegenBytecodeOperandType val : m_originalOperandTypes) { originalOperandTypes.push_back(static_cast<int>(val)); }
+        j["original_operand_type_list"] = originalOperandTypes;
+    }
+    {
+        std::vector<json> operand_list;
+        for (std::unique_ptr<BcOperand>& op : m_list)
+        {
+            operand_list.push_back(op->SaveToJSON());
+        }
+        j["operand_list"] = operand_list;
+    }
+
+    ReleaseAssert(m_hasDecidedOperandWidth);
+    ReleaseAssert(m_bytecodeStructLengthTentativelyFinalized);
+    ReleaseAssert(m_bytecodeStructLengthFinalized);
+
+    j["has_output_value"] = m_hasOutputValue;
+    if (m_hasOutputValue)
+    {
+        j["output_operand"] = m_outputOperand->SaveToJSON();
+    }
+
+    j["has_cond_br_target"] = m_hasConditionalBranchTarget;
+    if (m_hasConditionalBranchTarget)
+    {
+        j["cond_br_target_operand"] = m_condBrTarget->SaveToJSON();
+    }
+
+    // The bytecode metadata info is currently not serialized since the JIT doesn't need it
+    //
+
+    j["is_interpreter_call_ic_explicitly_disabled"] = m_isInterpreterCallIcExplicitlyDisabled;
+    j["is_interpreter_call_ic_ever_used"] = m_isInterpreterCallIcEverUsed;
+
+    j["quickening_kind"] = static_cast<int>(m_quickeningKind);
+
+    {
+        std::vector<std::vector<size_t>> serializedQuickeningDescList;
+        for (auto& it : m_quickening)
+        {
+            serializedQuickeningDescList.push_back(std::vector<size_t> { it.m_operandOrd, it.m_speculatedMask });
+        }
+        j["quickening_descriptor"] = serializedQuickeningDescList;
+    }
+
+    // m_allOtherQuickenings not serialized since it's not used right now.
+    // m_sameLengthConstraintList not serialized since JIT doesn't care about it.
+    // m_metadataStructInfo and m_interpreterCallIcMetadata not serialized since JIT doesn't need it.
+    //
+
+    j["bytecode_struct_length"] = m_bytecodeStructLength;
+
+    return j;
 }
 
 }   // namespace dast

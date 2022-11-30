@@ -2,21 +2,44 @@
 
 #include "misc_llvm_helper.h"
 
+#include "json_utils.h"
 #include "api_define_bytecode.h"
 #include "deegen_bytecode_metadata.h"
 #include "deegen_call_inline_cache.h"
 
 namespace dast {
 
+#define BC_OPERAND_KIND_LIST    \
+    Slot                        \
+  , Constant                    \
+  , Literal                     \
+  , SpecializedLiteral          \
+  , BytecodeRangeBase           \
+  , InlinedMetadata             \
+
 enum class BcOperandKind
 {
-    Slot,
-    Constant,
-    Literal,
-    SpecializedLiteral,
-    BytecodeRangeBase,
-    InlinedMetadata
+    BC_OPERAND_KIND_LIST
 };
+
+inline const char* StringifyBcOperandKind(BcOperandKind kind)
+{
+#define macro(e) case BcOperandKind::e: return PP_STRINGIFY(e);
+    switch (kind)
+    {
+        PP_FOR_EACH(macro, BC_OPERAND_KIND_LIST)
+    }
+    ReleaseAssert(false);
+#undef macro
+}
+
+inline BcOperandKind GetBcOperandKindFromString(const std::string& strBcOpKind)
+{
+#define macro(e) if (strBcOpKind == std::string_view { PP_STRINGIFY(e) }) { return BcOperandKind::e; }
+    PP_FOR_EACH(macro, BC_OPERAND_KIND_LIST)
+    ReleaseAssert(false);
+#undef macro
+}
 
 class InterpreterBytecodeImplCreator;
 
@@ -138,6 +161,14 @@ public:
     //
     llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB);
 
+    virtual json WARN_UNUSED SaveToJSON() = 0;
+
+    static std::unique_ptr<BcOperand> WARN_UNUSED LoadFromJSON(json& j);
+
+protected:
+    json WARN_UNUSED SaveBaseToJSON();
+    BcOperand(json& j);
+
 private:
     std::string m_name;
     // The ordinal of this operand in the bytecode definition
@@ -158,6 +189,8 @@ public:
     BcOpSlot(const std::string& name)
         : BcOperand(name)
     { }
+
+    BcOpSlot(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -184,6 +217,8 @@ public:
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
+    virtual json WARN_UNUSED SaveToJSON() override final;
 };
 
 // A bytecode operand that refers to a constant in the constant table
@@ -195,6 +230,8 @@ public:
         : BcOperand(name)
         , m_typeMask(mask)
     { }
+
+    BcOpConstant(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -233,6 +270,8 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
+    virtual json WARN_UNUSED SaveToJSON() override final;
+
     // The statically-known type mask of this constant
     //
     TypeSpeculationMask m_typeMask;
@@ -248,6 +287,8 @@ public:
         , m_isSigned(isSigned)
         , m_numBytes(numBytes)
     { }
+
+    BcOpLiteral(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -309,6 +350,8 @@ public:
         }
     }
 
+    virtual json WARN_UNUSED SaveToJSON() override;
+
     // The sign and width of this literal
     //
     bool m_isSigned;
@@ -336,6 +379,8 @@ public:
             }
         }
     }
+
+    BcOpSpecializedLiteral(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -367,6 +412,8 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
+    virtual json WARN_UNUSED SaveToJSON() override final;
+
     uint64_t m_concreteValue;
 };
 
@@ -383,6 +430,8 @@ public:
         , m_constantRangeLimit(0)
         , m_operandRangeLimit(nullptr)
     { }
+
+    BcOpBytecodeRangeBase(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -433,6 +482,8 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
+    virtual json WARN_UNUSED SaveToJSON() override final;
+
     bool m_isReadOnly;
     bool m_hasRangeLimit;
     bool m_isRangeLimitConstant;
@@ -449,6 +500,8 @@ public:
         : BcOperand("inlined_bytecode_metadata")
         , m_size(size)
     { }
+
+    BcOpInlinedMetadata(json& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -478,6 +531,8 @@ public:
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+
+    virtual json WARN_UNUSED SaveToJSON() override final;
 
     size_t m_size;
 };
@@ -516,6 +571,9 @@ struct BytecodeOperandQuickeningDescriptor
 class BytecodeVariantDefinition
 {
 public:
+    BytecodeVariantDefinition() = default;
+    BytecodeVariantDefinition(json& j);
+
     void SetMaxOperandWidthBytes(size_t maxWidthBytesInput)
     {
         ReleaseAssert(!m_hasDecidedOperandWidth);
@@ -672,6 +730,8 @@ public:
         m_interpreterCallIcMetadata = res.second;
         ReleaseAssert(m_interpreterCallIcMetadata.IcExists());
     }
+
+    json WARN_UNUSED SaveToJSON();
 
     // For now we have a fixed 2-byte opcode header for simplicity
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future

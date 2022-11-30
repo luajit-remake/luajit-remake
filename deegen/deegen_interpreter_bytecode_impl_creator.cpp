@@ -548,7 +548,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // be put into the cold code section.
     //
     std::unordered_set<std::string> fnNamesOfAllReturnContinuationsUsedByMainFn;
-    ReturnContinuationAndSlowPathFinder rcFinder(bi.m_mainComponent->m_impl, true /*ignoreSlowPaths*/);
+    ReturnContinuationAndSlowPathFinder rcFinder(bi.m_interpreterMainComponent->m_impl, true /*ignoreSlowPaths*/);
     for (Function* func : rcFinder.m_returnContinuations)
     {
         std::string rcImplName = func->getName().str();
@@ -563,7 +563,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     // Process the main component
     //
     {
-        std::unique_ptr<InterpreterBytecodeImplCreator> mainComponent = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_mainComponent.get());
+        std::unique_ptr<InterpreterBytecodeImplCreator> mainComponent = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_interpreterMainComponent.get());
 
         // Extract the necessary functions from the main component
         // We need to extract the result function and any IC body functions that didn't get inlined
@@ -797,7 +797,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
     {
         Function* func = survivedSlowPathFns[ord].first;
-        std::string newFnName = bi.m_mainComponent->m_identFuncName + "_slow_path_" + std::to_string(ord);
+        std::string newFnName = bi.m_interpreterMainComponent->m_identFuncName + "_slow_path_" + std::to_string(ord);
         ReleaseAssert(module->getNamedValue(newFnName) == nullptr);
         func->setName(newFnName);
         ReleaseAssert(func->getName() == newFnName);

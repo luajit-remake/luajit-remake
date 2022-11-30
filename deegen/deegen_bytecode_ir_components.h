@@ -59,9 +59,15 @@ struct BytecodeIrComponent
     //
     BytecodeIrComponent(ProcessFusedInIcEffectTag, BytecodeVariantDefinition* bytecodeDef, llvm::Function* impl, size_t icEffectOrd);
 
+    // Load BytecodeIrComponent from JSON
+    //
+    BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json& j);
+
     // Run the deegen-level optimization passes
     //
     void DoOptimization();
+
+    json WARN_UNUSED SaveToJSON();
 };
 
 // The class that holds all the LLVM IR information about one bytecode
@@ -72,9 +78,19 @@ struct BytecodeIrInfo
     //
     BytecodeVariantDefinition* m_bytecodeDef;
 
-    // The main implementation function
+    // The main implementation function for the interpreter
+    // The difference between 'm_interpreterMainComponent' and 'm_jitMainComponent" is that 'm_interpreterMainComponent' has
+    // already lowered the inline caching API to the implementation expected by the interpreter.
     //
-    std::unique_ptr<BytecodeIrComponent> m_mainComponent;
+    // It is kind of bad that interpreter-specific lowering is coupled with this class, but currently we are doing it
+    // because the bytecode metadata struct / the bytecode final length / the fused-IC list cannot be determined until
+    // the inline caching APIs have been lowered for the interpreter.
+    //
+    std::unique_ptr<BytecodeIrComponent> m_interpreterMainComponent;
+
+    // The inline caching API hasn't been lowered yet in this component.
+    //
+    std::unique_ptr<BytecodeIrComponent> m_jitMainComponent;
 
     // All the return continuation functions
     //
@@ -107,6 +123,11 @@ struct BytecodeIrInfo
     //
     std::vector<std::string> m_icBodyNames;
 
+    // This struct may or may not be the owner of the BytecodeVariantDefinition.
+    // But if it is, this is the one that owns the BytecodeVariantDefinition.
+    //
+    std::unique_ptr<BytecodeVariantDefinition> m_bytecodeDefHolder;
+
     static BytecodeIrInfo WARN_UNUSED Create(BytecodeVariantDefinition* bytecodeDef, llvm::Function* mainImpl);
 
     // Some misc naming-related utilities
@@ -131,6 +152,11 @@ struct BytecodeIrInfo
     {
         return GetBaseName(bytecodeDef) + "_quickening_slowpath";
     }
+
+    BytecodeIrInfo() = default;
+    BytecodeIrInfo(llvm::LLVMContext& ctx, json& j);
+
+    json WARN_UNUSED SaveToJSON();
 };
 
 // A utility helper to find all the return continuations and slow paths in a bytecode definition

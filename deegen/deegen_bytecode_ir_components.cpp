@@ -5,6 +5,8 @@
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "tvalue_typecheck_optimization.h"
+#include "base64_util.h"
+#include "llvm/IRReader/IRReader.h"
 
 namespace dast {
 
@@ -252,6 +254,45 @@ void BytecodeIrComponent::DoOptimization()
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 }
 
+BytecodeIrComponent::BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json& j)
+{
+    using namespace llvm;
+
+    {
+        int processKindInt = JSONCheckedGet<int>(j, "kind");
+        m_processKind = static_cast<BytecodeIrComponentKind>(processKindInt);
+    }
+
+    m_bytecodeDef = bytecodeDef;
+    JSONCheckedGet(j, "ident_func_name", m_identFuncName);
+    std::string moduleStr = base64_decode(JSONCheckedGet<std::string>(j, "llvm_module"));
+    std::string moduleName = "bytecode_ir_component_module";
+
+    SMDiagnostic llvmErr;
+    MemoryBufferRef mb(StringRef(moduleStr.data(), moduleStr.length()), StringRef(moduleName.data(), moduleName.length()));
+
+    m_module = parseIR(mb, llvmErr, ctx);
+    ReleaseAssert(m_module.get() != nullptr);
+
+    std::string implFuncName = JSONCheckedGet<std::string>(j, "impl_func_name");
+    Function* func = m_module->getFunction(implFuncName);
+    ReleaseAssert(func != nullptr);
+    m_impl = func;
+}
+
+json WARN_UNUSED BytecodeIrComponent::SaveToJSON()
+{
+    json j;
+    j["kind"] = static_cast<int>(m_processKind);
+    j["ident_func_name"] = m_identFuncName;
+    std::string implFuncName = m_impl->getName().str();
+    ReleaseAssert(m_module->getFunction(implFuncName) == m_impl);
+    j["impl_func_name"] = implFuncName;
+    std::string b64modStr = base64_encode(DumpLLVMModuleAsString(m_module.get()));
+    j["llvm_module"] = b64modStr;
+    return j;
+}
+
 static llvm::Function* CreateGetBytecodeMetadataPtrPlaceholderFnDeclaration(llvm::Module* module)
 {
     using namespace llvm;
@@ -386,6 +427,8 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             }
         }
     }
+
+    r.m_jitMainComponent = std::make_unique<BytecodeIrComponent>(bytecodeDef, mainImplFn, BytecodeIrComponentKind::Main);
 
     // Process all the inline caches
     //
@@ -522,7 +565,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
         }
     }
 
-    r.m_mainComponent = std::make_unique<BytecodeIrComponent>(bytecodeDef, mainImplFn, BytecodeIrComponentKind::Main);
+    r.m_interpreterMainComponent = std::make_unique<BytecodeIrComponent>(bytecodeDef, mainImplFn, BytecodeIrComponentKind::Main);
 
     ReleaseAssert(!bytecodeDef->IsBytecodeStructLengthTentativelyFinalized());
 
@@ -537,7 +580,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
         // deduced that calls are unreachable and removed them.
         //
         bool needCallIc = false;
-        if (AstMakeCall::GetAllUseInFunction(r.m_mainComponent->m_impl).size() > 0)
+        if (AstMakeCall::GetAllUseInFunction(r.m_interpreterMainComponent->m_impl).size() > 0)
         {
             needCallIc = true;
         }
@@ -556,6 +599,66 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
     bytecodeDef->TentativelyFinalizeBytecodeStructLength();
 
     return r;
+}
+
+BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
+{
+    ReleaseAssert(j.count("bytecode_variant_definition"));
+    m_bytecodeDefHolder = std::make_unique<BytecodeVariantDefinition>(j["bytecode_variant_definition"]);
+    m_bytecodeDef = m_bytecodeDefHolder.get();
+    ReleaseAssert(j.count("jit_main_component"));
+    m_jitMainComponent = std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, j["jit_main_component"]);
+
+    {
+        ReleaseAssert(j.count("all_return_continuations") && j["all_return_continuations"].is_array());
+        std::vector<json> allRetConts = j["all_return_continuations"];
+        for (auto& it : allRetConts)
+        {
+            m_allRetConts.push_back(std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, it));
+        }
+    }
+
+    if (j.count("quickening_slow_path"))
+    {
+        m_quickeningSlowPath = std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, j["quickening_slow_path"]);
+    }
+
+    {
+        ReleaseAssert(j.count("all_slow_paths") && j["all_slow_paths"].is_array());
+        std::vector<json> allSlowPaths = j["all_slow_paths"];
+        for (auto& it : allSlowPaths)
+        {
+            m_slowPaths.push_back(std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, it));
+        }
+    }
+}
+
+json WARN_UNUSED BytecodeIrInfo::SaveToJSON()
+{
+    json j;
+    j["bytecode_variant_definition"] = m_bytecodeDef->SaveToJSON();
+    j["jit_main_component"] = m_jitMainComponent->SaveToJSON();
+    {
+        std::vector<json> allRetConts;
+        for (auto& it : m_allRetConts)
+        {
+            allRetConts.push_back(it->SaveToJSON());
+        }
+        j["all_return_continuations"] = allRetConts;
+    }
+    if (m_quickeningSlowPath.get() != nullptr)
+    {
+        j["quickening_slow_path"] = m_quickeningSlowPath->SaveToJSON();
+    }
+    {
+        std::vector<json> allSlowPaths;
+        for (auto& it : m_slowPaths)
+        {
+            allSlowPaths.push_back(it->SaveToJSON());
+        }
+        j["all_slow_paths"] = allSlowPaths;
+    }
+    return j;
 }
 
 }   // namespace dast

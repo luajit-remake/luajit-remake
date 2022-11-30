@@ -56,6 +56,8 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     j["header-name"] = GetFileNameFromAbsolutePath(cl_headerOutputFilename);
     j["class-names"] = result.m_generatedClassNames;
     j["cdecl-names"] = result.m_allExternCDeclarations;
+    j["all-bytecode-info"] = result.m_bytecodeInfoJson;
+
     jsonOutFile.write(j.dump(4 /*indent*/));
 
     for (auto& it : result.m_auditFiles)

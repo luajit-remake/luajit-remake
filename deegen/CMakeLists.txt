@@ -34,6 +34,7 @@ add_library(deegen_utils
   llvm_flatten_select_structure_pass.cpp
   deegen_ast_get_output_slot.cpp
   deegen_bytecode_ir_components.cpp
+  base64_util.cpp
 ) 
 
 # Build the main Futamura projection stage binary

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "json_utils.h"
 #include "misc_llvm_helper.h"
 
 namespace dast {
@@ -13,6 +14,7 @@ struct ProcessBytecodeDefinitionForInterpreterResult
     std::vector<std::vector<std::string>> m_allExternCDeclarations;
     std::vector<std::pair<std::string /*auditFileName*/, std::string /*content*/>> m_auditFiles;
     std::string m_generatedHeaderFile;
+    json m_bytecodeInfoJson;
 };
 
 ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module);
