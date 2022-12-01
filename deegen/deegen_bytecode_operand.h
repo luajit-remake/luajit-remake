@@ -42,6 +42,7 @@ inline BcOperandKind GetBcOperandKindFromString(const std::string& strBcOpKind)
 }
 
 class InterpreterBytecodeImplCreator;
+class DeegenBytecodeImplCreatorBase;
 
 // The base class for a bytecode operand
 //
@@ -95,7 +96,7 @@ public:
     // 'targetBB' is the basic block where the logic should be appended to.
     // 'bytecodeValue' is an i64 denoting the value of the operand in the bytecode struct (or void if it is eliminated from bytecode struct).
     //
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
 
     llvm::Type* WARN_UNUSED GetSourceValueFullRepresentationType(llvm::LLVMContext& ctx)
     {
@@ -159,7 +160,7 @@ public:
     // Emit decoding logic into 'targetBB', and return the decoded operand value in the bytecode struct
     // 'bytecodeStruct' must have type i8*
     //
-    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB);
+    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB);
 
     virtual json WARN_UNUSED SaveToJSON() = 0;
 
@@ -216,7 +217,7 @@ public:
         return llvm_type_of<uint64_t>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
 };
@@ -268,7 +269,7 @@ public:
         return llvm_type_of<uint64_t>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
 
@@ -312,7 +313,7 @@ public:
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 8));
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     DeegenBytecodeOperandType GetLiteralType()
     {
@@ -410,7 +411,7 @@ public:
         return m_isSigned;
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
 
@@ -480,7 +481,7 @@ public:
         return llvm_type_of<void*>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
 
@@ -530,7 +531,7 @@ public:
         return llvm_type_of<void*>(ctx);
     }
 
-    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
+    virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
 

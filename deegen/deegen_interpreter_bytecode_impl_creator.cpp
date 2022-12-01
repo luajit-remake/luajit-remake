@@ -12,62 +12,13 @@
 #include "llvm_fcmp_extra_optimizations.h"
 #include "deegen_ast_inline_cache.h"
 #include "deegen_ast_slow_path.h"
+#include "deegen_type_based_hcs_helper.h"
 
 #include "llvm/Linker/Linker.h"
 
 #include "runtime_utils.h"
 
 namespace dast {
-
-static std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> GetQuickeningSlowPathAdditionalArgs(BytecodeVariantDefinition* bytecodeDef)
-{
-    ReleaseAssert(bytecodeDef->HasQuickeningSlowPath());
-
-    // We can only use the unused registers in InterpreterFunctionInterface, so unfortunately this is
-    // currently tightly coupled with our value-passing convention of InterpreterFunctionInterface..
-    //
-    // The already-decoded args will be passed to the continuation using registers in the following order.
-    //
-    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecodeSlowPath();
-    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath();
-
-    // We will use pop_back for simplicity, so reverse the vector now
-    //
-    std::reverse(gprList.begin(), gprList.end());
-    std::reverse(fprList.begin(), fprList.end());
-
-    std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> res;
-    for (auto& it : bytecodeDef->m_quickening)
-    {
-        TypeSpeculationMask mask = it.m_speculatedMask;
-        // This is the only case that we want to (and can) use FPR to hold the TValue directly
-        //
-        bool shouldUseFPR = (mask == x_typeSpeculationMaskFor<tDoubleNotNaN>);
-        size_t operandOrd = it.m_operandOrd;
-
-        if (shouldUseFPR)
-        {
-            if (fprList.empty())
-            {
-                continue;
-            }
-            size_t argOrd = fprList.back();
-            fprList.pop_back();
-            res[operandOrd] = argOrd;
-        }
-        else
-        {
-            if (gprList.empty())
-            {
-                continue;
-            }
-            size_t argOrd = gprList.back();
-            gprList.pop_back();
-            res[operandOrd] = argOrd;
-        }
-    }
-    return res;
-}
 
 void InterpreterBytecodeImplCreator::CreateWrapperFunction()
 {
@@ -152,7 +103,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> alreadyDecodedArgs;
     if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
     {
-        alreadyDecodedArgs = GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
+        alreadyDecodedArgs = TypeBasedHCSHelper::GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
     }
 
     std::vector<Value*> opcodeValues;
@@ -219,23 +170,8 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
             if (alreadyDecodedArgs.count(operand->OperandOrdinal()))
             {
                 size_t argOrd = alreadyDecodedArgs[operand->OperandOrdinal()];
-                ReleaseAssert(argOrd < m_wrapper->arg_size());
-                Value* arg = m_wrapper->getArg(static_cast<uint32_t>(argOrd));
-                if (llvm_value_has_type<double>(arg))
-                {
-                    Instruction* dblToI64 = new BitCastInst(arg, llvm_type_of<uint64_t>(ctx), "", currentBlock);
-                    usageValues.push_back(dblToI64);
-                }
-                else if (llvm_value_has_type<void*>(arg))
-                {
-                    Instruction* ptrToI64 = new PtrToIntInst(arg, llvm_type_of<uint64_t>(ctx), "", currentBlock);
-                    usageValues.push_back(ptrToI64);
-                }
-                else
-                {
-                    ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
-                    usageValues.push_back(arg);
-                }
+                Value* arg = TypeBasedHCSHelper::GetBytecodeOperandUsageValueFromAlreadyDecodedArgs(m_wrapper, argOrd, currentBlock);
+                usageValues.push_back(arg);
             }
             else
             {
@@ -273,74 +209,9 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         // If we are the main function and we are a quickening bytecode, we need to check that the quickening condition holds.
         // We can only run 'm_impl' if the condition holds. If not, we must transfer control to the quickening slow path.
         //
+        TypeBasedHCSHelper::GenerateCheckConditionLogic(this, usageValues, currentBlock /*inout*/);
 
-        // First let's create the basic block that fallbacks to the slow path
-        //
-        BasicBlock* slowpathBB;
-        {
-            std::string slowpathName = BytecodeIrInfo::GetQuickeningSlowPathFuncName(m_bytecodeDef);
-            Function* slowpathFn = InterpreterFunctionInterface::CreateFunction(m_module.get(), slowpathName);
-            slowpathFn->addFnAttr(Attribute::AttrKind::NoReturn);
-            slowpathFn->addFnAttr(Attribute::AttrKind::NoInline);
-            ReleaseAssert(slowpathFn->getName() == slowpathName);
-            slowpathBB = BasicBlock::Create(ctx, "slowpath", m_wrapper);
-            Instruction* tmp = new UnreachableInst(ctx, slowpathBB);
-            CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(slowpathFn, GetCoroutineCtx(), GetStackBase(), GetCurBytecode(), GetCodeBlock(), tmp /*insertBefore*/);
-            tmp->eraseFromParent();
-            std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> extraArgs = GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
-            for (auto& it : extraArgs)
-            {
-                uint64_t operandOrd = it.first;
-                ReleaseAssert(operandOrd < usageValues.size());
-                uint64_t argOrd = it.second;
-                ReleaseAssert(argOrd < slowpathFn->arg_size());
-                Type* desiredArgTy = slowpathFn->getArg(static_cast<uint32_t>(argOrd))->getType();
-                Value* srcValue = usageValues[operandOrd];
-                ReleaseAssert(llvm_value_has_type<uint64_t>(srcValue));
-                Value* argValue;
-                if (llvm_type_has_type<double>(desiredArgTy))
-                {
-                    argValue = new BitCastInst(srcValue, llvm_type_of<double>(ctx), "", callInst /*insertBefore*/);
-                }
-                else if (llvm_type_has_type<void*>(desiredArgTy))
-                {
-                    argValue = new IntToPtrInst(srcValue, llvm_type_of<void*>(ctx), "", callInst /*insertBefore*/);
-                }
-                else
-                {
-                    ReleaseAssert(llvm_type_has_type<uint64_t>(desiredArgTy));
-                    argValue = srcValue;
-                }
-                ReleaseAssert(argValue->getType() == desiredArgTy);
-                ReleaseAssert(dyn_cast<UndefValue>(callInst->getArgOperand(static_cast<uint32_t>(argOrd))) != nullptr);
-                callInst->setArgOperand(static_cast<uint32_t>(argOrd), argValue);
-            }
-        }
-
-        // Now, create each check of the quickening condition
-        //
-        Function* expectIntrin = Intrinsic::getDeclaration(m_module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
-        TypeCheckFunctionSelector tcFnSelector(m_module.get());
-
-        for (auto& it : m_bytecodeDef->m_quickening)
-        {
-            size_t operandOrd = it.m_operandOrd;
-            ReleaseAssert(operandOrd < usageValues.size());
-            TypeSpeculationMask mask = it.m_speculatedMask;
-            TypeCheckFunctionSelector::QueryResult res = tcFnSelector.Query(mask, x_typeSpeculationMaskFor<tTop>);
-            ReleaseAssert(res.m_opKind == TypeCheckFunctionSelector::QueryResult::CallFunction);
-            Function* callee = res.m_func;
-            ReleaseAssert(callee != nullptr && callee->arg_size() == 1 && llvm_value_has_type<uint64_t>(callee->getArg(0)) && llvm_type_has_type<bool>(callee->getReturnType()));
-            CallInst* checkPassed = CallInst::Create(callee, { usageValues[operandOrd] }, "", currentBlock);
-            ReleaseAssert(llvm_value_has_type<bool>(checkPassed));
-            checkPassed = CallInst::Create(expectIntrin, { checkPassed, CreateLLVMConstantInt<bool>(ctx, true) }, "", currentBlock);
-
-            BasicBlock* newBB = BasicBlock::Create(ctx, "", m_wrapper);
-            BranchInst::Create(newBB /*ifTrue*/, slowpathBB /*ifFalse*/, checkPassed /*cond*/, currentBlock);
-            currentBlock = newBB;
-        }
-
-        // We've passed all checks. Now we can call our specialized fastpath 'm_impl' which assumes these checks are true
+        // At the end of 'currentBlock', we've passed all checks. Now we can call our specialized fastpath 'm_impl' which assumes these checks are true
         //
         CallInst::Create(m_impl, usageValues, "", currentBlock);
         new UnreachableInst(ctx, currentBlock);
@@ -390,11 +261,10 @@ void InterpreterBytecodeImplCreator::LowerGetBytecodeMetadataPtrAPI()
 }
 
 InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeIrComponent& bic)
+    : DeegenBytecodeImplCreatorBase(bic.m_bytecodeDef, bic.m_processKind)
 {
     using namespace llvm;
-    m_bytecodeDef = bic.m_bytecodeDef;
     m_module = CloneModule(*bic.m_module.get());
-    m_processKind = bic.m_processKind;
     m_impl = m_module->getFunction(bic.m_impl->getName());
     ReleaseAssert(m_impl != nullptr);
     ReleaseAssert(m_impl->getName() == bic.m_impl->getName());

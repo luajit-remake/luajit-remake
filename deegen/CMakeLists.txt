@@ -35,6 +35,8 @@ add_library(deegen_utils
   deegen_ast_get_output_slot.cpp
   deegen_bytecode_ir_components.cpp
   base64_util.cpp
+  deegen_type_based_hcs_helper.cpp
+  deegen_baseline_jit_impl_creator.cpp
 ) 
 
 # Build the main Futamura projection stage binary

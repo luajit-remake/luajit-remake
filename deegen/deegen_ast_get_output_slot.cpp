@@ -10,7 +10,7 @@ struct LowerGetOutputSlotApiPass final : public DeegenAbstractSimpleApiLoweringP
         return symbolName == "DeegenImpl_GetOutputBytecodeSlotOrdinal";
     }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         ReleaseAssert(origin->arg_size() == 0);

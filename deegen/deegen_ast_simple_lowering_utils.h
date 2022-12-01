@@ -7,7 +7,9 @@
 
 namespace dast {
 
+class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
+class BaselineJitImplCreator;
 
 // A simple abstraction for a common pattern of simple lowering passes: the pass defined some 'magic API'
 // exposed to the bytecode, and the lowering simply replaces the API call to some concrete implementation.
@@ -17,12 +19,23 @@ struct DeegenAbstractSimpleApiLoweringPass
 public:
     virtual ~DeegenAbstractSimpleApiLoweringPass() { }
 
-    // If any of the two functions below returned true, the 'DoLowering' method will be called
+    // If any of the two functions below returned true, the 'DoLoweringForXXX' method will be called
     //
     virtual bool WARN_UNUSED IsMagicCSymbol(const std::string& /*symbolName*/) { return false; }
     virtual bool WARN_UNUSED IsMagicCXXSymbol(const std::string& /*demangledSymbolName*/) { return false; }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) = 0;
+    // The generic DoLowering that will be called if the tier-specific DoLoweringForXXX is not overridden.
+    // User may override this for simplicity if the lowering logic is the same for any tier.
+    //
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* /*ifi*/, llvm::CallInst* /*origin*/)
+    {
+        ReleaseAssert(false);
+    }
+
+    // The tier-specific lowering action. If not overridden, the default action is to call the generic DoLowering()
+    //
+    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin);
+    virtual void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::CallInst* origin);
 };
 
 class DeegenAllSimpleApiLoweringPasses

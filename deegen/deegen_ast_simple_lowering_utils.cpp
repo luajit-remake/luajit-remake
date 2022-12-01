@@ -1,5 +1,6 @@
 #include "deegen_ast_simple_lowering_utils.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
 
 namespace dast {
 
@@ -82,6 +83,16 @@ void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecod
         CallInst* callInst = it.second;
         handler->DoLoweringForInterpreter(ifi, callInst);
     }
+}
+
+void DeegenAbstractSimpleApiLoweringPass::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin)
+{
+    DoLowering(ifi, origin);
+}
+
+void DeegenAbstractSimpleApiLoweringPass::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::CallInst* origin)
+{
+    DoLowering(ifi, origin);
 }
 
 }   // namespace dast
