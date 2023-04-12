@@ -141,7 +141,7 @@ bool WARN_UNUSED AddWithOverflowCheck(T a, T b, T* c /*out*/)
     else if constexpr(std::is_signed_v<T> && sizeof(T) == 8)
     {
         static_assert(sizeof(long long int) == 8);
-        return __builtin_saddll_overflow(a, b, c);
+        return __builtin_saddll_overflow(a, b, reinterpret_cast<long long int*>(c));
     }
     else if constexpr(!std::is_signed_v<T> && sizeof(T) == 4)
     {
@@ -152,7 +152,7 @@ bool WARN_UNUSED AddWithOverflowCheck(T a, T b, T* c /*out*/)
     {
         static_assert(!std::is_signed_v<T> && sizeof(T) == 8, "unexpected type T");
         static_assert(sizeof(unsigned long long int) == 8);
-        return __builtin_uaddll_overflow(a, b, c);
+        return __builtin_uaddll_overflow(a, b, reinterpret_cast<unsigned long long int*>(c));
     }
 }
 
@@ -171,7 +171,7 @@ bool WARN_UNUSED SubWithOverflowCheck(T a, T b, T* c /*out*/)
     else if constexpr(std::is_signed_v<T> && sizeof(T) == 8)
     {
         static_assert(sizeof(long long int) == 8);
-        return __builtin_ssubll_overflow(a, b, c);
+        return __builtin_ssubll_overflow(a, b, reinterpret_cast<long long int*>(c));
     }
     else if constexpr(!std::is_signed_v<T> && sizeof(T) == 4)
     {
@@ -182,7 +182,7 @@ bool WARN_UNUSED SubWithOverflowCheck(T a, T b, T* c /*out*/)
     {
         static_assert(!std::is_signed_v<T> && sizeof(T) == 8, "unexpected type T");
         static_assert(sizeof(unsigned long long int) == 8);
-        return __builtin_usubll_overflow(a, b, c);
+        return __builtin_usubll_overflow(a, b, reinterpret_cast<unsigned long long int*>(c));
     }
 }
 
@@ -201,7 +201,7 @@ bool WARN_UNUSED MulWithOverflowCheck(T a, T b, T* c /*out*/)
     else if constexpr(std::is_signed_v<T> && sizeof(T) == 8)
     {
         static_assert(sizeof(long long int) == 8);
-        return __builtin_smulll_overflow(a, b, c);
+        return __builtin_smulll_overflow(a, b, reinterpret_cast<long long int*>(c));
     }
     else if constexpr(!std::is_signed_v<T> && sizeof(T) == 4)
     {
@@ -212,7 +212,7 @@ bool WARN_UNUSED MulWithOverflowCheck(T a, T b, T* c /*out*/)
     {
         static_assert(!std::is_signed_v<T> && sizeof(T) == 8, "unexpected type T");
         static_assert(sizeof(unsigned long long int) == 8);
-        return __builtin_umulll_overflow(a, b, c);
+        return __builtin_umulll_overflow(a, b, reinterpret_cast<unsigned long long int*>(c));
     }
 }
 

@@ -11,7 +11,7 @@ struct LowerGuestLanguageFunctionReturnPass final : public DeegenAbstractSimpleA
         return symbolName == x_retNoneSymbol || symbolName == x_retSymbol || symbolName == x_retVarResSymbol;
     }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         std::string symbolName = origin->getCalledFunction()->getName().str();

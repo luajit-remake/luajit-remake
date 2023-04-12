@@ -4,7 +4,7 @@
 #include "runtime_utils.h"
 
 template<bool passVariadicRes>
-static void NO_RETURN TailCallCheckMetamethodSlowPath(TValue* /*base*/, uint32_t /*numArgs*/, TValue* base, uint32_t numArgs, TValue func)
+static void NO_RETURN TailCallCheckMetamethodSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, TValue* base, uint16_t numArgs, TValue func)
 {
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
@@ -24,7 +24,7 @@ static void NO_RETURN TailCallCheckMetamethodSlowPath(TValue* /*base*/, uint32_t
 }
 
 template<bool passVariadicRes>
-static void NO_RETURN TailCallOperationImpl(TValue* base, uint32_t numArgs)
+static void NO_RETURN TailCallOperationImpl(TValue* base, uint16_t numArgs)
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
@@ -50,11 +50,11 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TailCallOperation, bool passVariadicRes)
 {
     Operands(
         BytecodeRangeBaseRW("base"),
-        Literal<uint32_t>("numArgs")
+        Literal<uint16_t>("numArgs")
     );
     Result(NoOutput);
     Implementation(TailCallOperationImpl<passVariadicRes>);
-    for (uint32_t numArgs = 0; numArgs < 6; numArgs++)
+    for (uint16_t numArgs = 0; numArgs < 6; numArgs++)
     {
         Variant(Op("numArgs").HasValue(numArgs));
     }

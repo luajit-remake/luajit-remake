@@ -7,6 +7,15 @@ namespace dast {
 
 class BytecodeVariantDefinition;
 
+enum class DeegenEngineTier
+{
+    Interpreter,
+    BaselineJIT
+};
+
+class InterpreterBytecodeImplCreator;
+class BaselineJitImplCreator;
+
 class DeegenBytecodeImplCreatorBase
 {
 public:
@@ -17,6 +26,8 @@ public:
         , m_processKind(processKind)
         , m_valuePreserver()
     { }
+
+    virtual DeegenEngineTier WARN_UNUSED GetTier() const = 0;
 
     bool IsReturnContinuation() const { return m_processKind == BytecodeIrComponentKind::ReturnContinuation; }
 
@@ -47,6 +58,9 @@ public:
     {
         return CreateCallToDeegenRuntimeFunction(GetModule(), dcsName, args, insertBefore);
     }
+
+    bool WARN_UNUSED IsInterpreter() const { return GetTier() == DeegenEngineTier::Interpreter; }
+    bool WARN_UNUSED IsBaselineJIT() const { return GetTier() == DeegenEngineTier::BaselineJIT; }
 
 protected:
     BytecodeVariantDefinition* m_bytecodeDef;

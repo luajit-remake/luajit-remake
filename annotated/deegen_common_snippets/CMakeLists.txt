@@ -39,6 +39,11 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_func_obj_as_u64_from_tvalue.cpp
   get_immutable_upvalue.cpp
   get_mutable_upvalue.cpp
+  get_bytecode_ptr_from_bytecode_offset.cpp
+  translate_raw_pointer_to_sysheap_pointer.cpp
+  get_baseline_jit_slowpath_data_after_slow_call.cpp
+  round_up_to_multiple_of.cpp
+  get_baseline_jit_codeblock_from_codeblock.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

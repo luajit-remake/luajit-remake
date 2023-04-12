@@ -7,7 +7,11 @@
 
 namespace dast {
 
-static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module, llvm::CodeGenFileType outFileType, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module,
+                                                     llvm::CodeGenFileType outFileType,
+                                                     llvm::Reloc::Model relocationModel,
+                                                     llvm::CodeModel::Model codeModel,
+                                                     const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
 {
     using namespace llvm;
     std::string tripleStr = module->getTargetTriple();
@@ -28,6 +32,8 @@ static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module, llvm:
     }
     targetOptions.MCOptions.AsmVerbose = false;
     targetOptions.ExceptionModel = ExceptionHandling::None;
+
+    targetOptionsTweaker(targetOptions /*inout*/);
 
     ValidateLLVMModule(module);
 
@@ -125,12 +131,36 @@ static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module, llvm:
 
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel);
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel, [](llvm::TargetOptions&) { });
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
+{
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel, targetOptionsTweaker);
 }
 
 std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel);
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel, [](llvm::TargetOptions&) { });
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
+{
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel, targetOptionsTweaker);
+}
+
+llvm::object::ELFObjectFileBase* LoadElfObjectFile(llvm::LLVMContext& ctx, const std::string& fileContent)
+{
+    using namespace llvm;
+    using namespace llvm::object;
+    MemoryBufferRef mb(fileContent, "elf_object");
+    Expected<std::unique_ptr<Binary>> expectedBinary = llvm::object::createBinary(mb, &ctx);
+    ReleaseAssert(expectedBinary);
+    Binary* bin = expectedBinary.get().release();
+    ReleaseAssert(bin != nullptr);
+    ELFObjectFileBase* obj = dyn_cast<ELFObjectFileBase>(bin);
+    ReleaseAssert(obj != nullptr);
+    return obj;
 }
 
 }   // namespace dast

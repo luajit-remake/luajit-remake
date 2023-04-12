@@ -2120,4 +2120,90 @@ void AstInlineCache::DoLoweringForInterpreter()
     ValidateLLVMFunction(m_bodyFn);
 }
 
+void AstInlineCache::DoTrivialLowering()
+{
+    using namespace llvm;
+
+    // Lower each Effect API in the IC body
+    // No IC will be created, so it's sufficient to simply call the effect function
+    //
+    for (Effect& e : m_effects)
+    {
+        ReleaseAssert(e.m_effectFnBody->arg_size() == 1);
+        CallInst* replacement = CallInst::Create(e.m_effectFnBody, { e.m_effectFnBodyCapture }, "", e.m_origin /*insertBefore*/);
+        ReleaseAssert(replacement->getType() == e.m_origin->getType());
+        if (!llvm_value_has_type<void>(replacement))
+        {
+            e.m_origin->replaceAllUsesWith(replacement);
+        }
+        ReleaseAssert(e.m_origin->use_empty());
+        e.m_origin->eraseFromParent();
+
+        ReleaseAssert(!e.m_effectFnBody->hasFnAttribute(Attribute::NoInline));
+        e.m_effectFnBody->addFnAttr(Attribute::AlwaysInline);
+        ReleaseAssert(e.m_effectFnBody->getLinkage() == GlobalValue::InternalLinkage);
+    }
+
+    // Lower m_origin to simply call m_bodyFn
+    //
+    Value* icResult = CallInst::Create(m_bodyFn, m_bodyFnArgs, "", m_origin);
+    ReleaseAssert(icResult->getType() == m_origin->getType());
+    m_origin->replaceAllUsesWith(icResult);
+    m_origin->eraseFromParent();
+
+    // Make the IC body function always_inline since there is no reason to not inline it now
+    //
+    ReleaseAssert(!m_bodyFn->hasFnAttribute(Attribute::NoInline));
+    m_bodyFn->addFnAttr(Attribute::AlwaysInline);
+    m_bodyFn->setLinkage(GlobalValue::InternalLinkage);
+}
+
+void AstInlineCache::TriviallyLowerAllInlineCaches(llvm::Function* func)
+{
+    using namespace llvm;
+
+    std::vector<AstInlineCache> icList = AstInlineCache::GetAllUseInFunction(func);
+    for (AstInlineCache& ic : icList)
+    {
+        ic.DoTrivialLowering();
+    }
+
+    DesugarAndSimplifyLLVMModule(func->getParent(), DesugaringLevel::PerFunctionSimplifyOnly);
+
+    // Remove all use of MakeInlineCache() calls
+    //
+    for (AstInlineCache& ic : icList)
+    {
+        ReleaseAssert(ic.m_icPtrOrigin->use_empty());
+        ic.m_icPtrOrigin->eraseFromParent();
+    }
+
+    // Remove all use of the GetInterpreterBytecodePtrPlaceholder() placeholders
+    //
+    {
+        std::vector<CallInst*> allUses;
+        for (BasicBlock& bb : *func)
+        {
+            for (Instruction& inst : bb)
+            {
+                CallInst* ci = dyn_cast<CallInst>(&inst);
+                if (ci != nullptr && ci->getCalledFunction() != nullptr && ci->getCalledFunction()->getName() == x_get_bytecode_ptr_placeholder_fn_name)
+                {
+                    allUses.push_back(ci);
+                }
+            }
+        }
+
+        for (CallInst* ci : allUses)
+        {
+            ReleaseAssert(ci->use_empty());
+            ci->eraseFromParent();
+        }
+    }
+
+    ValidateLLVMFunction(func);
+
+    RunLLVMDeadGlobalElimination(func->getParent());
+}
+
 }   // namespace dast

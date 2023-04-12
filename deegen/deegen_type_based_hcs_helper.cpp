@@ -1,6 +1,7 @@
 #include "deegen_type_based_hcs_helper.h"
 #include "deegen_interpreter_function_interface.h"
 #include "tvalue_typecheck_optimization.h"
+#include "deegen_baseline_jit_impl_creator.h"
 
 namespace dast {
 
@@ -99,8 +100,31 @@ void TypeBasedHCSHelper::GenerateCheckConditionLogic(DeegenBytecodeImplCreatorBa
         ReleaseAssert(slowpathFn->getName() == slowpathName);
         slowpathBB = BasicBlock::Create(ctx, "slowpath", wrapper);
         Instruction* tmp = new UnreachableInst(ctx, slowpathBB);
-        CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(slowpathFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), ifi->GetCurBytecode(), ifi->GetCodeBlock(), tmp /*insertBefore*/);
+        Value* callSiteInfo = nullptr;
+        if (ifi->IsInterpreter())
+        {
+            // The interpreter needs to pass curBytecode to slowpath.
+            //
+            callSiteInfo = ifi->GetCurBytecode();
+        }
+        else
+        {
+            // The baseline JIT needs to pass the BaselineJITSlowPathData pointer
+            //
+            BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
+            ReleaseAssert(!j->IsBaselineJitSlowPath());
+            Value* offset = j->CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
+                                                                        llvm_type_of<uint64_t>(ctx),
+                                                                        1 /*lowerBound*/,
+                                                                        StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
+                                                                        tmp /*insertBefore*/);
+            Value* baselineJitCodeBlock = j->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { j->GetCodeBlock() }, tmp /*insertBefore*/);
+            ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
+            callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", tmp /*insertBefore*/);
+        }
+        CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(slowpathFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, ifi->GetCodeBlock(), tmp /*insertBefore*/);
         tmp->eraseFromParent();
+
         std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> extraArgs = GetQuickeningSlowPathAdditionalArgs(ifi->GetBytecodeDef());
         for (auto& it : extraArgs)
         {

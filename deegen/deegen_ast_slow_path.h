@@ -5,17 +5,18 @@
 
 namespace dast {
 
+class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
 
 class AstSlowPath
 {
 public:
     static void PreprocessModule(llvm::Module* module);
-    static void LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func);
+    static void LowerAllForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func);
     static std::vector<AstSlowPath> GetAllUseInFunction(llvm::Function* func);
 
     void CheckWellFormedness(llvm::Function* bytecodeImplFunc);
-    void LowerForInterpreter(InterpreterBytecodeImplCreator* ifi);
+    void LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi);
 
     llvm::Function* WARN_UNUSED GetImplFunction();
     static std::string WARN_UNUSED GetPostProcessSlowPathFunctionNameForInterpreter(llvm::Function* implFunc);

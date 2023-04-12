@@ -1,4 +1,5 @@
 #include "deegen_ast_return.h"
+#include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_bytecode_operand.h"
@@ -129,6 +130,52 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
         bytecodeTarget,
+        ifi->GetCodeBlock(),
+        m_origin /*insertBefore*/);
+
+    AssertInstructionIsFollowedByUnreachable(m_origin);
+    Instruction* unreachableInst = m_origin->getNextNode();
+    m_origin->eraseFromParent();
+    unreachableInst->eraseFromParent();
+    m_origin = nullptr;
+}
+
+void AstBytecodeReturn::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    // If the bytecode has an output, store it now
+    //
+    ReleaseAssertIff(HasValueOutput(), ifi->GetBytecodeDef()->m_hasOutputValue);
+    if (HasValueOutput())
+    {
+        Value* slot = ifi->GetOutputSlot();
+        ReleaseAssert(llvm_value_has_type<uint64_t>(slot));
+        GetElementPtrInst* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetStackBase(), { slot }, "", m_origin /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(m_valueOperand));
+        std::ignore = new StoreInst(m_valueOperand, bvPtr, false /*isVolatile*/, Align(8), m_origin /*insertBefore*/);
+    }
+
+    // Jump to the correct destination in JIT'ed code
+    //
+    Value* target;
+    if (DoesBranch())
+    {
+        ReleaseAssert(ifi->GetBytecodeDef()->m_hasConditionalBranchTarget);
+        target = ifi->GetCondBrDest();
+    }
+    else
+    {
+        target = ifi->GetFallthroughDest();
+    }
+    ReleaseAssert(llvm_value_has_type<void*>(target));
+
+    InterpreterFunctionInterface::CreateDispatchToBytecode(
+        target,
+        ifi->GetCoroutineCtx(),
+        ifi->GetStackBase(),
+        UndefValue::get(llvm_type_of<void*>(ctx)),
         ifi->GetCodeBlock(),
         m_origin /*insertBefore*/);
 

@@ -7,7 +7,9 @@
 
 namespace dast {
 
+class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
+class BaselineJitImplCreator;
 
 class AstMakeCall
 {
@@ -79,6 +81,13 @@ public:
     //
     static std::vector<AstMakeCall> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
+    // Emit generic logic that set up the new call frame
+    // 'callSiteInfo' should be nullptr for tail call, or the tier-specific CallSiteInfo (a uint32_t value, e.g., curBytecode for interpreter, etc) for normal calls
+    // The logic is emitted before 'm_origin'.
+    // The returned 'newSfBase' has type void*, and 'totalNumArgs' has type uint64_t
+    //
+    std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED EmitGenericNewCallFrameSetupLogic(DeegenBytecodeImplCreatorBase* ifi, llvm::Value* callSiteInfo);
+
     // Lower the call to concrete interpreter logic
     //
     void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi);
@@ -89,6 +98,19 @@ public:
         for (AstMakeCall& item : res)
         {
             item.DoLoweringForInterpreter(ifi);
+        }
+
+        ValidateLLVMFunction(func);
+    }
+
+    void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi);
+
+    static void LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
+    {
+        std::vector<AstMakeCall> res = GetAllUseInFunction(func);
+        for (AstMakeCall& item : res)
+        {
+            item.DoLoweringForBaselineJIT(ifi);
         }
 
         ValidateLLVMFunction(func);

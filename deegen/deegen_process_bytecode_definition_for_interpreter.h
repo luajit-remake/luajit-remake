@@ -7,8 +7,10 @@ namespace dast {
 
 struct ProcessBytecodeDefinitionForInterpreterResult
 {
-    std::unique_ptr<llvm::Module> m_processedModule;
+    std::unique_ptr<llvm::Module> m_referenceModule;
+    std::vector<std::unique_ptr<llvm::Module>> m_bytecodeModules;
     std::vector<std::string> m_generatedClassNames;
+    std::vector<std::string> m_returnContinuationNameList;
     // Has same length as m_generatedClassNames, each subvector holding the names of all the variants, in the same order as the opcode used by the builder
     //
     std::vector<std::vector<std::string>> m_allExternCDeclarations;

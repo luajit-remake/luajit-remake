@@ -49,10 +49,11 @@ static DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED GetPassHandlerMaybeNull(
     return result;
 }
 
-void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+template<typename Functor>
+static void ForEachUseOfDeegenSimpleApi(llvm::Function* func, const Functor& action)
 {
     using namespace llvm;
-    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = GetAllPasses();
+    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = DeegenAllSimpleApiLoweringPasses::GetAllPasses();
     std::vector<std::pair<DeegenAbstractSimpleApiLoweringPass*, CallInst*>> allUsesInFunction;
     for (BasicBlock& bb : *func)
     {
@@ -81,8 +82,24 @@ void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecod
     {
         DeegenAbstractSimpleApiLoweringPass* handler = it.first;
         CallInst* callInst = it.second;
-        handler->DoLoweringForInterpreter(ifi, callInst);
+        action(handler, callInst);
     }
+}
+
+void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    ForEachUseOfDeegenSimpleApi(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
+        handler->DoLoweringForInterpreter(ifi, origin);
+    });
+}
+
+void DeegenAllSimpleApiLoweringPasses::LowerAllForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    ForEachUseOfDeegenSimpleApi(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
+        handler->DoLoweringForBaselineJIT(ifi, origin);
+    });
 }
 
 void DeegenAbstractSimpleApiLoweringPass::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin)

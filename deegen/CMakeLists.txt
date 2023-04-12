@@ -37,6 +37,14 @@ add_library(deegen_utils
   base64_util.cpp
   deegen_type_based_hcs_helper.cpp
   deegen_baseline_jit_impl_creator.cpp
+  deegen_stencil_runtime_constant_insertion_pass.cpp
+  deegen_stencil_lowering_pass.cpp
+  invoke_clang_helper.cpp
+  deegen_stencil_creator.cpp
+  deegen_baseline_jit_codegen_logic_creator.cpp
+  deegen_process_bytecode_for_baseline_jit.cpp
+  deegen_postprocess_module_linker.cpp
+  llvm_identical_function_merger.cpp
 ) 
 
 # Build the main Futamura projection stage binary
@@ -47,6 +55,7 @@ add_executable(fps
   fps_generate_interpreter_function_entry_logic.cpp
   fps_process_user_builtin_lib.cpp
   fps_process_bytecode_definition_for_interpreter.cpp
+  fps_process_bytecode_definition_for_baseline_jit.cpp
 )
 
 target_link_libraries(fps PUBLIC

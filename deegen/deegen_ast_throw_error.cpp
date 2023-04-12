@@ -50,7 +50,7 @@ struct LowerThrowErrorApiPass final : public DeegenAbstractSimpleApiLoweringPass
         return symbolName == "DeegenImpl_ThrowErrorTValue" || symbolName == "DeegenImpl_ThrowErrorCString";
     }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         ReleaseAssert(origin->arg_size() == 1);

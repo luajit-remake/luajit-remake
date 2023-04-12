@@ -8,6 +8,7 @@
 namespace dast {
 
 class InterpreterBytecodeImplCreator;
+class BaselineJitImplCreator;
 
 class AstBytecodeReturn
 {
@@ -26,6 +27,17 @@ public:
         for (AstBytecodeReturn& item : res)
         {
             item.DoLoweringForInterpreter(ifi);
+        }
+    }
+
+    void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi);
+
+    static void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
+    {
+        std::vector<AstBytecodeReturn> res = GetAllUseInFunction(func);
+        for (AstBytecodeReturn& item : res)
+        {
+            item.DoLoweringForBaselineJIT(ifi);
         }
     }
 

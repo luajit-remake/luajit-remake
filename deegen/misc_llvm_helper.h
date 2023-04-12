@@ -11,10 +11,12 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IRReader/IRReader.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Pass.h"
@@ -24,6 +26,7 @@
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/IR/DebugInfo.h"
+#include "llvm/Object/ELFObjectFile.h"
 
 #include "cxx_symbol_demangler.h"
 #include "deegen_desugaring_level.h"
@@ -598,10 +601,16 @@ inline void ValidateLLVMModule(llvm::Module* module)
 // Compile an LLVM module to assembly (.S) file
 //
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker);
 
 // Compile an LLVM module to ELF object (.o) file
 //
 std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel);
+std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker);
+
+// Load a ELF object file
+//
+llvm::object::ELFObjectFileBase* WARN_UNUSED LoadElfObjectFile(llvm::LLVMContext& ctx, const std::string& fileContent);
 
 // In LLVM, a function A may be inlined into a function B only if B's target-features
 // is a superset of that of A. (This is because B may be calling into A only after checking
@@ -686,6 +695,18 @@ inline std::string DumpLLVMModuleAsString(llvm::Module* module)
     module->print(rso, nullptr);
     std::string dump = rso.str();
     return dump;
+}
+
+inline std::unique_ptr<llvm::Module> WARN_UNUSED ParseLLVMModuleFromString(llvm::LLVMContext& ctx, const std::string& moduleName, const std::string& moduleString)
+{
+    using namespace llvm;
+
+    SMDiagnostic llvmErr;
+    MemoryBufferRef mb(StringRef(moduleString.data(), moduleString.length()), StringRef(moduleName.data(), moduleName.length()));
+
+    std::unique_ptr<Module> module = parseIR(mb, llvmErr, ctx);
+    ReleaseAssert(module.get() != nullptr);
+    return module;
 }
 
 // Link the requested snippet into the current module if it hasn't been linked in yet.
@@ -1047,34 +1068,37 @@ inline void AssertInstructionIsFollowedByUnreachable(llvm::Instruction* inst)
     ReleaseAssert(nextInst->getNextNode() == nullptr);
 }
 
-inline llvm::Function* GetLLVMIntrinsicMemcpyFn(llvm::Module* module, llvm::Type* sizeType)
+template<bool forceInline>
+llvm::Function* GetLLVMIntrinsicMemcpyFn(llvm::Module* module, llvm::Type* sizeType)
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
     ReleaseAssert(llvm_type_has_type<uint64_t>(sizeType) || llvm_type_has_type<uint32_t>(sizeType));
-    return Intrinsic::getDeclaration(module, Intrinsic::memcpy, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), sizeType });
+    return Intrinsic::getDeclaration(module, forceInline ? Intrinsic::memcpy_inline : Intrinsic::memcpy, { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), sizeType });
 }
 
-inline llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::Instruction* insertBefore)
+template<bool forceInline = false>
+llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
     ReleaseAssert(llvm_value_has_type<void*>(dst));
     ReleaseAssert(llvm_value_has_type<void*>(src));
     ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
-    Function* fn = GetLLVMIntrinsicMemcpyFn(module, bytesToCopy->getType());
+    Function* fn = GetLLVMIntrinsicMemcpyFn<forceInline>(module, bytesToCopy->getType());
     CallInst* result = CallInst::Create(fn, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertBefore);
     return result;
 }
 
-inline llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::BasicBlock* insertAtEnd)
+template<bool forceInline = false>
+llvm::CallInst* EmitLLVMIntrinsicMemcpy(llvm::Module* module, llvm::Value* dst, llvm::Value* src, llvm::Value* bytesToCopy, llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
     ReleaseAssert(llvm_value_has_type<void*>(dst));
     ReleaseAssert(llvm_value_has_type<void*>(src));
     ReleaseAssert(llvm_value_has_type<uint64_t>(bytesToCopy) || llvm_value_has_type<uint32_t>(bytesToCopy));
-    Function* fn = GetLLVMIntrinsicMemcpyFn(module, bytesToCopy->getType());
+    Function* fn = GetLLVMIntrinsicMemcpyFn<forceInline>(module, bytesToCopy->getType());
     CallInst* result = CallInst::Create(fn, { dst, src, bytesToCopy, CreateLLVMConstantInt<bool>(ctx, false) /*isVolatile*/ }, "", insertAtEnd);
     return result;
 }
@@ -1292,57 +1316,62 @@ struct LLVMRepeatedInliningInhibitor
         {
             RemoveGlobalValueUsedAttributeAnnotation(gv);
             ReleaseAssert(gv->hasInitializer());
-            ConstantArray* list = dyn_cast<ConstantArray>(gv->getInitializer());
-            size_t numElements = list->getType()->getNumElements();
-            for (size_t i = 0; i < numElements; i++)
+            Constant* gvi = gv->getInitializer();
+            if (!isa<ConstantAggregateZero>(gvi))
             {
-                Constant* c = list->getOperand(static_cast<uint32_t>(i));
-                ReleaseAssert(llvm_value_has_type<void*>(c));
-                Function* func = dyn_cast<Function>(c);
-                ReleaseAssert(func != nullptr);
-
-                if (func->hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+                ConstantArray* list = dyn_cast<ConstantArray>(gvi);
+                ReleaseAssert(list != nullptr);
+                size_t numElements = list->getType()->getNumElements();
+                for (size_t i = 0; i < numElements; i++)
                 {
-                    // This means our caller has changed the function to always_inline.
-                    // We should respect it. Just skip.
-                    //
-                    // TODO: there are still some problems with this strategy. Specifically, many Deegen APIs
-                    // are marked no_inline initially and gradually desugared by the desugaring pass. This
-                    // causes a problem: a Deegen API 'f' may call some function 'g', which is small but not
-                    // inlined into 'f' because 'f' itself is also too small. However, when 'f' is marked
-                    // always_inline and inlined into its caller, now it makes sense to inline 'g' as well
-                    // (since the size of 'g' is going to be small compared with its caller). But our current
-                    // implementation will prevent 'g' from being inlined because 'g' already got a chance to
-                    // inline (while 'f' is still marked no_inline). For now, we are working around this issue
-                    // by adding __flatten__ attribute to such functions to make sure their callees are inlined.
-                    //
-                    continue;
-                }
+                    Constant* c = list->getOperand(static_cast<uint32_t>(i));
+                    ReleaseAssert(llvm_value_has_type<void*>(c));
+                    Function* func = dyn_cast<Function>(c);
+                    ReleaseAssert(func != nullptr);
 
-                std::string fnName = func->getName().str();
+                    if (func->hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+                    {
+                        // This means our caller has changed the function to always_inline.
+                        // We should respect it. Just skip.
+                        //
+                        // TODO: there are still some problems with this strategy. Specifically, many Deegen APIs
+                        // are marked no_inline initially and gradually desugared by the desugaring pass. This
+                        // causes a problem: a Deegen API 'f' may call some function 'g', which is small but not
+                        // inlined into 'f' because 'f' itself is also too small. However, when 'f' is marked
+                        // always_inline and inlined into its caller, now it makes sense to inline 'g' as well
+                        // (since the size of 'g' is going to be small compared with its caller). But our current
+                        // implementation will prevent 'g' from being inlined because 'g' already got a chance to
+                        // inline (while 'f' is still marked no_inline). For now, we are working around this issue
+                        // by adding __flatten__ attribute to such functions to make sure their callees are inlined.
+                        //
+                        continue;
+                    }
 
-                if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
-                {
-                    // This means our caller has added no_inline attribute to this function.
-                    // We should respect it by making sure it is still no_inline after the pass.
-                    // Nevertheless, this function has already got its chance to inline
-                    // while its no_inline attribute has not been added (which is why it is in this list),
-                    // so it should still be in the list after the pass
-                    //
-                    ReleaseAssert(!m_list.count(fnName));
-                    m_list.insert(fnName);
-                }
-                else
-                {
-                    // In addition to putting this function into 'm_list',
-                    // we should also add no_inline attribute, which shall be removed after the optimization passes
-                    //
-                    ReleaseAssert(!m_list.count(fnName));
-                    m_list.insert(fnName);
+                    std::string fnName = func->getName().str();
 
-                    func->addFnAttr(Attribute::AttrKind::NoInline);
-                    ReleaseAssert(!m_functionToRemoveNoInlineAttr.count(fnName));
-                    m_functionToRemoveNoInlineAttr.insert(fnName);
+                    if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
+                    {
+                        // This means our caller has added no_inline attribute to this function.
+                        // We should respect it by making sure it is still no_inline after the pass.
+                        // Nevertheless, this function has already got its chance to inline
+                        // while its no_inline attribute has not been added (which is why it is in this list),
+                        // so it should still be in the list after the pass
+                        //
+                        ReleaseAssert(!m_list.count(fnName));
+                        m_list.insert(fnName);
+                    }
+                    else
+                    {
+                        // In addition to putting this function into 'm_list',
+                        // we should also add no_inline attribute, which shall be removed after the optimization passes
+                        //
+                        ReleaseAssert(!m_list.count(fnName));
+                        m_list.insert(fnName);
+
+                        func->addFnAttr(Attribute::AttrKind::NoInline);
+                        ReleaseAssert(!m_functionToRemoveNoInlineAttr.count(fnName));
+                        m_functionToRemoveNoInlineAttr.insert(fnName);
+                    }
                 }
             }
             gv->eraseFromParent();

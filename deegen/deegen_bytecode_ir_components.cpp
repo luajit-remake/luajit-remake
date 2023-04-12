@@ -144,6 +144,8 @@ BytecodeIrComponent::BytecodeIrComponent(BytecodeVariantDefinition* bytecodeDef,
     , m_bytecodeDef(bytecodeDef)
     , m_module(nullptr)
     , m_impl(nullptr)
+    , m_isSlowPathRetCont(false)
+    , m_hasDeterminedIsSlowPathRetCont(false)
 {
     using namespace llvm;
     m_module = llvm::CloneModule(*implTmp->getParent());
@@ -266,18 +268,24 @@ BytecodeIrComponent::BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariant
     m_bytecodeDef = bytecodeDef;
     JSONCheckedGet(j, "ident_func_name", m_identFuncName);
     std::string moduleStr = base64_decode(JSONCheckedGet<std::string>(j, "llvm_module"));
-    std::string moduleName = "bytecode_ir_component_module";
-
-    SMDiagnostic llvmErr;
-    MemoryBufferRef mb(StringRef(moduleStr.data(), moduleStr.length()), StringRef(moduleName.data(), moduleName.length()));
-
-    m_module = parseIR(mb, llvmErr, ctx);
+    m_module = ParseLLVMModuleFromString(ctx, "bytecode_ir_component_module" /*moduleName*/, moduleStr);
     ReleaseAssert(m_module.get() != nullptr);
 
     std::string implFuncName = JSONCheckedGet<std::string>(j, "impl_func_name");
     Function* func = m_module->getFunction(implFuncName);
     ReleaseAssert(func != nullptr);
     m_impl = func;
+
+    if (m_processKind == BytecodeIrComponentKind::ReturnContinuation)
+    {
+        m_hasDeterminedIsSlowPathRetCont = true;
+        m_isSlowPathRetCont = JSONCheckedGet<bool>(j, "is_slowpath_ret_cont");
+    }
+    else
+    {
+        m_hasDeterminedIsSlowPathRetCont = false;
+        ReleaseAssert(!j.count("is_slowpath_ret_cont"));
+    }
 }
 
 json WARN_UNUSED BytecodeIrComponent::SaveToJSON()
@@ -290,6 +298,14 @@ json WARN_UNUSED BytecodeIrComponent::SaveToJSON()
     j["impl_func_name"] = implFuncName;
     std::string b64modStr = base64_encode(DumpLLVMModuleAsString(m_module.get()));
     j["llvm_module"] = b64modStr;
+    if (m_processKind == BytecodeIrComponentKind::ReturnContinuation)
+    {
+        j["is_slowpath_ret_cont"] = IsReturnContinuationUsedBySlowPathOnly();
+    }
+    else
+    {
+        ReleaseAssert(!m_hasDeterminedIsSlowPathRetCont);
+    }
     return j;
 }
 
@@ -611,6 +627,7 @@ BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
 
     {
         ReleaseAssert(j.count("all_return_continuations") && j["all_return_continuations"].is_array());
+        // TODO: avoid copy
         std::vector<json> allRetConts = j["all_return_continuations"];
         for (auto& it : allRetConts)
         {
@@ -644,7 +661,7 @@ json WARN_UNUSED BytecodeIrInfo::SaveToJSON()
         {
             allRetConts.push_back(it->SaveToJSON());
         }
-        j["all_return_continuations"] = allRetConts;
+        j["all_return_continuations"] = std::move(allRetConts);
     }
     if (m_quickeningSlowPath.get() != nullptr)
     {
@@ -656,7 +673,7 @@ json WARN_UNUSED BytecodeIrInfo::SaveToJSON()
         {
             allSlowPaths.push_back(it->SaveToJSON());
         }
-        j["all_slow_paths"] = allSlowPaths;
+        j["all_slow_paths"] = std::move(allSlowPaths);
     }
     return j;
 }

@@ -1215,10 +1215,10 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
                 // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
                 //
-                int32_t numResults = opdata[1] - 1;
+                int16_t numResults = SafeIntegerCast<int16_t>(opdata[1] - 1);
                 // For CALLM, C holds # of fixed params
                 //
-                uint32_t numFixedParams = SafeIntegerCast<uint32_t>(opdata[2]);
+                uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[2]);
                 bw.CreateCallM({
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams,
@@ -1238,10 +1238,10 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
                 // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
                 //
-                int32_t numResults = opdata[1] - 1;
+                int16_t numResults = SafeIntegerCast<int16_t>(opdata[1] - 1);
                 // For CALL, C holds 1 + # of fixed params
                 //
-                uint32_t numFixedParams = SafeIntegerCast<uint32_t>(opdata[2] - 1);
+                uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[2] - 1);
                 bw.CreateCall({
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams,
@@ -1260,7 +1260,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 TestAssert(opdata.size() == 2);
                 // For CALLMT, D holds # of fixed params
                 //
-                uint32_t numFixedParams = SafeIntegerCast<uint32_t>(opdata[1]);
+                uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[1]);
                 bw.CreateCallMT({
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams
@@ -1275,7 +1275,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
             case LJOpcode::CALLT:
             {
                 TestAssert(opdata.size() == 2);
-                uint32_t numFixedParams = SafeIntegerCast<uint32_t>(opdata[1] - 1);
+                uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[1] - 1);
                 bw.CreateCallT({
                     .base = local(opdata[0]),
                     .numArgs = numFixedParams

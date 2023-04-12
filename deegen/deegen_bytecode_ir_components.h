@@ -46,6 +46,21 @@ struct BytecodeIrComponent
     //
     std::string m_identFuncName;
 
+    // True if this return continuation is only used by the slow path
+    //
+    bool m_isSlowPathRetCont;
+
+    // The guard variable to make sure m_isSlowPathRetCont has been set up
+    //
+    bool m_hasDeterminedIsSlowPathRetCont;
+
+    bool WARN_UNUSED IsReturnContinuationUsedBySlowPathOnly()
+    {
+        ReleaseAssert(m_processKind == BytecodeIrComponentKind::ReturnContinuation);
+        ReleaseAssert(m_hasDeterminedIsSlowPathRetCont);
+        return m_isSlowPathRetCont;
+    }
+
     // Construct a bytecode IR component
     // This function clones the module, so the original module is untouched.
     // The cloned module is owned by this class.
@@ -140,7 +155,7 @@ struct BytecodeIrInfo
 
     static std::string WARN_UNUSED GetBaseName(BytecodeVariantDefinition* bytecodeDef)
     {
-        return std::string("__deegen_bytecode_") + bytecodeDef->m_bytecodeName + "_" + std::to_string(bytecodeDef->m_variantOrd);
+        return std::string("__deegen_bytecode_") + bytecodeDef->GetBytecodeIdName();
     }
 
     static std::string WARN_UNUSED GetRetContFuncName(BytecodeVariantDefinition* bytecodeDef, size_t rcOrd)

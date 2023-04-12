@@ -8,6 +8,7 @@
 namespace dast {
 
 class InterpreterBytecodeImplCreator;
+class DeegenBytecodeImplCreatorBase;
 
 class InterpreterCallIcMetadata
 {
@@ -63,6 +64,17 @@ private:
 
 struct DeegenCallIcLogicCreator
 {
+    // Emit generic logic that always works but is rather slow
+    //
+    static void EmitGenericGetCallTargetLogic(
+        DeegenBytecodeImplCreatorBase* ifi,
+        llvm::Value* functionObject,
+        llvm::Value*& calleeCbHeapPtr /*out*/,
+        llvm::Value*& codePointer /*out*/,
+        llvm::Instruction* insertBefore);
+
+    // Emit logic for interpreter, employing Call IC if possible
+    //
     static void EmitForInterpreter(
         InterpreterBytecodeImplCreator* ifi,
         llvm::Value* functionObject,

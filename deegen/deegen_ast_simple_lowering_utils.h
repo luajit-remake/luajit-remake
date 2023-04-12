@@ -43,6 +43,7 @@ class DeegenAllSimpleApiLoweringPasses
 public:
     static std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> WARN_UNUSED GetAllPasses();
     static void LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func);
+    static void LowerAllForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func);
 };
 
 // Each pass should use 'DEEGEN_REGISTER_SIMPLE_API_LOWERING_PASS(name)' to register the pass, then put the pass class name into the following list

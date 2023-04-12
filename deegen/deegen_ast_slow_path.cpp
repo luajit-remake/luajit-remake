@@ -2,6 +2,7 @@
 #include "deegen_analyze_lambda_capture_pass.h"
 #include "deegen_rewrite_closure_call.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
 
 namespace dast {
@@ -204,12 +205,12 @@ std::vector<AstSlowPath> AstSlowPath::GetAllUseInFunction(llvm::Function* func)
     return res;
 }
 
-void AstSlowPath::LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+void AstSlowPath::LowerAllForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
 {
     std::vector<AstSlowPath> list = AstSlowPath::GetAllUseInFunction(func);
     for (AstSlowPath& slowPath : list)
     {
-        slowPath.LowerForInterpreter(ifi);
+        slowPath.LowerForInterpreterOrBaselineJIT(ifi);
     }
 }
 
@@ -287,12 +288,24 @@ static std::vector<uint64_t> WARN_UNUSED AstSlowPathGetInterpreterFunctionArgAss
     return result;
 }
 
-void AstSlowPath::LowerForInterpreter(InterpreterBytecodeImplCreator* ifi)
+void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
-    std::string dispatchFnName = GetPostProcessSlowPathFunctionNameForInterpreter(GetImplFunction());
+    std::string dispatchFnName;
+    if (ifi->IsInterpreter())
+    {
+        dispatchFnName = GetPostProcessSlowPathFunctionNameForInterpreter(GetImplFunction());
+    }
+    else
+    {
+        ReleaseAssert(ifi->IsBaselineJIT());
+        std::string implFnName = GetImplFunction()->getName().str();
+        ReleaseAssert(implFnName.ends_with("_impl"));
+        dispatchFnName = implFnName.substr(0, implFnName.length() - strlen("_impl"));
+    }
+
     std::vector<uint64_t> argOrdList;
     {
         std::vector<Type*> argTys;
@@ -370,7 +383,39 @@ void AstSlowPath::LowerForInterpreter(InterpreterBytecodeImplCreator* ifi)
     }
     ReleaseAssert(dispatchFn->getFunctionType() == fty);
 
-    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), ifi->GetCurBytecode(), ifi->GetCodeBlock(), m_origin /*insertBefore*/);
+    Value* callSiteInfo;
+    if (ifi->IsInterpreter())
+    {
+        // For interpreter, we need to pass the bytecode pointer to the slow path
+        //
+        callSiteInfo = ifi->GetCurBytecode();
+    }
+    else
+    {
+        ReleaseAssert(ifi->IsBaselineJIT());
+        // For baseline JIT, if we are in JIT'ed code, we need to pass the BaselineJitSlowPathData pointer by a stencil hole.
+        // If we are already in baseline JIT slow path, we already have our BaselineJitSlowPathData pointer and just need to pass it around.
+        //
+        BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
+        if (j->IsBaselineJitSlowPath())
+        {
+            callSiteInfo = j->GetJitSlowPathData();
+        }
+        else
+        {
+            Value* offset = j->CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
+                                                                        llvm_type_of<uint64_t>(ctx),
+                                                                        1 /*lowerBound*/,
+                                                                        StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
+                                                                        m_origin);
+            Value* baselineJitCodeBlock = j->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { j->GetCodeBlock() }, m_origin);
+            ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
+            callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", m_origin);
+        }
+    }
+    ReleaseAssert(llvm_value_has_type<void*>(callSiteInfo));
+
+    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, ifi->GetCodeBlock(), m_origin /*insertBefore*/);
     for (size_t i = 0; i < argOrdList.size(); i++)
     {
         uint32_t argOrd = static_cast<uint32_t>(argOrdList[i]);

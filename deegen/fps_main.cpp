@@ -40,6 +40,16 @@ int main(int argc, char** argv)
         FPS_GenerateBytecodeBuilderAPIHeader();
         break;
     }
+    case FpsCommand_ProcessBytecodeDefinitionForBaselineJit:
+    {
+        FPS_ProcessBytecodeDefinitionForBaselineJit();
+        break;
+    }
+    case FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable:
+    {
+        FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

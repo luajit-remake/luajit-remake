@@ -71,6 +71,12 @@ public:
 
     static void PreprocessModule(llvm::Module* module);
 
+    // Perform trivial lowering for all inline caches in 'func'
+    //
+    // For testing and debugging purpose only.
+    //
+    static void TriviallyLowerAllInlineCaches(llvm::Function* func);
+
     // Parse out all the inline caches defined in the given function
     // Note that unlike many GetAllUseInFunction() in other classes, this GetAllUseInFunction() is not idempotent.
     // That is, it can be only called once on each function.
@@ -84,6 +90,13 @@ public:
     // This function also populates 'm_icStruct', the state definition of this IC.
     //
     void DoLoweringForInterpreter();
+
+    // Perform trivial lowering: the execution semantics of this inline cache is preserved,
+    // but no inling caching ever happens (i.e., execution simply unconditionally execute the IC body).
+    //
+    // For testing and debugging purpose only.
+    //
+    void DoTrivialLowering();
 
     // The CallInst that retrieves the IC pointer in the main function
     //

@@ -42,6 +42,7 @@ inline BcOperandKind GetBcOperandKindFromString(const std::string& strBcOpKind)
 }
 
 class InterpreterBytecodeImplCreator;
+class BaselineJitImplCreator;
 class DeegenBytecodeImplCreatorBase;
 
 // The base class for a bytecode operand
@@ -54,6 +55,8 @@ public:
         , m_operandOrdinal(static_cast<size_t>(-1))
         , m_offsetInBytecodeStruct(static_cast<size_t>(-1))
         , m_sizeInBytecodeStruct(0)
+        , m_offsetInBaselineJitSlowPathDataStruct(static_cast<size_t>(-1))
+        , m_sizeInBaselineJitSlowPathDataStruct(0)
     { }
 
     virtual ~BcOperand() {}
@@ -98,6 +101,11 @@ public:
     //
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) = 0;
 
+    // The value of this bytecode operand must fall within [lowerBound, upperBound]
+    //
+    virtual int64_t WARN_UNUSED ValueLowerBound() = 0;
+    virtual int64_t WARN_UNUSED ValueUpperBound() = 0;
+
     llvm::Type* WARN_UNUSED GetSourceValueFullRepresentationType(llvm::LLVMContext& ctx)
     {
         ReleaseAssert(!IsNotTriviallyDecodeableFromBytecodeStruct());
@@ -131,10 +139,25 @@ public:
         return m_sizeInBytecodeStruct;
     }
 
+    size_t GetOffsetInBaselineJitSlowPathDataStruct()
+    {
+        ReleaseAssert(m_offsetInBaselineJitSlowPathDataStruct != static_cast<size_t>(-1));
+        return m_offsetInBaselineJitSlowPathDataStruct;
+    }
+
+    size_t GetSizeInBaselineJitSlowPathDataStruct()
+    {
+        ReleaseAssert(m_offsetInBaselineJitSlowPathDataStruct != static_cast<size_t>(-1));
+        ReleaseAssert(m_sizeInBaselineJitSlowPathDataStruct <= ValueFullByteLength());
+        return m_sizeInBaselineJitSlowPathDataStruct;
+    }
+
     void InvalidateBytecodeStructOffsetAndSize()
     {
         m_offsetInBytecodeStruct = static_cast<size_t>(-1);
         m_sizeInBytecodeStruct = 0;
+        m_offsetInBaselineJitSlowPathDataStruct = static_cast<size_t>(-1);
+        m_sizeInBaselineJitSlowPathDataStruct = 0;
     }
 
     void AssignOrChangeBytecodeStructOffsetAndSize(size_t offset, size_t size)
@@ -154,13 +177,40 @@ public:
         m_sizeInBytecodeStruct = size;
     }
 
+    void AssignOrChangeBaselineJitSlowPathDataOffsetAndSize(size_t offset, size_t size)
+    {
+        size_t maxSize = ValueFullByteLength();
+        if (IsElidedFromBytecodeStruct())
+        {
+            ReleaseAssert(offset == static_cast<size_t>(-1));
+            ReleaseAssert(size == 0);
+        }
+        else
+        {
+            ReleaseAssert(offset > 0 && size > 0);
+        }
+        ReleaseAssert(size <= maxSize);
+        m_offsetInBaselineJitSlowPathDataStruct = offset;
+        m_sizeInBaselineJitSlowPathDataStruct = size;
+    }
+
     bool WARN_UNUSED SupportsGetOperandValueFromBytecodeStruct();
 
     // May only be called if SupportsGetOperandValueFromBytecodeStruct() is true
     // Emit decoding logic into 'targetBB', and return the decoded operand value in the bytecode struct
     // 'bytecodeStruct' must have type i8*
     //
-    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB);
+    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(InterpreterBytecodeImplCreator* ifi, llvm::BasicBlock* targetBB);
+
+    // Similar to above, but takes directly a llvm::Value bytecodePtr
+    //
+    llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(llvm::Value* bytecodePtr, llvm::BasicBlock* targetBB);
+
+    // Similar to above, but for baseline JIT slow path
+    // Can only be used to decode bytecode operands and the output slot. Cannot decode condBrTarget or other interpreter-bytecode-specific fields.
+    //
+    llvm::Value* WARN_UNUSED GetOperandValueFromBaselineJitSlowPathData(BaselineJitImplCreator* ifi, llvm::BasicBlock* targetBB);
+
 
     virtual json WARN_UNUSED SaveToJSON() = 0;
 
@@ -171,15 +221,22 @@ protected:
     BcOperand(json& j);
 
 private:
+    llvm::Value* WARN_UNUSED EmitGetOperandValueImpl(llvm::Value* structPtr, llvm::BasicBlock* targetBB, bool isBytecodeStruct);
+
     std::string m_name;
     // The ordinal of this operand in the bytecode definition
     //
     size_t m_operandOrdinal;
 
-    // The offset of this bytecode in the bytecode struct
+    // The offset and size of this bytecode operand in the bytecode struct
     //
     size_t m_offsetInBytecodeStruct;
     size_t m_sizeInBytecodeStruct;
+
+    // The offset and size of this bytecode operand in the baseline JIT SlowPathData struct
+    //
+    size_t m_offsetInBaselineJitSlowPathDataStruct;
+    size_t m_sizeInBaselineJitSlowPathDataStruct;
 };
 
 // A bytecode operand that refers to a bytecode slot
@@ -215,6 +272,16 @@ public:
         // TValue, which is i64
         //
         return llvm_type_of<uint64_t>(ctx);
+    }
+
+    virtual int64_t WARN_UNUSED ValueLowerBound() override
+    {
+        return 0;
+    }
+
+    virtual int64_t WARN_UNUSED ValueUpperBound() override
+    {
+        return 1048576;
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -269,6 +336,16 @@ public:
         return llvm_type_of<uint64_t>(ctx);
     }
 
+    virtual int64_t WARN_UNUSED ValueLowerBound() override
+    {
+        return -1048576;
+    }
+
+    virtual int64_t WARN_UNUSED ValueUpperBound() override
+    {
+        return -1;
+    }
+
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
@@ -311,6 +388,30 @@ public:
     virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override final
     {
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(m_numBytes * 8));
+    }
+
+    virtual int64_t WARN_UNUSED ValueLowerBound() override
+    {
+        if (!m_isSigned)
+        {
+            return 0;
+        }
+        else
+        {
+            return -(static_cast<int64_t>(1) << (8 * m_numBytes - 1));
+        }
+    }
+
+    virtual int64_t WARN_UNUSED ValueUpperBound() override
+    {
+        if (!m_isSigned)
+        {
+            return (static_cast<int64_t>(1) << (8 * m_numBytes)) - 1;
+        }
+        else
+        {
+            return (static_cast<int64_t>(1) << (8 * m_numBytes - 1)) - 1;
+        }
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -411,6 +512,16 @@ public:
         return m_isSigned;
     }
 
+    virtual int64_t WARN_UNUSED ValueLowerBound() override
+    {
+        return static_cast<int64_t>(m_concreteValue);
+    }
+
+    virtual int64_t WARN_UNUSED ValueUpperBound() override
+    {
+        return static_cast<int64_t>(m_concreteValue);
+    }
+
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
@@ -481,6 +592,16 @@ public:
         return llvm_type_of<void*>(ctx);
     }
 
+    virtual int64_t WARN_UNUSED ValueLowerBound() override
+    {
+        return 0;
+    }
+
+    virtual int64_t WARN_UNUSED ValueUpperBound() override
+    {
+        return 1048576;
+    }
+
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
     virtual json WARN_UNUSED SaveToJSON() override final;
@@ -529,6 +650,16 @@ public:
     virtual llvm::Type* WARN_UNUSED GetUsageType(llvm::LLVMContext& ctx) override
     {
         return llvm_type_of<void*>(ctx);
+    }
+
+    virtual int64_t NO_RETURN ValueLowerBound() override
+    {
+        ReleaseAssert(false);
+    }
+
+    virtual int64_t NO_RETURN ValueUpperBound() override
+    {
+        ReleaseAssert(false);
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
@@ -594,6 +725,8 @@ public:
                 currentOffset += width;
             }
         };
+        // DEVNOTE: the operands and the output slot must come first, since the JitSlowPathData struct assumes this.
+        //
         for (auto& operand : m_list)
         {
             update(operand.get(), maxWidthBytesInput);
@@ -602,6 +735,7 @@ public:
         {
             update(m_outputOperand.get(), maxWidthBytesInput);
         }
+
         if (m_hasConditionalBranchTarget)
         {
             // Currently the frontend locked condBr's width to 2 bytes, we can improve this later
@@ -616,6 +750,12 @@ public:
     static void AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module);
 
     static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore);
+    static llvm::Value* WARN_UNUSED DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::BasicBlock* insertAtEnd);
+
+    std::string WARN_UNUSED GetBytecodeIdName()
+    {
+        return m_bytecodeName + "_" + std::to_string(m_variantOrd);
+    }
 
     bool HasQuickeningSlowPath()
     {
@@ -732,6 +872,34 @@ public:
         ReleaseAssert(m_interpreterCallIcMetadata.IcExists());
     }
 
+    bool WARN_UNUSED IsBaselineJitSlowPathDataLayoutDetermined()
+    {
+        return m_baselineJitSlowPathDataLength != static_cast<size_t>(-1);
+    }
+
+    size_t WARN_UNUSED GetBaselineJitSlowPathDataLength()
+    {
+        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+        return m_baselineJitSlowPathDataLength;
+    }
+
+    void ComputeBaselineJitSlowPathDataLayout();
+
+    // Return a ptr for the address of the JIT'ed code of the next bytecode
+    //
+    llvm::Value* WARN_UNUSED GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
+    // Return a ptr for the address that STORES the cond br destination
+    //
+    llvm::Value* WARN_UNUSED GetAddressOfCondBrOperandForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetAddressOfCondBrOperandForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
+    // Return a ptr for the address of the JIT'ed code of the cond br target
+    //
+    llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
     json WARN_UNUSED SaveToJSON();
 
     // For now we have a fixed 2-byte opcode header for simplicity
@@ -800,9 +968,45 @@ private:
     size_t m_bytecodeStructLength;
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 
+    size_t m_baselineJitSlowPathDataLength;
+
     // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
     //
     InterpreterCallIcMetadata m_interpreterCallIcMetadata;
+};
+
+// A simple helper that supports querying the opcode raw value for a bytecode name
+//
+struct BytecodeOpcodeRawValueMap
+{
+    size_t WARN_UNUSED GetDispatchTableLength() const
+    {
+        return m_list.size();
+    }
+
+    size_t WARN_UNUSED GetOpcode(const std::string& bytecodeName) const
+    {
+        ReleaseAssert(m_map.count(bytecodeName));
+        return m_map.find(bytecodeName)->second;
+    }
+
+    std::string WARN_UNUSED GetBytecode(size_t opcodeOrd) const
+    {
+        ReleaseAssert(opcodeOrd < m_list.size());
+        return m_list[opcodeOrd];
+    }
+
+    static bool WARN_UNUSED IsFusedIcVariant(const std::string& bytecodeName)
+    {
+        return bytecodeName.find("_fused_ic_") != std::string::npos;
+    }
+
+    static BytecodeOpcodeRawValueMap WARN_UNUSED ParseFromJSON(json j);
+    static BytecodeOpcodeRawValueMap WARN_UNUSED ParseFromCommandLineArgs();
+
+private:
+    std::unordered_map<std::string, size_t> m_map;
+    std::vector<std::string> m_list;
 };
 
 }  // namespace dast

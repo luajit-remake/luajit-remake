@@ -79,6 +79,7 @@ class BytecodeBuilder final : public BytecodeBuilderImpl
     MAKE_NONMOVABLE(BytecodeBuilder);
 
     friend class DeegenInterpreterDispatchTableBuilder;
+    friend class DeegenInterpreterOpcodeNameTableBuilder;
 
     template<BCKind bytecodeKind>
     using OperandsTypeForBytecodeKind = typename detail::BytecodeBuilderImplClassNameForBcKind<bytecodeKind, BytecodeBuilderImpl>::Operands;

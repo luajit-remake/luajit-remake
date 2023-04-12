@@ -4,17 +4,11 @@
 #include "llvm/IRReader/IRReader.h"
 #include "deegen_process_bytecode_definition_for_interpreter.h"
 #include "deegen_ast_return.h"
+#include "base64_util.h"
 
 #include "json_utils.h"
 
 using namespace dast;
-
-static std::string GetFileNameFromAbsolutePath(const std::string& s)
-{
-    size_t k = s.find_last_of('/');
-    ReleaseAssert(k != std::string::npos);
-    return s.substr(k + 1);
-}
 
 void FPS_ProcessBytecodeDefinitionForInterpreter()
 {
@@ -25,9 +19,6 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     std::string inputFileName = cl_irInputFilename;
     ReleaseAssert(inputFileName != "");
 
-    std::string outputFileName = cl_assemblyOutputFilename;
-    ReleaseAssert(outputFileName != "");
-
     SMDiagnostic llvmErr;
     std::unique_ptr<Module> moduleIn = parseIRFile(inputFileName, llvmErr, ctx);
     if (moduleIn == nullptr)
@@ -37,10 +28,6 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     }
 
     ProcessBytecodeDefinitionForInterpreterResult result = ProcessBytecodeDefinitionForInterpreter(std::move(moduleIn));
-
-    std::string contents = CompileLLVMModuleToAssemblyFile(result.m_processedModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
-    TransactionalOutputFile asmOutFile(outputFileName);
-    asmOutFile.write(contents);
 
     TransactionalOutputFile hdrOutFile(cl_headerOutputFilename);
     FPS_EmitHeaderFileCommonHeader(hdrOutFile.fp());
@@ -53,10 +40,18 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     TransactionalOutputFile jsonOutFile(cl_jsonOutputFilename);
     using json = ::nlohmann::json;
     json j;
-    j["header-name"] = GetFileNameFromAbsolutePath(cl_headerOutputFilename);
+    j["header-name"] = FPS_GetFileNameFromAbsolutePath(cl_headerOutputFilename);
     j["class-names"] = result.m_generatedClassNames;
     j["cdecl-names"] = result.m_allExternCDeclarations;
-    j["all-bytecode-info"] = result.m_bytecodeInfoJson;
+    j["all-bytecode-info"] = std::move(result.m_bytecodeInfoJson);
+    j["return-cont-name-list"] = result.m_returnContinuationNameList;
+    j["reference_module"] = base64_encode(DumpLLVMModuleAsString(result.m_referenceModule.get()));
+    std::vector<std::string> bytecodeModuleList;
+    for (auto& m : result.m_bytecodeModules)
+    {
+        bytecodeModuleList.push_back(base64_encode(DumpLLVMModuleAsString(m.get())));
+    }
+    j["bytecode_module_list"] = std::move(bytecodeModuleList);
 
     jsonOutFile.write(j.dump(4 /*indent*/));
 
@@ -69,7 +64,6 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
         auditFile.Commit();
     }
 
-    asmOutFile.Commit();
     hdrOutFile.Commit();
     jsonOutFile.Commit();
 }
@@ -248,6 +242,89 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
 
     fprintf(cppOutFile.fp(), "#pragma clang diagnostic pop\n");
 
+    // This is even more hacky.. We want to generate the list of bytecodes in the same order as the dispatching array.
+    // To do this, we generate a CPP file that includes bytecode_builder.h, then compile it into an executable and execute it..
+    //
+    TransactionalOutputFile cppOutFile2(cl_cppOutputFilename2);
+
+    fprintf(cppOutFile2.fp(), "#define DEEGEN_POST_FUTAMURA_PROJECTION\n");
+    fprintf(cppOutFile2.fp(), "#include \"drt/bytecode_builder.h\"\n\n");
+
+    fprintf(cppOutFile2.fp(), "\nnamespace DeegenBytecodeBuilder {\n\n");
+
+    fprintf(cppOutFile2.fp(), "class DeegenInterpreterOpcodeNameTableBuilder {\n");
+    fprintf(cppOutFile2.fp(), "public:\n");
+    fprintf(cppOutFile2.fp(), "    static constexpr auto get() {\n");
+    fprintf(cppOutFile2.fp(), "        std::array<const char*, %u> r;\n", SafeIntegerCast<unsigned int>(totalSize));
+    fprintf(cppOutFile2.fp(), "        for (size_t i = 0; i < %u; i++) {\n", SafeIntegerCast<unsigned int>(totalSize));
+    fprintf(cppOutFile2.fp(), "            r[i] = nullptr;\n");
+    fprintf(cppOutFile2.fp(), "        }\n");
+
+    for (json& j : jlist)
+    {
+        ReleaseAssert(j.count("class-names") && j["class-names"].is_array());
+        ReleaseAssert(j.count("cdecl-names") && j["cdecl-names"].is_array());
+        ReleaseAssert(j["class-names"].size() == j["cdecl-names"].size());
+
+        size_t len = j["class-names"].size();
+        for (size_t i = 0; i < len; i++)
+        {
+            ReleaseAssert(j["class-names"][i].is_string());
+            std::string className = j["class-names"][i].get<std::string>();
+
+            ReleaseAssert(j["cdecl-names"][i].is_array());
+            auto& arr = j["cdecl-names"][i];
+            std::vector<std::string> lis;
+            for (auto& x : arr)
+            {
+                ReleaseAssert(x.is_string());
+                std::string val = x.get<std::string>();
+                ReleaseAssert(val.starts_with("__deegen_interpreter_op_"));
+                val = val.substr(strlen("__deegen_interpreter_op_"));
+                lis.push_back(val);
+            }
+
+            fprintf(cppOutFile2.fp(), "        {\n");
+            fprintf(cppOutFile2.fp(), "            static_assert(BytecodeBuilder::GetNumVariantsOfBytecode<%s>() == %u);\n", className.c_str(), SafeIntegerCast<unsigned int>(lis.size()));
+            fprintf(cppOutFile2.fp(), "            constexpr size_t base = BytecodeBuilder::GetBytecodeOpcodeBase<%s<BytecodeBuilderImpl>>();\n", className.c_str());
+            for (size_t k = 0; k < lis.size(); k++)
+            {
+                fprintf(cppOutFile2.fp(), "            ReleaseAssert(r[base + %d] == nullptr);\n", static_cast<int>(k));
+            }
+            for (size_t k = 0; k < lis.size(); k++)
+            {
+                fprintf(cppOutFile2.fp(), "            r[base + %d] = \"%s\";\n", static_cast<int>(k), lis[k].c_str());
+            }
+            fprintf(cppOutFile2.fp(), "        }\n");
+        }
+    }
+
+    fprintf(cppOutFile2.fp(), "        for (size_t i = 0; i < %u; i++) {\n", SafeIntegerCast<unsigned int>(totalSize));
+    fprintf(cppOutFile2.fp(), "            ReleaseAssert(r[i] != nullptr);\n");
+    fprintf(cppOutFile2.fp(), "        }\n");
+    fprintf(cppOutFile2.fp(), "        return r;\n");
+    fprintf(cppOutFile2.fp(), "    }\n");
+    fprintf(cppOutFile2.fp(), "};\n");
+
+    fprintf(cppOutFile2.fp(), "\n} /*namespace DeegenBytecodeBuilder*/\n\n");
+
+    fprintf(cppOutFile2.fp(), "int main(int argc, char** argv) {\n");
+    fprintf(cppOutFile2.fp(), "    ReleaseAssert(argc == 2);\n");
+    fprintf(cppOutFile2.fp(), "    FILE* fp = fopen(argv[1], \"w\");\n");
+    fprintf(cppOutFile2.fp(), "    ReleaseAssert(fp != nullptr);\n");
+    fprintf(cppOutFile2.fp(), "    fprintf(fp, \"[\\n\");\n");
+    fprintf(cppOutFile2.fp(), "    auto v = DeegenBytecodeBuilder::DeegenInterpreterOpcodeNameTableBuilder::get();\n");
+    fprintf(cppOutFile2.fp(), "    for (size_t i = 0; i < v.size(); i++) {\n");
+    fprintf(cppOutFile2.fp(), "%s", "        fprintf(fp, \"\\\"%s\\\"\", v[i]);\n");
+    fprintf(cppOutFile2.fp(), "        if (i + 1 < v.size()) fprintf(fp, \",\");\n");
+    fprintf(cppOutFile2.fp(), "        fprintf(fp, \"\\n\");\n");
+    fprintf(cppOutFile2.fp(), "    }\n");
+    fprintf(cppOutFile2.fp(), "    fprintf(fp, \"]\\n\");\n");
+    fprintf(cppOutFile2.fp(), "    fclose(fp);\n");
+    fprintf(cppOutFile2.fp(), "    return 0;\n");
+    fprintf(cppOutFile2.fp(), "}\n");
+
     hdrOutFile.Commit();
     cppOutFile.Commit();
+    cppOutFile2.Commit();
 }

@@ -3,7 +3,7 @@
 
 #include "runtime_utils.h"
 
-static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint32_t /*numArgs*/, int32_t numRets)
+static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint16_t /*numArgs*/, int16_t numRets)
 {
     if (numRets < 0)
     {
@@ -17,7 +17,7 @@ static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint32_t /*n
 }
 
 template<bool passVariadicRes>
-static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint32_t /*numArgs*/, int32_t /*numRets*/, TValue* argStart, uint32_t numArgs, TValue func)
+static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, int16_t /*numRets*/, TValue* argStart, uint16_t numArgs, TValue func)
 {
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
@@ -36,7 +36,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint32_t /*numArg
 }
 
 template<bool passVariadicRes>
-static void NO_RETURN CallOperationImpl(TValue* base, uint32_t numArgs, int32_t /*numRets*/)
+static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, int16_t /*numRets*/)
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
@@ -60,14 +60,14 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes)
 {
     Operands(
         BytecodeRangeBaseRW("base"),
-        Literal<uint32_t>("numArgs"),
-        Literal<int32_t>("numRets")
+        Literal<uint16_t>("numArgs"),
+        Literal<int16_t>("numRets")
     );
     Result(NoOutput);
     Implementation(CallOperationImpl<passVariadicRes>);
-    for (uint32_t numArgs = 0; numArgs < 6; numArgs++)
+    for (uint16_t numArgs = 0; numArgs < 6; numArgs++)
     {
-        for (int32_t numRets = -1; numRets < 4; numRets++)
+        for (int16_t numRets = -1; numRets < 4; numRets++)
         {
             Variant(
                 Op("numArgs").HasValue(numArgs),

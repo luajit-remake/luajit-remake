@@ -208,6 +208,7 @@ public:
     CoroutineRuntimeContext* m_parent;
 
     // slot [m_variadicRetSlotBegin + ord] holds variadic return value 'ord'
+    // TODO: maybe this can be directly stored in CPU register since it must be consumed by immediate next bytecode?
     //
     uint32_t m_numVariadicRets;
     int32_t m_variadicRetSlotBegin;
@@ -434,6 +435,8 @@ public:
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;
 
+    uint32_t m_numBytecodes;
+
     // Only used during parsing. Always nullptr at runtime.
     // It doesn't have to sit in this struct but the memory consumption of this struct simply shouldn't matter.
     //
@@ -443,6 +446,49 @@ public:
     // The actual length of this trailing array is always x_num_bytecode_metadata_struct_kinds_
     //
     uint16_t m_bytecodeMetadataUseCounts[0];
+};
+
+// Layout:
+// [ BaselineCodeBlock ] [ slowPathDataIndex ] [ slowPathData ]
+//
+// slowPathDataIndex:
+//     SlowPathDataAndBytecodeOffset[N] where N is the # of bytecodes in this function.
+//     Every SlowPathDataAndBytecodeOffset item records the offset of the bytecode / slowPathData in the
+//     bytecode / slowPathData stream for one bytecode
+// slowPathData:
+//     It is similar to bytecode, but contains more information, which are needed for the JIT slow path
+//     (e.g., the JIT code address to jump to if a branch is needed).
+//
+class alignas(8) BaselineCodeBlock
+{
+public:
+    // The layout of this struct is currently hardcoded
+    // If you change this, be sure to make corresponding changes in DeegenBytecodeBaselineJitInfo
+    //
+    struct alignas(8) SlowPathDataAndBytecodeOffset
+    {
+        uint32_t m_slowPathDataOffset;
+        uint32_t m_bytecodeOffset;
+    };
+
+    void* WARN_UNUSED GetSlowPathDataAtBytecodeIndex(size_t index)
+    {
+        assert(index < m_ucbOwner->m_numBytecodes);
+        size_t offset = m_sbIndex[index].m_slowPathDataOffset;
+        return reinterpret_cast<uint8_t*>(this) + offset;
+    }
+
+    // Currently the JIT code is layouted as follow:
+    //     [ Data Section ] [ FastPath Code ] [ SlowPath Code ]
+    // Their respective sizes are recorded in m_ucbOwner
+    //
+    void* m_jitCodeEntry;
+    void* m_dataSecPtr;
+
+    CodeBlock* m_cbOwner;
+    UnlinkedCodeBlock* m_ucbOwner;
+
+    SlowPathDataAndBytecodeOffset m_sbIndex[0];
 };
 
 class FunctionObject;

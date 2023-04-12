@@ -15,6 +15,8 @@ public:
     //
     InterpreterBytecodeImplCreator(BytecodeIrComponent& bic);
 
+    virtual DeegenEngineTier WARN_UNUSED GetTier() const override { return DeegenEngineTier::Interpreter; }
+
     // Inline 'impl' into the wrapper logic, then lower APIs like 'Return', 'MakeCall', 'Error', etc.
     //
     void DoLowering();

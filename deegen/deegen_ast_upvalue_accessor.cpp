@@ -10,7 +10,7 @@ struct LowerUpvalueAccessorApiPass final : public DeegenAbstractSimpleApiLowerin
         return symbolName.starts_with(x_getImmutableApi) || symbolName.starts_with(x_getMutableApi) || symbolName.starts_with(x_putApi) || symbolName.starts_with(x_closeApi);
     }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         std::string demangledName = DemangleCXXSymbol(origin->getCalledFunction()->getName().str());

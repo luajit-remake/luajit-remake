@@ -5,11 +5,11 @@
 
 namespace dast {
 
-static void EmitInterpreterCallIcSlowPath(InterpreterBytecodeImplCreator* ifi,
-                                          llvm::Value* functionObject,
-                                          llvm::Value*& calleeCbHeapPtr /*out*/,
-                                          llvm::Value*& codePointer /*out*/,
-                                          llvm::Instruction* insertBefore)
+void DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(DeegenBytecodeImplCreatorBase* ifi,
+                                                             llvm::Value* functionObject,
+                                                             llvm::Value*& calleeCbHeapPtr /*out*/,
+                                                             llvm::Value*& codePointer /*out*/,
+                                                             llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { functionObject }, insertBefore);
@@ -30,7 +30,7 @@ static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecode
     using namespace llvm;
     calleeCbHeapPtr = nullptr;
     codePointer = nullptr;
-    EmitInterpreterCallIcSlowPath(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore /*insertBefore*/);
+    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore /*insertBefore*/);
     ReleaseAssert(calleeCbHeapPtr != nullptr);
     ReleaseAssert(codePointer != nullptr);
 
@@ -373,7 +373,7 @@ void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator
     {
         // Inline cache is not available for whatever reason, just honestly emit the slow path
         //
-        EmitInterpreterCallIcSlowPath(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore);
+        EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore);
         return;
     }
 

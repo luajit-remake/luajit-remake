@@ -328,11 +328,11 @@ void InterpreterBytecodeImplCreator::DoLowering()
     //
     AstBytecodeReturn::LowerForInterpreter(this, m_wrapper);
     AstMakeCall::LowerForInterpreter(this, m_wrapper);
-    AstReturnValueAccessor::LowerForInterpreter(this, m_wrapper);
+    AstReturnValueAccessor::LowerForInterpreterOrBaselineJIT(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
     LowerGetBytecodeMetadataPtrAPI();
     LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
-    AstSlowPath::LowerAllForInterpreter(this, m_wrapper);
+    AstSlowPath::LowerAllForInterpreterOrBaselineJIT(this, m_wrapper);
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
@@ -535,7 +535,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         std::unique_ptr<InterpreterBytecodeImplCreator> component = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_allRetConts[rcOrdinal].get());
 
         std::unique_ptr<Module> rcModule = std::move(component->m_module);
-        std::string expectedRcName = bi.m_allRetConts[rcOrdinal]->m_identFuncName;
+        BytecodeIrComponent* bic = bi.m_allRetConts[rcOrdinal].get();
+        std::string expectedRcName = bic->m_identFuncName;
         ReleaseAssert(expectedRcName == BytecodeIrInfo::GetRetContFuncName(bytecodeDef, rcOrdinal));
         ReleaseAssert(rcModule->getFunction(expectedRcName) != nullptr);
         ReleaseAssert(!rcModule->getFunction(expectedRcName)->empty());
@@ -556,14 +557,19 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         ReleaseAssert(linkedInFn != nullptr);
         ReleaseAssert(!linkedInFn->empty());
         ReleaseAssert(!linkedInFn->hasSection());
+        ReleaseAssert(!bic->m_hasDeterminedIsSlowPathRetCont);
+        bic->m_hasDeterminedIsSlowPathRetCont = true;
         if (fnNamesOfAllReturnContinuationsUsedByMainFn.count(expectedRcName))
         {
             fnNamesOfAllReturnContinuationsUsedByMainFn.erase(expectedRcName);
             linkedInFn->setSection(x_hot_code_section_name);
+            bic->m_isSlowPathRetCont = false;
         }
         else
         {
             linkedInFn->setSection(x_cold_code_section_name);
+            bi.m_allRetConts[rcOrdinal]->m_isSlowPathRetCont = true;
+            bic->m_isSlowPathRetCont = true;
         }
     }
     ReleaseAssert(fnNamesOfAllReturnContinuationsUsedByMainFn.empty());
@@ -661,18 +667,82 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         }
     }
 
-    // Similarly, update 'bi' to remove the dead slowpaths and make sure they have up-to-date names
+    // Create the old-to-new name map and rename all the slow path functions to the new names
+    //
+    std::map<std::string, std::string> slowPathFnRenameMap;
+    for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
+    {
+        // Note that this 'func' is the function in the main module, not the slow path module!
+        //
+        Function* func = survivedSlowPathFns[ord].first;
+        BytecodeIrComponent* bic = survivedSlowPathFns[ord].second.get();
+
+        std::string oldFnName = func->getName().str();
+        ReleaseAssert(oldFnName.ends_with("_interpreter_wrapper"));
+        oldFnName = oldFnName.substr(0, oldFnName.length() - strlen("_interpreter_wrapper"));
+
+        std::string newFnName = bi.m_interpreterMainComponent->m_identFuncName + "_slow_path_" + std::to_string(ord);
+        std::string newFnNameImpl = newFnName + "_impl";
+        ReleaseAssert(!slowPathFnRenameMap.count(oldFnName));
+        slowPathFnRenameMap[oldFnName] = newFnNameImpl;
+
+        func->setName(newFnName);
+        ReleaseAssert(func->getName() == newFnName);
+        bic->m_identFuncName = newFnName;
+    }
+
+    {
+        // Sanity check all the names are different
+        //
+        std::set<std::string> checkUnique;
+        for (auto& it : slowPathFnRenameMap)
+        {
+            ReleaseAssert(!checkUnique.count(it.first));
+            checkUnique.insert(it.first);
+            ReleaseAssert(!checkUnique.count(it.second));
+            checkUnique.insert(it.second);
+        }
+    }
+
+    auto renameSlowPathFnNames = [&](Module* m) {
+        for (auto& it : slowPathFnRenameMap)
+        {
+            std::string oldName = it.first;
+            std::string newName = it.second;
+            Function* func = m->getFunction(oldName);
+            if (func != nullptr)
+            {
+                func->setName(newName);
+                ReleaseAssert(func->getName() == newName);
+            }
+            else
+            {
+                ReleaseAssert(m->getNamedValue(oldName) == nullptr);
+            }
+        }
+    };
+
+    // Rename all the slow path function names in each slow path module, and update 'bi' to remove the dead slowpaths
     //
     bi.m_slowPaths.clear();
     for (size_t ord = 0; ord < survivedSlowPathFns.size(); ord++)
     {
-        Function* func = survivedSlowPathFns[ord].first;
-        std::string newFnName = bi.m_interpreterMainComponent->m_identFuncName + "_slow_path_" + std::to_string(ord);
-        ReleaseAssert(module->getNamedValue(newFnName) == nullptr);
-        func->setName(newFnName);
-        ReleaseAssert(func->getName() == newFnName);
-        bi.m_slowPaths.push_back(std::move(survivedSlowPathFns[ord].second));
-        bi.m_slowPaths.back()->m_identFuncName = newFnName;
+        std::unique_ptr<BytecodeIrComponent>& bic = survivedSlowPathFns[ord].second;
+        Module* m = bic->m_module.get();
+        renameSlowPathFnNames(m);
+        bi.m_slowPaths.push_back(std::move(bic));
+    }
+
+    // Rename the slow path functions in the other modules as well
+    //
+    renameSlowPathFnNames(bi.m_jitMainComponent->m_module.get());
+    if (bi.m_quickeningSlowPath)
+    {
+        renameSlowPathFnNames(bi.m_quickeningSlowPath->m_module.get());
+    }
+    for (auto& it : bi.m_allRetConts)
+    {
+        renameSlowPathFnNames(it->m_module.get());
     }
 
     // Rename the '__deegen_bytecode_' generic prefix to '__deegen_interpreter_op' to prevent

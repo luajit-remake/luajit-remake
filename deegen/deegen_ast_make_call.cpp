@@ -1,5 +1,6 @@
 #include "deegen_ast_make_call.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_call_inline_cache.h"
 #include "deegen_bytecode_operand.h"
@@ -352,18 +353,16 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     }
 }
 
-void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
+std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED AstMakeCall::EmitGenericNewCallFrameSetupLogic(DeegenBytecodeImplCreatorBase* ifi, llvm::Value* callSiteInfo)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
-    // Get the code pointer and the callee CodeBlock
-    //
-    Value* calleeCbHeapPtr = nullptr;
-    Value* codePointer = nullptr;
-    DeegenCallIcLogicCreator::EmitForInterpreter(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
-    ReleaseAssert(calleeCbHeapPtr != nullptr);
-    ReleaseAssert(codePointer != nullptr);
+    ReleaseAssertIff(m_isMustTailCall, callSiteInfo == nullptr);
+    if (!m_isMustTailCall)
+    {
+        ReleaseAssert(llvm_value_has_type<uint32_t>(callSiteInfo));
+    }
 
     // Currently our call scheme is as follows:
     // Caller side:
@@ -507,7 +506,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
             {
                 newSfBase,
                 ifi->GetStackBase() /*oldStackBase*/,
-                ifi->GetCurBytecode(),
+                callSiteInfo,
                 m_target,
                 GetContinuationDispatchTarget() /*onReturn*/
             },
@@ -789,6 +788,84 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     ReleaseAssert(newSfBase != nullptr);
     ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(totalNumArgs != nullptr);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+
+    return std::make_pair(newSfBase, totalNumArgs);
+}
+
+void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    // Get the code pointer and the callee CodeBlock
+    //
+    Value* calleeCbHeapPtr = nullptr;
+    Value* codePointer = nullptr;
+    DeegenCallIcLogicCreator::EmitForInterpreter(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    ReleaseAssert(codePointer != nullptr);
+
+    Value* callSiteInfo = nullptr;
+    if (!m_isMustTailCall)
+    {
+        callSiteInfo = ifi->CallDeegenCommonSnippet(
+            "TranslateRawPtrToSysHeapPtr",
+            {
+              ifi->GetCurBytecode()
+            },
+            m_origin /*insertBefore*/);
+    }
+    auto [newSfBase, totalNumArgs] = EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
+    ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+
+    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
+
+    AssertInstructionIsFollowedByUnreachable(m_origin);
+    Instruction* unreachableInst = m_origin->getNextNode();
+    m_origin->eraseFromParent();
+    unreachableInst->eraseFromParent();
+    m_origin = nullptr;
+}
+
+void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    // Get the code pointer and the callee CodeBlock
+    // TODO: now we always use naive logic, need to employ IC
+    //
+    Value* calleeCbHeapPtr = nullptr;
+    Value* codePointer = nullptr;
+    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    ReleaseAssert(codePointer != nullptr);
+
+    Value* callSiteInfo = nullptr;
+    if (!m_isMustTailCall)
+    {
+        if (ifi->IsBaselineJitSlowPath())
+        {
+            // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
+            //
+            Value* spdSysHeapPtr = ifi->GetJitSlowPathData();
+            ReleaseAssert(llvm_value_has_type<void*>(spdSysHeapPtr));
+            Value* spd64 = new PtrToIntInst(spdSysHeapPtr, llvm_type_of<uint64_t>(ctx), "", m_origin);
+            TruncInst* spd32 = new TruncInst(spd64, llvm_type_of<uint32_t>(ctx), "", m_origin);
+            callSiteInfo = spd32;
+        }
+        else
+        {
+            // The baseline JIT'ed fast path doesn't need a CallSiteInfo, just provide undefined
+            //
+            callSiteInfo = UndefValue::get(llvm_type_of<uint32_t>(ctx));
+        }
+    }
+
+    auto [newSfBase, totalNumArgs] = EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
+    ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
 
     InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);

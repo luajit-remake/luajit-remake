@@ -77,7 +77,7 @@ std::vector<AstReturnValueAccessor> WARN_UNUSED AstReturnValueAccessor::GetAllUs
     return result;
 }
 
-void AstReturnValueAccessor::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
+void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi)
 {
     using namespace llvm;
     ReleaseAssert(ifi->IsReturnContinuation());

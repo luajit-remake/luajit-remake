@@ -11,7 +11,9 @@ enum FpsCommand
     FpsCommand_GenerateInterpreterFunctionEntryLogic,
     FpsCommand_ProcessUserBuiltinLib,
     FpsCommand_ProcessBytecodeDefinitionForInterpreter,
-    FpsCommand_GenerateBytecodeBuilderApiHeader
+    FpsCommand_GenerateBytecodeBuilderApiHeader,
+    FpsCommand_ProcessBytecodeDefinitionForBaselineJit,
+    FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -30,15 +32,24 @@ inline cl::opt<FpsCommand> cl_mainCommand(
                    "Process a bytecode definition source file for interpreter lowering.")
       , clEnumValN(FpsCommand_GenerateBytecodeBuilderApiHeader,
                    "generate-bytecode-builder-api-header",
-                   "Generate the bytecode builder API heade file.")
+                   "Generate the bytecode builder API header file.")
+      , clEnumValN(FpsCommand_ProcessBytecodeDefinitionForBaselineJit,
+                   "process-bytecode-definition-for-baseline-jit",
+                   "Process a bytecode definition source file for baseline JIT lowering.")
+      , clEnumValN(FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable,
+                   "generate-baseline-jit-dispatch-and-bytecode-trait-table",
+                   "Generate the codegen function dispatch table and bytecode trait table for baseline JIT.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
 
 inline cl::opt<std::string> cl_irInputFilename("ir-input", cl::desc("The input LLVM IR file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A comma-separated list of input files"), cl::value_desc("filenames"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_bytecodeNameTable("bytecode-name-table", cl::desc("A JSON file containing the list of all bytecode names, in the same order as the dispatch table"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_jsonInputFilename("json-input", cl::desc("The JSON input file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_headerOutputFilename("hdr-output", cl::desc("The output file name for the generated C++ header"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename("cpp-output", cl::desc("The output file name for the generated CPP file"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_cppOutputFilename2("cpp-output-2", cl::desc("The output file name for the generated CPP file #2"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_assemblyOutputFilename("asm-output", cl::desc("The output file name for the generated assembly"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonOutputFilename("json-output", cl::desc("The output file name for the generated JSON"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_auditDirPath("audit-dir", cl::desc("The directory for outputting audit information. These are not used for the build, but for human inspection only."), cl::value_desc("path"), cl::init(""), cl::cat(FPSOptions));
@@ -62,7 +73,8 @@ void FPS_GenerateInterpreterFunctionEntryLogic();
 void FPS_ProcessUserBuiltinLib();
 
 // Process a bytecode definition source file for interpreter lowering
-// Takes a IR file as input, outputs the '.s' file as if the file were compiled normally by Clang
+// Takes a IR file as input, outputs a '.json' file that contains information about the interpreter implementation
+// Note that we cannot compile to '.s' file at this step. The compilation is done after the baseline JIT lowering is also complete
 //
 void FPS_ProcessBytecodeDefinitionForInterpreter();
 
@@ -70,7 +82,26 @@ void FPS_ProcessBytecodeDefinitionForInterpreter();
 //
 void FPS_GenerateBytecodeBuilderAPIHeader();
 
+// Process a bytecode definition source file for baseline JIT lowering
+// Takes the '.json' file from interpreter lowering as input, outputs the '.s' file as if the original input IR file were compiled normally by Clang
+//
+void FPS_ProcessBytecodeDefinitionForBaselineJit();
+
+// Generate the baseline JIT codegen function dispatch table (__deegen_baseline_jit_codegen_dispatch_table)
+// and the baseline JIT bytecode trait table (deegen_baseline_jit_bytecode_trait_table)
+//
+void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
+
 // Given the desired file name in the audit directory, returns the full file path.
 // This also creates the audit directory if it doesn't exist yet.
 //
 std::string WARN_UNUSED FPS_GetAuditFilePath(const std::string& filename);
+
+// Similar to above, except that the file is created at audit_${dirSuffix}/${filename}
+// This also creates the audit directory if it doesn't exist yet.
+//
+std::string WARN_UNUSED FPS_GetAuditFilePathWithTwoPartName(const std::string& dirSuffix, const std::string& filename);
+
+// A simple function that returns the file name from the absolute file path
+//
+std::string WARN_UNUSED FPS_GetFileNameFromAbsolutePath(const std::string& filename);

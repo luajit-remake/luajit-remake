@@ -1097,7 +1097,11 @@ public:
     // The return address
     //
     void* m_retAddr;
-    // If the function is calling (i.e. not topmost frame), denotes the bytecode position that performed the call
+    // If the function is calling (i.e. not topmost frame), denotes the caller position that performed the call
+    // For interpreter, this is pointer to the bytecode (as a HeapPtr) that performed the call
+    // For baseline JIT fast path, this is not populated
+    // For baseline JIT slow path, this is the lower 32 bits of the SlowPathData pointer
+    // TODO: rename this to m_callSiteInfo to better reflect the nature of this field
     //
     SystemHeapPointer<uint8_t> m_callerBytecodePtr;
     // Total number of variadic arguments passed to the function

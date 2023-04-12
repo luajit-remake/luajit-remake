@@ -10,7 +10,7 @@ struct LowerVariadicResultsAccessorApiPass final : public DeegenAbstractSimpleAp
         return symbolName == x_getStartApi || symbolName == x_getNumApi;
     }
 
-    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         std::string symbolName = origin->getCalledFunction()->getName().str();

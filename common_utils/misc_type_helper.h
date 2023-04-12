@@ -93,8 +93,6 @@ void ConvertPointerTupleToVoidStarVector(const Tuple& t, std::vector<void*>* out
     internal::PointerTupleToVoidStarVectorImpl<Tuple>::template run<0>(t, output);
 }
 
-#define FOLD_CONSTEXPR(...) (__builtin_constant_p(__VA_ARGS__) ? (__VA_ARGS__) : (__VA_ARGS__))
-
 namespace internal
 {
 
