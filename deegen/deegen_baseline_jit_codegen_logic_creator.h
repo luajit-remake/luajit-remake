@@ -24,6 +24,12 @@ struct DeegenBytecodeBaselineJitInfo
 
     std::string m_resultFuncName;
 
+    // The list of modules that were used to generate the stencils.
+    // The first module is always the main JIT component, followed by the return continuations.
+    // For audit purpose only.
+    //
+    std::vector<std::pair<std::unique_ptr<llvm::Module>, std::string /*fnName*/>> m_implModulesForAudit;
+
     // Human-readable disassembly of what code will be generated, for audit purpose only
     //
     std::string m_disasmForAudit;

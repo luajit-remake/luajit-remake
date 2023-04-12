@@ -151,7 +151,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
 
         moduleToLink.push_back(std::move(res.m_baselineJitInfo.m_cgMod));
 
-        // Write the audit file
+        // Write the codegen logic audit file
         //
         {
             std::string cgFnAuditFileContents = res.m_baselineJitInfo.m_disasmForAudit + cgFnAsmForAudit;
@@ -160,6 +160,32 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("baseline_jit" /*dirSuffix*/, cgFnAuditFileName);
             TransactionalOutputFile auditFile(auditFilePath);
             auditFile.write(cgFnAuditFileContents);
+            auditFile.Commit();
+        }
+
+        // Write the verbose audit files
+        //
+        for (size_t i = 0; i < res.m_baselineJitInfo.m_implModulesForAudit.size(); i++)
+        {
+            Module* m = res.m_baselineJitInfo.m_implModulesForAudit[i].first.get();
+            std::string fnName = res.m_baselineJitInfo.m_implModulesForAudit[i].second;
+            std::string auditFileName = res.m_bytecodeDef->GetBytecodeIdName();
+            if (i > 0)
+            {
+                size_t k = fnName.rfind("_retcont_");
+                ReleaseAssert(k != std::string::npos);
+                auditFileName += fnName.substr(k);
+            }
+            else
+            {
+                ReleaseAssert(fnName.rfind("_retcont_") == std::string::npos);
+            }
+            auditFileName += ".ll";
+            std::string auditFileContents = DumpLLVMModuleAsString(m);
+
+            std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("baseline_jit_verbose" /*dirSuffix*/, auditFileName);
+            TransactionalOutputFile auditFile(auditFilePath);
+            auditFile.write(auditFileContents);
             auditFile.Commit();
         }
     }

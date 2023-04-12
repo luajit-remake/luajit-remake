@@ -215,12 +215,15 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
     LLVMContext& ctx = bii.m_jitMainComponent->m_module->getContext();
 
+    DeegenBytecodeBaselineJitInfo res;
+
     // TODO: implement
     //
     AstInlineCache::TriviallyLowerAllInlineCaches(bii.m_jitMainComponent->m_impl);
 
     BaselineJitImplCreator mainJic(*bii.m_jitMainComponent.get());
     mainJic.DoLowering();
+    res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*mainJic.GetModule()), mainJic.GetResultFunctionName()));
 
     BytecodeVariantDefinition* bytecodeDef = mainJic.GetBytecodeDef();
 
@@ -235,6 +238,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     for (auto& rcJic : rcJicList)
     {
         rcJic->DoLowering();
+        res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*rcJic->GetModule()), rcJic->GetResultFunctionName()));
     }
 
     // For now, stay simple and always layout all the return continuations in the order given, and let the last
@@ -284,7 +288,6 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         cgi.offsetInDataSec = dataSec.Add(cgi.cgRes.m_dataSecAlignment, cgi.cgRes.m_dataSecPreFixupCode, cgi.cgRes.m_dataSecRelocMarker, cgi.cgRes.m_condBrFixupOffsetsInDataSec);
     }
 
-    DeegenBytecodeBaselineJitInfo res;
     res.m_fastPathCodeLen = fastPath.m_code.size();
     res.m_slowPathCodeLen = slowPath.m_code.size();
     res.m_dataSectionCodeLen = dataSec.m_code.size();
