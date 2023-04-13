@@ -12,9 +12,36 @@
 #include "deegen_stencil_creator.h"
 #include "deegen_baseline_jit_codegen_logic_creator.h"
 #include "deegen_ast_inline_cache.h"
+#include "lj_parser_wrapper.h"
+#include "drt/baseline_jit_codegen_helper.h"
 
 using namespace dast;
 using namespace llvm;
+
+#if 0
+TEST(XX, XX)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    ParseResult res = ParseLuaScript(vm->GetRootCoroutine(), ReadFileContentAsString("luatests/fib_upvalue.lua"));
+
+    ScriptModule* sm = res.m_scriptModule.get();
+    {
+        UnlinkedCodeBlock* ucb  = sm->m_unlinkedCodeBlocks[0];
+        CodeBlock* cb = ucb->GetCodeBlock(sm->m_defaultGlobalObject);
+        BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+        uint64_t start = reinterpret_cast<uint64_t>(bcb->m_jitRegionStart);
+        uint64_t len = bcb->m_jitRegionSize;
+        uint64_t entry = reinterpret_cast<uint64_t>(bcb->m_jitCodeEntry);
+        fprintf(stderr, "Jit Region [0x%llx, 0x%llx) entry 0x%llx\n",
+                static_cast<unsigned long long>(start),
+                static_cast<unsigned long long>(start + len),
+                static_cast<unsigned long long>(entry));
+        cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
+    }
+    vm->LaunchScript(sm);
+}
+#endif
 
 #if 0
 TEST(BaselineJITGen, LoadBytecodeInfo)

@@ -66,7 +66,15 @@ BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
     // Note that however, the codegen may overwrite at most 7 more bytes after each section, so allocation must account for that.
     //
     constexpr size_t x_maxBytesCodegenFnMayOverwrite = 7;
-    size_t fastPathSectionOffset = dataSectionCodeLen + x_maxBytesCodegenFnMayOverwrite;
+    size_t fastPathSectionOffset = dataSectionCodeLen;
+    if (dataSectionCodeLen > 0)
+    {
+        // Only add the padding if the data section is not empty (it is often empty),
+        // since if the data section is empty, the codegen won't write anything at all so the padding is not needed.
+        // This way we don't waste 16 bytes if the data section is empty.
+        //
+        fastPathSectionOffset += x_maxBytesCodegenFnMayOverwrite;
+    }
     // Make the function entry address 16-byte aligned
     //
     fastPathSectionOffset = RoundUpToMultipleOf<16>(fastPathSectionOffset);
@@ -94,6 +102,11 @@ BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
     assert(regionVoidPtr != nullptr);
 
     uint8_t* dataSecPtr = reinterpret_cast<uint8_t*>(regionVoidPtr);
+
+    // This is required in order for all the computations above about the data section size to hold
+    //
+    assert(reinterpret_cast<uintptr_t>(dataSecPtr) % x_baselineJitMaxPossibleDataSectionAlignment == 0);
+
     uint8_t* fastPathSecPtr = dataSecPtr + fastPathSectionOffset;
     uint8_t* slowPathSecPtr = dataSecPtr + slowPathSectionOffset;
 

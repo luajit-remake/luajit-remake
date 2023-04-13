@@ -330,12 +330,21 @@ public:
             {
                 GetElementPtrInst* gep = cast<GetElementPtrInst>(val);
                 MapVector<Value*, APInt> variableOffsets;
-                APInt constantOffset;
+
+                // LLVM footgun warning: the 'constantOffset' passed to GEP::collectOffset must be initialized! Or we will silently get a 0 back!
+                //
+                APInt constantOffset = APInt(64, 0);
                 if (!gep->collectOffset(m_dataLayout, 64 /*bitWidth*/, variableOffsets /*out*/, constantOffset /*out*/))
                 {
                     // collectOffset failed for whatever reason, just skip
                     //
                     goto end;
+                }
+
+                ReleaseAssert(constantOffset.getBitWidth() == 64);
+                for (auto& it : variableOffsets)
+                {
+                    ReleaseAssert(it.second.getBitWidth() == 64);
                 }
 
                 bool success = true;
@@ -628,19 +637,28 @@ end:
                 {
                     GetElementPtrInst* gep = cast<GetElementPtrInst>(inst);
                     MapVector<Value*, APInt> variableOffsets;
-                    APInt constantOffset;
+
+                    // LLVM footgun warning: the 'constantOffset' passed to GEP::collectOffset must be initialized! Or we will silently get a 0 back!
+                    //
+                    APInt constantOffset = APInt(64, 0);
                     if (!gep->collectOffset(m_dataLayout, 64 /*bitWidth*/, variableOffsets /*out*/, constantOffset /*out*/))
                     {
                         // collectOffset failed for whatever reason, just skip
                         //
                         continue;
                     }
+                    ReleaseAssert(constantOffset.getBitWidth() == 64);
 
                     if (variableOffsets.size() == 0)
                     {
                         // This GEP doesn't contain any variable offset, skip
                         //
                         continue;
+                    }
+
+                    for (auto& it : variableOffsets)
+                    {
+                        ReleaseAssert(it.second.getBitWidth() == 64);
                     }
 
                     bool success = true;
