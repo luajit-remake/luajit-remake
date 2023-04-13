@@ -37,4 +37,12 @@ struct DeegenBytecodeBaselineJitInfo
     static DeegenBytecodeBaselineJitInfo WARN_UNUSED Create(BytecodeIrInfo& bii, const BytecodeOpcodeRawValueMap& byToOpcodeMap);
 };
 
+// Emit the implementation of 'deegen_baseline_jit_do_codegen_impl'
+//
+void DeegenGenerateBaselineJitCompilerCppEntryFunction(llvm::Module* module);
+
+// Emit the implementation of 'deegen_baseline_jit_codegen_finish'
+//
+void DeegenGenerateBaselineJitCodegenFinishFunction(llvm::Module* module);
+
 }   // namespace dast

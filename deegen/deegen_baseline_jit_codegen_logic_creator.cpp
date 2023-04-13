@@ -208,6 +208,62 @@ struct BaselineJitCodegenFnProto
     static constexpr uint32_t x_slowPathDataPtr = 9;
 };
 
+static llvm::GlobalVariable* WARN_UNUSED GetBaselineJitCodegenFnDispatchTable(llvm::Module* module)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    constexpr const char* x_dispatchTableSymbolName = "__deegen_baseline_jit_codegen_dispatch_table";
+    llvm::ArrayType* dispatchTableTy = llvm::ArrayType::get(llvm_type_of<void*>(ctx), 0 /*numElements*/);
+
+    {
+        GlobalVariable* gv = module->getGlobalVariable(x_dispatchTableSymbolName);
+        if (gv != nullptr)
+        {
+            ReleaseAssert(gv->getValueType() == dispatchTableTy);
+            return gv;
+        }
+    }
+
+    ReleaseAssert(module->getNamedValue(x_dispatchTableSymbolName) == nullptr);
+    GlobalVariable* dispatchTable = new GlobalVariable(*module,
+                                                       dispatchTableTy /*valueType*/,
+                                                       true /*isConstant*/,
+                                                       GlobalValue::ExternalLinkage,
+                                                       nullptr /*initializer*/,
+                                                       x_dispatchTableSymbolName /*name*/);
+    ReleaseAssert(dispatchTable->getName().str() == x_dispatchTableSymbolName);
+    ReleaseAssert(dispatchTable->getValueType() == dispatchTableTy);
+    dispatchTable->setAlignment(MaybeAlign(8));
+    dispatchTable->setDSOLocal(true);
+
+    return dispatchTable;
+}
+
+static llvm::Value* WARN_UNUSED GetBaselineJitCodegenFnDispatchTableEntry(llvm::Module* module, llvm::Value* index, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = index->getContext();
+    ReleaseAssert(llvm_value_has_type<uint64_t>(index));
+
+    llvm::GlobalVariable* dispatchTable = GetBaselineJitCodegenFnDispatchTable(module);
+    Value* addr = GetElementPtrInst::CreateInBounds(
+            dispatchTable->getValueType() /*pointeeType*/, dispatchTable,
+            { CreateLLVMConstantInt<uint64_t>(ctx, 0), index }, "", insertBefore);
+
+    Value* result = new LoadInst(llvm_type_of<void*>(ctx), addr, "", false /*isVolatile*/, Align(8), insertBefore);
+    ReleaseAssert(llvm_value_has_type<void*>(result));
+    return result;
+}
+
+static llvm::Value* WARN_UNUSED GetBaselineJitCodegenFnDispatchTableEntry(llvm::Module* module, llvm::Value* index, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(module->getContext(), insertAtEnd);
+    Value* res = GetBaselineJitCodegenFnDispatchTableEntry(module, index, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
 DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(BytecodeIrInfo& bii, const BytecodeOpcodeRawValueMap& byToOpcodeMap)
 {
     using namespace llvm;
@@ -635,12 +691,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         emitPatchLogic(cgi.dataSecPatchFn, dataSecAddr);
     }
 
-    // Emit slowPathDataIndex
-    // Note that we simply truncate bytecodePtr to i32 and store, and fixup the undone work of subtracting
-    // the base address in the end.
-    // This is to avoid spending one precious register passing the base address of bytecodePtr around all the time.
-    //
-    // However for SlowPathData we already maintain SlowPathDataOffset, so we can store directly
+    // Emit slowPathDataIndex (slowPathDataOffset and bytecodePtr32)
     //
     Value* advancedSlowPathDataIndex = nullptr;
     {
@@ -851,34 +902,10 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     Value* advancedBytecodePtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), cg.GetBytecodePtr(),
                                                                    { CreateLLVMConstantInt<uint64_t>(ctx, bytecodeDef->GetBytecodeStructLength()) }, "", entryBB);
 
-    // Create the dispatch table global declaration
-    //
-    constexpr const char* x_dispatchTableSymbolName = "__deegen_baseline_jit_codegen_dispatch_table";
+    Value* nextBytecodeOpcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(advancedBytecodePtr, entryBB);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(nextBytecodeOpcode));
 
-    llvm::ArrayType* dispatchTableTy = llvm::ArrayType::get(llvm_type_of<void*>(ctx), 0 /*numElements*/);
-    ReleaseAssert(module->getNamedValue(x_dispatchTableSymbolName) == nullptr);
-    GlobalVariable* dispatchTable = new GlobalVariable(*module,
-                                                       dispatchTableTy /*valueType*/,
-                                                       true /*isConstant*/,
-                                                       GlobalValue::ExternalLinkage,
-                                                       nullptr /*initializer*/,
-                                                       x_dispatchTableSymbolName /*name*/);
-    ReleaseAssert(dispatchTable->getName().str() == x_dispatchTableSymbolName);
-    dispatchTable->setAlignment(MaybeAlign(8));
-    dispatchTable->setDSOLocal(true);
-
-    Value* callee = nullptr;
-    {
-        Value* nextBytecodeOpcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(advancedBytecodePtr, entryBB);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(nextBytecodeOpcode));
-
-        Value* addr = GetElementPtrInst::CreateInBounds(
-            dispatchTableTy /*pointeeType*/, dispatchTable,
-            { CreateLLVMConstantInt<uint64_t>(ctx, 0), nextBytecodeOpcode }, "", entryBB);
-
-        callee = new LoadInst(llvm_type_of<void*>(ctx), addr, "", false /*isVolatile*/, Align(8), entryBB);
-    }
-
+    Value* callee = GetBaselineJitCodegenFnDispatchTableEntry(module.get(), nextBytecodeOpcode, entryBB);
     CallInst* ci = BaselineJitCodegenFnProto::CreateDispatch(callee,
                                                              advancedBytecodePtr,
                                                              advancedJitFastPathAddr,
@@ -1113,6 +1140,171 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
     res.m_cgMod = std::move(module);
     return res;
+}
+
+// The IR generated by this function doesn't have proper TBAA information, which is why it is not a shared utility.
+// But in the particular use case of this file, not having TBAA info should be fine, so we use this for convenience..
+//
+// To generate TBAA-safe LLVM IR one should use DeegenCommonSnippet.
+//
+template<auto member_object_ptr>
+llvm::Value* WARN_UNUSED GetMemberFromCppStruct(llvm::Value* ptr, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ptr->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(ptr));
+
+    constexpr size_t offset = offsetof_member_v<member_object_ptr>;
+    using MemberTy = typeof_member_t<member_object_ptr>;
+
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ptr,
+                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
+    Type* ty = llvm_type_of<MemberTy>(ctx);
+    return new LoadInst(ty, gep, "", insertBefore);
+}
+
+template<auto member_object_ptr>
+llvm::Value* WARN_UNUSED GetMemberFromCppStruct(llvm::Value* ptr, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(ptr->getContext(), insertAtEnd);
+    Value* res = GetMemberFromCppStruct<member_object_ptr>(ptr, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
+template<auto member_object_ptr>
+void WriteCppStructMember(llvm::Value* ptr, llvm::Value* valueToWrite, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ptr->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(ptr));
+
+    constexpr size_t offset = offsetof_member_v<member_object_ptr>;
+    using MemberTy = typeof_member_t<member_object_ptr>;
+
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ptr,
+                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
+    Type* ty = llvm_type_of<MemberTy>(ctx);
+    ReleaseAssert(valueToWrite->getType() == ty);
+    new StoreInst(valueToWrite, gep, insertBefore);
+}
+
+template<auto member_object_ptr>
+void WriteCppStructMember(llvm::Value* ptr, llvm::Value* valueToWrite, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(ptr->getContext(), insertAtEnd);
+    WriteCppStructMember<member_object_ptr>(ptr, valueToWrite, dummy);
+    dummy->eraseFromParent();
+}
+
+void DeegenGenerateBaselineJitCompilerCppEntryFunction(llvm::Module* module)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    std::string fnName = "deegen_baseline_jit_do_codegen_impl";
+    FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<void*>(ctx) }, false /*isVarArg*/);
+    Function* fn = Function::Create(fty, GlobalValue::ExternalLinkage, fnName, module);
+    ReleaseAssert(fn->getName() == fnName);
+    fn->addFnAttr(Attribute::AttrKind::NoUnwind);
+
+    // Pull in some random C++ function so we can set up the correct function attributes..
+    //
+    {
+        Function* tmp = LinkInDeegenCommonSnippet(module, "RoundPtrUpToMultipleOf");
+        CopyFunctionAttributes(fn /*dst*/, tmp /*src*/);
+    }
+
+    BasicBlock* entryBB = BasicBlock::Create(ctx, "", fn);
+    Value* ctlStruct = fn->getArg(0);
+
+    using CtlStruct = DeegenBaselineJitCodegenControlStruct;
+    Value* fastPathAddr = GetMemberFromCppStruct<&CtlStruct::m_jitFastPathAddr>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(fastPathAddr));
+    Value* slowPathAddr = GetMemberFromCppStruct<&CtlStruct::m_jitSlowPathAddr>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathAddr));
+    Value* dataSecAddr = GetMemberFromCppStruct<&CtlStruct::m_jitDataSecAddr>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(dataSecAddr));
+    Value* condBrPatchesArray = GetMemberFromCppStruct<&CtlStruct::m_condBrPatchesArray>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(condBrPatchesArray));
+    Value* slowPathDataPtr = GetMemberFromCppStruct<&CtlStruct::m_slowPathDataPtr>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
+    Value* slowPathDataIndexArray = GetMemberFromCppStruct<&CtlStruct::m_slowPathDataIndexArray>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathDataIndexArray));
+    Value* codeBlock32 = GetMemberFromCppStruct<&CtlStruct::m_codeBlock32>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(codeBlock32));
+    Value* initialSlowPathDataOffset = GetMemberFromCppStruct<&CtlStruct::m_initialSlowPathDataOffset>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(initialSlowPathDataOffset));
+    Value* bytecodeStream = GetMemberFromCppStruct<&CtlStruct::m_bytecodeStream>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(bytecodeStream));
+
+    Value* bytecodeOpcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(bytecodeStream, entryBB);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(bytecodeOpcode));
+
+    Value* callee = GetBaselineJitCodegenFnDispatchTableEntry(module, bytecodeOpcode, entryBB);
+    CallInst* ci = BaselineJitCodegenFnProto::CreateDispatch(callee,
+                                                             bytecodeStream,
+                                                             fastPathAddr,
+                                                             slowPathAddr,
+                                                             dataSecAddr,
+                                                             slowPathDataIndexArray,
+                                                             slowPathDataPtr,
+                                                             condBrPatchesArray,
+                                                             x_isDebugBuild ? ctlStruct : UndefValue::get(llvm_type_of<void*>(ctx)),
+                                                             initialSlowPathDataOffset,
+                                                             codeBlock32);
+    // This call is not (and cannot be) musttail because this is a C -> GHC call, but tail is still OK
+    //
+    ci->setTailCallKind(CallInst::TailCallKind::TCK_Tail);
+    entryBB->getInstList().push_back(ci);
+    ReturnInst::Create(ctx, nullptr, entryBB);
+
+    ValidateLLVMModule(module);
+}
+
+void DeegenGenerateBaselineJitCodegenFinishFunction(llvm::Module* module)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    std::string fnName = "deegen_baseline_jit_codegen_finish";
+
+    BaselineJitCodegenFnProto cg = BaselineJitCodegenFnProto::Create(module, fnName);
+    Function* fn = cg.GetFunction();
+
+    // Pull in some random C++ function so we can set up the correct function attributes..
+    //
+    {
+        Function* tmp = LinkInDeegenCommonSnippet(module, "RoundPtrUpToMultipleOf");
+        CopyFunctionAttributes(fn /*dst*/, tmp /*src*/);
+    }
+
+    BasicBlock* bb = BasicBlock::Create(ctx, "", fn);
+
+#ifndef NDEBUG
+    {
+        // In debug build, populate the control struct fields for assertion
+        //
+        using CtlStruct = DeegenBaselineJitCodegenControlStruct;
+        Value* ctlStruct = cg.GetControlStructPtr();
+
+        WriteCppStructMember<&CtlStruct::m_actualJitFastPathEnd>(ctlStruct, cg.GetJitFastPathPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualJitSlowPathEnd>(ctlStruct, cg.GetJitSlowPathPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualJitDataSecEnd>(ctlStruct, cg.GetJitUnalignedDataSecPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualCondBrPatchesArrayEnd>(ctlStruct, cg.GetCondBrPatchRecPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualSlowPathDataEnd>(ctlStruct, cg.GetSlowPathDataPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualSlowPathDataIndexArrayEnd>(ctlStruct, cg.GetSlowPathDataIndexPtr(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualCodeBlock32End>(ctlStruct, cg.GetCodeBlock32(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualSlowPathDataOffsetEnd>(ctlStruct, cg.GetSlowPathDataOffset(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualBytecodeStreamEnd>(ctlStruct, cg.GetBytecodePtr(), bb);
+    }
+#endif
+
+    ReturnInst::Create(ctx, nullptr, bb);
+
+    ValidateLLVMModule(module);
 }
 
 }   // namespace dast

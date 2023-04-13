@@ -13,7 +13,8 @@ struct BytecodeBaselineJitTraits
     uint16_t m_dataSectionAlignment;
     uint16_t m_numCondBrLatePatches;
     uint16_t m_slowPathDataLen;
-    uint16_t m_unused[2];
+    uint16_t m_bytecodeLength;
+    uint16_t m_unused;
 };
 // Make sure the size of this struct is a power of 2 to make addressing cheap
 //
@@ -43,13 +44,6 @@ struct BaselineJitCondBrLatePatchRecord
     uint8_t* m_ptr;
     uint32_t m_dstBytecodePtrLow32bits;
     BaselineJitCondBrLatePatchKind m_patchKind;
-
-    uint64_t ALWAYS_INLINE WARN_UNUSED GetTrueBytecodePtr(uint64_t bytecodePtrBase)
-    {
-        uint32_t offset = m_dstBytecodePtrLow32bits - static_cast<uint32_t>(bytecodePtrBase);
-        assert(offset < static_cast<uint32_t>(std::numeric_limits<int32_t>::max()));
-        return bytecodePtrBase + static_cast<uint64_t>(offset);
-    }
 
     void ALWAYS_INLINE Patch(uint64_t jitAddr, uint32_t bytecodeOrd)
     {
@@ -88,22 +82,34 @@ struct DeegenBaselineJitCodegenControlStruct
     uint8_t* m_jitDataSecAddr;
     BaselineJitCondBrLatePatchRecord* m_condBrPatchesArray;
     uint8_t* m_slowPathDataPtr;
-    uint32_t* m_slowPathDataIndexArray;
+    void* m_slowPathDataIndexArray;
 
-    // Input CodeBlock
+    // Inputs:
+    // The lower 32 bits of the input CodeBlock pointer
     //
-    CodeBlock* m_codeBlock;
+    uint64_t m_codeBlock32;
+    // The slowPathDataOffset for the first SlowPathData in BaselineCodeBlock
+    //
+    uint64_t m_initialSlowPathDataOffset;
+    // Bytecode stream
+    //
+    uint8_t* m_bytecodeStream;
 
+#ifndef NDEBUG
     // Assertions: in debug mode, the codegen function will populate these fields after codegen completes,
     // so the caller can assert that no buffer overflow has happened (which should never happen as long
     // as all the size computations are done correctly).
     //
-    uint8_t* m_expectedJitFastPathEnd;
-    uint8_t* m_expectedJitSlowPathEnd;
-    uint8_t* m_expectedJitDataSecEnd;
-    BaselineJitCondBrLatePatchRecord* m_expectedCondBrPatchesArrayEnd;
-    uint8_t* m_expectedSlowPathDataEnd;
-    uint32_t* m_expectedSlowPathDataIndexArrayEnd;
+    uint8_t* m_actualJitFastPathEnd;
+    uint8_t* m_actualJitSlowPathEnd;
+    uint8_t* m_actualJitDataSecEnd;
+    BaselineJitCondBrLatePatchRecord* m_actualCondBrPatchesArrayEnd;
+    uint8_t* m_actualSlowPathDataEnd;
+    void* m_actualSlowPathDataIndexArrayEnd;
+    uint64_t m_actualCodeBlock32End;
+    uint64_t m_actualSlowPathDataOffsetEnd;
+    uint8_t* m_actualBytecodeStreamEnd;
+#endif
 };
 
 class BaselineCodeBlock;

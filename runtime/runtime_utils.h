@@ -331,6 +331,11 @@ public:
         return offsetof_member_v<&CodeBlock::m_bytecodeStream>;
     }
 
+    uint8_t* GetBytecodeStream()
+    {
+        return reinterpret_cast<uint8_t*>(this) + GetTrailingArrayOffset();
+    }
+
     uintptr_t GetBytecodeMetadataStart()
     {
         return reinterpret_cast<uintptr_t>(this) + GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(m_bytecodeLength);
@@ -435,8 +440,6 @@ public:
     uint32_t m_bytecodeMetadataLength;
     uint32_t m_stackFrameNumSlots;
 
-    uint32_t m_numBytecodes;
-
     // Only used during parsing. Always nullptr at runtime.
     // It doesn't have to sit in this struct but the memory consumption of this struct simply shouldn't matter.
     //
@@ -462,31 +465,104 @@ public:
 class alignas(8) BaselineCodeBlock
 {
 public:
+    static BaselineCodeBlock* WARN_UNUSED Create(CodeBlock* cb,
+                                                 uint32_t numBytecodes,
+                                                 uint32_t slowPathDataStreamLength,
+                                                 void* jitCodeEntry,
+                                                 void* jitRegionStart,
+                                                 uint32_t jitRegionSize);
+
+    static constexpr size_t GetTrailingArrayOffset()
+    {
+        return offsetof_member_v<&BaselineCodeBlock::m_sbIndex>;
+    }
+
     // The layout of this struct is currently hardcoded
     // If you change this, be sure to make corresponding changes in DeegenBytecodeBaselineJitInfo
     //
     struct alignas(8) SlowPathDataAndBytecodeOffset
     {
+        // Note that this offset is relative to the BaselineCodeBlock pointer
+        //
         uint32_t m_slowPathDataOffset;
-        uint32_t m_bytecodeOffset;
+        // This is the lower 32 bits of m_owner's bytecode pointer
+        //
+        uint32_t m_bytecodePtr32;
     };
 
-    void* WARN_UNUSED GetSlowPathDataAtBytecodeIndex(size_t index)
+    // Return the SlowPathData pointer for the given bytecode index (not bytecode offset!)
+    //
+    uint8_t* WARN_UNUSED GetSlowPathDataAtBytecodeIndex(size_t index)
     {
-        assert(index < m_ucbOwner->m_numBytecodes);
+        assert(index < m_numBytecodes);
         size_t offset = m_sbIndex[index].m_slowPathDataOffset;
         return reinterpret_cast<uint8_t*>(this) + offset;
     }
 
+    uint8_t* WARN_UNUSED GetSlowPathDataStreamStart()
+    {
+        uintptr_t addr = reinterpret_cast<uintptr_t>(this);
+        addr += GetTrailingArrayOffset();
+        addr += sizeof(SlowPathDataAndBytecodeOffset) * m_numBytecodes;
+        return reinterpret_cast<uint8_t*>(addr);
+    }
+
+    // The bytecodePtr32 must be valid.
+    //
+    // For now, this is simply implemented by a O(log n) binary search.
+    //
+    size_t WARN_UNUSED GetBytecodeIndexFromBytecodePtrLower32Bits(uint32_t bytecodePtr32)
+    {
+        uint32_t base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(m_owner));
+        uint32_t targetOffset = bytecodePtr32 - base;
+        assert(m_owner->GetTrailingArrayOffset() <= targetOffset && targetOffset < m_owner->m_bytecodeLength + m_owner->GetTrailingArrayOffset());
+        assert(m_numBytecodes > 0);
+        size_t left = 0, right = m_numBytecodes - 1;
+        while (left < right)
+        {
+            size_t mid = (left + right) / 2;
+            uint32_t value = m_sbIndex[mid].m_bytecodePtr32 - base;
+            if (targetOffset == value)
+            {
+                assert(m_sbIndex[mid].m_bytecodePtr32 == bytecodePtr32);
+                return mid;
+            }
+            if (targetOffset < value)
+            {
+                assert(mid > 0);
+                right = mid - 1;
+            }
+            else
+            {
+                left = mid + 1;
+            }
+        }
+        assert(left == right);
+        assert(m_sbIndex[left].m_bytecodePtr32 == bytecodePtr32);
+        return left;
+    }
+
+    // The bytecodePtr must be a valid bytecode pointer in m_owner's bytecode stream
+    //
+    size_t WARN_UNUSED GetBytecodeIndexFromBytecodePtr(void* bytecodePtr)
+    {
+        assert(m_owner->GetBytecodeStream() <= bytecodePtr && bytecodePtr < m_owner->GetBytecodeStream() + m_owner->m_bytecodeLength);
+        return GetBytecodeIndexFromBytecodePtrLower32Bits(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(bytecodePtr)));
+    }
+
     // Currently the JIT code is layouted as follow:
     //     [ Data Section ] [ FastPath Code ] [ SlowPath Code ]
-    // Their respective sizes are recorded in m_ucbOwner
     //
     void* m_jitCodeEntry;
-    void* m_dataSecPtr;
 
-    CodeBlock* m_cbOwner;
-    UnlinkedCodeBlock* m_ucbOwner;
+    CodeBlock* m_owner;
+    uint32_t m_numBytecodes;
+    uint32_t m_slowPathDataStreamLength;
+
+    // The JIT region is [m_jitRegionStart, m_jitRegionStart + m_jitRegionSize)
+    //
+    void* m_jitRegionStart;
+    uint32_t m_jitRegionSize;
 
     SlowPathDataAndBytecodeOffset m_sbIndex[0];
 };

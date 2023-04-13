@@ -79,6 +79,8 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             size_t end = res.m_opcodeRawValue + res.m_opcodeNumFuseIcVariants + 1;
             ReleaseAssert(start < byOpMap.GetDispatchTableLength() && end <= byOpMap.GetDispatchTableLength());
 
+            size_t bytecodeStructLength = res.m_bytecodeDef->GetBytecodeStructLength();
+
             fprintf(hdrFp, "extern \"C\" void %s();\n", cgFnName.c_str());
             fprintf(hdrFp, "namespace {\n\n");
             fprintf(hdrFp, "template<typename T> struct populate_baseline_jit_dispatch_table_%s {\n", res.m_bytecodeDef->GetBytecodeIdName().c_str());
@@ -106,7 +108,9 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             ReleaseAssert(res.m_baselineJitInfo.m_numCondBrLatePatches <= 65535);
             fprintf(hdrFp, "    .m_numCondBrLatePatches = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_numCondBrLatePatches));
             ReleaseAssert(res.m_baselineJitInfo.m_slowPathDataLen <= 65535);
-            fprintf(hdrFp, "    .m_slowPathDataLen = %llu\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathDataLen));
+            fprintf(hdrFp, "    .m_slowPathDataLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathDataLen));
+            ReleaseAssert(bytecodeStructLength <= 65535);
+            fprintf(hdrFp, "    .m_bytecodeLength = %llu\n", static_cast<unsigned long long>(bytecodeStructLength));
             fprintf(hdrFp, "};\n");
 
             for (size_t k = start; k < end; k++)
@@ -276,8 +280,23 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
     asmOutFile.Commit();
 }
 
+static std::unique_ptr<llvm::Module> WARN_UNUSED GenerateBaselineJitHelperLogic(llvm::LLVMContext& ctx)
+{
+    using namespace llvm;
+    std::unique_ptr<Module> module = std::make_unique<Module>("baseline_jit_helper_logic", ctx);
+
+    DeegenGenerateBaselineJitCompilerCppEntryFunction(module.get());
+    DeegenGenerateBaselineJitCodegenFinishFunction(module.get());
+
+    RunLLVMOptimizePass(module.get());
+    return module;
+}
+
 void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
 {
+    std::unique_ptr<llvm::LLVMContext> llvmCtxHolder = std::make_unique<llvm::LLVMContext>();
+    llvm::LLVMContext& ctx = *llvmCtxHolder.get();
+
     ReleaseAssert(cl_inputListFilenames != "");
     std::vector<std::string> hdrFileNameList = ParseCommaSeparatedFileList(cl_inputListFilenames);
 
@@ -314,6 +333,8 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
     }
     fprintf(fp, ">::get();\n\n");
 
+    fprintf(fp, "extern \"C\" void deegen_baseline_jit_codegen_finish();\n");
+
     // Note that the codegen dispatch table needs to have one extra "stopper function" entry in the end!
     //
     fprintf(fp, "extern \"C\" const DispatchTableEntryT __deegen_baseline_jit_codegen_dispatch_table[%llu];\n",
@@ -327,9 +348,7 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
         fprintf(fp, "deegen_cg_dt_contents[%llu],\n", static_cast<unsigned long long>(i));
     }
 
-    // TODO: print the correct function name for the stopper function entry
-    //
-    fprintf(fp, "nullptr\n};\n\n");
+    fprintf(fp, "FOLD_CONSTEXPR(reinterpret_cast<void*>(&deegen_baseline_jit_codegen_finish))\n};\n\n");
 
     fprintf(fp, "static constexpr auto deegen_by_trait_table_contents = constexpr_multipart_array_builder_helper<BytecodeBaselineJitTraits, %llu\n",
             static_cast<unsigned long long>(numEntries));
@@ -361,5 +380,13 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
     }
     fprintf(fp, "};\n\n");
 
+    std::unique_ptr<llvm::Module> helperLogicModule = GenerateBaselineJitHelperLogic(ctx);
+    std::string asmFileContents = CompileLLVMModuleToAssemblyFile(helperLogicModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
+
+    ReleaseAssert(cl_assemblyOutputFilename != "");
+    TransactionalOutputFile asmOutputFile(cl_assemblyOutputFilename);
+    asmOutputFile.write(asmFileContents);
+
     cppOutput.Commit();
+    asmOutputFile.Commit();
 }

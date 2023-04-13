@@ -25,7 +25,6 @@ static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module,
     }
 
     TargetOptions targetOptions;
-    targetOptions.GuaranteedTailCallOpt = true;
     if (x_isDebugBuild)
     {
         targetOptions.TrapUnreachable = true;

@@ -183,3 +183,27 @@ CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer
     r->m_stackBegin = reinterpret_cast<TValue*>(stackArea);
     return r;
 }
+
+BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
+                                                         uint32_t numBytecodes,
+                                                         uint32_t slowPathDataStreamLength,
+                                                         void* jitCodeEntry,
+                                                         void* jitRegionStart,
+                                                         uint32_t jitRegionSize)
+{
+    size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(SlowPathDataAndBytecodeOffset) * numBytecodes + slowPathDataStreamLength;
+    sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
+    BaselineCodeBlock* res = reinterpret_cast<BaselineCodeBlock*>(new uint64_t[sizeToAllocate / 8]);
+
+    res->m_jitCodeEntry = jitCodeEntry;
+    res->m_owner = cb;
+    res->m_numBytecodes = numBytecodes;
+    res->m_slowPathDataStreamLength = slowPathDataStreamLength;
+    res->m_jitRegionStart = jitRegionStart;
+    res->m_jitRegionSize = jitRegionSize;
+
+    assert(cb->m_baselineCodeBlock == nullptr);
+    cb->m_baselineCodeBlock = res;
+
+    return res;
+}

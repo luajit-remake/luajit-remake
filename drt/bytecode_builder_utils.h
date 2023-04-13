@@ -170,26 +170,10 @@ class BytecodeBuilderBase
 public:
     friend class BytecodeBuilder;
 
-    // Maybe we don't need this but it doesn't hurt anything either..
+    // We only need two extra bytes to store the "stopper" bytecode opcode at the end for baseline JIT codegen,
+    // but giving it 4 bytes doesn't hurt anything either..
     //
     static constexpr size_t x_numExtraPaddingAtEnd = 4;
-
-    std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
-    {
-        if (!m_metadataFieldPatched)
-        {
-            m_metadataFieldPatched = true;
-            PatchMetadataFields();
-        }
-
-        size_t len = GetCurLength();
-        // Add a few bytes so that tentative decoding of the next bytecode won't segfault..
-        //
-        uint8_t* res = new uint8_t[len + x_numExtraPaddingAtEnd];
-        memcpy(res, GetBytecodeStart(), len);
-        memset(res + len, 0, x_numExtraPaddingAtEnd);
-        return std::make_pair(res, len + x_numExtraPaddingAtEnd);
-    }
 
     std::pair<uint64_t*, size_t> GetBuiltConstantTable()
     {
@@ -241,6 +225,21 @@ protected:
             delete [] m_bufferBegin;
             m_bufferBegin = nullptr;
         }
+    }
+
+    std::pair<uint8_t*, size_t> GetBuiltBytecodeSequenceImpl()
+    {
+        if (!m_metadataFieldPatched)
+        {
+            m_metadataFieldPatched = true;
+            PatchMetadataFields();
+        }
+
+        size_t len = GetCurLength();
+        uint8_t* res = new uint8_t[len + x_numExtraPaddingAtEnd];
+        memcpy(res, GetBytecodeStart(), len);
+        memset(res + len, 0, x_numExtraPaddingAtEnd);
+        return std::make_pair(res, len + x_numExtraPaddingAtEnd);
     }
 
     uint8_t* Reserve(size_t size)

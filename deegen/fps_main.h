@@ -89,6 +89,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit();
 
 // Generate the baseline JIT codegen function dispatch table (__deegen_baseline_jit_codegen_dispatch_table)
 // and the baseline JIT bytecode trait table (deegen_baseline_jit_bytecode_trait_table)
+// and some wrapper logic for call from C++
 //
 void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
 

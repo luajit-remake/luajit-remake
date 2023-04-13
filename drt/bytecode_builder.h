@@ -274,11 +274,28 @@ public:
         return true;
     }
 
-private:
+    std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
+    {
+        static_assert(sizeof(BytecodeOpcodeTy) <= x_numExtraPaddingAtEnd);
+        std::pair<uint8_t*, size_t> res = GetBuiltBytecodeSequenceImpl();
+        // Append the "stopper" bytecode opcode right after the end of the bytecode sequence
+        //
+        assert(res.second >= x_numExtraPaddingAtEnd);
+        uint8_t* loc = res.first + res.second - x_numExtraPaddingAtEnd;
+        UnalignedStore<BytecodeOpcodeTy>(loc, SafeIntegerCast<BytecodeOpcodeTy>(x_numTotalVariants));
+        return res;
+    }
+
+    static constexpr size_t GetTotalBytecodeKinds()
+    {
+        return x_numTotalVariants;
+    }
+
     // We should refactor this definition to a unified place..
     //
     using BytecodeOpcodeTy = uint16_t;
 
+private:
     BytecodeOpcodeTy GetOpcodeAtPosition(size_t bcPos)
     {
         assert(bcPos < GetCurLength());

@@ -123,10 +123,15 @@ endforeach()
 #
 set(baseline_jit_dispatch_and_trait_table_cpp "${GENERATED_FILES_DIR}/build_baseline_jit_dispatch_and_trait_table.cpp")
 set_source_files_properties(${baseline_jit_dispatch_and_trait_table_cpp} PROPERTIES GENERATED true)
+
+set(baseline_jit_misc_helper_logic_asm "${GENERATED_FILES_DIR}/baseline_jit_misc_helper_logic.asm")
+set_source_files_properties(${baseline_jit_misc_helper_logic_asm} PROPERTIES GENERATED true)
+
 list(JOIN baseline_jit_dispatch_table_hdr_file_list "," comma_separated_baseline_jit_dispatch_table_hdr_file_list)
 add_custom_command(
   OUTPUT ${baseline_jit_dispatch_and_trait_table_cpp}
-  COMMAND ${fps_exec} --generate-baseline-jit-dispatch-and-bytecode-trait-table --input-list='${comma_separated_baseline_jit_dispatch_table_hdr_file_list}' --cpp-output=${baseline_jit_dispatch_and_trait_table_cpp} --bytecode-name-table=${interpreter_opcode_name_table_json}
+  OUTPUT ${baseline_jit_misc_helper_logic_asm}
+  COMMAND ${fps_exec} --generate-baseline-jit-dispatch-and-bytecode-trait-table --input-list='${comma_separated_baseline_jit_dispatch_table_hdr_file_list}' --cpp-output=${baseline_jit_dispatch_and_trait_table_cpp} --bytecode-name-table=${interpreter_opcode_name_table_json} --asm-output=${baseline_jit_misc_helper_logic_asm}
   DEPENDS fps ${generated_src_list} ${baseline_jit_dispatch_table_hdr_file_list} ${interpreter_opcode_name_table_json}
 )
 
@@ -134,6 +139,7 @@ add_library(deegen_generated_interpreter_impl OBJECT
   ${generated_src_list}
   ${interpreter_dispatch_table_builder}
   ${baseline_jit_dispatch_and_trait_table_cpp}
+  ${baseline_jit_misc_helper_logic_asm}
 )
 set_target_properties(deegen_generated_interpreter_impl PROPERTIES COMPILE_FLAGS " -O3 ")
 
