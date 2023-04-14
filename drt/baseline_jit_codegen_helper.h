@@ -112,6 +112,22 @@ struct DeegenBaselineJitCodegenControlStruct
 #endif
 };
 
+struct BaselineJitFunctionEntryLogicTraits
+{
+    using EmitterFn = void(*)(void* /*fastPathPtr*/, void* /*slowPathPtr*/, void* /*dataSecPtr*/);
+    uint16_t m_fastPathCodeLen;
+    uint16_t m_slowPathCodeLen;
+    uint16_t m_dataSecCodeLen;
+    EmitterFn m_emitterFn;
+};
+static_assert(sizeof(BaselineJitFunctionEntryLogicTraits) == 16);
+
+// If the function takes <= threshold fixed parameters, it will use the specialized function entry logic implementation
+// In debug mode, make the threshold smaller so there is more chance to test the generic implementation
+//
+constexpr size_t x_baselineJitFunctionEntrySpecializeThresholdForNonVarargsFunction = x_isDebugBuild ? 3 : 10;
+constexpr size_t x_baselineJitFunctionEntrySpecializeThresholdForVarargsFunction = x_isDebugBuild ? 3 : 10;
+
 class BaselineCodeBlock;
 
 extern "C" BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb);

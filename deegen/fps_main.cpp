@@ -50,6 +50,11 @@ int main(int argc, char** argv)
         FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
         break;
     }
+    case FpsCommand_GenerateBaselineJitFunctionEntryLogic:
+    {
+        FPS_GenerateBaselineJitFunctionEntryLogic();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

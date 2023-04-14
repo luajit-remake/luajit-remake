@@ -13,7 +13,8 @@ enum FpsCommand
     FpsCommand_ProcessBytecodeDefinitionForInterpreter,
     FpsCommand_GenerateBytecodeBuilderApiHeader,
     FpsCommand_ProcessBytecodeDefinitionForBaselineJit,
-    FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable
+    FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable,
+    FpsCommand_GenerateBaselineJitFunctionEntryLogic
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -39,6 +40,9 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable,
                    "generate-baseline-jit-dispatch-and-bytecode-trait-table",
                    "Generate the codegen function dispatch table and bytecode trait table for baseline JIT.")
+      , clEnumValN(FpsCommand_GenerateBaselineJitFunctionEntryLogic,
+                   "generate-baseline-jit-function-entry-logic",
+                   "Generate the function entry logic emitter for baseline JIT.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
@@ -92,6 +96,10 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit();
 // and some wrapper logic for call from C++
 //
 void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
+
+// Generate the baseline JIT function entry logic
+//
+void FPS_GenerateBaselineJitFunctionEntryLogic();
 
 // Given the desired file name in the audit directory, returns the full file path.
 // This also creates the audit directory if it doesn't exist yet.

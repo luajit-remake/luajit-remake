@@ -124,7 +124,7 @@ endforeach()
 set(baseline_jit_dispatch_and_trait_table_cpp "${GENERATED_FILES_DIR}/build_baseline_jit_dispatch_and_trait_table.cpp")
 set_source_files_properties(${baseline_jit_dispatch_and_trait_table_cpp} PROPERTIES GENERATED true)
 
-set(baseline_jit_misc_helper_logic_asm "${GENERATED_FILES_DIR}/baseline_jit_misc_helper_logic.asm")
+set(baseline_jit_misc_helper_logic_asm "${GENERATED_FILES_DIR}/baseline_jit_misc_helper_logic.s")
 set_source_files_properties(${baseline_jit_misc_helper_logic_asm} PROPERTIES GENERATED true)
 
 list(JOIN baseline_jit_dispatch_table_hdr_file_list "," comma_separated_baseline_jit_dispatch_table_hdr_file_list)
@@ -135,11 +135,28 @@ add_custom_command(
   DEPENDS fps ${generated_src_list} ${baseline_jit_dispatch_table_hdr_file_list} ${interpreter_opcode_name_table_json}
 )
 
+# generate the baseline JIT entry logic
+#
+set(baseline_jit_function_entry_decl_cpp "${GENERATED_FILES_DIR}/build_baseline_jit_function_entry_logic_trait_table.cpp")
+set_source_files_properties(${baseline_jit_function_entry_decl_cpp} PROPERTIES GENERATED true)
+
+set(baseline_jit_function_entry_emitter_asm "${GENERATED_FILES_DIR}/baseline_jit_function_entry_logic_emitter.s")
+set_source_files_properties(${baseline_jit_function_entry_emitter_asm} PROPERTIES GENERATED true)
+
+add_custom_command(
+  OUTPUT ${baseline_jit_function_entry_decl_cpp}
+  OUTPUT ${baseline_jit_function_entry_emitter_asm}
+  COMMAND ${fps_exec} --generate-baseline-jit-function-entry-logic --cpp-output=${baseline_jit_function_entry_decl_cpp} --asm-output=${baseline_jit_function_entry_emitter_asm} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+  DEPENDS fps 
+)
+
 add_library(deegen_generated_interpreter_impl OBJECT
   ${generated_src_list}
   ${interpreter_dispatch_table_builder}
   ${baseline_jit_dispatch_and_trait_table_cpp}
   ${baseline_jit_misc_helper_logic_asm}
+  ${baseline_jit_function_entry_decl_cpp}
+  ${baseline_jit_function_entry_emitter_asm}
 )
 set_target_properties(deegen_generated_interpreter_impl PROPERTIES COMPILE_FLAGS " -O3 ")
 

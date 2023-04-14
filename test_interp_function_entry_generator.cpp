@@ -186,8 +186,8 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
 {
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
-    InterpreterFunctionEntryLogicCreator ifi(calleeAcceptsVarArgs, specializedNumFixedParams);
-    std::unique_ptr<Module> module = ifi.Get(ctx);
+    DeegenFunctionEntryLogicCreator ifi(ctx, DeegenEngineTier::Interpreter, calleeAcceptsVarArgs, specializedNumFixedParams);
+    std::unique_ptr<Module> module = ifi.GetInterpreterModule();
 
     Function* func = module->getFunction(ifi.GetFunctionName());
     ReleaseAssert(func != nullptr);

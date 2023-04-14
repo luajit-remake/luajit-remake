@@ -41,28 +41,28 @@ struct GeneratorContext
     {
         for (size_t i = 0; i <= x_specializeThresholdForNonVarargsFunction; i++)
         {
-            InterpreterFunctionEntryLogicCreator ifi(false /*takesVarArgs*/, i /*specialziedFixedParams*/);
+            DeegenFunctionEntryLogicCreator ifi(*context.get(), DeegenEngineTier::Interpreter, false /*takesVarArgs*/, i /*specialziedFixedParams*/);
             novaNames.push_back(ifi.GetFunctionName());
-            LinkInModule(ifi.Get(*context.get()));
+            LinkInModule(ifi.GetInterpreterModule());
         }
 
         {
-            InterpreterFunctionEntryLogicCreator ifi(false /*takesVarArgs*/, static_cast<size_t>(-1) /*specialziedFixedParams*/);
+            DeegenFunctionEntryLogicCreator ifi(*context.get(), DeegenEngineTier::Interpreter, false /*takesVarArgs*/, static_cast<size_t>(-1) /*specialziedFixedParams*/);
             generalNovaName = ifi.GetFunctionName();
-            LinkInModule(ifi.Get(*context.get()));
+            LinkInModule(ifi.GetInterpreterModule());
         }
 
         for (size_t i = 0; i <= x_specializeThresholdForVarargsFunction; i++)
         {
-            InterpreterFunctionEntryLogicCreator ifi(true /*takesVarArgs*/, i /*specialziedFixedParams*/);
+            DeegenFunctionEntryLogicCreator ifi(*context.get(), DeegenEngineTier::Interpreter, true /*takesVarArgs*/, i /*specialziedFixedParams*/);
             vaNames.push_back(ifi.GetFunctionName());
-            LinkInModule(ifi.Get(*context.get()));
+            LinkInModule(ifi.GetInterpreterModule());
         }
 
         {
-            InterpreterFunctionEntryLogicCreator ifi(true /*takesVarArgs*/, static_cast<size_t>(-1) /*specialziedFixedParams*/);
+            DeegenFunctionEntryLogicCreator ifi(*context.get(), DeegenEngineTier::Interpreter, true /*takesVarArgs*/, static_cast<size_t>(-1) /*specialziedFixedParams*/);
             generalVaName = ifi.GetFunctionName();
-            LinkInModule(ifi.Get(*context.get()));
+            LinkInModule(ifi.GetInterpreterModule());
         }
     }
 

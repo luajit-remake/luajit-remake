@@ -3,15 +3,29 @@
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_return.h"
 #include "deegen_options.h"
+#include "invoke_clang_helper.h"
 #include "tvalue.h"
 #include "tag_register_optimization.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
+#include "deegen_stencil_lowering_pass.h"
+#include "drt/baseline_jit_codegen_helper.h"
 
 namespace dast {
 
-std::string InterpreterFunctionEntryLogicCreator::GetFunctionName()
+std::string DeegenFunctionEntryLogicCreator::GetFunctionName()
 {
-    std::string name = "deegen_interpreter_enter_guest_language_function_";
+    std::string tierName;
+    if (m_tier == DeegenEngineTier::Interpreter)
+    {
+        tierName = "interpreter";
+    }
+    else
+    {
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+        tierName = "baseline_jit";
+    }
+    std::string name = "deegen_" + tierName + "_enter_guest_language_function_";
     if (IsNumFixedParamSpecialized())
     {
         name += std::to_string(GetSpecializedNumFixedParam()) + "_params_";
@@ -31,7 +45,7 @@ std::string InterpreterFunctionEntryLogicCreator::GetFunctionName()
     return name;
 }
 
-std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::Get(llvm::LLVMContext& ctx)
+void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 {
     ReleaseAssert(!m_generated);
     m_generated = true;
@@ -39,7 +53,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     using namespace llvm;
     std::unique_ptr<Module> module = std::make_unique<Module>("generated_function_entry_logic", ctx);
 
-    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), GetFunctionName());
+    std::string funcName = GetFunctionName();
+    if (m_tier == DeegenEngineTier::BaselineJIT)
+    {
+        // For baseline JIT, use a temp function name since it's not our final result
+        //
+        funcName = "baseline_jit_fn_entry_logic_tmp";
+    }
+    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), funcName);
 
     {
         // Just pull in some C++ function so we can set up the attributes..
@@ -73,8 +94,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
     calleeCodeBlock->setName("calleeCodeBlock");
 
-    Value* bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, entryBB);
-    bytecodePtr->setName("bytecodePtr");
+    Value* bytecodePtr = nullptr;
+    if (m_tier == DeegenEngineTier::Interpreter)
+    {
+        bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, entryBB);
+        bytecodePtr->setName("bytecodePtr");
+    }
 
     Value* stackBaseAfterFixUp = nullptr;
     if (!m_acceptVarArgs)
@@ -139,41 +164,259 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterFunctionEntryLogicCreator::
     //
     UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
 
-    Value* opcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(bytecodePtr, dummyInst /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(opcode));
-
-    Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(module.get(), opcode, dummyInst /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
-
-    InterpreterFunctionInterface::CreateDispatchToBytecode(
-        targetFunction,
-        coroutineCtx,
-        stackBaseAfterFixUp,
-        bytecodePtr,
-        calleeCodeBlock,
-        dummyInst /*insertBefore*/);
-
-    dummyInst->eraseFromParent();
-
-    bool shouldPutIntoHotCodeSection;
-    if (m_acceptVarArgs)
+    if (m_tier == DeegenEngineTier::Interpreter)
     {
-        shouldPutIntoHotCodeSection = IsNumFixedParamSpecialized() && GetSpecializedNumFixedParam() <= 2;
+        ReleaseAssert(bytecodePtr != nullptr);
+
+        Value* opcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(bytecodePtr, dummyInst /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(opcode));
+
+        Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(module.get(), opcode, dummyInst /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
+
+        InterpreterFunctionInterface::CreateDispatchToBytecode(
+            targetFunction,
+            coroutineCtx,
+            stackBaseAfterFixUp,
+            bytecodePtr,
+            calleeCodeBlock,
+            dummyInst /*insertBefore*/);
     }
     else
     {
-        shouldPutIntoHotCodeSection = true;
+        ReleaseAssert(bytecodePtr == nullptr);
+
+        CallInst* target = DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(module.get(),
+                                                                                       101 /*fallthroughDest*/,
+                                                                                       llvm_type_of<void*>(ctx),
+                                                                                       dummyInst /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<void*>(target));
+
+        InterpreterFunctionInterface::CreateDispatchToBytecode(
+            target,
+            coroutineCtx,
+            stackBaseAfterFixUp,
+            UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
+            calleeCodeBlock,
+            dummyInst /*insertBefore*/);
     }
-    if (shouldPutIntoHotCodeSection)
+
+    dummyInst->eraseFromParent();
+
+    if (m_tier == DeegenEngineTier::Interpreter)
     {
-        func->setSection(InterpreterBytecodeImplCreator::x_hot_code_section_name);
+        bool shouldPutIntoHotCodeSection;
+        if (m_acceptVarArgs)
+        {
+            shouldPutIntoHotCodeSection = IsNumFixedParamSpecialized() && GetSpecializedNumFixedParam() <= 2;
+        }
+        else
+        {
+            shouldPutIntoHotCodeSection = true;
+        }
+        if (shouldPutIntoHotCodeSection)
+        {
+            func->setSection(InterpreterBytecodeImplCreator::x_hot_code_section_name);
+        }
     }
 
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::Top);
     RunTagRegisterOptimizationPass(func);
-    RunLLVMOptimizePass(module.get());
 
-    return module;
+    if (m_tier == DeegenEngineTier::Interpreter)
+    {
+        RunLLVMOptimizePass(module.get());
+        m_module = std::move(module);
+        return;
+    }
+
+    GenerateBaselineJitStencil(std::move(module));
+}
+
+void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr<llvm::Module> srcModule)
+{
+    using namespace llvm;
+    LLVMContext& ctx = srcModule->getContext();
+
+    ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+
+    Function* func = srcModule->getFunction("baseline_jit_fn_entry_logic_tmp");
+    ReleaseAssert(func != nullptr);
+
+    // The logic below basically duplicates the logic in baseline JIT lowering, which is a bit unfortunate..
+    //
+    DesugarAndSimplifyLLVMModule(srcModule.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
+
+    std::vector<CPRuntimeConstantNodeBase*> rcDef;
+    {
+        StencilRuntimeConstantInserter rcInserter;
+        rcInserter.AddRawRuntimeConstantAsLowAddressFnPointer(101 /*fallthroughDest*/);
+        rcDef = rcInserter.RunOnFunction(func);
+    }
+
+    RunLLVMOptimizePass(srcModule.get());
+
+    DeegenStencilLoweringPass::RunIrRewritePhase(func, DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(rcDef));
+
+    std::string asmFile = CompileLLVMModuleToAssemblyFile(srcModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
+
+    asmFile = DeegenStencilLoweringPass::RunAsmRewritePhase(asmFile, func->getName().str());
+
+    // Save contents for audit
+    //
+    {
+        m_baselineJitSourceAsmForAudit = asmFile;
+
+        // Do some simple heuristic to try to pick out the function asm for better readability
+        //
+        size_t startPos = asmFile.find("baseline_jit_fn_entry_logic_tmp:");
+        if (startPos != std::string::npos)
+        {
+            size_t endPos = asmFile.find(".Lfunc_end0:");
+            if (endPos != std::string::npos && endPos > startPos)
+            {
+                m_baselineJitSourceAsmForAudit = asmFile.substr(startPos, endPos - startPos);
+            }
+        }
+    }
+
+    std::string objectFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");
+    DeegenStencil stencil = DeegenStencil::Parse(ctx, objectFile);
+
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(true /*mayAttemptToEliminateJmpToFallthrough*/,
+                                                                     0 /*numBytecodeOperands*/,
+                                                                     rcDef);
+    // The codegen result must have no late CondBr patches
+    //
+    ReleaseAssert(cgRes.m_condBrFixupOffsetsInFastPath.size() == 0);
+    ReleaseAssert(cgRes.m_condBrFixupOffsetsInSlowPath.size() == 0);
+    ReleaseAssert(cgRes.m_condBrFixupOffsetsInDataSec.size() == 0);
+
+    // Note that since the function entry logic is always the first thing to be emitted,
+    // the data section pointer is always at offset 0 with assumed max alignment.
+    // So we don't need to worry about aligning the data section pointer here, just assert that it doesn't exceed our assumed max alignment
+    //
+    ReleaseAssert(cgRes.m_dataSecAlignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+    ReleaseAssert(is_power_of_2(cgRes.m_dataSecAlignment));
+
+    std::unique_ptr<llvm::Module> cgMod = cgRes.GenerateCodegenLogicLLVMModule(srcModule.get() /*originModule*/);
+
+    Function* fastPathPatchFn = cgMod->getFunction(DeegenStencilCodegenResult::x_fastPathCodegenFuncName);
+    ReleaseAssert(fastPathPatchFn != nullptr);
+
+    Function* slowPathPatchFn = cgMod->getFunction(DeegenStencilCodegenResult::x_slowPathCodegenFuncName);
+    ReleaseAssert(slowPathPatchFn != nullptr);
+
+    Function* dataSecPatchFn = cgMod->getFunction(DeegenStencilCodegenResult::x_dataSecCodegenFuncName);
+    ReleaseAssert(dataSecPatchFn != nullptr);
+
+    fastPathPatchFn->setLinkage(GlobalValue::InternalLinkage);
+    fastPathPatchFn->addFnAttr(Attribute::AlwaysInline);
+    slowPathPatchFn->setLinkage(GlobalValue::InternalLinkage);
+    slowPathPatchFn->addFnAttr(Attribute::AlwaysInline);
+    dataSecPatchFn->setLinkage(GlobalValue::InternalLinkage);
+    dataSecPatchFn->addFnAttr(Attribute::AlwaysInline);
+
+    // Currently patch functions takes 3 fixed operands even if they don't exists (placeholder ordinal 100, 103, 104)
+    //
+    constexpr size_t x_numExpectedArgsInPatchFn = 4 + 3;
+    auto validatePatchFnProto = [&](Function* f)
+    {
+        ReleaseAssert(f->arg_size() == x_numExpectedArgsInPatchFn);
+        // Our stencil doesn't have any runtime constants to provide, so no patch values should exist.
+        // The only usable inputs are the first 4 arguments (dstAddr, fastPathAddr, slowPathAddr, dataSecAddr)
+        //
+        for (size_t i = 4; i < fastPathPatchFn->arg_size(); i++)
+        {
+            ReleaseAssert(fastPathPatchFn->getArg(static_cast<uint32_t>(i))->use_empty());
+        }
+    };
+    validatePatchFnProto(fastPathPatchFn);
+    validatePatchFnProto(slowPathPatchFn);
+    validatePatchFnProto(dataSecPatchFn);
+
+    FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx) }, false /*isVarArg*/);
+    Function* patchFn = Function::Create(fty, GlobalValue::ExternalLinkage, GetFunctionName(), cgMod.get());
+    ReleaseAssert(patchFn->getName() == GetFunctionName());
+
+    patchFn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(patchFn, fastPathPatchFn);
+
+    Value* fastPathAddr = patchFn->getArg(0);
+    Value* slowPathAddr = patchFn->getArg(1);
+    Value* dataSecAddr = patchFn->getArg(2);
+
+    BasicBlock* bb = BasicBlock::Create(ctx, "", patchFn);
+
+    auto emitCopyLogic = [&](const std::vector<uint8_t>& bytes, llvm::Value* dst, const std::string& dbgName)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(dst));
+        size_t roundedLen = RoundUpToMultipleOf<8>(bytes.size());
+        std::vector<Constant*> arr;
+        for (size_t i = 0; i < roundedLen; i++)
+        {
+            uint8_t value;
+            if (i < bytes.size())
+            {
+                value = bytes[i];
+            }
+            else
+            {
+                value = 0;
+            }
+
+            arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, value));
+        }
+
+        ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), roundedLen);
+        Constant* ca = ConstantArray::get(aty, arr);
+
+        ReleaseAssert(cgMod->getNamedValue(dbgName) == nullptr);
+        GlobalVariable* gv = new GlobalVariable(*cgMod.get(), aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, dbgName);
+        ReleaseAssert(gv->getName() == dbgName);
+        gv->setAlignment(Align(16));
+
+        EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(cgMod.get(), dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, roundedLen), bb);
+    };
+
+    // Note that we don't have to align the data section pointer since it is at offset 0 and must already be aligned
+    //
+    emitCopyLogic(cgRes.m_fastPathPreFixupCode, fastPathAddr, "deegen_fastpath_prefixup_code");
+    emitCopyLogic(cgRes.m_slowPathPreFixupCode, slowPathAddr, "deegen_slowpath_prefixup_code");
+    emitCopyLogic(cgRes.m_dataSecPreFixupCode, dataSecAddr, "deegen_datasec_prefixup_code");
+
+    Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
+    Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
+    Value* dataSecAddrI64 = new PtrToIntInst(dataSecAddr, llvm_type_of<uint64_t>(ctx), "", bb);
+
+    auto callPatchFn = [&](Function* target, Value* dstAddr)
+    {
+        std::vector<Value*> args;
+        args.push_back(dstAddr);
+        args.push_back(fastPathAddrI64);
+        args.push_back(slowPathAddrI64);
+        args.push_back(dataSecAddrI64);
+        while (args.size() < x_numExpectedArgsInPatchFn)
+        {
+            args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));
+        }
+        CallInst::Create(target, args, "", bb);
+    };
+    callPatchFn(fastPathPatchFn, fastPathAddr);
+    callPatchFn(slowPathPatchFn, slowPathAddr);
+    callPatchFn(dataSecPatchFn, dataSecAddr);
+
+    ReturnInst::Create(ctx, nullptr, bb);
+
+    ValidateLLVMModule(cgMod.get());
+
+    RunLLVMOptimizePass(cgMod.get());
+
+    ReleaseAssert(cgMod->getFunction(GetFunctionName()) != nullptr);
+    m_module = std::move(cgMod);
+    m_baselineJitFastPathLen = cgRes.m_fastPathPreFixupCode.size();
+    m_baselineJitSlowPathLen = cgRes.m_slowPathPreFixupCode.size();
+    m_baselineJitDataSecLen = cgRes.m_dataSecPreFixupCode.size();
 }
 
 }   // namespace dast

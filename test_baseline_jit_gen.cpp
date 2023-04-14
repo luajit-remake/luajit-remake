@@ -14,36 +14,51 @@
 #include "deegen_ast_inline_cache.h"
 #include "lj_parser_wrapper.h"
 #include "drt/baseline_jit_codegen_helper.h"
+#include "deegen_interpreter_function_entry.h"
+#include "llvm_override_option.h"
+#include "test_vm_utils.h"
 
 using namespace dast;
 using namespace llvm;
 
-#if 0
-TEST(XX, XX)
+TEST(BaselineJit, Fib_Upvalue)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
+
+    VMOutputInterceptor vmoutput(vm);
+
     ParseResult res = ParseLuaScript(vm->GetRootCoroutine(), ReadFileContentAsString("luatests/fib_upvalue.lua"));
 
     ScriptModule* sm = res.m_scriptModule.get();
+    for (UnlinkedCodeBlock* ucb : sm->m_unlinkedCodeBlocks)
     {
-        UnlinkedCodeBlock* ucb  = sm->m_unlinkedCodeBlocks[0];
         CodeBlock* cb = ucb->GetCodeBlock(sm->m_defaultGlobalObject);
         BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
-        uint64_t start = reinterpret_cast<uint64_t>(bcb->m_jitRegionStart);
-        uint64_t len = bcb->m_jitRegionSize;
-        uint64_t entry = reinterpret_cast<uint64_t>(bcb->m_jitCodeEntry);
-        fprintf(stderr, "Jit Region [0x%llx, 0x%llx) entry 0x%llx\n",
-                static_cast<unsigned long long>(start),
-                static_cast<unsigned long long>(start + len),
-                static_cast<unsigned long long>(entry));
         cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
     }
+
     vm->LaunchScript(sm);
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    ReleaseAssert(out == "610\n");
+    ReleaseAssert(err == "");
 }
-#endif
 
 #if 0
+TEST(XX, YY)
+{
+    std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
+    LLVMContext& ctx = *llvmCtxHolder.get();
+    DeegenFunctionEntryLogicCreator creator(ctx, DeegenEngineTier::BaselineJIT, false, static_cast<size_t>(-1));
+    auto res = creator.GetBaselineJitResult();
+    res.m_module->dump();
+
+    fprintf(stderr, "%s\n", res.m_asmSourceForAudit.c_str());
+
+}
+
 TEST(BaselineJITGen, LoadBytecodeInfo)
 {
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);

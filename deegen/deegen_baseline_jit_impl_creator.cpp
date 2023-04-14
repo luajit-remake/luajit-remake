@@ -20,7 +20,7 @@ static std::string WARN_UNUSED GetRawRuntimeConstantPlaceholderName(size_t ordin
     return std::string("__deegen_constant_placeholder_bytecode_operand_") + std::to_string(ordinal);
 }
 
-static llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperandImpl(llvm::Module* module, size_t ordinal, llvm::Type* operandTy, llvm::Instruction* insertBefore)
+llvm::CallInst* WARN_UNUSED DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(llvm::Module* module, size_t ordinal, llvm::Type* operandTy, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     std::string placeholderName = GetRawRuntimeConstantPlaceholderName(ordinal);
@@ -37,7 +37,7 @@ static llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperandImpl(llvm:
 llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    CallInst* ci = CreateConstantPlaceholderForOperandImpl(GetModule(), ordinal, operandTy, insertBefore);
+    CallInst* ci = DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(GetModule(), ordinal, operandTy, insertBefore);
     m_stencilRcInserter.AddRawRuntimeConstant(ordinal, lb, ub);
     return ci;
 }
@@ -99,14 +99,13 @@ BaselineJitImplCreator::BaselineJitImplCreator(BaselineJitImplCreator::SlowPathR
     m_isSlowPathReturnContinuation = true;
 }
 
-std::string WARN_UNUSED BaselineJitImplCreator::GetRcPlaceholderNameForFallthrough()
+std::string WARN_UNUSED DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(std::vector<CPRuntimeConstantNodeBase*>& rcDef)
 {
-    ReleaseAssert(!IsBaselineJitSlowPath());
     bool found = false;
     size_t ord = static_cast<size_t>(-1);
-    for (size_t i = 0; i < m_stencilRcDefinitions.size(); i++)
+    for (size_t i = 0; i < rcDef.size(); i++)
     {
-        CPRuntimeConstantNodeBase* def = m_stencilRcDefinitions[i];
+        CPRuntimeConstantNodeBase* def = rcDef[i];
         if (def->IsRawRuntimeConstant() && dynamic_cast<CPRawRuntimeConstant*>(def)->m_label == 101 /*fallthroughTarget*/)
         {
             ReleaseAssert(!found);
@@ -116,6 +115,12 @@ std::string WARN_UNUSED BaselineJitImplCreator::GetRcPlaceholderNameForFallthrou
     }
     if (!found) { return ""; }
     return std::string("__deegen_cp_placeholder_") + std::to_string(ord);
+}
+
+std::string WARN_UNUSED BaselineJitImplCreator::GetRcPlaceholderNameForFallthrough()
+{
+    ReleaseAssert(!IsBaselineJitSlowPath());
+    return DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(m_stencilRcDefinitions);
 }
 
 void BaselineJitImplCreator::CreateWrapperFunction()

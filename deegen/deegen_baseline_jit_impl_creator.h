@@ -119,4 +119,15 @@ private:
     static constexpr const char* x_fallthroughDest = "fallthroughDest";
 };
 
+struct DeegenPlaceholderUtils
+{
+    static llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperand(llvm::Module* module,
+                                                                           size_t ordinal,
+                                                                           llvm::Type* operandTy,
+                                                                           llvm::Instruction* insertBefore);
+
+    static std::string WARN_UNUSED FindFallthroughPlaceholderSymbolName(std::vector<CPRuntimeConstantNodeBase*>& rcDef);
+};
+
+
 }   // namespace dast
