@@ -1,0 +1,14 @@
+t1	1	nil	nil
+1	2	3
+3	4	nil	nil
+2	3	4
+nil	5	nil	nil
+2	3	4
+false	6	nil	nil
+2	3	4
+true	7	nil	nil
+2	3	4
+false
+false
+false
+false

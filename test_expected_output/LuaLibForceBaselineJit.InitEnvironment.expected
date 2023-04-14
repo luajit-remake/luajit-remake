@@ -1,0 +1,6 @@
+_G:	40
+lib coroutine:	6
+lib debug:	14
+lib math:	31
+lib os:	11
+lib string:	15

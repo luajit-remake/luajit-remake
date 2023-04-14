@@ -1,0 +1,93 @@
+[coro1] current coro:	coroutine-1
+[coro1] coro status:	running	suspended	suspended	suspended
+[coro2] current coro:	coroutine-2
+[coro2] coro status:	normal	running	suspended	suspended
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro3] 	true	aaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro4] 	aaaaaaaaaaaaaaaaaaaaaaaa
+[coro4] current coro:	coroutine-4
+[coro4] coro status:	normal	normal	normal	running
+[coro3] 	true	aaaaaaaaaaaaaaaaaaaaaaaaa
+[coro3] current coro:	coroutine-3
+[coro3] coro status:	normal	normal	running	suspended
+[coro2] 	true	aaaaaaaaaaaaaaaaaaaaaaaaa
+[coro2] current coro:	coroutine-2
+[coro2] coro status:	normal	running	dead	suspended
+[coro2] 	false	cannot resume dead coroutine
+[coro2] current coro:	coroutine-2
+[coro2] coro status:	normal	running	dead	suspended
+[coro2] 	false	cannot resume dead coroutine
+[coro2] current coro:	coroutine-2
+[coro2] coro status:	normal	running	dead	suspended
+[coro2] 	false	cannot resume dead coroutine
+[coro2] current coro:	coroutine-2
+[coro2] coro status:	normal	running	dead	suspended
+[coro1] 	true	cannot resume dead coroutine
+[coro1] current coro:	coroutine-1
+[coro1] coro status:	running	dead	dead	suspended
+[coro1] 	false	cannot resume dead coroutine
+[coro1] current coro:	coroutine-1
+[coro1] coro status:	running	dead	dead	suspended
+[main] 	true	cannot resume dead coroutine

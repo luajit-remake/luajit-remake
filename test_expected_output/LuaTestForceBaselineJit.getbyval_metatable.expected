@@ -1,0 +1,245 @@
+-- test 1 --
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+-- test 2 --
+x
+f1	t	b	nil
+233
+f1	t	1.2	nil
+233
+8765
+f1	t	-5	nil
+233
+f1	t	false	nil
+233
+f1	t	nan	nil
+233
+f1	t	nil	nil
+233
+-- test 3 --
+f1	t	a	nil
+233
+y
+345
+f1	t	3	nil
+233
+f1	t	-5	nil
+233
+f1	t	false	nil
+233
+f1	t	nan	nil
+233
+f1	t	nil	nil
+233
+-- test 4 --
+false
+1.2
+f1	t	1.2	nil
+233
+f1	t	3	nil
+233
+www
+f1	t	false	nil
+233
+f1	t	nan	nil
+233
+f1	t	nil	nil
+233
+-- test 5 --
+false
+1.2
+false
+false
+www
+false
+false
+false
+-- test 6 --
+false
+0
+false
+22
+false
+44
+false
+false
+-- test 7 --
+f3	123	a	nil	nil
+433
+0
+f3	123	1.2	nil	nil
+433
+22
+f3	123	-5	nil	nil
+433
+44
+f3	123	nan	nil	nil
+433
+f3	123	nil	nil	nil
+433
+-- test 8 --
+false
+0
+false
+22
+false
+44
+false
+false
+-- test 9 --
+false
+false
+false
+false
+false
+false
+false
+-- test 10 --
+f3	false	b	nil
+455
+f3	false	1.2	nil
+455
+f3	false	3	nil
+455
+f3	false	-5	nil
+455
+f3	false	false	nil
+455
+f3	false	nan	nil
+455
+f3	false	nil	nil
+455
+-- test 11 --
+false
+false
+false
+false
+false
+false
+false
+-- test 12 --
+false
+false
+false
+false
+false
+false
+false
+-- test 13 --
+f5	566	b	nil	nil
+899
+f5	566	1.2	nil	nil
+899
+f5	566	3	nil	nil
+899
+f5	566	-5	nil	nil
+899
+f5	566	false	nil	nil
+899
+f5	566	nan	nil	nil
+899
+f5	566	nil	nil	nil
+899
+-- test 14 --
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+f6	t10	a11	nil
+900
+4
+5
+6
+7
+8
+9
+10
+11
+f6	t10	20	nil
+900
+13
+f6	t10	31	nil
+900
+14
+f6	t10	true	nil
+900
+f6	t10	nil	nil
+900
+f6	t10	nan	nil
+900
+f6	t10	a1	nil
+900
+2
+3
+f6	t10	a11	nil
+900
+f6	t10	nan	nil
+900
+f6	t10	21	nil
+900
+5
+6
+f6	t10	21	nil
+900
+14
+f6	t10	true	nil
+900
+f6	t10	nil	nil
+900
+-- test 15 --
+10
+f5	456	a11	nil	nil
+899
+4
+f5	456	31	nil	nil
+899
+14
+f5	456	true	nil	nil
+899
+f5	456	nil	nil	nil
+899
+f5	456	nan	nil	nil
+899
+10
+f5	456	a11	nil	nil
+899
+f5	456	21	nil	nil
+899
+f5	456	31	nil	nil
+899
+14
+f5	456	true	nil	nil
+899
+f5	456	nil	nil	nil
+899
+f5	456	nan	nil	nil
+899
+-- test 16 --
+10
+11
+4
+nil
+14
+nil
+nil
+nil
+10
+11
+nil
+nil
+14
+nil
+nil
+nil

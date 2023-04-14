@@ -1,0 +1,49 @@
+-- test 1 --
+nil
+nil
+-- test 2 --
+f1	true	x	nil
+123
+f1	true	y	nil
+123
+-- test 3 --
+xx
+f1	true	y	nil
+123
+-- test 4 --
+xx
+ww
+-- test 5 --
+xx
+y1
+-- test 6 --
+x1
+y1
+-- test 7 --
+abc
+y1
+-- test 8 --
+abc
+f2	233	y	nil	nil
+233
+-- test 9 --
+abc
+false
+-- test 10 --
+abc
+f6	t10	y	nil
+900
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+f6	t10	a11	nil
+900
+f6	t10	a12	nil
+900

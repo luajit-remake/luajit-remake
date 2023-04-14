@@ -1,0 +1,50 @@
+
+step	1
+color	0
+prewhite	4
+prewhite	0
+colorup	0
+area	1	0	1
+edges	16
+
+step	2
+color	0
+prewhite	14
+prewhite	0
+colorup	0
+area	0.875	0	0.875
+edges	102
+
+step	3
+color	9
+color	1
+color	0
+prewhite	29
+prewhite	3
+prewhite	0
+colorup	2
+area	0.5	0	0.5
+edges	332
+
+step	4
+color	26
+color	6
+color	0
+prewhite	70
+prewhite	20
+prewhite	0
+colorup	6
+area	0.3515625	0	0.3515625
+edges	930
+
+step	5
+color	71
+color	17
+color	0
+prewhite	153
+prewhite	95
+prewhite	24
+prewhite	0
+colorup	12
+area	0.265625	0	0.265625
+edges	2618

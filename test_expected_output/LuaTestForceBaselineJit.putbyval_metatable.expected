@@ -1,0 +1,182 @@
+-- test 1 --
+f1	t	a	1	nil
+f1	t	b	2	nil
+f1	t	1.2	3	nil
+f1	t	3	4	nil
+f1	t	-5	5	nil
+f1	t	false	6	nil
+false
+false
+2
+4
+6
+8
+10
+12
+nil
+nil
+false
+false
+1
+2
+3
+4
+5
+6
+nil
+nil
+-- test 2 --
+f2	233	a	1	nil
+f2	233	b	2	nil
+f2	233	1.2	3	nil
+f2	233	3	4	nil
+f2	233	-5	5	nil
+f2	233	false	6	nil
+false
+false
+3
+6
+9
+12
+15
+18
+nil
+nil
+false
+false
+1
+2
+3
+4
+5
+6
+nil
+nil
+-- test 3 --
+f3	t6	0	107	nil
+false
+false
+t0	nil	nil	nil	nil	nil	nil	nil	nil	nil
+t1	101	nil	nil	nil	nil	nil	nil	nil	nil
+t2	2	102	nil	nil	nil	nil	nil	nil	nil
+t3	4	5	103	nil	nil	nil	nil	nil	nil
+t4	7	8	9	104	nil	nil	nil	nil	nil
+t5	11	12	13	14	105	nil	nil	nil	nil
+t6	16	17	18	19	20	106	10700	nil	nil
+false
+false
+t0	nil	nil	nil	nil	nil	nil	nil	nil	nil
+t1	101	nil	nil	nil	nil	nil	nil	nil	nil
+t2	2	102	nil	nil	nil	nil	nil	nil	nil
+t3	4	5	103	nil	nil	nil	nil	nil	nil
+t4	7	8	9	104	nil	nil	nil	nil	nil
+t5	11	12	13	14	105	nil	nil	nil	nil
+t6	16	17	18	19	20	106	107	nil	nil
+-- test 4 --
+f4	t6	0	107	nil
+false
+false
+t0	nil	nil	nil	nil	nil	nil	nil	nil	nil
+t1	101	nil	nil	nil	nil	nil	nil	nil	nil
+t2	2	102	nil	nil	nil	nil	nil	nil	nil
+t3	4	5	103	nil	nil	nil	nil	nil	nil
+t4	7	8	9	104	nil	nil	nil	nil	nil
+t5	11	12	13	14	105	nil	nil	nil	nil
+t6	16	17	18	19	20	106	10700	nil	nil
+false
+false
+t0	nil	nil	nil	nil	nil	nil	nil	nil	nil
+t1	101	nil	nil	nil	nil	nil	nil	nil	nil
+t2	2	102	nil	nil	nil	nil	nil	nil	nil
+t3	4	5	103	nil	nil	nil	nil	nil	nil
+t4	7	8	9	104	nil	nil	nil	nil	nil
+t5	11	12	13	14	105	nil	nil	nil	nil
+t6	16	17	18	19	20	106	107	nil	nil
+-- test 5 --
+f5	765	a	1	nil
+f5	765	b	2	nil
+f5	765	1.2	3	nil
+f5	765	3	4	nil
+f5	765	-5	5	nil
+f5	765	false	6	nil
+f5	765	nan	7	nil
+f5	765	nil	8	nil
+f5	765	a	1	nil
+f5	765	b	2	nil
+f5	765	1.2	3	nil
+f5	765	3	4	nil
+f5	765	-5	5	nil
+f5	765	false	6	nil
+f5	765	nan	7	nil
+f5	765	nil	8	nil
+-- test 6 --
+f6	t2	a	1	nil
+f6	t2	b	2	nil
+f6	t2	1.2	3	nil
+f6	t2	3	4	nil
+f6	t2	-5	5	nil
+f6	t2	false	6	nil
+false
+false
+4
+8
+12
+16
+20
+24
+nil
+nil
+false
+false
+1
+2
+3
+4
+5
+6
+nil
+nil
+-- test 7 --
+f7	t2	a	1	nil
+f7	t2	b	2	nil
+f7	t2	1.2	3	nil
+f7	t2	3	4	nil
+f7	t2	-5	5	nil
+f7	t2	false	6	nil
+false
+false
+4
+8
+12
+16
+20
+24
+nil
+nil
+false
+false
+1
+2
+3
+4
+5
+6
+nil
+nil
+-- test 8 --
+f8	876	a	1	nil
+f8	876	b	2	nil
+f8	876	1.2	3	nil
+f8	876	3	4	nil
+f8	876	-5	5	nil
+f8	876	false	6	nil
+f8	876	nan	7	nil
+f8	876	nil	8	nil
+f8	876	a	1	nil
+f8	876	b	2	nil
+f8	876	1.2	3	nil
+f8	876	3	4	nil
+f8	876	-5	5	nil
+f8	876	false	6	nil
+f8	876	nan	7	nil
+f8	876	nil	8	nil

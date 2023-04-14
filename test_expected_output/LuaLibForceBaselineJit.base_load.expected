@@ -1,0 +1,24 @@
+-- test 1 --
+function
+execution result
+-- test 2 --
+function
+execution result
+-- test 3 --
+function
+execution result
+-- test 4 --
+function
+in load
+execution result	123
+-- test 5 --
+function
+in load
+execution result	123	456
+-- test 6 --
+function
+in load
+execution result	1234	567
+-- test 7 --
+nil
+-- end of test --

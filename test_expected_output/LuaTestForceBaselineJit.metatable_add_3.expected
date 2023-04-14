@@ -1,0 +1,17 @@
+3
+enter f	a	1	nil
+nil
+enter f	1	a	nil
+nil
+16.2
+enter f	1.2	0xG	nil
+nil
+16.2
+enter f	0xG	1.2	nil
+nil
+18
+enter f	    0xG        	3	nil
+nil
+30
+enter f	0xG	 0xG 	nil
+nil

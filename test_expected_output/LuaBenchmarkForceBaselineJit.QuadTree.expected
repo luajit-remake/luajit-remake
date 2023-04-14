@@ -1,0 +1,81 @@
+
+step	1
+color	0
+prewhite	4
+prewhite	0
+colorup	0
+area	1	0	1
+edges	16
+
+step	2
+color	0
+prewhite	14
+prewhite	0
+colorup	0
+area	0.875	0	0.875
+edges	100
+
+step	3
+color	8
+color	0
+prewhite	34
+prewhite	0
+colorup	0
+area	0.53125	0	0.53125
+edges	340
+
+step	4
+color	30
+color	6
+color	0
+prewhite	70
+prewhite	18
+prewhite	0
+colorup	6
+area	0.34375	0	0.34375
+edges	980
+
+step	5
+color	78
+color	13
+color	1
+color	0
+prewhite	161
+prewhite	79
+prewhite	16
+prewhite	0
+colorup	18
+area	0.25	0	0.25
+edges	2564
+
+step	6
+color	188
+color	62
+color	15
+color	3
+color	0
+prewhite	396
+prewhite	223
+prewhite	128
+prewhite	9
+prewhite	0
+colorup	56
+area	0.1845703125	0	0.1845703125
+edges	7510
+
+step	7
+color	365
+color	115
+color	45
+color	9
+color	6
+color	0
+prewhite	1048
+prewhite	630
+prewhite	588
+prewhite	196
+prewhite	22
+prewhite	0
+colorup	114
+area	0.151611328125	0	0.151611328125
+edges	22812

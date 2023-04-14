@@ -1,0 +1,640 @@
+testing:	f1
+false
+false
+false
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f2
+true
+true
+false
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f3
+false
+false
+true
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f4
+true
+true
+true
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f5
+true
+true
+false
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f6
+false
+false
+false
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f7
+true
+true
+true
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f8
+false
+false
+true
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f9
+false
+false
+false
+false
+false
+false
+true
+true
+pcall:	false
+testing:	f10
+true
+true
+true
+true
+true
+false
+false
+false
+pcall:	false
+testing:	f11
+false
+false
+false
+false
+false
+true
+true
+true
+pcall:	false
+testing:	f12
+true
+true
+true
+true
+true
+true
+false
+false
+pcall:	false
+testing:	f13
+true
+true
+true
+true
+true
+false
+false
+false
+pcall:	false
+testing:	f14
+false
+false
+false
+false
+false
+false
+true
+true
+pcall:	false
+testing:	f15
+true
+true
+true
+true
+true
+true
+false
+false
+pcall:	false
+testing:	f16
+false
+false
+false
+false
+false
+true
+true
+true
+pcall:	false
+testing:	f17
+y
+y
+y
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f18
+x
+x
+y
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f19
+y
+y
+x
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f20
+x
+x
+x
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f21
+x
+x
+y
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f22
+y
+y
+y
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f23
+x
+x
+x
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f24
+y
+y
+x
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f25
+y
+y
+y
+y
+y
+y
+x
+x
+pcall:	false
+testing:	f26
+x
+x
+x
+x
+x
+y
+y
+y
+pcall:	false
+testing:	f27
+y
+y
+y
+y
+y
+x
+x
+x
+pcall:	false
+testing:	f28
+x
+x
+x
+x
+x
+x
+y
+y
+pcall:	false
+testing:	f29
+x
+x
+x
+x
+x
+y
+y
+y
+pcall:	false
+testing:	f30
+y
+y
+y
+y
+y
+y
+x
+x
+pcall:	false
+testing:	f31
+x
+x
+x
+x
+x
+x
+y
+y
+pcall:	false
+testing:	f32
+y
+y
+y
+y
+y
+x
+x
+x
+pcall:	false
+testing:	f33
+true
+true
+true
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f34
+false
+false
+true
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f35
+true
+true
+false
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f36
+false
+false
+false
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f37
+false
+false
+true
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f38
+true
+true
+true
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f39
+false
+false
+false
+true
+true
+true
+true
+true
+pcall:	false
+testing:	f40
+true
+true
+false
+false
+false
+false
+false
+false
+pcall:	false
+testing:	f41
+true
+true
+true
+true
+true
+true
+false
+false
+pcall:	false
+testing:	f42
+false
+false
+false
+false
+false
+true
+true
+true
+pcall:	false
+testing:	f43
+true
+true
+true
+true
+true
+false
+false
+false
+pcall:	false
+testing:	f44
+false
+false
+false
+false
+false
+false
+true
+true
+pcall:	false
+testing:	f45
+false
+false
+false
+false
+false
+true
+true
+true
+pcall:	false
+testing:	f46
+true
+true
+true
+true
+true
+true
+false
+false
+pcall:	false
+testing:	f47
+false
+false
+false
+false
+false
+false
+true
+true
+pcall:	false
+testing:	f48
+true
+true
+true
+true
+true
+false
+false
+false
+pcall:	false
+testing:	f49
+x
+x
+x
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f50
+y
+y
+x
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f51
+x
+x
+y
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f52
+y
+y
+y
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f53
+y
+y
+x
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f54
+x
+x
+x
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f55
+y
+y
+y
+x
+x
+x
+x
+x
+pcall:	false
+testing:	f56
+x
+x
+y
+y
+y
+y
+y
+y
+pcall:	false
+testing:	f57
+x
+x
+x
+x
+x
+x
+y
+y
+pcall:	false
+testing:	f58
+y
+y
+y
+y
+y
+x
+x
+x
+pcall:	false
+testing:	f59
+x
+x
+x
+x
+x
+y
+y
+y
+pcall:	false
+testing:	f60
+y
+y
+y
+y
+y
+y
+x
+x
+pcall:	false
+testing:	f61
+y
+y
+y
+y
+y
+x
+x
+x
+pcall:	false
+testing:	f62
+x
+x
+x
+x
+x
+x
+y
+y
+pcall:	false
+testing:	f63
+y
+y
+y
+y
+y
+y
+x
+x
+pcall:	false
+testing:	f64
+x
+x
+x
+x
+x
+y
+y
+y
+pcall:	false

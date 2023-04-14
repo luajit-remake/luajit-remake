@@ -1,0 +1,15 @@
+nil
+nil
+nil
+false
+false
+function
+in loaded string!
+main	123	234
+loaded	nil	234
+loaded	345	456
+main	123	456
+loaded
+loaded	w
+loaded	1	2
+loaded	x	y	z

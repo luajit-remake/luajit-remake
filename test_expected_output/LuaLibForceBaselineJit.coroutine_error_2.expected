@@ -1,0 +1,134 @@
+-- unprotected error in coroutine (test 1) --
+starting coro
+inside coro
+false	true
+dead
+-- unprotected error in coroutine (test 2) --
+starting coro
+inside coro
+true	yield value from coro
+suspended
+false	true
+dead
+-- unprotected error in coroutine (test 3) --
+starting coro
+inside coro
+false	true
+-- unprotected error in coroutine (test 4) --
+starting coro
+inside coro
+inside main error handler, err=	true
+false	return value from main error handler
+-- unprotected error in coroutine (test 5) --
+starting coro
+inside coro
+true	yield value from coro
+false	true
+-- unprotected error in coroutine (test 6) --
+starting coro
+inside coro
+true	yield value from coro
+inside main error handler 2, err=	true
+false	return value from main error handler
+-- unprotected error in coroutine (test 7) --
+inside coro
+inside coro2
+false	true
+true	return value crom coro
+dead	dead
+-- unprotected error in coroutine (test 8) --
+inside coro
+inside coro2
+true	yield value from coro2
+true	yield value form coro
+suspended	suspended
+false	true
+true	return value crom coro
+dead	dead
+-- unprotected error in coroutine (test 9) --
+inside coro
+inside coro2
+false	true
+dead
+-- unprotected error in coroutine (test 10) --
+inside coro
+starting coro2
+inside coro2
+yield value from coro2
+true	yield value from coro
+suspended
+resuming coro2
+false	true
+dead
+-- unprotected error in coroutine (test 11) --
+inside coro
+inside coro2
+coro2 resume result	false	true
+return value from coro
+dead
+-- unprotected error in coroutine (test 12) --
+inside coro
+inside coro2
+coro2 resume result	true	yield value from coro2
+yield value from coro
+suspended
+coro2 resume result 2	false	true
+return value from coro
+dead
+-- unprotected error in coroutine (test 13) --
+inside coro
+inside coro2
+false	true
+-- unprotected error in coroutine (test 14) --
+inside coro
+inside coro2
+coro2 resume result	yield value from coro2
+yield value from coro
+true	should succeed
+false	true
+-- unprotected error in coroutine (test 15) --
+inside coro
+inside coro2
+in main err handler, err=	true
+false	error from main err handler
+-- unprotected error in coroutine (test 16) --
+inside coro
+inside coro2
+coro2 resume result	yield value from coro2
+yield value from coro
+true	should succeed
+in main err handler, err=	true
+false	error from main err handler
+-- unprotected error in coroutine (test 17) --
+inside coro
+inside coro2
+inside coro3
+in main err handler, err=	true
+false	error from main err handler
+-- unprotected error in coroutine (test 18) --
+inside coro
+inside coro2
+inside coro3
+coro3 resume result	yield value from coro3
+coro2 resume result	yield value from coro2
+yield value from coro1
+should reach here
+true
+in main err handler, err=	true
+false	error from main err handler
+-- unprotected error in coroutine (test 19) --
+inside coro
+inside coro2
+inside coro3
+false	true
+dead
+-- unprotected error in coroutine (test 20) --
+inside coro
+inside coro2
+inside coro3
+coro3 resume result	yield value from coro3
+coro2 resume result	yield value from coro2
+true	yield value from coro1
+suspended
+false	true
+dead

@@ -122,13 +122,13 @@ TEST(LuaTestForceBaselineJit, Fib)
     RunSimpleLuaTest("luatests/fib.lua", LuaTestOption::ForceBaselineJit);
 }
 
-TEST(LuaTest, TestPrint)
+static void LuaTest_TestPrint_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/test_print.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/test_print.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -137,6 +137,11 @@ TEST(LuaTest, TestPrint)
     std::string expectedOut = "0.2\t3\tfalse\ttrue\tnil\tabc\tfunction: 0x";
     ReleaseAssert(out.starts_with(expectedOut));
     ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, TestPrint)
+{
+    LuaTest_TestPrint_Impl(LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TestTableDup)

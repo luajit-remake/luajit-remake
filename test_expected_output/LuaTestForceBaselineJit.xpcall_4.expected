@@ -1,0 +1,31 @@
+test1
+enter h
+false	123
+test2
+enter h
+false	123
+test3
+enter f	nil
+true	123	456	789
+test4
+enter f2	nil
+false	error in error handling
+test5
+false	error in error handling
+test6
+false	error in error handling
+test7
+enter h	attempt to call a nil value
+false	124
+test8
+enter h	attempt to call a table value
+false	124
+test10
+false	error in error handling
+test11
+enter f3	nil	nil
+true	21	43
+test12
+enter f4	nil	nil
+enter h
+false	123
