@@ -2,7 +2,7 @@
 #include "fps_main.h"
 #include "transactional_output_file.h"
 
-#include "deegen_interpreter_function_entry.h"
+#include "deegen_function_entry_logic_creator.h"
 #include "llvm/Linker/Linker.h"
 
 namespace {

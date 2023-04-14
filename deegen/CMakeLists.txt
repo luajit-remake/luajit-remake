@@ -11,7 +11,7 @@ add_library(deegen_utils
   deegen_ast_return.cpp
   deegen_ast_return_value_accessor.cpp
   deegen_interpreter_bytecode_impl_creator.cpp
-  deegen_interpreter_function_entry.cpp
+  deegen_function_entry_logic_creator.cpp
   llvm_llc_helper.cpp
   deegen_process_lib_func.cpp
   deegen_ast_throw_error.cpp

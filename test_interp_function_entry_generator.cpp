@@ -2,7 +2,7 @@
 
 #include "deegen_api.h"
 
-#include "deegen_interpreter_function_entry.h"
+#include "deegen_function_entry_logic_creator.h"
 #include "deegen_ast_return.h"
 #include "runtime_utils.h"
 

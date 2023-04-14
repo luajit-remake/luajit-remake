@@ -14,7 +14,7 @@
 #include "deegen_ast_inline_cache.h"
 #include "lj_parser_wrapper.h"
 #include "drt/baseline_jit_codegen_helper.h"
-#include "deegen_interpreter_function_entry.h"
+#include "deegen_function_entry_logic_creator.h"
 #include "llvm_override_option.h"
 #include "test_vm_utils.h"
 

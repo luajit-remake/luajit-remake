@@ -1,4 +1,4 @@
-#include "deegen_interpreter_function_entry.h"
+#include "deegen_function_entry_logic_creator.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_return.h"
