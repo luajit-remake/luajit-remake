@@ -5,6 +5,7 @@
 #include "test_util_helper.h"
 #include "test_vm_utils.h"
 #include "lj_parser_wrapper.h"
+#include "drt/baseline_jit_codegen_helper.h"
 
 namespace {
 
@@ -30,7 +31,18 @@ std::string LoadFile(std::string filename)
     return std::string { iter, end };
 }
 
-std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& filename)
+enum class LuaTestOption
+{
+    // The test shall be run fully in interpreter mode, never tier up to anything else
+    //
+    ForceInterpreter,
+    // The test shall be run fully in baseline JIT mode
+    // This means all Lua functions are immediately compiled to baseline JIT code, the interpreter is never invoked
+    //
+    ForceBaselineJit
+};
+
+std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& filename, LuaTestOption testOption)
 {
     ReleaseAssert(filename.ends_with(".lua"));
     VM* vm = VM::GetActiveVMForCurrentThread();
@@ -42,9 +54,34 @@ std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& filename)
         PrintTValue(stderr, res.errMsg);
         abort();
     }
+
+    if (testOption == LuaTestOption::ForceBaselineJit)
+    {
+        // Compile everything to baseline JIT code and update m_bestEntryPoint
+        //
+        ScriptModule* module = res.m_scriptModule.get();
+        for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+        {
+            CodeBlock* cb = ucb->GetCodeBlock(module->m_defaultGlobalObject);
+            BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+            cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
+        }
+
+        {
+            // Sanity check that the entry point of the module indeed points to the baseline JIT code
+            //
+            HeapPtr<FunctionObject> obj = module->m_defaultEntryPoint.As();
+            ExecutableCode* ec = TranslateToRawPointer(TCGet(obj->m_executable).As());
+            ReleaseAssert(ec->IsBytecodeFunction());
+            CodeBlock* cb = static_cast<CodeBlock*>(ec);
+            ReleaseAssert(ec->m_bestEntryPoint == cb->m_baselineCodeBlock->m_jitCodeEntry);
+        }
+    }
+
     return std::move(res.m_scriptModule);
 }
 
+#if 0
 [[maybe_unused]] std::unique_ptr<ScriptModule> ParseLuaScriptOrJsonBytecodeDumpOrFail(const std::string& filename)
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
@@ -58,14 +95,15 @@ std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& filename)
         return ParseLuaScriptOrFail(filename);
     }
 }
+#endif
 
-void RunSimpleLuaTest(const std::string& filename)
+void RunSimpleLuaTest(const std::string& filename, LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename, testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -76,7 +114,12 @@ void RunSimpleLuaTest(const std::string& filename)
 
 TEST(LuaTest, Fib)
 {
-    RunSimpleLuaTest("luatests/fib.lua");
+    RunSimpleLuaTest("luatests/fib.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, Fib)
+{
+    RunSimpleLuaTest("luatests/fib.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, TestPrint)
@@ -85,7 +128,7 @@ TEST(LuaTest, TestPrint)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/test_print.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/test_print.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -98,17 +141,17 @@ TEST(LuaTest, TestPrint)
 
 TEST(LuaTest, TestTableDup)
 {
-    RunSimpleLuaTest("luatests/table_dup.lua");
+    RunSimpleLuaTest("luatests/table_dup.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TestTableDup2)
 {
-    RunSimpleLuaTest("luatests/table_dup2.lua");
+    RunSimpleLuaTest("luatests/table_dup2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TestTableDup3)
 {
-    RunSimpleLuaTest("luatests/table_dup3.lua");
+    RunSimpleLuaTest("luatests/table_dup3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TestTableSizeHint)
@@ -117,7 +160,7 @@ TEST(LuaTest, TestTableSizeHint)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/table_size_hint.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/table_size_hint.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -144,57 +187,57 @@ TEST(LuaTest, TestTableSizeHint)
 
 TEST(LuaTest, Upvalue)
 {
-    RunSimpleLuaTest("luatests/upvalue.lua");
+    RunSimpleLuaTest("luatests/upvalue.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, Fib_upvalue)
 {
-    RunSimpleLuaTest("luatests/fib_upvalue.lua");
+    RunSimpleLuaTest("luatests/fib_upvalue.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, LinearSieve)
 {
-    RunSimpleLuaTest("luatests/linear_sieve.lua");
+    RunSimpleLuaTest("luatests/linear_sieve.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, NaNEdgeCase)
 {
-    RunSimpleLuaTest("luatests/nan_edge_case.lua");
+    RunSimpleLuaTest("luatests/nan_edge_case.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, ForLoopCoercion)
 {
-    RunSimpleLuaTest("luatests/for_loop_coercion.lua");
+    RunSimpleLuaTest("luatests/for_loop_coercion.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, ForLoopEdgeCases)
 {
-    RunSimpleLuaTest("luatests/for_loop_edge_cases.lua");
+    RunSimpleLuaTest("luatests/for_loop_edge_cases.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PrimitiveConstants)
 {
-    RunSimpleLuaTest("luatests/primitive_constant.lua");
+    RunSimpleLuaTest("luatests/primitive_constant.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, LogicalOpSanity)
 {
-    RunSimpleLuaTest("luatests/logical_op_sanity.lua");
+    RunSimpleLuaTest("luatests/logical_op_sanity.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PositiveAndNegativeInf)
 {
-    RunSimpleLuaTest("luatests/pos_and_neg_inf.lua");
+    RunSimpleLuaTest("luatests/pos_and_neg_inf.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, LogicalNot)
 {
-    RunSimpleLuaTest("luatests/logical_not.lua");
+    RunSimpleLuaTest("luatests/logical_not.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, LengthOperator)
 {
-    RunSimpleLuaTest("luatests/length_operator.lua");
+    RunSimpleLuaTest("luatests/length_operator.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TailCall)
@@ -203,7 +246,7 @@ TEST(LuaTest, TailCall)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/tail_call.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/tail_call.lua", LuaTestOption::ForceInterpreter);
 
     // Manually lower the stack size
     //
@@ -224,7 +267,7 @@ TEST(LuaTest, VariadicTailCall_1)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_1.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_1.lua", LuaTestOption::ForceInterpreter);
 
     // Manually lower the stack size
     //
@@ -245,7 +288,7 @@ TEST(LuaTest, VariadicTailCall_2)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_2.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_2.lua", LuaTestOption::ForceInterpreter);
 
     // Manually lower the stack size
     //
@@ -266,7 +309,7 @@ TEST(LuaTest, VariadicTailCall_3)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_3.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_3.lua", LuaTestOption::ForceInterpreter);
 
     // Manually lower the stack size
     //
@@ -283,17 +326,17 @@ TEST(LuaTest, VariadicTailCall_3)
 
 TEST(LuaTest, OpcodeKNIL)
 {
-    RunSimpleLuaTest("luatests/test_knil.lua");
+    RunSimpleLuaTest("luatests/test_knil.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, IterativeForLoop)
 {
-    RunSimpleLuaTest("luatests/iter_for.lua");
+    RunSimpleLuaTest("luatests/iter_for.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, NegativeZeroAsIndex)
 {
-    RunSimpleLuaTest("luatests/negative_zero_as_index.lua");
+    RunSimpleLuaTest("luatests/negative_zero_as_index.lua", LuaTestOption::ForceInterpreter);
 }
 
 // We have a few different tests by slightly changing the Lua source code, but expects the same output with insensitive order
@@ -390,7 +433,7 @@ TEST(LuaTest, ForPairs)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -408,7 +451,7 @@ TEST(LuaTest, ForPairsPoisonNext)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_poison_next.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_poison_next.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -425,12 +468,12 @@ TEST(LuaTest, ForPairsPoisonNext)
 
 TEST(LuaTest, ForPairsPoisonPairs)
 {
-    RunSimpleLuaTest("luatests/for_pairs_poison_pairs.lua");
+    RunSimpleLuaTest("luatests/for_pairs_poison_pairs.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, ForPairsEmpty)
 {
-    RunSimpleLuaTest("luatests/for_pairs_empty.lua");
+    RunSimpleLuaTest("luatests/for_pairs_empty.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, ForPairsSlowNext)
@@ -439,7 +482,7 @@ TEST(LuaTest, ForPairsSlowNext)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_slow_next.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_slow_next.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -457,7 +500,7 @@ TEST(LuaTest, BooleanAsTableIndex_1)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_1.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_1.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -493,7 +536,7 @@ TEST(LuaTest, BooleanAsTableIndex_2)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_2.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_2.lua", LuaTestOption::ForceInterpreter);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -525,32 +568,32 @@ TEST(LuaTest, BooleanAsTableIndex_2)
 
 TEST(LuaTest, BooleanAsTableIndex_3)
 {
-    RunSimpleLuaTest("luatests/boolean_as_table_index_3.lua");
+    RunSimpleLuaTest("luatests/boolean_as_table_index_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, ArithmeticSanity)
 {
-    RunSimpleLuaTest("luatests/arithmetic_sanity.lua");
+    RunSimpleLuaTest("luatests/arithmetic_sanity.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, StringConcat)
 {
-    RunSimpleLuaTest("luatests/string_concat.lua");
+    RunSimpleLuaTest("luatests/string_concat.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TableVariadicPut)
 {
-    RunSimpleLuaTest("luatests/table_variadic_put.lua");
+    RunSimpleLuaTest("luatests/table_variadic_put.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TableVariadicPut_2)
 {
-    RunSimpleLuaTest("luatests/table_variadic_put_2.lua");
+    RunSimpleLuaTest("luatests/table_variadic_put_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, NBody)
 {
-    RunSimpleLuaTest("luatests/n-body.lua");
+    RunSimpleLuaTest("luatests/n-body.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Ack)
@@ -559,7 +602,7 @@ TEST(LuaBenchmark, Ack)
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/ack.lua");
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/ack.lua", LuaTestOption::ForceInterpreter);
 
     // This benchmark needs a larger stack
     //
@@ -576,872 +619,872 @@ TEST(LuaBenchmark, Ack)
 
 TEST(LuaBenchmark, BinaryTrees_1)
 {
-    RunSimpleLuaTest("luatests/binary-trees-1.lua");
+    RunSimpleLuaTest("luatests/binary-trees-1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, BinaryTrees_2)
 {
-    RunSimpleLuaTest("luatests/binary-trees-2.lua");
+    RunSimpleLuaTest("luatests/binary-trees-2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Fannkuch_Redux)
 {
-    RunSimpleLuaTest("luatests/fannkuch-redux.lua");
+    RunSimpleLuaTest("luatests/fannkuch-redux.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Fixpoint_Fact)
 {
-    RunSimpleLuaTest("luatests/fixpoint-fact.lua");
+    RunSimpleLuaTest("luatests/fixpoint-fact.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Mandel_NoMetatable)
 {
-    RunSimpleLuaTest("luatests/mandel-nometatable.lua");
+    RunSimpleLuaTest("luatests/mandel-nometatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Mandel)
 {
-    RunSimpleLuaTest("luatests/mandel.lua");
+    RunSimpleLuaTest("luatests/mandel.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, QuadTree)
 {
-    RunSimpleLuaTest("luatests/qt.lua");
+    RunSimpleLuaTest("luatests/qt.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Queen)
 {
-    RunSimpleLuaTest("luatests/queen.lua");
+    RunSimpleLuaTest("luatests/queen.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, NlgN_Sieve)
 {
-    RunSimpleLuaTest("luatests/nlgn_sieve.lua");
+    RunSimpleLuaTest("luatests/nlgn_sieve.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, Spectral_Norm)
 {
-    RunSimpleLuaTest("luatests/spectral-norm.lua");
+    RunSimpleLuaTest("luatests/spectral-norm.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, chameneos)
 {
-    RunSimpleLuaTest("luatests/chameneos.lua");
+    RunSimpleLuaTest("luatests/chameneos.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_1)
 {
-    RunSimpleLuaTest("luatests/xpcall_1.lua");
+    RunSimpleLuaTest("luatests/xpcall_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_2)
 {
-    RunSimpleLuaTest("luatests/xpcall_2.lua");
+    RunSimpleLuaTest("luatests/xpcall_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_3)
 {
-    RunSimpleLuaTest("luatests/xpcall_3.lua");
+    RunSimpleLuaTest("luatests/xpcall_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_4)
 {
-    RunSimpleLuaTest("luatests/xpcall_4.lua");
+    RunSimpleLuaTest("luatests/xpcall_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_5)
 {
-    RunSimpleLuaTest("luatests/xpcall_5.lua");
+    RunSimpleLuaTest("luatests/xpcall_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_6)
 {
-    RunSimpleLuaTest("luatests/xpcall_6.lua");
+    RunSimpleLuaTest("luatests/xpcall_6.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, pcall_1)
 {
-    RunSimpleLuaTest("luatests/pcall_1.lua");
+    RunSimpleLuaTest("luatests/pcall_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, pcall_2)
 {
-    RunSimpleLuaTest("luatests/pcall_2.lua");
+    RunSimpleLuaTest("luatests/pcall_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetSetMetatable)
 {
-    RunSimpleLuaTest("luatests/get_set_metatable.lua");
+    RunSimpleLuaTest("luatests/get_set_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, getsetmetatable_2)
 {
-    RunSimpleLuaTest("luatests/getsetmetatable_2.lua");
+    RunSimpleLuaTest("luatests/getsetmetatable_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_call_1)
 {
-    RunSimpleLuaTest("luatests/metatable_call_1.lua");
+    RunSimpleLuaTest("luatests/metatable_call_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_call_2)
 {
-    RunSimpleLuaTest("luatests/metatable_call_2.lua");
+    RunSimpleLuaTest("luatests/metatable_call_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_call_3)
 {
-    RunSimpleLuaTest("luatests/metatable_call_3.lua");
+    RunSimpleLuaTest("luatests/metatable_call_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_call_4)
 {
-    RunSimpleLuaTest("luatests/metatable_call_4.lua");
+    RunSimpleLuaTest("luatests/metatable_call_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_call_5)
 {
-    RunSimpleLuaTest("luatests/metatable_call_5.lua");
+    RunSimpleLuaTest("luatests/metatable_call_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, xpcall_metatable)
 {
-    RunSimpleLuaTest("luatests/xpcall_metatable.lua");
+    RunSimpleLuaTest("luatests/xpcall_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, pcall_metatable)
 {
-    RunSimpleLuaTest("luatests/pcall_metatable.lua");
+    RunSimpleLuaTest("luatests/pcall_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_add_1)
 {
-    RunSimpleLuaTest("luatests/metatable_add_1.lua");
+    RunSimpleLuaTest("luatests/metatable_add_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_add_2)
 {
-    RunSimpleLuaTest("luatests/metatable_add_2.lua");
+    RunSimpleLuaTest("luatests/metatable_add_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_add_3)
 {
-    RunSimpleLuaTest("luatests/metatable_add_3.lua");
+    RunSimpleLuaTest("luatests/metatable_add_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_sub)
 {
-    RunSimpleLuaTest("luatests/metatable_sub.lua");
+    RunSimpleLuaTest("luatests/metatable_sub.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_mul)
 {
-    RunSimpleLuaTest("luatests/metatable_mul.lua");
+    RunSimpleLuaTest("luatests/metatable_mul.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_div)
 {
-    RunSimpleLuaTest("luatests/metatable_div.lua");
+    RunSimpleLuaTest("luatests/metatable_div.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_mod)
 {
-    RunSimpleLuaTest("luatests/metatable_mod.lua");
+    RunSimpleLuaTest("luatests/metatable_mod.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_pow)
 {
-    RunSimpleLuaTest("luatests/metatable_pow.lua");
+    RunSimpleLuaTest("luatests/metatable_pow.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_unm)
 {
-    RunSimpleLuaTest("luatests/metatable_unm.lua");
+    RunSimpleLuaTest("luatests/metatable_unm.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_len)
 {
-    RunSimpleLuaTest("luatests/metatable_len.lua");
+    RunSimpleLuaTest("luatests/metatable_len.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_concat)
 {
-    RunSimpleLuaTest("luatests/metatable_concat.lua");
+    RunSimpleLuaTest("luatests/metatable_concat.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_concat_2)
 {
-    RunSimpleLuaTest("luatests/metatable_concat_2.lua");
+    RunSimpleLuaTest("luatests/metatable_concat_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_eq_1)
 {
-    RunSimpleLuaTest("luatests/metatable_eq_1.lua");
+    RunSimpleLuaTest("luatests/metatable_eq_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_eq_2)
 {
-    RunSimpleLuaTest("luatests/metatable_eq_2.lua");
+    RunSimpleLuaTest("luatests/metatable_eq_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_lt)
 {
-    RunSimpleLuaTest("luatests/metatable_lt.lua");
+    RunSimpleLuaTest("luatests/metatable_lt.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_le)
 {
-    RunSimpleLuaTest("luatests/metatable_le.lua");
+    RunSimpleLuaTest("luatests/metatable_le.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, metatable_eq_3)
 {
-    RunSimpleLuaTest("luatests/metatable_eq_3.lua");
+    RunSimpleLuaTest("luatests/metatable_eq_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, getbyid_metatable)
 {
-    RunSimpleLuaTest("luatests/getbyid_metatable.lua");
+    RunSimpleLuaTest("luatests/getbyid_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, globalget_metatable)
 {
-    RunSimpleLuaTest("luatests/globalget_metatable.lua");
+    RunSimpleLuaTest("luatests/globalget_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, getbyval_metatable)
 {
-    RunSimpleLuaTest("luatests/getbyval_metatable.lua");
+    RunSimpleLuaTest("luatests/getbyval_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, getbyintegerval_metatable)
 {
-    RunSimpleLuaTest("luatests/getbyintegerval_metatable.lua");
+    RunSimpleLuaTest("luatests/getbyintegerval_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, rawget_and_rawset)
 {
-    RunSimpleLuaTest("luatests/rawget_rawset.lua");
+    RunSimpleLuaTest("luatests/rawget_rawset.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, putbyid_metatable)
 {
-    RunSimpleLuaTest("luatests/putbyid_metatable.lua");
+    RunSimpleLuaTest("luatests/putbyid_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, globalput_metatable)
 {
-    RunSimpleLuaTest("luatests/globalput_metatable.lua");
+    RunSimpleLuaTest("luatests/globalput_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, putbyintegerval_metatable)
 {
-    RunSimpleLuaTest("luatests/putbyintegerval_metatable.lua");
+    RunSimpleLuaTest("luatests/putbyintegerval_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, putbyval_metatable)
 {
-    RunSimpleLuaTest("luatests/putbyval_metatable.lua");
+    RunSimpleLuaTest("luatests/putbyval_metatable.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GlobalGetInterpreterIC)
 {
-    RunSimpleLuaTest("luatests/globalget_interpreter_ic.lua");
+    RunSimpleLuaTest("luatests/globalget_interpreter_ic.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, TableGetByIdInterpreterIC)
 {
-    RunSimpleLuaTest("luatests/table_getbyid_interpreter_ic.lua");
+    RunSimpleLuaTest("luatests/table_getbyid_interpreter_ic.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByImmInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByImmInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/get_by_imm_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_3)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_3.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_4)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_4.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_5)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_5.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GetByValInterpreterIC_6)
 {
-    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_6.lua");
+    RunSimpleLuaTest("luatests/get_by_val_interpreter_ic_6.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GlobalPutInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/globalput_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/globalput_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GlobalPutInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/globalput_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/globalput_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GlobalPutInterpreterIC_3)
 {
-    RunSimpleLuaTest("luatests/globalput_interpreter_ic_3.lua");
+    RunSimpleLuaTest("luatests/globalput_interpreter_ic_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, GlobalPutInterpreterIC_4)
 {
-    RunSimpleLuaTest("luatests/globalput_interpreter_ic_4.lua");
+    RunSimpleLuaTest("luatests/globalput_interpreter_ic_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_3)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_3.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_4)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_4.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_5)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_5.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_6)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_6.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_6.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_7)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_7.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_7.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByIdInterpreterIC_8)
 {
-    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_8.lua");
+    RunSimpleLuaTest("luatests/putbyid_interpreter_ic_8.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByImmInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByImmInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByImmInterpreterIC_3)
 {
-    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_3.lua");
+    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByImmInterpreterIC_4)
 {
-    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_4.lua");
+    RunSimpleLuaTest("luatests/putbyimm_interpreter_ic_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByValInterpreterIC_1)
 {
-    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_1.lua");
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByValInterpreterIC_2)
 {
-    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_2.lua");
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByValInterpreterIC_3)
 {
-    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_3.lua");
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByValInterpreterIC_4)
 {
-    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_4.lua");
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, PutByValInterpreterIC_5)
 {
-    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_5.lua");
+    RunSimpleLuaTest("luatests/putbyval_interpreter_ic_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, istc_conditional_copy)
 {
-    RunSimpleLuaTest("luatests/istc_conditional_copy.lua");
+    RunSimpleLuaTest("luatests/istc_conditional_copy.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, isfc_conditional_copy)
 {
-    RunSimpleLuaTest("luatests/isfc_conditional_copy.lua");
+    RunSimpleLuaTest("luatests/isfc_conditional_copy.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, le_use_lt_metamethod)
 {
-    RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua");
+    RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_assert)
 {
-    RunSimpleLuaTest("luatests/lib_base_assert.lua");
+    RunSimpleLuaTest("luatests/lib_base_assert.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_assert_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_assert_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_assert_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, RawsetReturnsOriginalTable)
 {
-    RunSimpleLuaTest("luatests/rawset_returns_original_table.lua");
+    RunSimpleLuaTest("luatests/rawset_returns_original_table.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, InitEnvironment)
 {
-    RunSimpleLuaTest("luatests/init_environment.lua");
+    RunSimpleLuaTest("luatests/init_environment.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_sqrt)
 {
-    RunSimpleLuaTest("luatests/math_sqrt.lua");
+    RunSimpleLuaTest("luatests/math_sqrt.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_constants)
 {
-    RunSimpleLuaTest("luatests/math_constants.lua");
+    RunSimpleLuaTest("luatests/math_constants.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_unary_fn)
 {
-    RunSimpleLuaTest("luatests/math_lib_unary.lua");
+    RunSimpleLuaTest("luatests/math_lib_unary.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_misc_fn)
 {
-    RunSimpleLuaTest("luatests/math_lib_misc.lua");
+    RunSimpleLuaTest("luatests/math_lib_misc.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_min_max)
 {
-    RunSimpleLuaTest("luatests/math_lib_min_max.lua");
+    RunSimpleLuaTest("luatests/math_lib_min_max.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, math_random)
 {
-    RunSimpleLuaTest("luatests/math_lib_random.lua");
+    RunSimpleLuaTest("luatests/math_lib_random.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_1)
 {
-    RunSimpleLuaTest("luatests/coroutine_1.lua");
+    RunSimpleLuaTest("luatests/coroutine_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_2)
 {
-    RunSimpleLuaTest("luatests/coroutine_2.lua");
+    RunSimpleLuaTest("luatests/coroutine_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_3)
 {
-    RunSimpleLuaTest("luatests/coroutine_3.lua");
+    RunSimpleLuaTest("luatests/coroutine_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_4)
 {
-    RunSimpleLuaTest("luatests/coroutine_4.lua");
+    RunSimpleLuaTest("luatests/coroutine_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_5)
 {
-    RunSimpleLuaTest("luatests/coroutine_5.lua");
+    RunSimpleLuaTest("luatests/coroutine_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_ring)
 {
-    RunSimpleLuaTest("luatests/coroutine_ring.lua");
+    RunSimpleLuaTest("luatests/coroutine_ring.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_error_1)
 {
-    RunSimpleLuaTest("luatests/coroutine_error_1.lua");
+    RunSimpleLuaTest("luatests/coroutine_error_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_error_2)
 {
-    RunSimpleLuaTest("luatests/coroutine_error_2.lua");
+    RunSimpleLuaTest("luatests/coroutine_error_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, coroutine_error_3)
 {
-    RunSimpleLuaTest("luatests/coroutine_error_3.lua");
+    RunSimpleLuaTest("luatests/coroutine_error_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_ipairs)
 {
-    RunSimpleLuaTest("luatests/base_lib_ipairs.lua");
+    RunSimpleLuaTest("luatests/base_lib_ipairs.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_ipairs_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_ipairs_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_ipairs_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_rawequal)
 {
-    RunSimpleLuaTest("luatests/base_lib_rawequal.lua");
+    RunSimpleLuaTest("luatests/base_lib_rawequal.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_select_1)
 {
-    RunSimpleLuaTest("luatests/base_lib_select_1.lua");
+    RunSimpleLuaTest("luatests/base_lib_select_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_select_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_select_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_select_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_type)
 {
-    RunSimpleLuaTest("luatests/base_lib_type.lua");
+    RunSimpleLuaTest("luatests/base_lib_type.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_next)
 {
-    RunSimpleLuaTest("luatests/base_lib_next.lua");
+    RunSimpleLuaTest("luatests/base_lib_next.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_pairs)
 {
-    RunSimpleLuaTest("luatests/base_lib_pairs.lua");
+    RunSimpleLuaTest("luatests/base_lib_pairs.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_pcall)
 {
-    RunSimpleLuaTest("luatests/base_lib_pcall.lua");
+    RunSimpleLuaTest("luatests/base_lib_pcall.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tonumber)
 {
-    RunSimpleLuaTest("luatests/base_lib_tonumber.lua");
+    RunSimpleLuaTest("luatests/base_lib_tonumber.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tonumber_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_tonumber_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_tonumber_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring_3)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring_3.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring_4)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring_4.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring_5)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring_5.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring_5.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_tostring_6)
 {
-    RunSimpleLuaTest("luatests/base_lib_tostring_6.lua");
+    RunSimpleLuaTest("luatests/base_lib_tostring_6.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_print)
 {
-    RunSimpleLuaTest("luatests/base_lib_print.lua");
+    RunSimpleLuaTest("luatests/base_lib_print.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_print_2)
 {
-    RunSimpleLuaTest("luatests/base_lib_print_2.lua");
+    RunSimpleLuaTest("luatests/base_lib_print_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_unpack)
 {
-    RunSimpleLuaTest("luatests/base_lib_unpack.lua");
+    RunSimpleLuaTest("luatests/base_lib_unpack.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_byte)
 {
-    RunSimpleLuaTest("luatests/string_lib_byte.lua");
+    RunSimpleLuaTest("luatests/string_lib_byte.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_byte_2)
 {
-    RunSimpleLuaTest("luatests/string_lib_byte_2.lua");
+    RunSimpleLuaTest("luatests/string_lib_byte_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_char)
 {
-    RunSimpleLuaTest("luatests/string_lib_char.lua");
+    RunSimpleLuaTest("luatests/string_lib_char.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_char_2)
 {
-    RunSimpleLuaTest("luatests/string_lib_char_2.lua");
+    RunSimpleLuaTest("luatests/string_lib_char_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_rep)
 {
-    RunSimpleLuaTest("luatests/string_lib_rep.lua");
+    RunSimpleLuaTest("luatests/string_lib_rep.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_rep_2)
 {
-    RunSimpleLuaTest("luatests/string_lib_rep_2.lua");
+    RunSimpleLuaTest("luatests/string_lib_rep_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_sub)
 {
-    RunSimpleLuaTest("luatests/string_lib_sub.lua");
+    RunSimpleLuaTest("luatests/string_lib_sub.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_sub_2)
 {
-    RunSimpleLuaTest("luatests/string_lib_sub_2.lua");
+    RunSimpleLuaTest("luatests/string_lib_sub_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_format)
 {
-    RunSimpleLuaTest("luatests/string_format.lua");
+    RunSimpleLuaTest("luatests/string_format.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_len)
 {
-    RunSimpleLuaTest("luatests/string_lib_len.lua");
+    RunSimpleLuaTest("luatests/string_lib_len.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_reverse)
 {
-    RunSimpleLuaTest("luatests/string_lib_reverse.lua");
+    RunSimpleLuaTest("luatests/string_lib_reverse.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_lower_upper)
 {
-    RunSimpleLuaTest("luatests/string_lib_lower_upper.lua");
+    RunSimpleLuaTest("luatests/string_lib_lower_upper.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_lower_upper_2)
 {
-    RunSimpleLuaTest("luatests/string_lib_lower_upper_2.lua");
+    RunSimpleLuaTest("luatests/string_lib_lower_upper_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, string_lib_misc)
 {
-    RunSimpleLuaTest("luatests/string_lib_misc.lua");
+    RunSimpleLuaTest("luatests/string_lib_misc.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, table_sort_1)
 {
-    RunSimpleLuaTest("luatests/table_sort_1.lua");
+    RunSimpleLuaTest("luatests/table_sort_1.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, table_sort_2)
 {
-    RunSimpleLuaTest("luatests/table_sort_2.lua");
+    RunSimpleLuaTest("luatests/table_sort_2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, table_sort_3)
 {
-    RunSimpleLuaTest("luatests/table_sort_3.lua");
+    RunSimpleLuaTest("luatests/table_sort_3.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, table_sort_4)
 {
-    RunSimpleLuaTest("luatests/table_sort_4.lua");
+    RunSimpleLuaTest("luatests/table_sort_4.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, table_lib_concat)
 {
-    RunSimpleLuaTest("luatests/table_lib_concat.lua");
+    RunSimpleLuaTest("luatests/table_lib_concat.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, array3d)
 {
-    RunSimpleLuaTest("luatests/array3d.lua");
+    RunSimpleLuaTest("luatests/array3d.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, life)
 {
-    RunSimpleLuaTest("luatests/life.lua");
+    RunSimpleLuaTest("luatests/life.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, mandel2)
 {
-    RunSimpleLuaTest("luatests/mandel2.lua");
+    RunSimpleLuaTest("luatests/mandel2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, heapsort)
 {
-    RunSimpleLuaTest("luatests/heapsort.lua");
+    RunSimpleLuaTest("luatests/heapsort.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, nsieve)
 {
-    RunSimpleLuaTest("luatests/nsieve.lua");
+    RunSimpleLuaTest("luatests/nsieve.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, quadtree2)
 {
-    RunSimpleLuaTest("luatests/quadtree2.lua");
+    RunSimpleLuaTest("luatests/quadtree2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, ray)
 {
-    RunSimpleLuaTest("luatests/ray.lua");
+    RunSimpleLuaTest("luatests/ray.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, ray2)
 {
-    RunSimpleLuaTest("luatests/ray2.lua");
+    RunSimpleLuaTest("luatests/ray2.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, series)
 {
-    RunSimpleLuaTest("luatests/series.lua");
+    RunSimpleLuaTest("luatests/series.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, scimark_fft)
 {
-    RunSimpleLuaTest("luatests/scimark_fft.lua");
+    RunSimpleLuaTest("luatests/scimark_fft.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, scimark_lu)
 {
-    RunSimpleLuaTest("luatests/scimark_lu.lua");
+    RunSimpleLuaTest("luatests/scimark_lu.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, scimark_sor)
 {
-    RunSimpleLuaTest("luatests/scimark_sor.lua");
+    RunSimpleLuaTest("luatests/scimark_sor.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, scimark_sparse)
 {
-    RunSimpleLuaTest("luatests/scimark_sparse.lua");
+    RunSimpleLuaTest("luatests/scimark_sparse.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, table_sort)
 {
-    RunSimpleLuaTest("luatests/table_sort.lua");
+    RunSimpleLuaTest("luatests/table_sort.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, table_sort_cmp)
 {
-    RunSimpleLuaTest("luatests/table_sort_cmp.lua");
+    RunSimpleLuaTest("luatests/table_sort_cmp.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_loadstring)
 {
-    RunSimpleLuaTest("luatests/base_loadstring.lua");
+    RunSimpleLuaTest("luatests/base_loadstring.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_load)
 {
-    RunSimpleLuaTest("luatests/base_load.lua");
+    RunSimpleLuaTest("luatests/base_load.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_loadfile)
 {
-    RunSimpleLuaTest("luatests/base_loadfile.lua");
+    RunSimpleLuaTest("luatests/base_loadfile.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_loadfile_nonexistent)
 {
-    RunSimpleLuaTest("luatests/base_loadfile_nonexistent.lua");
+    RunSimpleLuaTest("luatests/base_loadfile_nonexistent.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_dofile)
 {
-    RunSimpleLuaTest("luatests/base_lib_dofile.lua");
+    RunSimpleLuaTest("luatests/base_lib_dofile.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_dofile_nonexistent)
 {
-    RunSimpleLuaTest("luatests/base_lib_dofile_nonexistent.lua");
+    RunSimpleLuaTest("luatests/base_lib_dofile_nonexistent.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_dofile_bad_syntax)
 {
-    RunSimpleLuaTest("luatests/base_lib_dofile_bad_syntax.lua");
+    RunSimpleLuaTest("luatests/base_lib_dofile_bad_syntax.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaLib, base_lib_dofile_throw)
 {
-    RunSimpleLuaTest("luatests/base_lib_dofile_throw.lua");
+    RunSimpleLuaTest("luatests/base_lib_dofile_throw.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, fasta)
 {
-    RunSimpleLuaTest("luatests/fasta.lua");
+    RunSimpleLuaTest("luatests/fasta.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, pidigits)
 {
-    RunSimpleLuaTest("luatests/pidigits-nogmp.lua");
+    RunSimpleLuaTest("luatests/pidigits-nogmp.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, revcomp)
 {
-    RunSimpleLuaTest("luatests/revcomp.lua");
+    RunSimpleLuaTest("luatests/revcomp.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaBenchmark, knucleotide)
 {
-    RunSimpleLuaTest("luatests/k-nucleotide.lua");
+    RunSimpleLuaTest("luatests/k-nucleotide.lua", LuaTestOption::ForceInterpreter);
 }
 
 TEST(LuaTest, comparison_one_side_constant)
 {
-    RunSimpleLuaTest("luatests/comparison_one_side_constant.lua");
+    RunSimpleLuaTest("luatests/comparison_one_side_constant.lua", LuaTestOption::ForceInterpreter);
 }
 
 }   // anonymous namespace
