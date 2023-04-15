@@ -861,6 +861,35 @@ public:
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
 
+    // Determines the starting tier of the Lua functions when a new CodeBlock is created
+    // (which happens either when a Lua chunk is parsed, or when an existing Lua chunk is
+    // instantiated with an unseen global object)
+    //
+    // When 'BaselineJIT' is selected, any newly-created CodeBlock will be compiled to baseline JIT code immediately.
+    //
+    enum class EngineStartingTier
+    {
+        Interpreter,
+        BaselineJIT
+    };
+
+    // Only affects CodeBlocks created after this call.
+    //
+    void SetEngineStartingTier(EngineStartingTier tier)
+    {
+        m_isEngineStartingTierBaselineJit = (tier == EngineStartingTier::BaselineJIT);
+    }
+
+    EngineStartingTier GetEngineStartingTier() const
+    {
+        return m_isEngineStartingTierBaselineJit ? EngineStartingTier::BaselineJIT : EngineStartingTier::Interpreter;
+    }
+
+    bool IsEngineStartingTierBaselineJit() const
+    {
+        return GetEngineStartingTier() == EngineStartingTier::BaselineJIT;
+    }
+
     static constexpr size_t x_pageSize = 4096;
 
 private:
@@ -977,6 +1006,8 @@ private:
     // must be first member, stores the value of static_cast<CRTP*>(this)
     //
     uintptr_t m_self;
+
+    bool m_isEngineStartingTierBaselineJit;
 
     alignas(64) SpdsAllocImpl<VM, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
 

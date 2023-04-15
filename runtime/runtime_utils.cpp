@@ -6,6 +6,7 @@
 #include "generated/get_guest_language_function_interpreter_entry_point.h"
 #include "json_utils.h"
 #include "bytecode_builder.h"
+#include "drt/baseline_jit_codegen_helper.h"
 
 const size_t x_num_bytecode_metadata_struct_kinds_ = x_num_bytecode_metadata_struct_kinds;
 
@@ -105,6 +106,16 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     ForEachBytecodeMetadata(cb, []<typename T>(T* md) ALWAYS_INLINE {
         md->Init();
     });
+
+    // Immediately compile the CodeBlock to baseline JIT code if requested by user.
+    // Note that this must be done after we have set up all the fields in the CodeBlock
+    //
+    if (vm->IsEngineStartingTierBaselineJit())
+    {
+        BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+        assert(cb->m_baselineCodeBlock == bcb);
+        cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
+    }
 
     return cb;
 }

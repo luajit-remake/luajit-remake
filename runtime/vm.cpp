@@ -106,6 +106,8 @@ bool WARN_UNUSED VM::InitializeVMBase()
 
     SetUpSegmentationRegister();
 
+    m_isEngineStartingTierBaselineJit = false;
+
     m_userHeapPtrLimit = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
     m_userHeapCurPtr = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
 

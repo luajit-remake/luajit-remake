@@ -129,3 +129,25 @@ inline StringList GetStringList(VM* vm, size_t n)
     ReleaseAssert(used.size() == n && ptrSet.size() == n && result.size() == n);
     return result;
 }
+
+class AutoOverrideVMEngineStartTier
+{
+public:
+    AutoOverrideVMEngineStartTier(VM::EngineStartingTier optionValue)
+    {
+        m_vm = VM::GetActiveVMForCurrentThread();
+        ReleaseAssert(m_vm != nullptr);
+        m_oldValue = m_vm->GetEngineStartingTier();
+        m_vm->SetEngineStartingTier(optionValue);
+    }
+
+    ~AutoOverrideVMEngineStartTier()
+    {
+        m_vm->SetEngineStartingTier(m_oldValue);
+    }
+
+private:
+    VM* m_vm;
+    VM::EngineStartingTier m_oldValue;
+};
+#define AutoOverrideVMEngineStartTier(...) static_assert(false, "Wrong use of 'auto'-pattern!");
