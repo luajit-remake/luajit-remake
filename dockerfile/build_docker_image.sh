@@ -7,7 +7,7 @@ cd /
 # install misc dependency
 #
 apt update
-apt install -y git wget tar xz-utils sudo make ninja-build python ccache libtinfo-dev libz-dev lsb-release software-properties-common gnupg libstdc++-10-dev
+apt install -y git wget tar xz-utils sudo make ninja-build python ccache libtinfo-dev libz-dev lsb-release software-properties-common gnupg libstdc++-10-dev binutils-gold
 
 # install cmake 
 #
@@ -30,13 +30,17 @@ rm -f install_cmake.sh
 #
 apt install -y clang-12
 
+# For now, do not use mold because it seems to have a bug when program is compiled with no-pie that causes dlsym() to crash
+#
 # install mold
 #
-cd /usr/local/
-wget -O mold.tar.gz https://github.com/rui314/mold/releases/download/v1.4.0/mold-1.4.0-x86_64-linux.tar.gz
-tar xf mold.tar.gz --strip-components=1
-rm -f mold.tar.gz
-update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
+#cd /usr/local/
+#wget -O mold.tar.gz https://github.com/rui314/mold/releases/download/v1.4.0/mold-1.4.0-x86_64-linux.tar.gz
+#tar xf mold.tar.gz --strip-components=1
+#rm -f mold.tar.gz
+
+update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 120
+#update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
 update-alternatives --install /usr/bin/ld ld /usr/bin/x86_64-linux-gnu-ld 90
 
 # Checkout LLVM 15.0.3
@@ -76,7 +80,8 @@ apt autoremove -y
 
 # It seems like after uninstalling the system Clang, the ld link is broken.. fix it
 #
-update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
+#update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
+update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 120
 
 # Remove the Clang/LLVM build directory
 #

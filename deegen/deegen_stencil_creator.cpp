@@ -1335,6 +1335,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
         fn->addParamAttr(1, Attribute::ReadOnly);
         fn->addFnAttr(Attribute::NoUnwind);
         fn->addFnAttr(Attribute::WillReturn);
+        // Important to set DSOLocal so we can get the PLT address (which sits in the first 2GB),
+        // instead of the actual address in the glibc shared library (which doesn't sit in the first 2GB and breaks our assumption!)
+        //
+        fn->setDSOLocal(true);
     };
 
     whitelistedGlobalNames["memmove"] = [&](Module* m)
@@ -1348,6 +1352,10 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
         fn->addParamAttr(1, Attribute::ReadOnly);
         fn->addFnAttr(Attribute::NoUnwind);
         fn->addFnAttr(Attribute::WillReturn);
+        // Important to set DSOLocal so we can get the PLT address (which sits in the first 2GB),
+        // instead of the actual address in the glibc shared library (which doesn't sit in the first 2GB and breaks our assumption!)
+        //
+        fn->setDSOLocal(true);
     };
 
     for (GlobalValue& gv : cgMod->global_values())

@@ -144,6 +144,11 @@ TEST(LuaTest, TestPrint)
     LuaTest_TestPrint_Impl(LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, TestPrint)
+{
+    LuaTest_TestPrint_Impl(LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, TestTableDup)
 {
     RunSimpleLuaTest("luatests/table_dup.lua", LuaTestOption::ForceInterpreter);
