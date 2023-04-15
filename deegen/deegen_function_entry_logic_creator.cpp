@@ -341,6 +341,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     patchFn->addFnAttr(Attribute::NoUnwind);
     CopyFunctionAttributes(patchFn, fastPathPatchFn);
+    patchFn->setDSOLocal(true);
 
     Value* fastPathAddr = patchFn->getArg(0);
     Value* slowPathAddr = patchFn->getArg(1);

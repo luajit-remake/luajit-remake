@@ -1209,6 +1209,7 @@ void DeegenGenerateBaselineJitCompilerCppEntryFunction(llvm::Module* module)
     Function* fn = Function::Create(fty, GlobalValue::ExternalLinkage, fnName, module);
     ReleaseAssert(fn->getName() == fnName);
     fn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    fn->setDSOLocal(true);
 
     // Pull in some random C++ function so we can set up the correct function attributes..
     //
