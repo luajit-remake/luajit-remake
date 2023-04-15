@@ -1146,6 +1146,22 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         }
     }
 
+    // Make all functions in our module dso_local, which is required to make sure we are using their PLT address
+    // even if they come from a dynamic library.
+    //
+    // However, note that the work we did here is NOT sufficient (in fact, does not matter at all).
+    // It seems like if two LLVM modules are linked together using LLVM linker, a declaration would become non-dso_local
+    // if *either* module's declaration is not dso_local.
+    //
+    // So the final linkage phase is ultimately responsible for turning the symbols we use dso_local, and what
+    // we do here have no effect. Nevertheless, we do this because our module will also be dumped as audit file,
+    // and we want the audit file to accurately reflect what's actually going on.
+    //
+    for (Function& fn : *module.get())
+    {
+        fn.setDSOLocal(true);
+    }
+
     RunLLVMOptimizePass(module.get());
     ReleaseAssert(module->getFunction(res.m_resultFuncName) != nullptr);
 

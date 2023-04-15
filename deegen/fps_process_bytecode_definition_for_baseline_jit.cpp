@@ -55,6 +55,21 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
     //
     std::vector<std::string> listOfFunctionsOkToMerge;
 
+    // We need to make sure that all the external symbols used by the JIT logic are local to the linkage unit
+    // (e.g., if the symbol is from a dynamic library, we must use its PLT address which resides in the first 2GB address range,
+    // not the real address in the dynamic library) to satisfy our small CodeModel assumption.
+    //
+    // However, it turns out that LLVM optimizer can sometimes introduce new symbols that does not have dso_local set
+    // (for example, it may rewrite 'fprintf' of a literal string to 'fwrite', and the 'fwrite' declaration is not dso_local).
+    //
+    // And it seems like if two LLVM modules are linked together using LLVM linker, a declaration would become non-dso_local
+    // if *either* module's declaration is not dso_local.
+    //
+    // So we record all the symbols needed to be made dso_local here, and after all LLVM linker work finishes, we scan the
+    // final module and change all those symbols dso_local.
+    //
+    std::unordered_set<std::string> fnNamesNeedToBeMadeDsoLocal;
+
     // For assertion purpose only
     //
     std::vector<std::string> bytecodeOriginalImplFunctionNames;
@@ -153,6 +168,11 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             fn->setSection(x_baselineJitCodegenFnSectionName);
         }
 
+        for (Function& fn : *res.m_baselineJitInfo.m_cgMod.get())
+        {
+            fnNamesNeedToBeMadeDsoLocal.insert(fn.getName().str());
+        }
+
         moduleToLink.push_back(std::move(res.m_baselineJitInfo.m_cgMod));
 
         // Write the codegen logic audit file
@@ -229,6 +249,13 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         modLinker.AddWhitelistedNewlyIntroducedGlobalVar("__deegen_interpreter_dispatch_table");
         modLinker.AddWhitelistedNewlyIntroducedGlobalVar("__deegen_baseline_jit_codegen_dispatch_table");
         module = modLinker.DoLinking();
+    }
+
+    for (const std::string& fnName : fnNamesNeedToBeMadeDsoLocal)
+    {
+        Function* fn = module->getFunction(fnName);
+        ReleaseAssert(fn != nullptr);
+        fn->setDSOLocal(true);
     }
 
     // Add the list of return continuations from interpreter lowering to mergeable functions list
