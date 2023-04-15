@@ -317,9 +317,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     dataSecPatchFn->setLinkage(GlobalValue::InternalLinkage);
     dataSecPatchFn->addFnAttr(Attribute::AlwaysInline);
 
-    // Currently patch functions takes 3 fixed operands even if they don't exists (placeholder ordinal 100, 103, 104)
+    // Currently patch functions takes 4 fixed operands even if they don't exists (placeholder ordinal 100, 101, 103, 104)
     //
-    constexpr size_t x_numExpectedArgsInPatchFn = 4 + 3;
+    constexpr size_t x_numExpectedArgsInPatchFn = 4 + 4;
     auto validatePatchFnProto = [&](Function* f)
     {
         ReleaseAssert(f->arg_size() == x_numExpectedArgsInPatchFn);
@@ -328,6 +328,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
         //
         for (size_t i = 4; i < fastPathPatchFn->arg_size(); i++)
         {
+            if (i == 5 /*ordinal 101*/) { continue; }
             ReleaseAssert(fastPathPatchFn->getArg(static_cast<uint32_t>(i))->use_empty());
         }
     };
@@ -389,6 +390,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
     Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
     Value* dataSecAddrI64 = new PtrToIntInst(dataSecAddr, llvm_type_of<uint64_t>(ctx), "", bb);
+    Value* fastPathEnd = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddr,
+                                                           { CreateLLVMConstantInt<uint64_t>(ctx, cgRes.m_fastPathPreFixupCode.size()) }, "", bb);
+    Value* fastPathEndI64 = new PtrToIntInst(fastPathEnd, llvm_type_of<uint64_t>(ctx), "", bb);
 
     auto callPatchFn = [&](Function* target, Value* dstAddr)
     {
@@ -397,10 +401,11 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
         args.push_back(fastPathAddrI64);
         args.push_back(slowPathAddrI64);
         args.push_back(dataSecAddrI64);
-        while (args.size() < x_numExpectedArgsInPatchFn)
-        {
-            args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));
-        }
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 100
+        args.push_back(fastPathEndI64);                                 // ordinal 101
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 103
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 104
+        ReleaseAssert(args.size() == x_numExpectedArgsInPatchFn);
         CallInst::Create(target, args, "", bb);
     };
     callPatchFn(fastPathPatchFn, fastPathAddr);

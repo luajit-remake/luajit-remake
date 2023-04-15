@@ -799,8 +799,7 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
     const std::vector<RelocationRecord>& relocs,
     const std::string& placeholderComputations,
     size_t placeholderOrdForFallthroughIfFastPath,  // -1 if not fast path or not exist
-    size_t placeholderOrdForCondBranch,             // -1 if not exist
-    size_t fastPathCodeSize)                        // -1 if this is the fast path
+    size_t placeholderOrdForCondBranch)             // -1 if not exist
 {
     PrintStencilCodegenLogicResult res;
 
@@ -870,15 +869,6 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
             codeLen -= 5;
         }
     }
-
-    // Set up the address for the fallthrough bytecode
-    //
-    if (fastPathCodeSize == static_cast<size_t>(-1))
-    {
-        fastPathCodeSize = codeLen;
-    }
-    fprintf(fp, "[[maybe_unused]] int64_t deegen_rc_input_101 = static_cast<int64_t>(deegen_fastPathAddr) + %llu;\n",
-            static_cast<unsigned long long>(fastPathCodeSize));
 
     fprintf(fp, "%s\n", placeholderComputations.c_str());
 
@@ -1190,11 +1180,14 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         // after everything is generated. To ensure this, we do not provide deegen_rc_input_102 (the conditional
         // branch target input ordinal) so that we will get a compile error if it showed up unexpectingly...
         //
-        // deegen_rc_input_101 (fallthrough) is not needed because it always point to the end of the fastpath
+        // Note that deegen_rc_input_101 (fallthrough) is also needed: it points to the end of the fast path,
+        // but the end of the fast path is NOT necessarily the end of this stencil, since the fast path may consist
+        // of multiple stencils! So we must let the caller provide this value.
         //
         // Print the remaining special ordinals
         //
         fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_100,\n");
+        fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_101,\n");
         fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_103,\n");
         fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_104\n");
         for (size_t i = 0; i < numBytecodeOperands; i++)
@@ -1252,8 +1245,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_fastPathRelos,
         placeholderComputations,
         fallthroughPlaceholderOrd,
-        condBrPlaceholderOrd,
-        static_cast<size_t>(-1) /*fastPathCodeSize*/);
+        condBrPlaceholderOrd);
 
     fprintf(fp, "%s\n", fastPathInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1264,8 +1256,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_slowPathRelos,
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
-        condBrPlaceholderOrd,
-        fastPathInfo.m_preFixupMachineCode.size() /*fastPathCodeSize*/);
+        condBrPlaceholderOrd);
 
     fprintf(fp, "%s\n", slowPathInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1276,8 +1267,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_privateDataObject.m_relocations,
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
-        condBrPlaceholderOrd,
-        fastPathInfo.m_preFixupMachineCode.size() /*fastPathCodeSize*/);
+        condBrPlaceholderOrd);
 
     fprintf(fp, "%s\n", dataSecInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");

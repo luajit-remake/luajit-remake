@@ -349,6 +349,8 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     res.m_dataSectionCodeLen = dataSec.m_code.size();
     res.m_dataSectionAlignment = dataSec.m_alignment;
 
+    // Generate the audit log
+    //
     {
         Triple targetTriple = mainJic.GetStencil().m_triple;
 
@@ -439,6 +441,31 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", mainFn);
 
+    // Align the data section pointer if necessary
+    //
+    Value* dataSecBaseAddr = nullptr;
+    {
+        Value* preAlignedDataSecPtr = cg.GetJitUnalignedDataSecPtr();
+        size_t alignment = dataSec.m_alignment;
+        ReleaseAssert(alignment > 0 && is_power_of_2(alignment));
+        if (alignment == 1)
+        {
+            dataSecBaseAddr = preAlignedDataSecPtr;
+        }
+        else
+        {
+            dataSecBaseAddr = CreateCallToDeegenCommonSnippet(
+                module.get(),
+                "RoundPtrUpToMultipleOf",
+                { preAlignedDataSecPtr, CreateLLVMConstantInt<uint64_t>(ctx, alignment) },
+                entryBB);
+        }
+    }
+    ReleaseAssert(llvm_value_has_type<void*>(dataSecBaseAddr));
+
+    Value* fastPathBaseAddr = cg.GetJitFastPathPtr();
+    Value* slowPathBaseAddr = cg.GetJitSlowPathPtr();
+
     // Decode the bytecode struct
     //
     std::vector<Value*> opcodeRawValues;
@@ -497,6 +524,15 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     else
     {
         bytecodeValList.push_back(extendTo64(outputSlot, bytecodeDef->m_outputOperand->IsSignedValue()));
+    }
+
+    // Slot 101 (fallthroughAddr) comes as the second arg
+    //
+    {
+        GetElementPtrInst* fastPathEnd = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathBaseAddr,
+                                                                           { CreateLLVMConstantInt<uint64_t>(ctx, res.m_fastPathCodeLen) }, "", entryBB);
+        Value* fastPathEndI64 = new PtrToIntInst(fastPathEnd, llvm_type_of<uint64_t>(ctx), "", entryBB);
+        bytecodeValList.push_back(fastPathEndI64);
     }
 
     // Then slot 103 (slowPathDataOffset) and slot 104 (CodeBlock32)
@@ -559,31 +595,6 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     {
         ReleaseAssert(llvm_value_has_type<uint64_t>(val));
     }
-
-    // Align the data section pointer if necessary
-    //
-    Value* dataSecBaseAddr = nullptr;
-    {
-        Value* preAlignedDataSecPtr = cg.GetJitUnalignedDataSecPtr();
-        size_t alignment = dataSec.m_alignment;
-        ReleaseAssert(alignment > 0 && is_power_of_2(alignment));
-        if (alignment == 1)
-        {
-            dataSecBaseAddr = preAlignedDataSecPtr;
-        }
-        else
-        {
-            dataSecBaseAddr = CreateCallToDeegenCommonSnippet(
-                module.get(),
-                "RoundPtrUpToMultipleOf",
-                { preAlignedDataSecPtr, CreateLLVMConstantInt<uint64_t>(ctx, alignment) },
-                entryBB);
-        }
-    }
-    ReleaseAssert(llvm_value_has_type<void*>(dataSecBaseAddr));
-
-    Value* fastPathBaseAddr = cg.GetJitFastPathPtr();
-    Value* slowPathBaseAddr = cg.GetJitSlowPathPtr();
 
     // Create logic that copies the pre-fixup bytes for each section
     // Note that we may over-copy at most 7 bytes without worrying about clobbering

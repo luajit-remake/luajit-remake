@@ -154,9 +154,19 @@ TEST(LuaTest, TestTableDup)
     RunSimpleLuaTest("luatests/table_dup.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, TestTableDup)
+{
+    RunSimpleLuaTest("luatests/table_dup.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, TestTableDup2)
 {
     RunSimpleLuaTest("luatests/table_dup2.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, TestTableDup2)
+{
+    RunSimpleLuaTest("luatests/table_dup2.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, TestTableDup3)
@@ -164,13 +174,18 @@ TEST(LuaTest, TestTableDup3)
     RunSimpleLuaTest("luatests/table_dup3.lua", LuaTestOption::ForceInterpreter);
 }
 
-TEST(LuaTest, TestTableSizeHint)
+TEST(LuaTestForceBaselineJit, TestTableDup3)
+{
+    RunSimpleLuaTest("luatests/table_dup3.lua", LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_TestTableSizeHint_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/table_size_hint.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/table_size_hint.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -195,9 +210,24 @@ TEST(LuaTest, TestTableSizeHint)
     }
 }
 
+TEST(LuaTest, TestTableSizeHint)
+{
+    LuaTest_TestTableSizeHint_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, TestTableSizeHint)
+{
+    LuaTest_TestTableSizeHint_Impl(LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, Upvalue)
 {
     RunSimpleLuaTest("luatests/upvalue.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, Upvalue)
+{
+    RunSimpleLuaTest("luatests/upvalue.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, Fib_upvalue)
@@ -205,9 +235,19 @@ TEST(LuaTest, Fib_upvalue)
     RunSimpleLuaTest("luatests/fib_upvalue.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, Fib_upvalue)
+{
+    RunSimpleLuaTest("luatests/fib_upvalue.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, LinearSieve)
 {
     RunSimpleLuaTest("luatests/linear_sieve.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, LinearSieve)
+{
+    RunSimpleLuaTest("luatests/linear_sieve.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, NaNEdgeCase)
@@ -215,9 +255,19 @@ TEST(LuaTest, NaNEdgeCase)
     RunSimpleLuaTest("luatests/nan_edge_case.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, NaNEdgeCase)
+{
+    RunSimpleLuaTest("luatests/nan_edge_case.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, ForLoopCoercion)
 {
     RunSimpleLuaTest("luatests/for_loop_coercion.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForLoopCoercion)
+{
+    RunSimpleLuaTest("luatests/for_loop_coercion.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, ForLoopEdgeCases)
@@ -225,9 +275,19 @@ TEST(LuaTest, ForLoopEdgeCases)
     RunSimpleLuaTest("luatests/for_loop_edge_cases.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, ForLoopEdgeCases)
+{
+    RunSimpleLuaTest("luatests/for_loop_edge_cases.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, PrimitiveConstants)
 {
     RunSimpleLuaTest("luatests/primitive_constant.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, PrimitiveConstants)
+{
+    RunSimpleLuaTest("luatests/primitive_constant.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, LogicalOpSanity)
@@ -235,9 +295,19 @@ TEST(LuaTest, LogicalOpSanity)
     RunSimpleLuaTest("luatests/logical_op_sanity.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, LogicalOpSanity)
+{
+    RunSimpleLuaTest("luatests/logical_op_sanity.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, PositiveAndNegativeInf)
 {
     RunSimpleLuaTest("luatests/pos_and_neg_inf.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, PositiveAndNegativeInf)
+{
+    RunSimpleLuaTest("luatests/pos_and_neg_inf.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, LogicalNot)
@@ -245,18 +315,59 @@ TEST(LuaTest, LogicalNot)
     RunSimpleLuaTest("luatests/logical_not.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, LogicalNot)
+{
+    RunSimpleLuaTest("luatests/logical_not.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, LengthOperator)
 {
     RunSimpleLuaTest("luatests/length_operator.lua", LuaTestOption::ForceInterpreter);
 }
 
-TEST(LuaTest, TailCall)
+TEST(LuaTestForceBaselineJit, LengthOperator)
+{
+    RunSimpleLuaTest("luatests/length_operator.lua", LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_TailCall_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/tail_call.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/tail_call.lua", testOption);
+
+    // Manually lower the stack size
+    //
+    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
+    rc->m_stackBegin = new TValue[200];
+
+    vm->LaunchScript(module.get());
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+    AssertIsExpectedOutput(out);
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, TailCall)
+{
+    LuaTest_TailCall_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, TailCall)
+{
+    LuaTest_TailCall_Impl(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_VariadicTailCall_1_Impl(LuaTestOption testOption)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_1.lua", testOption);
 
     // Manually lower the stack size
     //
@@ -273,11 +384,21 @@ TEST(LuaTest, TailCall)
 
 TEST(LuaTest, VariadicTailCall_1)
 {
+    LuaTest_VariadicTailCall_1_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, VariadicTailCall_1)
+{
+    LuaTest_VariadicTailCall_1_Impl(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_VariadicTailCall_2_Impl(LuaTestOption testOption)
+{
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_1.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_2.lua", testOption);
 
     // Manually lower the stack size
     //
@@ -294,11 +415,21 @@ TEST(LuaTest, VariadicTailCall_1)
 
 TEST(LuaTest, VariadicTailCall_2)
 {
+    LuaTest_VariadicTailCall_2_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, VariadicTailCall_2)
+{
+    LuaTest_VariadicTailCall_2_Impl(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_VariadicTailCall_3_Impl(LuaTestOption testOption)
+{
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_2.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_3.lua", testOption);
 
     // Manually lower the stack size
     //
@@ -315,23 +446,12 @@ TEST(LuaTest, VariadicTailCall_2)
 
 TEST(LuaTest, VariadicTailCall_3)
 {
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
+    LuaTest_VariadicTailCall_3_Impl(LuaTestOption::ForceInterpreter);
+}
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_3.lua", LuaTestOption::ForceInterpreter);
-
-    // Manually lower the stack size
-    //
-    CoroutineRuntimeContext* rc = vm->GetRootCoroutine();
-    rc->m_stackBegin = new TValue[200];
-
-    vm->LaunchScript(module.get());
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-    AssertIsExpectedOutput(out);
-    ReleaseAssert(err == "");
+TEST(LuaTestForceBaselineJit, VariadicTailCall_3)
+{
+    LuaTest_VariadicTailCall_3_Impl(LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, OpcodeKNIL)
@@ -339,9 +459,19 @@ TEST(LuaTest, OpcodeKNIL)
     RunSimpleLuaTest("luatests/test_knil.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, OpcodeKNIL)
+{
+    RunSimpleLuaTest("luatests/test_knil.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, IterativeForLoop)
 {
     RunSimpleLuaTest("luatests/iter_for.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, IterativeForLoop)
+{
+    RunSimpleLuaTest("luatests/iter_for.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, NegativeZeroAsIndex)
@@ -349,10 +479,15 @@ TEST(LuaTest, NegativeZeroAsIndex)
     RunSimpleLuaTest("luatests/negative_zero_as_index.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, NegativeZeroAsIndex)
+{
+    RunSimpleLuaTest("luatests/negative_zero_as_index.lua", LuaTestOption::ForceBaselineJit);
+}
+
 // We have a few different tests by slightly changing the Lua source code, but expects the same output with insensitive order
 // This function checks for that specific output..
 //
-void CheckForPairsThreeTestOutput(std::stringstream& ss)
+static void CheckForPairsThreeTestOutput(std::stringstream& ss)
 {
     std::string line;
     ReleaseAssert(std::getline(ss, line));
@@ -437,13 +572,13 @@ void CheckForPairsThreeTestOutput(std::stringstream& ss)
     ReleaseAssert(expectedAnswerForTest3.size() == 0);
 }
 
-TEST(LuaTest, ForPairs)
+static void LuaTest_ForPairs_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -455,13 +590,23 @@ TEST(LuaTest, ForPairs)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaTest, ForPairsPoisonNext)
+TEST(LuaTest, ForPairs)
+{
+    LuaTest_ForPairs_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForPairs)
+{
+    LuaTest_ForPairs_Impl(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_ForPairsPoisonNext_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_poison_next.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_poison_next.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -476,9 +621,24 @@ TEST(LuaTest, ForPairsPoisonNext)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, ForPairsPoisonNext)
+{
+    LuaTest_ForPairsPoisonNext_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForPairsPoisonNext)
+{
+    LuaTest_ForPairsPoisonNext_Impl(LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, ForPairsPoisonPairs)
 {
     RunSimpleLuaTest("luatests/for_pairs_poison_pairs.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForPairsPoisonPairs)
+{
+    RunSimpleLuaTest("luatests/for_pairs_poison_pairs.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, ForPairsEmpty)
@@ -486,13 +646,18 @@ TEST(LuaTest, ForPairsEmpty)
     RunSimpleLuaTest("luatests/for_pairs_empty.lua", LuaTestOption::ForceInterpreter);
 }
 
-TEST(LuaTest, ForPairsSlowNext)
+TEST(LuaTestForceBaselineJit, ForPairsEmpty)
+{
+    RunSimpleLuaTest("luatests/for_pairs_empty.lua", LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_ForPairsSlowNext_Impl(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_slow_next.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_slow_next.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -504,13 +669,69 @@ TEST(LuaTest, ForPairsSlowNext)
     ReleaseAssert(err == "");
 }
 
-TEST(LuaTest, BooleanAsTableIndex_1)
+TEST(LuaTest, ForPairsSlowNext)
+{
+    LuaTest_ForPairsSlowNext_Impl(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForPairsSlowNext)
+{
+    LuaTest_ForPairsSlowNext_Impl(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_BooleanAsTableIndex_1(LuaTestOption testOption)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_1.lua", LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_1.lua", testOption);
+    vm->LaunchScript(module.get());
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    std::stringstream ss(out);
+    std::set<std::string> expectedAnswer {
+        "1\t2",
+        "2\t3",
+        "a\t1",
+        "true\t5",
+        "c\t4",
+        "b\t2",
+        "d\t6",
+        "0\t4",
+        "false\t3"
+    };
+
+    std::string line;
+    while (std::getline(ss, line))
+    {
+        ReleaseAssert(expectedAnswer.count(line));
+        expectedAnswer.erase(expectedAnswer.find(line));
+    }
+    ReleaseAssert(expectedAnswer.size() == 0);
+
+    ReleaseAssert(err == "");
+}
+
+TEST(LuaTest, BooleanAsTableIndex_1)
+{
+    LuaTest_BooleanAsTableIndex_1(LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, BooleanAsTableIndex_1)
+{
+    LuaTest_BooleanAsTableIndex_1(LuaTestOption::ForceBaselineJit);
+}
+
+static void LuaTest_BooleanAsTableIndex_2(LuaTestOption testOption)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmoutput(vm);
+
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_2.lua", testOption);
     vm->LaunchScript(module.get());
 
     std::string out = vmoutput.GetAndResetStdOut();
@@ -542,38 +763,12 @@ TEST(LuaTest, BooleanAsTableIndex_1)
 
 TEST(LuaTest, BooleanAsTableIndex_2)
 {
-    VM* vm = VM::Create();
-    Auto(vm->Destroy());
-    VMOutputInterceptor vmoutput(vm);
+    LuaTest_BooleanAsTableIndex_2(LuaTestOption::ForceInterpreter);
+}
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_2.lua", LuaTestOption::ForceInterpreter);
-    vm->LaunchScript(module.get());
-
-    std::string out = vmoutput.GetAndResetStdOut();
-    std::string err = vmoutput.GetAndResetStdErr();
-
-    std::stringstream ss(out);
-    std::set<std::string> expectedAnswer {
-        "1\t2",
-        "2\t3",
-        "a\t1",
-        "true\t5",
-        "c\t4",
-        "b\t2",
-        "d\t6",
-        "0\t4",
-        "false\t3"
-    };
-
-    std::string line;
-    while (std::getline(ss, line))
-    {
-        ReleaseAssert(expectedAnswer.count(line));
-        expectedAnswer.erase(expectedAnswer.find(line));
-    }
-    ReleaseAssert(expectedAnswer.size() == 0);
-
-    ReleaseAssert(err == "");
+TEST(LuaTestForceBaselineJit, BooleanAsTableIndex_2)
+{
+    LuaTest_BooleanAsTableIndex_2(LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, BooleanAsTableIndex_3)
@@ -581,9 +776,19 @@ TEST(LuaTest, BooleanAsTableIndex_3)
     RunSimpleLuaTest("luatests/boolean_as_table_index_3.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, BooleanAsTableIndex_3)
+{
+    RunSimpleLuaTest("luatests/boolean_as_table_index_3.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, ArithmeticSanity)
 {
     RunSimpleLuaTest("luatests/arithmetic_sanity.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ArithmeticSanity)
+{
+    RunSimpleLuaTest("luatests/arithmetic_sanity.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaTest, StringConcat)
@@ -591,14 +796,29 @@ TEST(LuaTest, StringConcat)
     RunSimpleLuaTest("luatests/string_concat.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, StringConcat)
+{
+    RunSimpleLuaTest("luatests/string_concat.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, TableVariadicPut)
 {
     RunSimpleLuaTest("luatests/table_variadic_put.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(LuaTestForceBaselineJit, TableVariadicPut)
+{
+    RunSimpleLuaTest("luatests/table_variadic_put.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, TableVariadicPut_2)
 {
     RunSimpleLuaTest("luatests/table_variadic_put_2.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, TableVariadicPut_2)
+{
+    RunSimpleLuaTest("luatests/table_variadic_put_2.lua", LuaTestOption::ForceBaselineJit);
 }
 
 TEST(LuaBenchmark, NBody)
