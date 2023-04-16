@@ -849,12 +849,15 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
         if (ifi->IsBaselineJitSlowPath())
         {
             // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
+            // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.
+            // This is OK, since the SlowPathData pointer always points to the trailing array region of the BaselineCodeBlock,
+            // so when the call returns, we can restore the full 64 bit value using the BaselineCodeBlock pointer.
             //
-            Value* spdSysHeapPtr = ifi->GetJitSlowPathData();
-            ReleaseAssert(llvm_value_has_type<void*>(spdSysHeapPtr));
-            Value* spd64 = new PtrToIntInst(spdSysHeapPtr, llvm_type_of<uint64_t>(ctx), "", m_origin);
-            TruncInst* spd32 = new TruncInst(spd64, llvm_type_of<uint32_t>(ctx), "", m_origin);
-            callSiteInfo = spd32;
+            Value* slowPathDataPtr = ifi->GetJitSlowPathData();
+            ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
+            Value* slowPathDataPtrI64 = new PtrToIntInst(slowPathDataPtr, llvm_type_of<uint64_t>(ctx), "", m_origin);
+            TruncInst* slowPathDataPtrI32 = new TruncInst(slowPathDataPtrI64, llvm_type_of<uint32_t>(ctx), "", m_origin);
+            callSiteInfo = slowPathDataPtrI32;
         }
         else
         {
