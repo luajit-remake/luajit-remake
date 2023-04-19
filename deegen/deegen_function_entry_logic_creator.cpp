@@ -256,11 +256,11 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     RunLLVMOptimizePass(srcModule.get());
 
-    DeegenStencilLoweringPass::RunIrRewritePhase(func, DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(rcDef));
+    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(func, DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(rcDef));
 
     std::string asmFile = CompileLLVMModuleToAssemblyFile(srcModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
 
-    asmFile = DeegenStencilLoweringPass::RunAsmRewritePhase(asmFile, func->getName().str());
+    asmFile = slPass.RunAsmRewritePhase(asmFile);
 
     // Save contents for audit
     //

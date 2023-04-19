@@ -11,6 +11,8 @@ class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
 class BaselineJitImplCreator;
 
+inline bool x_deegen_unit_test = false;
+
 class AstMakeCall
 {
 public:
@@ -120,6 +122,8 @@ private:
     static llvm::Function* WARN_UNUSED CreatePlaceholderFunction(llvm::Module* module, const std::vector<bool /*isArgRange*/>& argDesc);
 
     llvm::Function* WARN_UNUSED GetContinuationDispatchTarget();
+
+    static AstMakeCall WARN_UNUSED ParseFromApiUse(llvm::CallInst* callInst);
 
     static constexpr const char* x_placeholderPrefix = "__DeegenInternal_AstMakeCallIdentificationFunc_";
 

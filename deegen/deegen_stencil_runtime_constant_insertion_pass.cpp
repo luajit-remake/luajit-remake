@@ -153,6 +153,29 @@ std::string WARN_UNUSED CPExprUnaryOp::PrintExprImpl(CpPlaceholderExprPrinter* p
     return varName;
 }
 
+llvm::GlobalVariable* WARN_UNUSED DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(llvm::Module* module, uint64_t ord)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+    std::string symName = "__deegen_cp_placeholder_" + std::to_string(ord);
+    if (module->getNamedValue(symName) == nullptr)
+    {
+        GlobalVariable* gv = new GlobalVariable(*module,
+                                                llvm_type_of<uint8_t>(ctx) /*valueType*/,
+                                                true /*isConstant*/,
+                                                GlobalValue::ExternalLinkage,
+                                                nullptr /*initializer*/,
+                                                symName /*name*/);
+        ReleaseAssert(gv->getName().str() == symName);
+        gv->setAlignment(MaybeAlign(1));
+        gv->setDSOLocal(true);
+    }
+
+    GlobalVariable* gv = module->getGlobalVariable(symName);
+    ReleaseAssert(gv != nullptr);
+    return gv;
+}
+
 class StencilRuntimeConstantInsertionPass
 {
 public:
@@ -402,29 +425,6 @@ end:
         return res;
     }
 
-    static llvm::GlobalVariable* WARN_UNUSED InsertOrGetCpPlaceholderGlobal(llvm::Module* module, uint64_t ord)
-    {
-        using namespace llvm;
-        LLVMContext& ctx = module->getContext();
-        std::string symName = "__deegen_cp_placeholder_" + std::to_string(ord);
-        if (module->getNamedValue(symName) == nullptr)
-        {
-            GlobalVariable* gv = new GlobalVariable(*module,
-                                                    llvm_type_of<uint8_t>(ctx) /*valueType*/,
-                                                    true /*isConstant*/,
-                                                    GlobalValue::ExternalLinkage,
-                                                    nullptr /*initializer*/,
-                                                    symName /*name*/);
-            ReleaseAssert(gv->getName().str() == symName);
-            gv->setAlignment(MaybeAlign(1));
-            gv->setDSOLocal(true);
-        }
-
-        GlobalVariable* gv = module->getGlobalVariable(symName);
-        ReleaseAssert(gv != nullptr);
-        return gv;
-    }
-
     std::vector<CPRuntimeConstantNodeBase*> m_externSymDefs;
 
     void DoRewrite(llvm::Function* f)
@@ -583,7 +583,7 @@ end:
 
             ReleaseAssert(rcList.count(rc));
             uint64_t ord = rcList[rc].ord;
-            GlobalVariable* gv = InsertOrGetCpPlaceholderGlobal(module, ord);
+            GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, ord);
 
             Constant* subend = rcList[rc].subend;
 

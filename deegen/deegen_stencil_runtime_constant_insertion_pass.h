@@ -271,4 +271,6 @@ private:
     std::unordered_map<uint64_t /*label*/, std::pair<int64_t, int64_t> /*range*/> m_rcRanges;
 };
 
+llvm::GlobalVariable* WARN_UNUSED DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(llvm::Module* module, uint64_t ord);
+
 }   // namespace dast

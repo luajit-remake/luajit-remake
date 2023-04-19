@@ -9,6 +9,7 @@ namespace dast {
 
 class InterpreterBytecodeImplCreator;
 class DeegenBytecodeImplCreatorBase;
+class BaselineJitImplCreator;
 
 class InterpreterCallIcMetadata
 {
@@ -81,6 +82,28 @@ struct DeegenCallIcLogicCreator
         llvm::Value*& calleeCbHeapPtr /*out*/,
         llvm::Value*& codePointer /*out*/,
         llvm::Instruction* insertBefore);
+
+    // The baseline JIT lowering splits one MakeCall into multiple paths for IC
+    // Each path is described by the struct below
+    //
+    struct BaselineJitLoweringResult
+    {
+        llvm::Value* calleeCbHeapPtr;
+        llvm::Value* codePointer;
+        // The 'MakeCall' API in the BB for this path
+        //
+        llvm::Instruction* origin;
+    };
+
+    // Emit logic for baselineJIT, employing Call IC if possible
+    // Note that after the call, the passed-in 'origin' is invalidated! One should instead look at
+    // the 'origin' fields in the returned vector.
+    //
+    static std::vector<BaselineJitLoweringResult> WARN_UNUSED EmitForBaselineJIT(
+        BaselineJitImplCreator* ifi,
+        llvm::Value* functionObject,
+        uint64_t unique_ord,
+        llvm::Instruction* origin);
 };
 
 }   // namespace dast

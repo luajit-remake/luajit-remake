@@ -45,6 +45,7 @@ add_library(deegen_utils
   deegen_process_bytecode_for_baseline_jit.cpp
   deegen_postprocess_module_linker.cpp
   llvm_identical_function_merger.cpp
+  deegen_parse_asm_text.cpp
 ) 
 
 # Build the main Futamura projection stage binary

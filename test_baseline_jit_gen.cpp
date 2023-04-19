@@ -17,9 +17,80 @@
 #include "deegen_function_entry_logic_creator.h"
 #include "llvm_override_option.h"
 #include "test_vm_utils.h"
+#include "deegen_ast_make_call.h"
+#include "llvm/IR/DIBuilder.h"
+#include "deegen_parse_asm_text.h"
 
 using namespace dast;
 using namespace llvm;
+#if 0
+TEST(XX, XX)
+{
+    x_deegen_unit_test = true;
+
+    using namespace llvm::object;
+    std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
+    LLVMContext& ctx = *llvmCtxHolder.get();
+
+    nlohmann::json j = nlohmann::json::parse(ReadFileContentAsString("test_inputs/test_call.json"))["all-bytecode-info"][0];
+
+    BytecodeIrInfo b(ctx, j);
+    // b.m_slowPaths[0]->m_module->dump();
+
+    b.m_bytecodeDef->ComputeBaselineJitSlowPathDataLayout();
+
+
+    BaselineJitImplCreator mainJic(*b.m_jitMainComponent.get());
+    mainJic.DoLowering();
+
+    mainJic.GetModule()->dump();
+
+    Module* module = mainJic.GetModule();
+    Function* func = module->getFunction(mainJic.GetResultFunctionName());
+    ReleaseAssert(func != nullptr);
+
+    InjectedMagicDiLocationInfo dilInfo = InjectedMagicDiLocationInfo::RunOnFunction(func);
+
+    std::string asmFile = CompileLLVMModuleToAssemblyFile(
+        module,
+        llvm::Reloc::Static,
+        llvm::CodeModel::Small);
+
+    fprintf(stderr, "%s\n", asmFile.c_str());
+
+    std::unique_ptr<X64AsmFile> file = X64AsmFile::ParseFile(asmFile, dilInfo);
+
+
+    fprintf(stderr, "%s\n", file->m_filePreheader.c_str());
+    fprintf(stderr, "=========\n");
+
+    for (X64AsmBlock* block : file->m_blocks)
+    {
+        fprintf(stderr, "+++++++++\n");
+        fprintf(stderr, "%s\n", block->m_prefixText.c_str());
+        fprintf(stderr, "---------\n");
+        for (X64AsmLine& line : block->m_lines)
+        {
+            fprintf(stderr, "#########\n");
+            fprintf(stderr, "%s", line.m_prefixingText.c_str());
+            fprintf(stderr, "#-------#\n");
+            for (std::string& component : line.m_components)
+            {
+                fprintf(stderr, "%s", component.c_str());
+            }
+            fprintf(stderr, "\n");
+            fprintf(stderr, "#-------#\n");
+            fprintf(stderr, "%s", line.m_trailingComments.c_str());
+            fprintf(stderr, "#########\n");
+        }
+        fprintf(stderr, "+++++++++\n\n");
+    }
+
+    fprintf(stderr, "=========\n");
+
+    fprintf(stderr, "%s\n", file->m_fileFooter.c_str());
+}
+#endif
 
 #if 0
 

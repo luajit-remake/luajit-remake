@@ -2,6 +2,7 @@
 
 #include "common_utils.h"
 #include "misc_llvm_helper.h"
+#include "deegen_parse_asm_text.h"
 
 namespace dast {
 
@@ -17,6 +18,9 @@ namespace dast {
 // The pass has two phases: one phase is executed at LLVM IR level (IR -> IR transformation), and one phase
 // is executed at ASM (.s file) level (ASM -> ASM transformation).
 //
+// Note that this pass must be executed right before the LLVM module is compiled to assembly.
+// After this pass, no further transformation to the LLVM IR is allowed.
+//
 class DeegenStencilLoweringPass
 {
 public:
@@ -25,18 +29,16 @@ public:
     // for the next bytecode. If provided, we will attempt to optimize the code so that the code can fallthrough
     // (instead of jump) to the next bytecode. Pass "" if such rewrite is not desired.
     //
-    static void RunIrRewritePhase(llvm::Function* f, const std::string& fallthroughPlaceholderName);
+    static DeegenStencilLoweringPass WARN_UNUSED RunIrRewritePhase(llvm::Function* f, const std::string& fallthroughPlaceholderName);
 
     // Run the ASM phase (ASM -> ASM transformation), returns the transformed ASM file
     //
-    static std::string WARN_UNUSED RunAsmRewritePhase(const std::string& asmFile, const std::string& funcName);
+    std::string WARN_UNUSED RunAsmRewritePhase(const std::string& asmFile);
 
-    // Return the start offset of the hot-cold splitting barrier in the machine code
-    // [0, offset) is the fast path, and [offset + x_hotColdSplittingBarrierSize, end) is the slow path
-    //
-    static size_t WARN_UNUSED LocateHotColdSplittingBarrier(const std::string& machineCode);
-
-    static constexpr size_t x_hotColdSplittingBarrierSize = 160;
+    InjectedMagicDiLocationInfo m_diInfo;
+    std::vector<llvm::BasicBlock*> m_coldBlocks;
+    uint32_t m_locIdentForJmpToFallthroughCandidate;
+    std::string m_nextBytecodeFallthroughPlaceholderName;
 };
 
 }   // namespace dast

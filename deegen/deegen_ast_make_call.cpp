@@ -9,6 +9,57 @@
 
 namespace dast {
 
+AstMakeCall WARN_UNUSED AstMakeCall::ParseFromApiUse(llvm::CallInst* callInst)
+{
+    using namespace llvm;
+    Function* callee = callInst->getCalledFunction();
+    ReleaseAssert(callee != nullptr && callee->getName().str().starts_with(x_placeholderPrefix));
+
+    AstMakeCall item;
+    ReleaseAssert(callee->arg_size() >= x_ord_arg_start);
+    ReleaseAssert(callInst->arg_size() == callee->arg_size());
+    item.m_origin = callInst;
+    item.m_isInPlaceCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_inplaceCall));
+    item.m_passVariadicRes = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_passVariadicRes));
+    item.m_isMustTailCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_isMustTailCall));
+    item.m_target = callInst->getArgOperand(x_ord_target);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(item.m_target));
+    item.m_callOption = static_cast<MakeCallOption>(GetValueOfLLVMConstantInt<size_t>(callInst->getArgOperand(x_ord_callOption)));
+    if (item.m_isMustTailCall)
+    {
+        ReleaseAssert(dyn_cast<ConstantPointerNull>(callInst->getArgOperand(x_ord_continuation)) != nullptr);
+        item.m_continuation = nullptr;
+    }
+    else
+    {
+        item.m_continuation = dyn_cast<Function>(callInst->getArgOperand(x_ord_continuation));
+        ReleaseAssert(item.m_continuation != nullptr);
+    }
+
+    uint32_t curOrd = x_ord_arg_start;
+    while (curOrd < callee->arg_size())
+    {
+        Value* arg = callInst->getArgOperand(curOrd);
+        if (llvm_value_has_type<uint64_t>(arg))
+        {
+            item.m_args.push_back(Arg { arg });
+            curOrd += 1;
+        }
+        else
+        {
+            ReleaseAssert(llvm_value_has_type<void*>(arg));
+            ReleaseAssert(curOrd + 1 < callee->arg_size());
+            Value* nextArg = callInst->getArgOperand(curOrd + 1);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(nextArg));
+            item.m_args.push_back(Arg { arg, nextArg });
+            curOrd += 2;
+        }
+    }
+    ReleaseAssert(curOrd == callee->arg_size());
+
+    return item;
+}
+
 std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunction(llvm::Function* func)
 {
     using namespace llvm;
@@ -23,49 +74,7 @@ std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunction(llvm::Func
                 Function* callee = callInst->getCalledFunction();
                 if (callee != nullptr && callee->getName().str().starts_with(x_placeholderPrefix))
                 {
-                    AstMakeCall item;
-                    ReleaseAssert(callee->arg_size() >= x_ord_arg_start);
-                    ReleaseAssert(callInst->arg_size() == callee->arg_size());
-                    item.m_origin = callInst;
-                    item.m_isInPlaceCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_inplaceCall));
-                    item.m_passVariadicRes = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_passVariadicRes));
-                    item.m_isMustTailCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_isMustTailCall));
-                    item.m_target = callInst->getArgOperand(x_ord_target);
-                    ReleaseAssert(llvm_value_has_type<uint64_t>(item.m_target));
-                    item.m_callOption = static_cast<MakeCallOption>(GetValueOfLLVMConstantInt<size_t>(callInst->getArgOperand(x_ord_callOption)));
-                    if (item.m_isMustTailCall)
-                    {
-                        ReleaseAssert(dyn_cast<ConstantPointerNull>(callInst->getArgOperand(x_ord_continuation)) != nullptr);
-                        item.m_continuation = nullptr;
-                    }
-                    else
-                    {
-                        item.m_continuation = dyn_cast<Function>(callInst->getArgOperand(x_ord_continuation));
-                        ReleaseAssert(item.m_continuation != nullptr);
-                    }
-
-                    uint32_t curOrd = x_ord_arg_start;
-                    while (curOrd < callee->arg_size())
-                    {
-                        Value* arg = callInst->getArgOperand(curOrd);
-                        if (llvm_value_has_type<uint64_t>(arg))
-                        {
-                            item.m_args.push_back(Arg { arg });
-                            curOrd += 1;
-                        }
-                        else
-                        {
-                            ReleaseAssert(llvm_value_has_type<void*>(arg));
-                            ReleaseAssert(curOrd + 1 < callee->arg_size());
-                            Value* nextArg = callInst->getArgOperand(curOrd + 1);
-                            ReleaseAssert(llvm_value_has_type<uint64_t>(nextArg));
-                            item.m_args.push_back(Arg { arg, nextArg });
-                            curOrd += 2;
-                        }
-                    }
-                    ReleaseAssert(curOrd == callee->arg_size());
-
-                    result.push_back(std::move(item));
+                    result.push_back(ParseFromApiUse(callInst));
                 }
             }
         }
@@ -837,47 +846,90 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
     // Get the code pointer and the callee CodeBlock
     // TODO: now we always use naive logic, need to employ IC
     //
-    Value* calleeCbHeapPtr = nullptr;
-    Value* codePointer = nullptr;
-    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
-    ReleaseAssert(calleeCbHeapPtr != nullptr);
-    ReleaseAssert(codePointer != nullptr);
+    std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> list;
 
-    Value* callSiteInfo = nullptr;
-    if (!m_isMustTailCall)
+    ReleaseAssert(m_origin->getParent() != nullptr);
+    Function* func = m_origin->getParent()->getParent();
+    ReleaseAssert(func != nullptr);
+
+    if (!x_deegen_unit_test)
     {
-        if (ifi->IsBaselineJitSlowPath())
-        {
-            // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
-            // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.
-            // This is OK, since the SlowPathData pointer always points to the trailing array region of the BaselineCodeBlock,
-            // so when the call returns, we can restore the full 64 bit value using the BaselineCodeBlock pointer.
-            //
-            Value* slowPathDataPtr = ifi->GetJitSlowPathData();
-            ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
-            Value* slowPathDataPtrI64 = new PtrToIntInst(slowPathDataPtr, llvm_type_of<uint64_t>(ctx), "", m_origin);
-            TruncInst* slowPathDataPtrI32 = new TruncInst(slowPathDataPtrI64, llvm_type_of<uint32_t>(ctx), "", m_origin);
-            callSiteInfo = slowPathDataPtrI32;
-        }
-        else
-        {
-            // The baseline JIT'ed fast path doesn't need a CallSiteInfo, just provide undefined
-            //
-            callSiteInfo = UndefValue::get(llvm_type_of<uint32_t>(ctx));
-        }
+        Value* calleeCbHeapPtr = nullptr;
+        Value* codePointer = nullptr;
+        DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+        ReleaseAssert(calleeCbHeapPtr != nullptr);
+        ReleaseAssert(codePointer != nullptr);
+        list.push_back({
+            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .codePointer = codePointer,
+            .origin = m_origin
+        });
+        m_origin = nullptr;
+    }
+    else
+    {
+        list = DeegenCallIcLogicCreator::EmitForBaselineJIT(ifi, m_target, 0 /*unique_ord for now*/, m_origin);
+        m_origin = nullptr;
     }
 
-    auto [newSfBase, totalNumArgs] = EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
-    ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
-    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+    for (auto& item : list)
+    {
+        Value* calleeCbHeapPtr = item.calleeCbHeapPtr;
+        Value* codePointer = item.codePointer;
+        ReleaseAssert(isa<CallInst>(item.origin));
+        CallInst* origin = cast<CallInst>(item.origin);
 
-    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
+        AstMakeCall amc = ParseFromApiUse(origin);
+        ReleaseAssert(amc.m_origin == origin);
+        ReleaseAssert(amc.m_isInPlaceCall == m_isInPlaceCall);
+        ReleaseAssert(amc.m_passVariadicRes == m_passVariadicRes);
+        ReleaseAssert(amc.m_isMustTailCall == m_isMustTailCall);
+        ReleaseAssert(amc.m_args.size() == m_args.size());
+        for (size_t i = 0; i < m_args.size(); i++) { ReleaseAssert(amc.m_args[i].IsArgRange() == m_args[i].IsArgRange()); }
 
-    AssertInstructionIsFollowedByUnreachable(m_origin);
-    Instruction* unreachableInst = m_origin->getNextNode();
-    m_origin->eraseFromParent();
-    unreachableInst->eraseFromParent();
-    m_origin = nullptr;
+        Value* callSiteInfo = nullptr;
+        if (!m_isMustTailCall)
+        {
+            if (ifi->IsBaselineJitSlowPath())
+            {
+                // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
+                // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.
+                // This is OK, since the SlowPathData pointer always points to the trailing array region of the BaselineCodeBlock,
+                // so when the call returns, we can restore the full 64 bit value using the BaselineCodeBlock pointer.
+                //
+                Value* slowPathDataPtr = ifi->GetJitSlowPathData();
+                ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
+                Value* slowPathDataPtrI64 = new PtrToIntInst(slowPathDataPtr, llvm_type_of<uint64_t>(ctx), "", origin);
+                TruncInst* slowPathDataPtrI32 = new TruncInst(slowPathDataPtrI64, llvm_type_of<uint32_t>(ctx), "", origin);
+                callSiteInfo = slowPathDataPtrI32;
+            }
+            else
+            {
+                // The baseline JIT'ed fast path doesn't need a CallSiteInfo, just provide undefined
+                //
+                callSiteInfo = UndefValue::get(llvm_type_of<uint32_t>(ctx));
+            }
+        }
+
+        auto [newSfBase, totalNumArgs] = amc.EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
+        ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
+        ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+
+        InterpreterFunctionInterface::CreateDispatchToCallee(codePointer,
+                                                             ifi->GetCoroutineCtx(),
+                                                             newSfBase,
+                                                             calleeCbHeapPtr,
+                                                             totalNumArgs,
+                                                             CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)),
+                                                             origin /*insertBefore*/);
+
+        AssertInstructionIsFollowedByUnreachable(origin);
+        Instruction* unreachableInst = origin->getNextNode();
+        origin->eraseFromParent();
+        unreachableInst->eraseFromParent();
+    }
+
+    ValidateLLVMFunction(func);
 }
 
 }   // namespace dast

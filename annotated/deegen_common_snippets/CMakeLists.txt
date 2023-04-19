@@ -44,6 +44,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_baseline_jit_slowpath_data_after_slow_call.cpp
   round_up_to_multiple_of.cpp
   get_baseline_jit_codeblock_from_codeblock.cpp
+  get_callee_cb_u32.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

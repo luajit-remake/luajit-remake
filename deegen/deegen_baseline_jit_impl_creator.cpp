@@ -484,13 +484,6 @@ void BaselineJitImplCreator::DoLowering()
 
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
 
-    // If this function is for the JIT, run the stencil lowering pass in preparation for stencil generation
-    //
-    if (!IsBaselineJitSlowPath())
-    {
-        DeegenStencilLoweringPass::RunIrRewritePhase(m_wrapper, GetRcPlaceholderNameForFallthrough());
-    }
-
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: for non-JIT slow path, our caller will fix up the linkage for us.
     // For JIT, we will extract the target function into a stencil, so the linkage doesn't matter.
@@ -515,10 +508,14 @@ void BaselineJitImplCreator::DoLowering()
 
     if (IsBaselineJitSlowPath())
     {
-        // For non-JIT slow path, we can quit at this point. For JIT, we need to do further processing.
+        // For non-JIT slow path, we are done at this point. For JIT, we need to do further processing.
         //
         return;
     }
+
+    // Run the stencil lowering pass in preparation for stencil generation
+    //
+    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(m_wrapper, GetRcPlaceholderNameForFallthrough());
 
     // Compile the function to ASM (.s) file
     // TODO: ideally we should think about properly setting function and loop alignments
@@ -538,7 +535,7 @@ void BaselineJitImplCreator::DoLowering()
 
     // Run the ASM phase of the stencil lowering pass
     //
-    asmFile = DeegenStencilLoweringPass::RunAsmRewritePhase(asmFile, m_resultFuncName);
+    asmFile = slPass.RunAsmRewritePhase(asmFile);
 
     // Compile the final ASM file to object file
     //
