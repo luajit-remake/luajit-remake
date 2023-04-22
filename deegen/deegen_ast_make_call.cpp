@@ -846,7 +846,7 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
     // Get the code pointer and the callee CodeBlock
     // TODO: now we always use naive logic, need to employ IC
     //
-    std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> list;
+    std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> list;
 
     ReleaseAssert(m_origin->getParent() != nullptr);
     Function* func = m_origin->getParent()->getParent();

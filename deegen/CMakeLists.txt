@@ -46,6 +46,8 @@ add_library(deegen_utils
   deegen_postprocess_module_linker.cpp
   llvm_identical_function_merger.cpp
   deegen_parse_asm_text.cpp
+  deegen_recover_asm_cfg.cpp
+  deegen_stencil_inline_cache_extraction_pass.cpp
 ) 
 
 # Build the main Futamura projection stage binary

@@ -1,4 +1,5 @@
 #include "deegen_stencil_lowering_pass.h"
+#include "deegen_recover_asm_cfg.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/IR/InlineAsm.h"
@@ -148,111 +149,36 @@ retry:
         }
     }
 
-    // Layout the cold ASM blocks
-    // To not potentially accidentally breaking LLVM's carefully-aligned loops, we do it very conservatively.
-    // Specifically, if BB1 already fallthroughs to BB2 in the original layout, we will never break it.
-    // We will only introduce new fallthroughs, which should be a net gain.
-    //
-    std::unordered_map<X64AsmBlock* /*to*/, X64AsmBlock* /*from*/> existingFallthrough;
-    for (size_t i = 0; i + 1 < coldAsmBlocks.size(); i++)
-    {
-        X64AsmBlock* pred = coldAsmBlocks[i];
-        X64AsmBlock* succ = coldAsmBlocks[i + 1];
-        if (pred->m_endsWithJmpToLocalLabel && pred->m_terminalJmpTargetLabel == succ->m_normalizedLabelName)
-        {
-            ReleaseAssert(!existingFallthrough.count(succ));
-            existingFallthrough[succ] = pred;
-        }
-    }
+    ReleaseAssert(hotAsmBlocks.size() + coldAsmBlocks.size() == list.size());
+    ReleaseAssert(hotAsmBlocks.size() > 0);
+    ReleaseAssert(hotAsmBlocks[0] == list[0]);
 
-    std::unordered_map<std::string /*label*/, X64AsmBlock*> labelToColdBlockMap;
-    for (X64AsmBlock* block : coldAsmBlocks)
+    if (coldAsmBlocks.size() > 0)
     {
-        ReleaseAssert(!labelToColdBlockMap.count(block->m_normalizedLabelName));
-        labelToColdBlockMap[block->m_normalizedLabelName] = block;
-    }
-
-    std::vector<X64AsmBlock*> newColdBlockList;
-    std::unordered_set<X64AsmBlock*> layoutedColdBlocks;
-    for (size_t i = 0; i < coldAsmBlocks.size(); i++)
-    {
-        X64AsmBlock* block = coldAsmBlocks[i];
-        if (layoutedColdBlocks.count(block))
-        {
-            continue;
-        }
-        while (true)
-        {
-            ReleaseAssert(!layoutedColdBlocks.count(block));
-            newColdBlockList.push_back(block);
-            layoutedColdBlocks.insert(block);
-            if (!block->m_endsWithJmpToLocalLabel)
-            {
-                break;
-            }
-            std::string fallthroughLabel = block->m_terminalJmpTargetLabel;
-            if (!labelToColdBlockMap.count(fallthroughLabel))
-            {
-                // This jump is to a hot block, the fallthrough chain ends here
-                //
-                break;
-            }
-            X64AsmBlock* candidate = labelToColdBlockMap[fallthroughLabel];
-            if (layoutedColdBlocks.count(candidate))
-            {
-                break;
-            }
-            if (existingFallthrough.count(candidate) && existingFallthrough[candidate] != block)
-            {
-                // Don't break an existing fallthrough
-                //
-                break;
-            }
-            block = candidate;
-        }
-    }
-
-    ReleaseAssert(newColdBlockList.size() == coldAsmBlocks.size());
-    ReleaseAssert(layoutedColdBlocks.size() == coldAsmBlocks.size());
-
-    {
-        // Just be extra sure that the set of blocks are the same
+        // Layout the cold ASM blocks to minimize jumps
         //
-        std::unordered_set<X64AsmBlock*> checkSet;
-        for (X64AsmBlock* block : coldAsmBlocks)
-        {
-            ReleaseAssert(!checkSet.count(block));
-            checkSet.insert(block);
-        }
-        for (X64AsmBlock* block : newColdBlockList)
-        {
-            ReleaseAssert(checkSet.count(block));
-            checkSet.erase(checkSet.find(block));
-        }
-        ReleaseAssert(checkSet.empty());
-    }
+        coldAsmBlocks = X64AsmBlock::ReorderBlocksToMaximizeFallthroughs(coldAsmBlocks, 0 /*entryOrd*/);
 
-    if (newColdBlockList.size() > 0)
-    {
         // Put the cold BBs into the slow path section
         // Very important to put the directive BEFORE m_prefixText, not after, because m_prefixText contains labels!
         //
         {
             std::string sectionDirective = "\t.section\t.text.deegen_slow,\"ax\",@progbits\n";
-            newColdBlockList[0]->m_prefixText = sectionDirective + newColdBlockList[0]->m_prefixText;
-        }
-
-        // Reset the section directive at function end
-        // Similarly, important to append before m_fileFooter, not after
-        //
-        {
-            std::string sectionDirective = "\t.section\t.text,\"ax\",@progbits\n";
-            file->m_fileFooter = sectionDirective + file->m_fileFooter;
+            coldAsmBlocks[0]->m_prefixText = sectionDirective + coldAsmBlocks[0]->m_prefixText;
         }
     }
 
+    // Reset the section directive at function end
+    // Similarly, important to append before m_fileFooter, not after
+    // TODO: the section directive should be printed by ToString(), not appended by us
+    //
+    {
+        std::string sectionDirective = "\t.section\t.text,\"ax\",@progbits\n";
+        file->m_fileFooter = sectionDirective + file->m_fileFooter;
+    }
+
     file->m_blocks = hotAsmBlocks;
-    file->m_slowpath = newColdBlockList;
+    file->m_slowpath = coldAsmBlocks;
 }
 
 // A very crude pass that attempts to reorder code so that the fast path can fallthrough to
@@ -332,7 +258,7 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
         {
             X64AsmBlock* block = file->m_blocks[i];
             ReleaseAssert(block->m_lines.size() > 0);
-            if (block->m_lines.back().IsDirectJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
+            if (block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
             {
                 targetBlock = block;
                 targetBlockOrd = i;
@@ -351,7 +277,7 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
         {
             X64AsmBlock* block = file->m_slowpath[i];
             ReleaseAssert(block->m_lines.size() > 0);
-            if (block->m_lines.back().IsDirectJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
+            if (block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
             {
                 foundInSlowPath = true;
                 break;
@@ -363,7 +289,7 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
 
     ReleaseAssert(targetBlock != nullptr);
     ReleaseAssert(targetBlock->m_lines.size() > 0);
-    ReleaseAssert(targetBlock->m_lines.back().IsDirectJumpInst());
+    ReleaseAssert(targetBlock->m_lines.back().IsDirectUnconditionalJumpInst());
     ReleaseAssert(targetBlock->m_lines.back().GetWord(1) == fallthroughPlaceholderName);
 
     if (targetBlock == file->m_blocks.back())
@@ -464,7 +390,7 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
 
                             ReleaseAssert(p1->m_lines[instOrd].IsConditionalJumpInst());
                             ReleaseAssert(p1->m_lines[instOrd].GetWord(1) == file->m_blocks[definedBlockOrd]->m_normalizedLabelName);
-                            ReleaseAssert(p1->m_lines[instOrd + 1].IsDirectJumpInst());
+                            ReleaseAssert(p1->m_lines[instOrd + 1].IsDirectUnconditionalJumpInst());
                             ReleaseAssert(p1->m_lines[instOrd + 1].GetWord(1) == p2->m_normalizedLabelName);
 
                             p1->m_lines[instOrd].FlipConditionalJumpCondition();
@@ -605,6 +531,9 @@ std::string WARN_UNUSED DeegenStencilLoweringPass::RunAsmRewritePhase(const std:
 {
     std::unique_ptr<X64AsmFile> fileHolder = X64AsmFile::ParseFile(asmFile, m_diInfo);
     X64AsmFile* file = fileHolder.get();
+    m_rawInputFileForAudit = file->Clone();
+
+    DeegenAsmCfgAnalyzer dummy = DeegenAsmCfgAnalyzer::DoAnalysis(file, m_diInfo.GetFunc());
 
     RunAsmHotColdSplittingPass(file /*inout*/, m_coldBlocks);
 

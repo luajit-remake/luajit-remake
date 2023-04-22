@@ -234,7 +234,7 @@ public:
                 {
                     ReleaseAssert(ci->arg_size() == 0);
                     std::string labelStr = callee->getName().substr(strlen("__deegen_constant_placeholder_bytecode_operand_")).str();
-                    uint64_t label = static_cast<uint64_t>(std::stoi(labelStr));
+                    uint64_t label = SafeIntegerCast<uint64_t>(StoiOrFail(labelStr));
                     ReleaseAssert(m_rawRcRange.count(label));
                     int64_t min = m_rawRcRange[label].first;
                     int64_t max = m_rawRcRange[label].second;

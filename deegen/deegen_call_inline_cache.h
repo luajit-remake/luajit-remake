@@ -4,6 +4,7 @@
 #include "misc_llvm_helper.h"
 #include "deegen_bytecode_metadata.h"
 #include "tvalue.h"
+#include "deegen_parse_asm_text.h"
 
 namespace dast {
 
@@ -86,7 +87,7 @@ struct DeegenCallIcLogicCreator
     // The baseline JIT lowering splits one MakeCall into multiple paths for IC
     // Each path is described by the struct below
     //
-    struct BaselineJitLoweringResult
+    struct BaselineJitLLVMLoweringResult
     {
         llvm::Value* calleeCbHeapPtr;
         llvm::Value* codePointer;
@@ -99,11 +100,36 @@ struct DeegenCallIcLogicCreator
     // Note that after the call, the passed-in 'origin' is invalidated! One should instead look at
     // the 'origin' fields in the returned vector.
     //
-    static std::vector<BaselineJitLoweringResult> WARN_UNUSED EmitForBaselineJIT(
+    static std::vector<BaselineJitLLVMLoweringResult> WARN_UNUSED EmitForBaselineJIT(
         BaselineJitImplCreator* ifi,
         llvm::Value* functionObject,
         uint64_t unique_ord,
         llvm::Instruction* origin);
+
+    struct BaselineJitAsmLoweringResult
+    {
+        // The label for the ASM block that contains the patchable jump
+        // The block must contain exactly 1 instruction: jmp ic_miss_slowpath
+        //
+        std::string m_labelForPatchableJump;
+        // The entry label for the direct call IC hit logic
+        //
+        std::string m_labelForDirectCallIc;
+        // The entry label for the closure call IC hit logic
+        //
+        std::string m_labelForClosureCallIc;
+        // Label for the slow path
+        // The patchable jump always jumps to here initially
+        //
+        std::string m_labelForIcMissLogic;
+        // The unique ordinal of this call IC, always corresponds to the ordinal passed to EmitForBaselineJIT()
+        //
+        uint64_t m_uniqueOrd;
+    };
+
+    // See comments in CPP file
+    //
+    static std::vector<BaselineJitAsmLoweringResult> WARN_UNUSED DoBaselineJitAsmLowering(X64AsmFile* file);
 };
 
 }   // namespace dast

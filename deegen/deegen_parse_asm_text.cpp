@@ -1,8 +1,20 @@
 #include "deegen_parse_asm_text.h"
 #include "anonymous_file.h"
 #include "llvm/IR/DIBuilder.h"
+#include "llvm/IR/InlineAsm.h"
+#include "deegen_magic_asm_helper.h"
 
 namespace dast {
+
+bool WARN_UNUSED X64AsmLine::IsMagicInstructionOfKind(MagicAsmKind kind)
+{
+    if (!IsMagicInstruction())
+    {
+        return false;
+    }
+    ReleaseAssert(m_magicPayload != nullptr);
+    return m_magicPayload->m_kind == kind;
+}
 
 InjectedMagicDiLocationInfo WARN_UNUSED InjectedMagicDiLocationInfo::RunOnFunction(llvm::Function* func)
 {
@@ -15,6 +27,65 @@ InjectedMagicDiLocationInfo WARN_UNUSED InjectedMagicDiLocationInfo::RunOnFuncti
     Module* module = func->getParent();
     LLVMContext& ctx = module->getContext();
 
+    // We blend a random (but deterministic) values into the DILocation line number and magic asm as a
+    // santiy check that nothing is unexpected after compilation to ASM
+    //
+    std::mt19937 rng;
+
+    // Inject magic asm for us to map indirect branches (SwitchInst / IndirectBrInst / musttail call) back to LLVM IR
+    // beacuse it turns out that debug info is always broken for SwitchInst...
+    //
+    {
+        std::unordered_set<uint32_t> usedMarkerValues;
+        for (BasicBlock& bb : *func)
+        {
+            Instruction* inst = bb.getTerminator();
+            bool needMarker = isa<IndirectBrInst>(inst) || isa<SwitchInst>(inst);
+            if (!needMarker)
+            {
+                // If the terminating musttail call exists, the annotation should be inserted before the call, not the 'ret'
+                //
+                inst = bb.getTerminatingMustTailCall();
+                if (inst != nullptr)
+                {
+                    CallInst* ci = dyn_cast<CallInst>(inst);
+                    ReleaseAssert(ci != nullptr);
+                    ReleaseAssert(ci->isMustTailCall());
+                    // Do not insert annotation if the call is a global value, which means it will not be implemented by an indirect branch
+                    //
+                    if (!isa<GlobalValue>(ci->getCalledOperand()))
+                    {
+                        needMarker = true;
+                    }
+                }
+            }
+            if (needMarker)
+            {
+                ReleaseAssert(inst != nullptr);
+                uint32_t randVal = 0;
+                while (true)
+                {
+                    randVal = rng() % 10000000;
+                    if (!usedMarkerValues.count(randVal))
+                    {
+                        break;
+                    }
+                }
+                ReleaseAssert(!usedMarkerValues.count(randVal));
+                usedMarkerValues.insert(randVal);
+
+                std::string asmStr = "movl $$" + std::to_string(randVal) + ", eax;";
+                asmStr = MagicAsm::WrapLLVMAsmPayload(asmStr, MagicAsmKind::IndirectBrMarkerForCfgRecovery);
+                FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { }, false);
+                InlineAsm* ia = InlineAsm::get(fty, asmStr, "" /*constraints*/, true /*hasSideEffects*/);
+                CallInst* ci = CallInst::Create(ia, "", inst);
+                ci->addFnAttr(Attribute::NoUnwind);
+            }
+        }
+    }
+
+    // Inject DILocation debug info for us to map general ASM instructions back to LLVM IR
+    //
     module->addModuleFlag(Module::Warning, "Debug Info Version", DEBUG_METADATA_VERSION);
 
     std::string srcFileName = module->getSourceFileName();
@@ -39,10 +110,6 @@ InjectedMagicDiLocationInfo WARN_UNUSED InjectedMagicDiLocationInfo::RunOnFuncti
     ReleaseAssert(func->getSubprogram() == nullptr);
     func->setSubprogram(diSp);
 
-    // We blend a random (but deterministic) values into the DILocation line number as a
-    // santiy check that nothing is unexpected after compilation to ASM
-    //
-    std::mt19937 rng;
     for (BasicBlock& bb : *func)
     {
         for (Instruction& inst : bb)
@@ -67,11 +134,7 @@ InjectedMagicDiLocationInfo WARN_UNUSED InjectedMagicDiLocationInfo::RunOnFuncti
 llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetCertainInstructionOriginMaybeNullFromDILoc(uint32_t line)
 {
     using namespace llvm;
-    if (!m_hasUpdatedAfterCodegen)
-    {
-        UpdateAfterCodegen();
-        ReleaseAssert(m_hasUpdatedAfterCodegen);
-    }
+    ReleaseAssert(m_hasUpdatedAfterCodegen);
     if (line < x_lineBase)
     {
         ReleaseAssert(!m_mappingCertain.count(line));
@@ -87,11 +150,7 @@ llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetCertainInstructio
 llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetMaybeInstructionOriginMaybeNullFromDILoc(uint32_t line)
 {
     using namespace llvm;
-    if (!m_hasUpdatedAfterCodegen)
-    {
-        UpdateAfterCodegen();
-        ReleaseAssert(m_hasUpdatedAfterCodegen);
-    }
+    ReleaseAssert(m_hasUpdatedAfterCodegen);
     if (line < x_lineBase)
     {
         ReleaseAssert(!m_mappingMaybe.count(line));
@@ -102,6 +161,14 @@ llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetMaybeInstructionO
         return nullptr;
     }
     return m_mappingMaybe[line];
+}
+
+llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetIndirectBrSourceFromMagicAsmAnnotation(uint32_t ident)
+{
+    using namespace llvm;
+    ReleaseAssert(m_hasUpdatedAfterCodegen);
+    ReleaseAssert(m_markedIndirectBrMap.count(ident));
+    return m_markedIndirectBrMap[ident];
 }
 
 void InjectedMagicDiLocationInfo::UpdateAfterCodegen()
@@ -142,6 +209,30 @@ void InjectedMagicDiLocationInfo::UpdateAfterCodegen()
                 // Mark it as nullptr to invalidate it (important to not delete it, so that mapping.count still returns true)
                 //
                 m_mappingCertain[line] = nullptr;
+            }
+        }
+    }
+
+    for (BasicBlock& bb : *m_func)
+    {
+        for (Instruction& inst : bb)
+        {
+            if (MagicAsm::IsMagic(&inst) && MagicAsm::GetKind(&inst) == MagicAsmKind::IndirectBrMarkerForCfgRecovery)
+            {
+                std::string payload = MagicAsm::GetPayload(&inst);
+                ReleaseAssert(payload.starts_with("movl $$"));
+                payload = payload.substr(strlen("movl $$"));
+                ReleaseAssert(payload.ends_with(", eax;"));
+                payload = payload.substr(0, payload.length() - strlen(", eax;"));
+                uint32_t ord = SafeIntegerCast<uint32_t>(StoiOrFail(payload));
+                Instruction* terminator = bb.getTerminatingMustTailCall();
+                if (terminator == nullptr)
+                {
+                    terminator = bb.getTerminator();
+                }
+                ReleaseAssert(isa<IndirectBrInst>(terminator) || isa<SwitchInst>(terminator) || isa<CallInst>(terminator));
+                ReleaseAssert(!m_markedIndirectBrMap.count(ord));
+                m_markedIndirectBrMap[ord] = terminator;
             }
         }
     }
@@ -253,6 +344,8 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
     std::unique_ptr<X64AsmFile> resHolder = std::make_unique<X64AsmFile>();
     X64AsmFile* r = resHolder.get();
+
+    diInfo.UpdateAfterCodegen();
 
     Function* func = diInfo.GetFunc();
 
@@ -457,7 +550,7 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
         X64AsmLine& line = block->m_lines.back();
         ReleaseAssert(line.IsInstruction());
         block->m_endsWithJmpToLocalLabel = false;
-        if (line.IsDirectJumpInst())
+        if (line.IsDirectUnconditionalJumpInst())
         {
             ReleaseAssert(line.NumWords() == 2);
             std::string label = line.GetWord(1);
@@ -500,7 +593,7 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
         ReleaseAssert(block->m_lines.back().IsDefinitelyBarrierInst());
         ReleaseAssertImp(block->m_endsWithJmpToLocalLabel,
-                         block->m_lines.back().IsDirectJumpInst() && block->m_terminalJmpTargetLabel == block->m_lines.back().GetWord(1));
+                         block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_terminalJmpTargetLabel == block->m_lines.back().GetWord(1));
     }
 
     // Sanity check that all the label names make sense
@@ -724,8 +817,278 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
         block->m_lines = std::move(list);
     }
 
+    // Process and remove IndirectBrMarkerForCfgRecovery magic
+    //
+    for (X64AsmBlock* block : r->m_blocks)
+    {
+        // If the terminator is an indirect jump, update its origin using the inserted asm magic annotation
+        //
+        X64AsmLine& terminator = block->m_lines.back();
+        if (block->m_lines.back().IsIndirectJumpInst())
+        {
+            size_t loc = block->m_lines.size() - 1;
+            while (true)
+            {
+                X64AsmLine& line = block->m_lines[loc];
+                if (line.IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
+                {
+                    ReleaseAssert(line.m_magicPayload->m_lines.size() == 1);
+                    X64AsmLine& payload = line.m_magicPayload->m_lines[0];
+                    ReleaseAssert(payload.NumWords() == 3);
+                    ReleaseAssert(payload.GetWord(0) == "movl");
+                    std::string val = payload.GetWord(1);
+                    ReleaseAssert(val.starts_with("$") && val.ends_with(","));
+                    val = val.substr(1, val.length() - 1);
+                    uint32_t ident = SafeIntegerCast<uint32_t>(StoiOrFail(val));
+                    llvm::Instruction* originInst = diInfo.GetIndirectBrSourceFromMagicAsmAnnotation(ident);
+
+                    ReleaseAssertImp(terminator.m_originCertain != nullptr, terminator.m_originCertain == originInst);
+                    ReleaseAssertImp(terminator.m_originMaybe != nullptr, terminator.m_originMaybe == originInst);
+                    terminator.m_originCertain = originInst;
+                    terminator.m_originMaybe = originInst;
+                    break;
+                }
+                ReleaseAssert(loc > 0);
+                loc--;
+            }
+        }
+    }
+
+    r->RemoveAsmMagic(MagicAsmKind::IndirectBrMarkerForCfgRecovery);
+
     r->Validate();
 
+    return resHolder;
+}
+
+void X64AsmFile::RemoveAsmMagic(MagicAsmKind magicKind)
+{
+    auto removeForBlockList = [&](const std::vector<X64AsmBlock*>& blockList)
+    {
+        for (X64AsmBlock* block : blockList)
+        {
+            std::unordered_set<size_t> removeSet;
+            for (size_t i = 0; i < block->m_lines.size(); i++)
+            {
+                if (block->m_lines[i].IsMagicInstructionOfKind(magicKind))
+                {
+                    // Magic can never be a terminator
+                    //
+                    ReleaseAssert(i + 1 < block->m_lines.size());
+                    std::string text = block->m_lines[i].m_prefixingText;
+                    if (block->m_lines[i].m_trailingComments != "")
+                    {
+                        text += block->m_lines[i].m_trailingComments + "\n";
+                    }
+                    block->m_lines[i + 1].m_prefixingText = text + block->m_lines[i + 1].m_prefixingText;
+                    removeSet.insert(i);
+                }
+            }
+
+            if (removeSet.size() > 0)
+            {
+                std::vector<X64AsmLine> newList;
+                for (size_t i = 0; i < block->m_lines.size(); i++)
+                {
+                    if (!removeSet.count(i))
+                    {
+                        newList.push_back(std::move(block->m_lines[i]));
+                    }
+                }
+                ReleaseAssert(newList.size() + removeSet.size() == block->m_lines.size());
+                block->m_lines = std::move(newList);
+            }
+        }
+    };
+
+    removeForBlockList(m_blocks);
+    removeForBlockList(m_slowpath);
+}
+
+void X64AsmFile::InsertBlocksAfter(const std::vector<X64AsmBlock*>& blocksToBeInserted, X64AsmBlock* insertAfter)
+{
+    size_t ord = static_cast<size_t>(-1);
+    for (size_t i = 0; i < m_blocks.size(); i++)
+    {
+        if (m_blocks[i] == insertAfter)
+        {
+            ReleaseAssert(ord == static_cast<size_t>(-1));
+            ord = i;
+        }
+    }
+    ReleaseAssert(ord != static_cast<size_t>(-1));
+
+    m_blocks.insert(m_blocks.begin() + static_cast<int64_t>(ord + 1) /*insertBefore*/, blocksToBeInserted.begin(), blocksToBeInserted.end());
+
+    ReleaseAssert(m_blocks[ord] == insertAfter);
+    ReleaseAssertImp(blocksToBeInserted.size() > 0, m_blocks[ord + 1] == blocksToBeInserted[0]);
+}
+
+void X64AsmFile::RemoveBlock(X64AsmBlock* blockToRemove)
+{
+    size_t ord = static_cast<size_t>(-1);
+    for (size_t i = 0; i < m_blocks.size(); i++)
+    {
+        if (m_blocks[i] == blockToRemove)
+        {
+            ReleaseAssert(ord == static_cast<size_t>(-1));
+            ord = i;
+        }
+    }
+    ReleaseAssert(ord != static_cast<size_t>(-1));
+    m_blocks.erase(m_blocks.begin() + static_cast<int64_t>(ord));
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmBlock::Clone(X64AsmFile* owner)
+{
+    std::unique_ptr<X64AsmBlock> holder = std::make_unique<X64AsmBlock>(*this);
+    X64AsmBlock* res = holder.get();
+    owner->m_blockHolders.push_back(std::move(holder));
+    return res;
+}
+
+std::vector<X64AsmBlock*> WARN_UNUSED X64AsmBlock::ReorderBlocksToMaximizeFallthroughs(const std::vector<X64AsmBlock*>& input, size_t entryOrd)
+{
+    ReleaseAssert(input.size() > 0);
+    ReleaseAssert(entryOrd < input.size());
+
+    {
+        std::unordered_set<X64AsmBlock*> checkUnique;
+        for (X64AsmBlock* block : input)
+        {
+            ReleaseAssert(!checkUnique.count(block));
+            checkUnique.insert(block);
+        }
+    }
+
+    // In general, we believe in LLVM's existing layout. To not potentially accidentally breaking LLVM's carefully-aligned loops
+    // or otherwise cause accidental performance regression, we do the rearrangement very conservatively.
+    // Specifically, if BB1 already fallthroughs to BB2 in the original layout, we will never break it.
+    // That is, we will never break an existing fallthrough, but only introduce new fallthroughs, which should be a net gain.
+    //
+    std::unordered_map<X64AsmBlock* /*to*/, X64AsmBlock* /*from*/> existingFallthrough;
+    for (size_t i = 0; i + 1 < input.size(); i++)
+    {
+        X64AsmBlock* pred = input[i];
+        X64AsmBlock* succ = input[i + 1];
+        if (pred->m_endsWithJmpToLocalLabel && pred->m_terminalJmpTargetLabel == succ->m_normalizedLabelName)
+        {
+            ReleaseAssert(!existingFallthrough.count(succ));
+            existingFallthrough[succ] = pred;
+        }
+    }
+
+    // Make sure the desired entry point comes first in the final layout.
+    //
+    std::vector<size_t> reorderingOrder;
+    for (size_t i = entryOrd; i < input.size(); i++)
+    {
+        reorderingOrder.push_back(i);
+    }
+    for (size_t i = 0; i < entryOrd; i++)
+    {
+        reorderingOrder.push_back(i);
+    }
+    ReleaseAssert(reorderingOrder.size() == input.size());
+
+    std::unordered_map<std::string /*label*/, X64AsmBlock*> labelToBlockMap;
+    for (X64AsmBlock* block : input)
+    {
+        ReleaseAssert(!labelToBlockMap.count(block->m_normalizedLabelName));
+        labelToBlockMap[block->m_normalizedLabelName] = block;
+    }
+
+    std::vector<X64AsmBlock*> result;
+    std::unordered_set<X64AsmBlock*> layoutedBlocks;
+    for (size_t ordinalToConsider : reorderingOrder)
+    {
+        ReleaseAssert(ordinalToConsider < input.size());
+        X64AsmBlock* block = input[ordinalToConsider];
+        if (layoutedBlocks.count(block))
+        {
+            continue;
+        }
+        while (true)
+        {
+            ReleaseAssert(!layoutedBlocks.count(block));
+            result.push_back(block);
+            layoutedBlocks.insert(block);
+            if (!block->m_endsWithJmpToLocalLabel)
+            {
+                break;
+            }
+            std::string fallthroughLabel = block->m_terminalJmpTargetLabel;
+            if (!labelToBlockMap.count(fallthroughLabel))
+            {
+                // This jump is to a label we do not recognize, the fallthrough chain ends here
+                //
+                break;
+            }
+            X64AsmBlock* candidate = labelToBlockMap[fallthroughLabel];
+            if (layoutedBlocks.count(candidate))
+            {
+                break;
+            }
+            if (existingFallthrough.count(candidate) && existingFallthrough[candidate] != block)
+            {
+                // Don't break an existing fallthrough
+                //
+                break;
+            }
+            block = candidate;
+        }
+    }
+
+    ReleaseAssert(result.size() == input.size());
+    ReleaseAssert(layoutedBlocks.size() == input.size());
+
+    {
+        // Just be extra sure that the set of blocks are the same
+        //
+        std::unordered_set<X64AsmBlock*> checkSet;
+        for (X64AsmBlock* block : input)
+        {
+            ReleaseAssert(!checkSet.count(block));
+            checkSet.insert(block);
+        }
+        for (X64AsmBlock* block : result)
+        {
+            ReleaseAssert(checkSet.count(block));
+            checkSet.erase(checkSet.find(block));
+        }
+        ReleaseAssert(checkSet.empty());
+    }
+
+    // Assert that the requested entry block is indeed at the beginning
+    //
+    ReleaseAssert(result[0] == input[entryOrd]);
+    return result;
+}
+
+std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::Clone()
+{
+    Validate();
+
+    std::unique_ptr<X64AsmFile> resHolder = std::make_unique<X64AsmFile>();
+    X64AsmFile* r = resHolder.get();
+
+    auto cloneBlocks = [&](const std::vector<X64AsmBlock*>& blocks) WARN_UNUSED -> std::vector<X64AsmBlock*>
+    {
+        std::vector<X64AsmBlock*> clonedBlocks;
+        for (X64AsmBlock* block : blocks)
+        {
+            clonedBlocks.push_back(block->Clone(r /*owner*/));
+        }
+        return clonedBlocks;
+    };
+
+    r->m_blocks = cloneBlocks(m_blocks);
+    r->m_slowpath = cloneBlocks(m_slowpath);
+    r->m_labelNormalizer = m_labelNormalizer;
+    r->m_filePreheader = m_filePreheader;
+    r->m_fileFooter = m_fileFooter;
+
+    r->Validate();
     return resHolder;
 }
 
@@ -739,13 +1102,21 @@ void X64AsmFile::Validate()
         heldPtrs.insert(p);
     }
 
+    std::unordered_set<X64AsmBlock*> checkUnique;
+
     auto validateBlocks = [&](const std::vector<X64AsmBlock*>& blocks)
     {
         for (size_t i = 0; i < blocks.size(); i++)
         {
             X64AsmBlock* block = blocks[i];
             ReleaseAssert(heldPtrs.count(block));
+            ReleaseAssert(!checkUnique.count(block));
+            checkUnique.insert(block);
             ReleaseAssert(block->m_lines.size() > 0);
+            for (X64AsmLine& line : block->m_lines)
+            {
+                ReleaseAssert(line.m_trailingComments.find('\n') == std::string::npos);
+            }
             for (size_t k = 0; k + 1 < block->m_lines.size(); k++)
             {
                 ReleaseAssert(!block->m_lines[k].IsDefinitelyBarrierInst());
@@ -755,7 +1126,7 @@ void X64AsmFile::Validate()
             ReleaseAssert(m_labelNormalizer.QueryLabelExists(block->m_normalizedLabelName));
             ReleaseAssert(block->m_prefixText.find(block->m_normalizedLabelName + ":") != std::string::npos);
 
-            if (block->m_lines.back().IsDirectJumpInst())
+            if (block->m_lines.back().IsDirectUnconditionalJumpInst())
             {
                 std::string label = block->m_lines.back().GetWord(1);
                 if (m_labelNormalizer.QueryLabelExists(label))
@@ -806,7 +1177,7 @@ std::string WARN_UNUSED X64AsmFile::ToString()
                 X64AsmLine& line = block->m_lines[k];
                 if (k == block->m_lines.size() - 1 && elideTailJmp)
                 {
-                    ReleaseAssert(line.IsDirectJumpInst());
+                    ReleaseAssert(line.IsDirectUnconditionalJumpInst());
                     fprintf(fp, "%s", line.m_prefixingText.c_str());
                     fprintf(fp, "%s\n", line.m_trailingComments.c_str());
                 }

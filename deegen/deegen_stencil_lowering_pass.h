@@ -39,6 +39,10 @@ public:
     std::vector<llvm::BasicBlock*> m_coldBlocks;
     uint32_t m_locIdentForJmpToFallthroughCandidate;
     std::string m_nextBytecodeFallthroughPlaceholderName;
+
+    // The rawly-parsed input ASM file without any transformation (except the parser-applied ones) applied yet, for audit and debug purpose only
+    //
+    std::unique_ptr<X64AsmFile> m_rawInputFileForAudit;
 };
 
 }   // namespace dast

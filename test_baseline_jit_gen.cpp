@@ -20,9 +20,12 @@
 #include "deegen_ast_make_call.h"
 #include "llvm/IR/DIBuilder.h"
 #include "deegen_parse_asm_text.h"
+#include "deegen_call_inline_cache.h"
+#include "deegen_stencil_inline_cache_extraction_pass.h"
 
 using namespace dast;
 using namespace llvm;
+
 #if 0
 TEST(XX, XX)
 {
@@ -43,52 +46,44 @@ TEST(XX, XX)
     BaselineJitImplCreator mainJic(*b.m_jitMainComponent.get());
     mainJic.DoLowering();
 
-    mainJic.GetModule()->dump();
+    // mainJic.GetModule()->dump();
 
-    Module* module = mainJic.GetModule();
-    Function* func = module->getFunction(mainJic.GetResultFunctionName());
-    ReleaseAssert(func != nullptr);
+    X64AsmFile* file = mainJic.GetStencilPreTransformAsmFile();
+    auto res = DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(file);
 
-    InjectedMagicDiLocationInfo dilInfo = InjectedMagicDiLocationInfo::RunOnFunction(func);
-
-    std::string asmFile = CompileLLVMModuleToAssemblyFile(
-        module,
-        llvm::Reloc::Static,
-        llvm::CodeModel::Small);
-
-    fprintf(stderr, "%s\n", asmFile.c_str());
-
-    std::unique_ptr<X64AsmFile> file = X64AsmFile::ParseFile(asmFile, dilInfo);
-
-
-    fprintf(stderr, "%s\n", file->m_filePreheader.c_str());
-    fprintf(stderr, "=========\n");
-
-    for (X64AsmBlock* block : file->m_blocks)
+    for (auto& item : res)
     {
-        fprintf(stderr, "+++++++++\n");
-        fprintf(stderr, "%s\n", block->m_prefixText.c_str());
-        fprintf(stderr, "---------\n");
-        for (X64AsmLine& line : block->m_lines)
-        {
-            fprintf(stderr, "#########\n");
-            fprintf(stderr, "%s", line.m_prefixingText.c_str());
-            fprintf(stderr, "#-------#\n");
-            for (std::string& component : line.m_components)
-            {
-                fprintf(stderr, "%s", component.c_str());
-            }
-            fprintf(stderr, "\n");
-            fprintf(stderr, "#-------#\n");
-            fprintf(stderr, "%s", line.m_trailingComments.c_str());
-            fprintf(stderr, "#########\n");
-        }
-        fprintf(stderr, "+++++++++\n\n");
+        fprintf(stderr, "patchable jump: %s\n", item.m_labelForPatchableJump.c_str());
+        fprintf(stderr, "direct-call IC: %s\n", item.m_labelForDirectCallIc.c_str());
+        fprintf(stderr, "closure-call IC: %s\n", item.m_labelForClosureCallIc.c_str());
+        fprintf(stderr, "IC-miss: %s\n", item.m_labelForIcMissLogic.c_str());
+        fprintf(stderr, "unique ord = %llu\n", static_cast<unsigned long long>(item.m_uniqueOrd));
     }
 
-    fprintf(stderr, "=========\n");
+    std::vector<std::string> icLabels;
+    for (auto& item : res)
+    {
+        icLabels.push_back(item.m_labelForDirectCallIc);
+        icLabels.push_back(item.m_labelForClosureCallIc);
+    }
 
-    fprintf(stderr, "%s\n", file->m_fileFooter.c_str());
+    auto extractionRes = RunStencilInlineCacheLogicExtractionPass(file,
+                                                                  mainJic.GetModule()->getFunction(mainJic.GetResultFunctionName()),
+                                                                  icLabels);
+    fprintf(stderr, "post-processing file:\n\n%s\n", file->ToStringAndRemoveDebugInfo().c_str());
+
+    for (auto& item : extractionRes)
+    {
+        std::unique_ptr<X64AsmFile> fileClone = file->Clone();
+        fileClone->m_blocks.clear();
+        for (X64AsmBlock* block : item.m_blocks)
+        {
+            fileClone->m_blocks.push_back(block->Clone(fileClone.get()));
+        }
+
+        fileClone->m_slowpath.clear();
+        fprintf(stderr, "post-processing IC piece:\n\n%s\n", fileClone->ToStringAndRemoveDebugInfo().c_str());
+    }
 }
 #endif
 

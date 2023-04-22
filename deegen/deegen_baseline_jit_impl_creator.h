@@ -5,6 +5,7 @@
 #include "deegen_bytecode_impl_creator_base.h"
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
 #include "deegen_stencil_creator.h"
+#include "deegen_parse_asm_text.h"
 
 namespace dast {
 
@@ -70,6 +71,16 @@ public:
         return m_stencil;
     }
 
+    X64AsmFile* WARN_UNUSED GetStencilPreTransformAsmFile()
+    {
+        return m_stencilPreTransformAsmFile.get();
+    }
+
+    std::string WARN_UNUSED GetStencilPostTransformAsmFile()
+    {
+        return m_stencilPostTransformAsmFile;
+    }
+
     llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
     llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
 
@@ -90,6 +101,16 @@ private:
 
     StencilRuntimeConstantInserter m_stencilRcInserter;
     std::vector<CPRuntimeConstantNodeBase*> m_stencilRcDefinitions;
+
+    // The rawly parsed stencil ASM file, before apply any ASM passes except the parser-applied ones (e.g., folding magic asm)
+    // For audit and debugging purpose only
+    //
+    std::unique_ptr<X64AsmFile> m_stencilPreTransformAsmFile;
+
+    // The ASM file that is used to be compiled to stencil object file (i.e., after ASM passes)
+    // For audit and debugging purpose only
+    //
+    std::string m_stencilPostTransformAsmFile;
 
     std::string m_stencilObjectFile;
 

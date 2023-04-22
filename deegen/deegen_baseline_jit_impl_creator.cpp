@@ -537,6 +537,10 @@ void BaselineJitImplCreator::DoLowering()
     //
     asmFile = slPass.RunAsmRewritePhase(asmFile);
 
+    m_stencilPreTransformAsmFile = std::move(slPass.m_rawInputFileForAudit);
+
+    m_stencilPostTransformAsmFile = asmFile;
+
     // Compile the final ASM file to object file
     //
     m_stencilObjectFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");

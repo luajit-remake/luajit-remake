@@ -8,6 +8,7 @@
 //
 namespace dast {
 
+enum class MagicAsmKind;
 struct AsmMagicPayload;
 
 struct X64AsmLine
@@ -71,6 +72,8 @@ struct X64AsmLine
         return NumWords() == 1 && GetWord(0) == "hlt";
     }
 
+    bool WARN_UNUSED IsMagicInstructionOfKind(MagicAsmKind kind);
+
     bool WARN_UNUSED IsInstruction()
     {
         if (NumWords() == 0) { return false; }
@@ -84,7 +87,7 @@ struct X64AsmLine
         return GetWord(0) == "jmpq";
     }
 
-    bool WARN_UNUSED IsDirectJumpInst()
+    bool WARN_UNUSED IsDirectUnconditionalJumpInst()
     {
         if (!IsInstruction()) { return false; }
         bool res = (GetWord(0) == "jmp");
@@ -265,9 +268,6 @@ struct X64AsmFile;
 //
 struct X64AsmBlock
 {
-    MAKE_NONCOPYABLE(X64AsmBlock);
-    MAKE_NONMOVABLE(X64AsmBlock);
-
     X64AsmBlock() = default;
 
     // Split the block into part1 [0, line) and part2 [line, end)
@@ -275,6 +275,13 @@ struct X64AsmBlock
     // A branch instruction is inserted at the end of part1 to branch to part2
     //
     void SplitAtLine(X64AsmFile* owner, size_t line, X64AsmBlock*& part1 /*out*/, X64AsmBlock*& part2 /*out*/);
+
+    X64AsmBlock* WARN_UNUSED Clone(X64AsmFile* owner);
+
+    // Reorder blocks to maximize fallthroughs.
+    //
+    static std::vector<X64AsmBlock*> WARN_UNUSED ReorderBlocksToMaximizeFallthroughs(const std::vector<X64AsmBlock*>& input,
+                                                                                     size_t entryOrd);
 
     std::string m_prefixText;
 
@@ -311,6 +318,7 @@ struct InjectedMagicDiLocationInfo
     //
     llvm::Instruction* WARN_UNUSED GetCertainInstructionOriginMaybeNullFromDILoc(uint32_t line);
     llvm::Instruction* WARN_UNUSED GetMaybeInstructionOriginMaybeNullFromDILoc(uint32_t line);
+    llvm::Instruction* WARN_UNUSED GetIndirectBrSourceFromMagicAsmAnnotation(uint32_t ident);
     llvm::Function* GetFunc() { return m_func; }
 
     InjectedMagicDiLocationInfo()
@@ -318,16 +326,18 @@ struct InjectedMagicDiLocationInfo
         , m_hasUpdatedAfterCodegen(false)
     { }
 
+    void UpdateAfterCodegen();
+
 private:
     static constexpr uint32_t x_lineBase = 1000000000;
     static constexpr uint32_t x_lineInc = 10000;
 
-    void UpdateAfterCodegen();
 
     std::vector<uint32_t /*checkRem*/> m_list;
     llvm::Function* m_func;
     std::unordered_map<uint32_t, llvm::Instruction*> m_mappingCertain;
     std::unordered_map<uint32_t, llvm::Instruction*> m_mappingMaybe;
+    std::unordered_map<uint32_t, llvm::Instruction*> m_markedIndirectBrMap;
     // It seems like LLVM codegen pass modifies module.. so even if we add debug metadata right before codegen pass,
     // it can still get somehow corrupted (e.g., an IR instruction may be sinked or duplicated).
     // For now, workaround by automatically removing those corrupted debug info
@@ -368,6 +378,15 @@ struct X64AsmFile
         return (m_blocks[blockOrd]->m_endsWithJmpToLocalLabel &&
                 m_blocks[blockOrd]->m_terminalJmpTargetLabel == m_blocks[blockOrd + 1]->m_normalizedLabelName);
     }
+
+    // Remove all asm magic of the specified kind, including in slow path
+    //
+    void RemoveAsmMagic(MagicAsmKind magicKind);
+
+    void InsertBlocksAfter(const std::vector<X64AsmBlock*>& blocksToBeInserted, X64AsmBlock* insertAfter);
+    void RemoveBlock(X64AsmBlock* blockToRemove);
+
+    std::unique_ptr<X64AsmFile> WARN_UNUSED Clone();
 
     void Validate();
 

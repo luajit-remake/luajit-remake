@@ -1629,4 +1629,18 @@ inline void TestOnly_StripLLVMIdentMetadata(llvm::Module* module)
     }
 }
 
+inline int WARN_UNUSED StoiOrFail(const std::string& s)
+{
+    int res;
+    try
+    {
+        res = std::stoi(s);
+    }
+    catch (...)
+    {
+        ReleaseAssert(false);
+    }
+    return res;
+}
+
 }   // namespace dast

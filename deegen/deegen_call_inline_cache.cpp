@@ -6,6 +6,7 @@
 #include "deegen_baseline_jit_codegen_logic_creator.h"
 #include "deegen_magic_asm_helper.h"
 #include "llvm/IR/InlineAsm.h"
+#include "deegen_parse_asm_text.h"
 
 namespace dast {
 
@@ -468,11 +469,11 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
     ReleaseAssert(unique_ord <= 1000000000);
     asmText = "movl $$" + std::to_string(unique_ord) + ", eax;" + asmText;
 
-    asmText = WrapLLVMAsmStringWithMagicPattern(asmText, MagicAsmKind::CallIcDirectCall);
+    asmText = MagicAsm::WrapLLVMAsmPayload(asmText, MagicAsmKind::CallIcDirectCall);
 
     ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
 
-    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 100000 /*CallIcDirectCallCachedValue*/);
+    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 10000 /*CallIcDirectCallCachedValue*/);
     ReleaseAssert(llvm_value_has_type<void*>(cpSym));
 
     FunctionType* fty = FunctionType::get(llvm_type_of<uint64_t>(ctx), { llvm_type_of<uint64_t>(ctx), llvm_type_of<void*>(ctx) }, false);
@@ -524,11 +525,11 @@ static void InsertBaselineJitCallIcMagicAsmForClosureCall(llvm::Module* module,
     ReleaseAssert(unique_ord <= 1000000000);
     asmText = "movl $$" + std::to_string(unique_ord) + ", eax;" + asmText;
 
-    asmText = WrapLLVMAsmStringWithMagicPattern(asmText, MagicAsmKind::CallIcClosureCall);
+    asmText = MagicAsm::WrapLLVMAsmPayload(asmText, MagicAsmKind::CallIcClosureCall);
 
     ReleaseAssert(llvm_value_has_type<uint32_t>(codeBlockSysHeapPtrVal));
 
-    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 100001 /*CallIcClosureCallCachedValue*/);
+    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 10001 /*CallIcClosureCallCachedValue*/);
     ReleaseAssert(llvm_value_has_type<void*>(cpSym));
 
     FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<uint32_t>(ctx), llvm_type_of<void*>(ctx) }, false);
@@ -612,7 +613,7 @@ std::string WARN_UNUSED EmitComputeLabelOffsetAsm(const std::string& fnName, con
     return res;
 }
 
-std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::EmitForBaselineJIT(
+std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::EmitForBaselineJIT(
     BaselineJitImplCreator* ifi,
     llvm::Value* functionObject,
     uint64_t unique_ord,
@@ -621,7 +622,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> WARN_UNUSED Dee
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
-    std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> finalRes;
+    std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> finalRes;
 
     ReleaseAssert(origin->getParent() != nullptr);
     Function* func = origin->getParent()->getParent();
@@ -689,9 +690,9 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> WARN_UNUSED Dee
         BasicBlock* dcHitBB = dcHitOrigin->getParent();
 
         {
-            GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 100001 /*CallIcClosureCallCachedValue*/);
+            GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10001 /*CallIcClosureCallCachedValue*/);
             Value* dcHitCalleeCb = new AddrSpaceCastInst(gv, llvm_type_of<HeapPtr<void>>(ctx), "", dcHitOrigin);
-            Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 100002 /*CallIcCachedCodePtr*/);
+            Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
 
             finalRes.push_back({
                 .calleeCbHeapPtr = dcHitCalleeCb,
@@ -731,7 +732,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> WARN_UNUSED Dee
 
             Value* calleeCbU64 = new ZExtInst(calleeCbU32, llvm_type_of<uint64_t>(ctx), "", ccHitOrigin);
             Value* calleeCbHeapPtr = new IntToPtrInst(calleeCbU64, llvm_type_of<HeapPtr<void>>(ctx), "", ccHitOrigin);
-            Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 100002 /*CallIcCachedCodePtr*/);
+            Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
 
             finalRes.push_back({
                 .calleeCbHeapPtr = calleeCbHeapPtr,
@@ -847,6 +848,312 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLoweringResult> WARN_UNUSED Dee
     }
 
     return finalRes;
+}
+
+// The input ASM looks like the following:
+//
+//      ASM Block A                    ASM Block B                        ASM Block C
+// ....  main func  ....
+// [       magic       ]  ~~~~~~>  [ load hidden class ]
+// [   DirectCall IC   ]           [       magic       ]  ~~~~~~~~~~~> [ IC miss slowpath ]
+//                                 [   ClosureCall IC  ]
+//
+// and we want to rewrite it to the below three pieces:
+//
+// Main function piece:
+//       ....  main func ....
+//   smc_region_start:            ------------------
+//      [ load hidden class ]       Self-Modifying
+//      jmp ic_miss_slowpath         Code Region
+//   smc_region_end:              ------------------
+//
+// At runtime, the SMC region starts with
+//       jmp ic_miss_slowpath
+//       nop * N
+//
+// When in DirectCall IC mode, the SMC region would be rewritten to:
+//       jmp first_direct_call_ic
+//       nop * N
+//
+// When in ClosureCall IC mode, the SMC region would be rewritten to:
+//       [ load hidden class ]
+//       jmp first_closure_call_ic
+//
+// (this is why we must reserve code space for the load hidden class logic in the main function)
+//
+// For the DirectCall and ClosureCall IC piece, we can mostly extract directly without any special handling,
+// except that we must change the IC miss branch target to a stencil hole.
+//
+std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(X64AsmFile* file)
+{
+    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> r;
+
+    // Process one IC use, identified by a DirectCallIC asm magic (from this magic we can find everything we need)
+    //
+    auto processOne = [&](X64AsmBlock* dcBlock, size_t lineOrd)
+    {
+        ReleaseAssert(lineOrd < dcBlock->m_lines.size());
+        ReleaseAssert(dcBlock->m_lines[lineOrd].IsMagicInstructionOfKind(MagicAsmKind::CallIcDirectCall));
+        AsmMagicPayload* dcPayload = dcBlock->m_lines[lineOrd].m_magicPayload;
+        // The DirectCall IC magic has the following payload:
+        //     movl $uniq_id, eax
+        //     movabsq $cached_val, someReg
+        //     cmp someReg, tv
+        //     jne closure_call_ic_entry
+        //
+        ReleaseAssert(dcPayload->m_lines.size() == 4);
+
+        // Decode the movl $uniq_id, eax line to get uniq_id
+        //
+        auto getIdFromMagicPayloadLine = [&](X64AsmLine& line) WARN_UNUSED -> uint64_t
+        {
+            ReleaseAssert(line.NumWords() == 3 && line.GetWord(0) == "movl" && line.GetWord(2) == "eax");
+            std::string s = line.GetWord(1);
+            ReleaseAssert(s.starts_with("$") && s.ends_with(","));
+            int val = StoiOrFail(s.substr(1, s.length() - 2));
+            ReleaseAssert(val >= 0);
+            return static_cast<uint64_t>(val);
+        };
+
+        uint64_t icUniqueOrd = getIdFromMagicPayloadLine(dcPayload->m_lines[0]);
+
+        ReleaseAssert(dcPayload->m_lines[3].IsConditionalJumpInst());
+        std::string ccBlockLabel = dcPayload->m_lines[3].GetWord(1);
+        ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(ccBlockLabel));
+        ccBlockLabel = file->m_labelNormalizer.GetNormalizedLabel(ccBlockLabel);
+
+        X64AsmBlock* ccBlock = nullptr;
+        for (X64AsmBlock* block : file->m_blocks)
+        {
+            if (block->m_normalizedLabelName == ccBlockLabel)
+            {
+                ccBlock = block;
+                break;
+            }
+        }
+        ReleaseAssert(ccBlock != nullptr);
+        // No reason to have a bug here, but still check it to fail early instead of getting weird bugs when splitting blocks...
+        //
+        ReleaseAssert(ccBlock != dcBlock);
+
+        // Locate the ClosureCall IC magic in ccBlock
+        // We are assuming that loading the hidden class would not introduce control flow. But this should be true for any sane VM design.
+        //
+        size_t ccMagicAsmOrd = static_cast<size_t>(-1);
+        for (size_t i = 0; i < ccBlock->m_lines.size(); i++)
+        {
+            if (ccBlock->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::CallIcClosureCall))
+            {
+                ccMagicAsmOrd = i;
+                break;
+            }
+        }
+        ReleaseAssert(ccMagicAsmOrd != static_cast<size_t>(-1));
+
+        AsmMagicPayload* ccPayload = ccBlock->m_lines[ccMagicAsmOrd].m_magicPayload;
+        // The ClosureCall IC magic has the following payload:
+        //     movl $uniq_id, eax
+        //     cmp $cached_val, hidden_class
+        //     jne ic_slowpath
+        //
+        ReleaseAssert(ccPayload->m_lines.size() == 3);
+        ReleaseAssert(getIdFromMagicPayloadLine(ccPayload->m_lines[0]) == icUniqueOrd);
+
+        ReleaseAssert(ccPayload->m_lines[2].IsConditionalJumpInst());
+        std::string icSlowPathLabel = ccPayload->m_lines[2].GetWord(1);
+        ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(icSlowPathLabel));
+        icSlowPathLabel = file->m_labelNormalizer.GetNormalizedLabel(icSlowPathLabel);
+
+        ReleaseAssert(icSlowPathLabel != ccBlockLabel);
+        ReleaseAssert(icSlowPathLabel != dcBlock->m_normalizedLabelName);
+
+        // Now, perform the transform
+        // Split 'block' after line 'lineOrd' (the line for DirectCall IC magic)
+        //
+        X64AsmBlock* pred = nullptr;
+        X64AsmBlock* dcEntry = nullptr;
+        dcBlock->SplitAtLine(file, lineOrd + 1, pred /*out*/, dcEntry /*out*/);
+        ReleaseAssert(pred != nullptr && dcEntry != nullptr);
+
+        // Set up 'dcEntry' block
+        //
+        {
+            // Currently dcEntry is
+            //     [ impl  ]
+            //
+            // We want
+            //     movabsq $cached_val, someReg     # dcMagic line 1
+            //     cmp someReg, tv                  # dcMagic line 2
+            //     jne placeholder_call_ic_miss     # dcMagic line 3 with operand changed
+            //     [ impl  ]
+            //
+            std::vector<X64AsmLine> newList;
+            newList.push_back(dcPayload->m_lines[1]);
+            newList.push_back(dcPayload->m_lines[2]);
+            newList.push_back(dcPayload->m_lines[3]);
+            ReleaseAssert(newList.back().IsConditionalJumpInst());
+            newList.back().GetWord(1) = "__deegen_cp_placeholder_10003" /*ic_miss*/;
+
+            for (size_t i = 0; i < dcEntry->m_lines.size(); i++)
+            {
+                newList.push_back(std::move(dcEntry->m_lines[i]));
+            }
+            dcEntry->m_lines = std::move(newList);
+        }
+
+        // Split 'ccBlock' after line 'ccMagicAsmOrd'
+        //
+        X64AsmBlock* smc = nullptr;
+        X64AsmBlock* ccEntry = nullptr;
+        ccBlock->SplitAtLine(file, ccMagicAsmOrd + 1, smc /*out*/, ccEntry /*out*/);
+        ReleaseAssert(smc != nullptr && ccEntry != nullptr);
+
+        // Set up 'ccEntry' block
+        //
+        {
+            // Currently ccEntry is
+            //     [ impl ]
+            //
+            // We want
+            //     cmp $cached_val, hidden_class    # ccMagic line 1
+            //     jne placeholder_call_ic_miss     # ccMagic line 2 with operand changed
+            //     [ impl ]
+            //
+            std::vector<X64AsmLine> newList;
+            newList.push_back(ccPayload->m_lines[1]);
+            newList.push_back(ccPayload->m_lines[2]);
+            ReleaseAssert(newList.back().IsConditionalJumpInst());
+            newList.back().GetWord(1) = "__deegen_cp_placeholder_10003" /*ic_miss*/;
+
+            for (size_t i = 0; i < ccEntry->m_lines.size(); i++)
+            {
+                newList.push_back(std::move(ccEntry->m_lines[i]));
+            }
+            ccEntry->m_lines = std::move(newList);
+        }
+
+        // Currently pred is
+        //     [    ....     ]
+        //     [    magic    ]
+        //     [ jmp dcEntry ]
+        //
+        // Remove the 'magic' line and make it jump to 'smc'
+        //
+        {
+            ReleaseAssert(pred->m_lines.size() >= 2);
+            ReleaseAssert(pred->m_lines[pred->m_lines.size() - 2].IsMagicInstructionOfKind(MagicAsmKind::CallIcDirectCall));
+            pred->m_lines[pred->m_lines.size() - 2] = pred->m_lines.back();
+            pred->m_lines.pop_back();
+
+            ReleaseAssert(pred->m_lines.back().IsDirectUnconditionalJumpInst());
+            ReleaseAssert(pred->m_lines.back().GetWord(1) == dcEntry->m_normalizedLabelName);
+
+            pred->m_lines.back().GetWord(1) = smc->m_normalizedLabelName;
+            ReleaseAssert(pred->m_endsWithJmpToLocalLabel);
+            pred->m_terminalJmpTargetLabel = smc->m_normalizedLabelName;
+        }
+
+        // Currently 'smc' is
+        //     [ load HC ]
+        //     [ magic   ]
+        //     jmp ccEntry
+        //
+        // Remove the magic line and make it jump to slow path instead
+        //
+        {
+            ReleaseAssert(smc->m_lines.size() >= 2);
+            ReleaseAssert(smc->m_lines[smc->m_lines.size() - 2].IsMagicInstructionOfKind(MagicAsmKind::CallIcClosureCall));
+            smc->m_lines[smc->m_lines.size() - 2] = smc->m_lines.back();
+            smc->m_lines.pop_back();
+
+            ReleaseAssert(smc->m_lines.back().IsDirectUnconditionalJumpInst());
+            ReleaseAssert(smc->m_lines.back().GetWord(1) == ccEntry->m_normalizedLabelName);
+
+            smc->m_lines.back().GetWord(1) = icSlowPathLabel;
+            ReleaseAssert(smc->m_endsWithJmpToLocalLabel);
+            smc->m_terminalJmpTargetLabel = icSlowPathLabel;
+        }
+
+        // Now the control flow looks like this (detached = no longer reachable from function entry):
+        //
+        // pred:                            # not in block list
+        //     [ .... ]
+        //     jmp smc
+        //
+        // smc:                             # not in block list
+        //     [ Load HC ]
+        //     jmp slow
+        //
+        // slow:                            # in block list
+        //     ....
+        //
+        // ccEntry:                         # detached, not in block list
+        //     check closure call IC hit
+        //     jne placeholder_ic_miss
+        //     ....
+        //
+        // dcEntry:                         # detached, not in block list
+        //     check direct call IC hit
+        //     jne placeholder_ic_miss
+        //     ....
+        //
+        // junk blocks in block list: dcBlock, ccBlock
+        //
+        // To preserve the existing code layout by LLVM as much as possible, we should insert [pred, smc, dcEntry] after dcBlock,
+        // and [ccEntry] after ccBlock, then remove dcBlock and ccBlock
+        //
+        // Note that the block list is temporarily in inconsistent state after inserting blocks as there are duplicate labels
+        // so make sure to remove block and restore to consistent state immediately after
+        //
+        file->InsertBlocksAfter({ pred, smc, dcEntry }, dcBlock /*insertAfter*/);
+        file->RemoveBlock(dcBlock);
+
+        file->InsertBlocksAfter({ ccEntry }, ccBlock /*insertAfter*/);
+        file->RemoveBlock(ccBlock);
+
+        file->Validate();
+
+        r.push_back({
+            .m_labelForPatchableJump = smc->m_normalizedLabelName,
+            .m_labelForDirectCallIc = dcEntry->m_normalizedLabelName,
+            .m_labelForClosureCallIc = ccEntry->m_normalizedLabelName,
+            .m_labelForIcMissLogic = icSlowPathLabel,
+            .m_uniqueOrd = icUniqueOrd
+        });
+    };
+
+    // Process one by one to avoid iterator invalidation problems
+    //
+    auto findAndProcessOne = [&]() WARN_UNUSED -> bool
+    {
+        for (X64AsmBlock* block : file->m_blocks)
+        {
+            for (size_t i = 0; i < block->m_lines.size(); i++)
+            {
+                if (block->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::CallIcDirectCall))
+                {
+                    processOne(block, i);
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    while (findAndProcessOne()) { }
+
+    // Sanity check the unique ordinals are indeed unique
+    //
+    {
+        std::unordered_set<uint64_t> checkUnique;
+        for (auto& item : r)
+        {
+            ReleaseAssert(!checkUnique.count(item.m_uniqueOrd));
+            checkUnique.insert(item.m_uniqueOrd);
+        }
+    }
+
+    return r;
 }
 
 }   // namespace dast
