@@ -53,10 +53,10 @@ static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecode
     new StoreInst(codePointer, cachedIcCodePtrAddr, false /*isVolatile*/, Align(ic.GetCachedCodePointer()->GetAlignment()), insertBefore);
 }
 
-static bool WARN_UNUSED CheckCanHoistInterpreterCallIcCheck(llvm::Value* functionObject,
-                                                            llvm::BasicBlock* bb,
-                                                            llvm::Value*& tv /*out*/,
-                                                            llvm::BranchInst*& condBrInst /*out*/)
+static bool WARN_UNUSED CheckCanHoistCallIcCheck(llvm::Value* functionObject,
+                                                 llvm::BasicBlock* bb,
+                                                 llvm::Value*& tv /*out*/,
+                                                 llvm::BranchInst*& condBrInst /*out*/)
 {
     using namespace llvm;
     ReleaseAssert(llvm_value_has_type<uint64_t>(functionObject));
@@ -414,7 +414,7 @@ void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator
         BranchInst* brInst = nullptr;
         BasicBlock* bb = insertBefore->getParent();
         ReleaseAssert(bb != nullptr);
-        bool canHoist = CheckCanHoistInterpreterCallIcCheck(functionObject, bb, tv /*out*/, brInst /*out*/);
+        bool canHoist = CheckCanHoistCallIcCheck(functionObject, bb, tv /*out*/, brInst /*out*/);
         if (canHoist)
         {
             ReleaseAssert(tv != nullptr);
@@ -436,6 +436,7 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
                                                          llvm::Value* tv,
                                                          llvm::BasicBlock* icHit,
                                                          llvm::BasicBlock* icMiss,
+                                                         llvm::BasicBlock* icSlowPath,
                                                          uint64_t unique_ord,
                                                          llvm::Instruction* insertBefore)
 {
@@ -448,6 +449,7 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
     //     "movabsq %[cached_tv], %[t_r0];"
     //     "cmpq %[t_r0], %[i_tv];"
     //     "jne %l[ic_miss];"
+    //     "jne %l[ic_slowpath];"
     //         :
     //     [t_r0] "=&r"(tmp_i64) /*scratch*/
     //         :
@@ -456,15 +458,29 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
     //         :
     //     "cc" /*clobber*/
     //         :
-    //     ic_miss /*goto*/);
+    //     ic_miss /*goto*/,
+    //     ic_slowpath /*goto*/);
     //
     // If you want to change the ASM logic, you'd better modify the above GCC-style ASM, compile it using LLVM and
     // copy whatever LLVM produces, instead of directly modifying the LLVM-style ASM strings below...
     //
     // args: [i64 tv, ptr cached_tv] returns: i64
     //
-    std::string asmText = "movabsq $2, $0;cmpq $0, $1;jne ${3:l};";
-    std::string constraintText = "=&r,r,i,!i,~{cc},~{dirflag},~{fpsr},~{flags}";
+    // You may ask: why does the above ASM needs both ic_miss and ic_slowpath destination?
+    // This is actually REQUIRED FOR CORRECTNESS!
+    //
+    // If the ASM does not take the ic_slowpath destination, this also would allow LLVM (and Deegen's TValue typecheck
+    // optimization, which is in fact the one that causes problems) to assume that the control flow must be
+    //      direct-call-check => closure-call-check => ic-slow-path
+    // and therefore make assumptions on the preconditions of ic-slow-path based on the check we did in closure-call-check.
+    //
+    // However, at runtime in reality, if the direct call IC misses, we will directly jump to slow path, and
+    // the closure call IC check path doesn't even exist, so the assumption actually does not hold.
+    //
+    // Therefore, we must teach LLVM that the direct-call check may directly branch to IC slow path by putting it in the GOTO list as well.
+    //
+    std::string asmText = "movabsq $2, $0;cmpq $0, $1;jne ${3:l};jne ${4:l};";
+    std::string constraintText = "=&r,r,i,!i,!i,~{cc},~{dirflag},~{fpsr},~{flags}";
 
     ReleaseAssert(unique_ord <= 1000000000);
     asmText = "movl $$" + std::to_string(unique_ord) + ", eax;" + asmText;
@@ -481,7 +497,7 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
                                    asmText,
                                    constraintText,
                                    true /*hasSideEffects*/);
-    CallBrInst* inst = CallBrInst::Create(fty, ia, icHit /*fallthroughDest*/, { icMiss } /*gotoDests*/, { tv, cpSym } /*args*/, "", insertBefore);
+    CallBrInst* inst = CallBrInst::Create(fty, ia, icHit /*fallthroughDest*/, { icMiss, icSlowPath } /*gotoDests*/, { tv, cpSym } /*args*/, "", insertBefore);
     inst->addFnAttr(Attribute::NoUnwind);
     inst->addFnAttr(Attribute::ReadNone);
 }
@@ -629,225 +645,379 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     ReleaseAssert(func != nullptr);
     ReleaseAssert(llvm_value_has_type<uint64_t>(functionObject));
 
-    Value* tv = nullptr;
-    BranchInst* brInst = nullptr;
-    BasicBlock* bb = origin->getParent();
-    ReleaseAssert(bb != nullptr);
-    bool canHoist = CheckCanHoistInterpreterCallIcCheck(functionObject, bb, tv /*out*/, brInst /*out*/);
-    if (canHoist)
+    // Emit the direct call IC hit block, and push the MakeCall instance to finalRes
+    //
+    //     %calleeCb = <cached>     <--- inserted
+    //     %codePtr = <cached>      <--- inserted
+    //     MakeCall ....            <--- origin
+    //
+    auto emitIcDirectCallHitBlock = [&](Instruction* dcHitOrigin)
     {
-        ReleaseAssert(tv != nullptr);
-        ReleaseAssert(brInst != nullptr);
-        BasicBlock* predBB = brInst->getParent();
+        ReleaseAssert(isa<CallInst>(dcHitOrigin));
 
-        // Precondition:
-        //
-        // pred: (unique predecessor of bb)
-        //     ...
-        //     %0 = TValue::Is<tFunction>(%tv)
-        //     ...
-        //     br %0, bb, <not_function>
-        // bb:
-        //     %fnObj = TValue::As<tFunction>(%tv)
-        //     ...
-        //     MakeCall(%fnObj, ...)
-        //
-        // In this case, we hoist the IC check above the tFunction check, and rewrite the logic to:
-        //
-        // pred:
-        //     ...
-        //     %0 = TValue::Is<tFunction>(%tv)
-        //     ...
-        //     br ic_entry
-        //
-        // ic_entry:
-        //     <direct-call IC check> => direct-call IC hit/miss
-        //
-        // direct-call IC hit:
-        //     %calleeCb = <cached>
-        //     %codePtr = <cached>
-        //     <clone of bb>
-        //
-        // direct-call IC miss:
-        //     %calleeCb = getCalleeCb(%tv)
-        //     <closure-call IC check> => closure-call IC hit/miss
-        //
-        // closure-call IC hit:
-        //     %codePtr = <cached>
-        //     <clone of bb>
-        //
-        // closure-call IC miss:
-        //      br %0, bb, <not_function>
-        //
-        // bb:
-        //     <create IC>
-        //     ... rest of the original bb ...
-        //
+        GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10001 /*CallIcClosureCallCachedValue*/);
+        Value* dcHitCalleeCb = new AddrSpaceCastInst(gv, llvm_type_of<HeapPtr<void>>(ctx), "", dcHitOrigin);
+        Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
 
-        // Create the direct-call IC hit block
-        //
-        Instruction* dcHitOrigin = CloneBasicBlockContainingInstruction(origin);
-        BasicBlock* dcHitBB = dcHitOrigin->getParent();
+        finalRes.push_back({
+            .calleeCbHeapPtr = dcHitCalleeCb,
+            .codePointer = dcHitCodePtr,
+            .origin = dcHitOrigin
+        });
+    };
 
+    // Emit the direct call IC miss block:
+    //
+    //     %calleeCb = getCalleeCb(%tv)
+    //     <closure-call IC check> => closure-call IC hit/miss
+    //
+    // Returns calleeCbU32
+    //
+    auto emitIcClosureCallCheckBlock = [&](BasicBlock* dcMissBB, Value* tv, BasicBlock* ccHitBB, BasicBlock* ccMissBB) WARN_UNUSED -> Value*
+    {
+        ReleaseAssert(dcMissBB->empty());
+        UnreachableInst* dummy = new UnreachableInst(ctx, dcMissBB);
+        // Kind of bad, we are hardcoding the assumption that the CalleeCbHeapPtr is just the zero-extension of calleeCbU32.. but stay simple for now..
+        //
+        Value* calleeCbU32 = ifi->CallDeegenCommonSnippet("GetCalleeCbU32FromTValue", { tv }, dummy /*insertBefore*/);
+        InsertBaselineJitCallIcMagicAsmForClosureCall(ifi->GetModule(), calleeCbU32, ccHitBB, ccMissBB, unique_ord, dummy /*insertBefore*/);
+        dummy->eraseFromParent();
+        ReleaseAssert(llvm_value_has_type<uint32_t>(calleeCbU32));
+        return calleeCbU32;
+    };
+
+    // Emit the closure call IC hit block, and push the MakeCall instance to finalRes
+    //
+    //     %codePtr = <cached>      <--- inserted
+    //     MakeCall ....            <--- origin
+    //
+    auto emitIcClosureCallHitBlock = [&](Instruction* ccHitOrigin, Value* calleeCbU32)
+    {
+        ReleaseAssert(isa<CallInst>(ccHitOrigin));
+        ReleaseAssert(llvm_value_has_type<uint32_t>(calleeCbU32));
+
+        Value* calleeCbU64 = new ZExtInst(calleeCbU32, llvm_type_of<uint64_t>(ctx), "", ccHitOrigin);
+        Value* calleeCbHeapPtr = new IntToPtrInst(calleeCbU64, llvm_type_of<HeapPtr<void>>(ctx), "", ccHitOrigin);
+        Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
+
+        finalRes.push_back({
+            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .codePointer = codePtr,
+            .origin = ccHitOrigin
+        });
+    };
+
+    // Emit logic for the IC miss block, and push the MakeCall instance to finalRes
+    //
+    // Basically, we just need to call the create IC functor, which creates the IC and returns the CalleeCbHeapPtr and CodePtr
+    //
+    // However, currently the create IC takes CodeBlock, execFuncPtr and funcObj, and returns nothing for simplicity
+    // TODO: make it return CalleeCbHeapPtr and CodePtr so the slow path is slightly faster
+    //
+    auto emitIcMissBlock = [&](Instruction* icMissOrigin, Value* functionObjectTarget)
+    {
+#if 0
+        std::string icCreatorFnName = "__deegen_baseline_jit_codegen_" + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_call_ic_" + std::to_string(unique_ord);
+        FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), llvm_type_of<uint64_t>(ctx) }, false);
+
+        ReleaseAssert(ifi->GetModule()->getNamedValue(icCreatorFnName) == nullptr);
+        Function* icCreatorFn = Function::Create(fty, GlobalValue::ExternalLinkage, icCreatorFnName, ifi->GetModule());
+        icCreatorFn->addFnAttr(Attribute::NoUnwind);
+        ReleaseAssert(icCreatorFn->getName() == icCreatorFnName);
+        icCreatorFn->setCallingConv(CallingConv::PreserveMost);
+
+        CallInst* ci = CallInst::Create(icCreatorFn, { ifi->GetCodeBlock(), func, functionObjectTarget }, "", icMissOrigin);
+        ci->setCallingConv(CallingConv::PreserveMost);
+#endif
+
+        Value* calleeCbHeapPtr = nullptr;
+        Value* codePtr = nullptr;
+        EmitGenericGetCallTargetLogic(ifi, functionObjectTarget, calleeCbHeapPtr /*out*/, codePtr /*out*/, icMissOrigin);
+        ReleaseAssert(calleeCbHeapPtr != nullptr && codePtr != nullptr);
+
+        finalRes.push_back({
+            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .codePointer = codePtr,
+            .origin = icMissOrigin
+        });
+    };
+
+    {
+        Value* tv = nullptr;
+        BranchInst* brInst = nullptr;
+        BasicBlock* originBB = origin->getParent();
+        ReleaseAssert(originBB != nullptr);
+        bool canHoist = CheckCanHoistCallIcCheck(functionObject, originBB, tv /*out*/, brInst /*out*/);
+        if (canHoist)
         {
-            GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10001 /*CallIcClosureCallCachedValue*/);
-            Value* dcHitCalleeCb = new AddrSpaceCastInst(gv, llvm_type_of<HeapPtr<void>>(ctx), "", dcHitOrigin);
-            Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
+            ReleaseAssert(tv != nullptr);
+            ReleaseAssert(brInst != nullptr);
+            BasicBlock* predBB = brInst->getParent();
 
-            finalRes.push_back({
-                .calleeCbHeapPtr = dcHitCalleeCb,
-                .codePointer = dcHitCodePtr,
-                .origin = dcHitOrigin
-            });
-        }
-
-        BasicBlock* icEntryBB = BasicBlock::Create(ctx, "", func, bb /*insertBefore*/);
-
-        BasicBlock* dcMissBB = BasicBlock::Create(ctx, "", func, bb /*insertBefore*/);
-
-        // Emit the direct-call IC check
-        //
-        {
-            UnreachableInst* dummy = new UnreachableInst(ctx, icEntryBB);
-            InsertBaselineJitCallIcMagicAsmForDirectCall(ifi->GetModule(), tv, dcHitBB, dcMissBB, unique_ord, dummy /*insertBefore*/);
-            dummy->eraseFromParent();
-        }
-
-        BranchInst::Create(icEntryBB, brInst);
-
-        Instruction* ccHitOrigin = CloneBasicBlockContainingInstruction(origin);
-        BasicBlock* ccHitBB = ccHitOrigin->getParent();
-
-        BasicBlock* ccMissBB = BasicBlock::Create(ctx, "", func, bb /*insertBefore*/);
-
-        // Emit instructions for the direct-call IC miss block and closure-call IC hit block
-        //
-        {
-            UnreachableInst* dummy = new UnreachableInst(ctx, dcMissBB);
-            // Kind of bad, we are hardcoding the assumption that the CalleeCbHeapPtr is just the zero-extension of calleeCbU32.. but stay simple for now..
+            // Precondition:
             //
-            Value* calleeCbU32 = ifi->CallDeegenCommonSnippet("GetCalleeCbU32FromTValue", { tv }, dummy /*insertBefore*/);
-            InsertBaselineJitCallIcMagicAsmForClosureCall(ifi->GetModule(), calleeCbU32, ccHitBB, ccMissBB, unique_ord, dummy /*insertBefore*/);
-            dummy->eraseFromParent();
+            // pred: (unique predecessor of originBB)
+            //     ...
+            //     %0 = TValue::Is<tFunction>(%tv)
+            //     ...
+            //     br %0, originBB, <not_function>
+            //
+            // originBB:
+            //     %fnObj = TValue::As<tFunction>(%tv)
+            //     ...
+            //     MakeCall(%fnObj, ...)
+            //
+            // In this case, we hoist the IC check above the tFunction check, and rewrite the logic to:
+            //
+            // pred:
+            //     ...
+            //     %0 = TValue::Is<tFunction>(%tv)
+            //     ...
+            //     br ic_entry
+            //
+            // ic_entry:
+            //     <direct-call IC check> => direct-call IC hit/miss
+            //
+            // direct-call IC hit:
+            //     %calleeCb = <cached>
+            //     %codePtr = <cached>
+            //     <clone of originBB>
+            //
+            // direct-call IC miss:
+            //     # This is important: we cannot decode hidden class unless we know the TValue is a pointer!
+            //     %1 = TValue::IsPointer(%tv)
+            //     br %1, closure_call_ic_entry, <not_function>
+            //
+            // closure_call_ic_entry:
+            //     %calleeCb = getCalleeCb(%tv)
+            //     <closure-call IC check> => closure-call IC hit/miss
+            //
+            // closure-call IC hit:
+            //     %codePtr = <cached>
+            //     <clone of originBB>
+            //
+            // closure-call IC miss:
+            //      br %0, originBB, <not_function>
+            //
+            // originBB:
+            //     <create IC>
+            //     ... rest of the original originBB ...
+            //
 
-            Value* calleeCbU64 = new ZExtInst(calleeCbU32, llvm_type_of<uint64_t>(ctx), "", ccHitOrigin);
-            Value* calleeCbHeapPtr = new IntToPtrInst(calleeCbU64, llvm_type_of<HeapPtr<void>>(ctx), "", ccHitOrigin);
-            Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
+            // Create and emit the direct-call IC hit block
+            //
+            Instruction* dcHitOrigin = CloneBasicBlockContainingInstruction(origin);
+            BasicBlock* dcHitBB = dcHitOrigin->getParent();
+            emitIcDirectCallHitBlock(dcHitOrigin);
 
-            finalRes.push_back({
-                .calleeCbHeapPtr = calleeCbHeapPtr,
-                .codePointer = codePtr,
-                .origin = ccHitOrigin
-            });
-        }
+            BasicBlock* icEntryBB = BasicBlock::Create(ctx, "", func, originBB /*insertBefore*/);
+            BasicBlock* dcMissBB = BasicBlock::Create(ctx, "", func, originBB /*insertBefore*/);
 
-        // Emit instructions for the closure-call IC miss block
-        //
-        {
-            ReleaseAssert(brInst->getParent() != nullptr);
-            brInst->removeFromParent();
-            ccMissBB->getInstList().push_back(brInst);
-        }
+            BranchInst::Create(icEntryBB, brInst);
 
-        // Emit instructions for the original 'bb' block
-        // We need to call the create IC functor
-        // Currently it takes CodeBlock, execFuncPtr and funcObj, and returns nothing for simplicity
-        // TODO: make it return CalleeCbHeapPtr and CodePtr so the slow path is slightly faster
-        //
-        {
-            std::string icCreatorFnName = "__deegen_baseline_jit_codegen_" + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_call_ic_" + std::to_string(unique_ord);
-            FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), llvm_type_of<uint64_t>(ctx) }, false);
+            BasicBlock* ccEntryBB = BasicBlock::Create(ctx, "", func, originBB /*insertBefore*/);
 
-            ReleaseAssert(ifi->GetModule()->getNamedValue(icCreatorFnName) == nullptr);
-            Function* icCreatorFn = Function::Create(fty, GlobalValue::ExternalLinkage, icCreatorFnName, ifi->GetModule());
-            icCreatorFn->addFnAttr(Attribute::NoUnwind);
-            ReleaseAssert(icCreatorFn->getName() == icCreatorFnName);
-            icCreatorFn->setCallingConv(CallingConv::PreserveMost);
+            Instruction* ccHitOrigin = CloneBasicBlockContainingInstruction(origin);
+            BasicBlock* ccHitBB = ccHitOrigin->getParent();
 
-            CallInst* ci = CallInst::Create(icCreatorFn, { ifi->GetCodeBlock(), func, functionObject }, "", origin);
-            ci->setCallingConv(CallingConv::PreserveMost);
+            BasicBlock* ccMissBB = BasicBlock::Create(ctx, "", func, originBB /*insertBefore*/);
 
-            Value* calleeCbHeapPtr = nullptr;
-            Value* codePtr = nullptr;
-            EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCbHeapPtr /*out*/, codePtr /*out*/, origin);
-            ReleaseAssert(calleeCbHeapPtr != nullptr && codePtr != nullptr);
-
-            finalRes.push_back({
-                .calleeCbHeapPtr = calleeCbHeapPtr,
-                .codePointer = codePtr,
-                .origin = origin
-            });
-        }
-
-        ValidateLLVMFunction(func);
-
-        // Sink the TValue::Is<tFunction> check (see comments in EmitInterpreterCallIcWithHoistedCheck)
-        //
-        {
-            CallInst* typechk = dyn_cast<CallInst>(brInst->getCondition());
-            ReleaseAssert(typechk != nullptr);
-            ReleaseAssert(typechk->getParent() == predBB);
-            Function* callee = typechk->getCalledFunction();
-            ReleaseAssert(callee != nullptr && (IsTValueTypeCheckAPIFunction(callee) || IsTValueTypeCheckStrengthReductionFunction(callee)));
-            ReleaseAssert(typechk->arg_size() == 1 && typechk->getArgOperand(0) == tv);
-            ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeSpeculationMaskFor<tFunction>) == x_typeSpeculationMaskFor<tFunction>);
-
-            DominatorTree dt(*func);
-            bool isUsedInPredBlock = false;
-            for (Use& u : typechk->uses())
+            // Emit the direct-call IC check
+            //
             {
-                Instruction* inst = dyn_cast<Instruction>(u.getUser());
-                ReleaseAssert(inst != nullptr);
-                BasicBlock* instBB = inst->getParent();
-                ReleaseAssert(instBB != nullptr);
-                ReleaseAssert(dt.dominates(predBB, u));
-                if (instBB == predBB)
-                {
-                    isUsedInPredBlock = true;
-                }
+                UnreachableInst* dummy = new UnreachableInst(ctx, icEntryBB);
+                InsertBaselineJitCallIcMagicAsmForDirectCall(ifi->GetModule(), tv, dcHitBB, dcMissBB, ccMissBB, unique_ord, dummy /*insertBefore*/);
+                dummy->eraseFromParent();
             }
 
-            if (!isUsedInPredBlock)
+            // Emit the direct-call IC miss block
+            //
             {
-                std::unordered_map<Use*, Value*> useReplacementMap;
+                UnreachableInst* dummy = new UnreachableInst(ctx, dcMissBB);
+                Value* isHeapEntity = ifi->CallDeegenCommonSnippet("IsTValueHeapEntity", { tv }, dummy);
+                ReleaseAssert(llvm_value_has_type<bool>(isHeapEntity));
+
+                // Double-check that our transformation is OK, just to be extra certain
+                //
+                ReleaseAssert(brInst->isConditional());
+                Value* originalCond = brInst->getCondition();
+                ReleaseAssert(isa<CallInst>(originalCond));
+                Function* originalCondFn = cast<CallInst>(originalCond)->getCalledFunction();
+                ReleaseAssert(originalCondFn != nullptr);
+                ReleaseAssert(IsTValueTypeCheckAPIFunction(originalCondFn) || IsTValueTypeCheckStrengthReductionFunction(originalCondFn));
+                TypeSpeculationMask checkedMask = GetCheckedMaskOfTValueTypecheckFunction(originalCondFn);
+                // Having passed this assert, we know brInst is checking a typemask at least as strict as tHeapEntity
+                // (which should always be true since tHeapEntity is the only thing between tFunction and tTop, and we have
+                // checked earlier that the condition covers tFunction), so we are good
+                //
+                ReleaseAssert((checkedMask & x_typeSpeculationMaskFor<tHeapEntity>) == checkedMask);
+
+                // Add likely_true intrinsic for isHeapEntity to avoid breaking hot-cold splitting
+                //
+                Function* expectIntrin = Intrinsic::getDeclaration(func->getParent(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
+                isHeapEntity = CallInst::Create(expectIntrin, { isHeapEntity, CreateLLVMConstantInt<bool>(ctx, true) }, "", dummy);
+
+                BranchInst::Create(ccEntryBB /*ifTrue*/, brInst->getSuccessor(1 /*falseBranch*/), isHeapEntity, dummy);
+                dummy->eraseFromParent();
+            }
+
+            // Emit the direct-call IC miss block and closure-call IC hit block
+            //
+            {
+                Value* calleeCbU32 = emitIcClosureCallCheckBlock(ccEntryBB, tv, ccHitBB, ccMissBB);
+                ReleaseAssert(llvm_value_has_type<uint32_t>(calleeCbU32));
+                emitIcClosureCallHitBlock(ccHitOrigin, calleeCbU32);
+            }
+
+            // Emit the closure-call IC miss block
+            //
+            {
+                ReleaseAssert(brInst->getParent() != nullptr);
+                brInst->removeFromParent();
+                ccMissBB->getInstList().push_back(brInst);
+            }
+
+            // Emit the IC miss block, which is also the original 'bb' block
+            //
+            emitIcMissBlock(origin /*icMissOrigin*/, functionObject);
+
+            ValidateLLVMFunction(func);
+
+            // Sink the TValue::Is<tFunction> check (see comments in EmitInterpreterCallIcWithHoistedCheck)
+            //
+            {
+                CallInst* typechk = dyn_cast<CallInst>(brInst->getCondition());
+                ReleaseAssert(typechk != nullptr);
+                ReleaseAssert(typechk->getParent() == predBB);
+                Function* callee = typechk->getCalledFunction();
+                ReleaseAssert(callee != nullptr && (IsTValueTypeCheckAPIFunction(callee) || IsTValueTypeCheckStrengthReductionFunction(callee)));
+                ReleaseAssert(typechk->arg_size() == 1 && typechk->getArgOperand(0) == tv);
+                ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeSpeculationMaskFor<tFunction>) == x_typeSpeculationMaskFor<tFunction>);
+
+                DominatorTree dt(*func);
+                bool isUsedInPredBlock = false;
                 for (Use& u : typechk->uses())
                 {
                     Instruction* inst = dyn_cast<Instruction>(u.getUser());
                     ReleaseAssert(inst != nullptr);
                     BasicBlock* instBB = inst->getParent();
                     ReleaseAssert(instBB != nullptr);
-                    ReleaseAssert(dt.dominates(predBB, instBB));
-                    ReleaseAssert(dt.isReachableFromEntry(instBB));
-                    bool dominatedByIcMissBlock = dt.dominates(ccMissBB, instBB);
-                    if (dominatedByIcMissBlock)
+                    ReleaseAssert(dt.dominates(predBB, u));
+                    if (instBB == predBB)
                     {
-                        continue;
+                        isUsedInPredBlock = true;
                     }
-                    ReleaseAssert(dt.dominates(ccHitBB, instBB) || dt.dominates(dcHitBB, instBB));
-                    ReleaseAssert(!useReplacementMap.count(&u));
-                    useReplacementMap[&u] = CreateLLVMConstantInt<bool>(ctx, true);
                 }
-                for (auto& it : useReplacementMap)
+
+                if (!isUsedInPredBlock)
                 {
-                    Use* u = it.first;
-                    Value* replace = it.second;
-                    ReleaseAssert(u->get()->getType() == replace->getType());
-                    u->set(replace);
+                    std::unordered_map<Use*, Value*> useReplacementMap;
+                    for (Use& u : typechk->uses())
+                    {
+                        Instruction* inst = dyn_cast<Instruction>(u.getUser());
+                        ReleaseAssert(inst != nullptr);
+                        BasicBlock* instBB = inst->getParent();
+                        ReleaseAssert(instBB != nullptr);
+                        ReleaseAssert(dt.dominates(predBB, instBB));
+                        ReleaseAssert(dt.isReachableFromEntry(instBB));
+                        bool dominatedByIcMissBlock = dt.dominates(ccMissBB, instBB);
+                        if (dominatedByIcMissBlock)
+                        {
+                            continue;
+                        }
+                        ReleaseAssert(dt.dominates(ccHitBB, instBB) || dt.dominates(dcHitBB, instBB));
+                        ReleaseAssert(!useReplacementMap.count(&u));
+                        useReplacementMap[&u] = CreateLLVMConstantInt<bool>(ctx, true);
+                    }
+                    for (auto& it : useReplacementMap)
+                    {
+                        Use* u = it.first;
+                        Value* replace = it.second;
+                        ReleaseAssert(u->get()->getType() == replace->getType());
+                        u->set(replace);
+                    }
+                    ReleaseAssert(typechk->getParent() != nullptr);
+                    typechk->removeFromParent();
+                    ccMissBB->getInstList().push_front(typechk);
                 }
-                ReleaseAssert(typechk->getParent() != nullptr);
-                typechk->removeFromParent();
-                ccMissBB->getInstList().push_front(typechk);
             }
+
+            ValidateLLVMFunction(func);
+            return finalRes;
         }
+    }
+
+    // We want to rewrite
+    //
+    //     MakeCall(%fnObj, ...)
+    //
+    // to the following:
+    //
+    //     # Our IC direct call case currently always caches TValue, not function object.
+    //     # It seems like a questionable design for me, but in our boxing scheme, the TValue::Create is a no-op,
+    //     # so let's just go with it for now and think about what's the best design when we actually
+    //     # need to support other boxing schemes...
+    //     #
+    //     %tv = TValue::Create(%fnObj)
+    //     <direct-call IC check> => direct-call IC hit/miss
+    //
+    // direct-call IC hit:
+    //     %calleeCb = <cached>
+    //     %codePtr = <cached>
+    //     ... do call ...
+    //
+    // direct-call IC miss:
+    //     %calleeCb = getCalleeCb(%tv)
+    //     <closure-call IC check> => closure-call IC hit/IC miss
+    //
+    // closure-call IC hit:
+    //     %codePtr = <cached>
+    //     ... do call ...
+    //
+    // IC miss:
+    //     <create IC>
+    //     ... do call ...
+    //
+    {
+        Value* tv = ifi->CallDeegenCommonSnippet("BoxFunctionObjectToTValue", { functionObject }, origin);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
+
+        AssertInstructionIsFollowedByUnreachable(origin);
+
+        BasicBlock* icMissBB = BasicBlock::Create(ctx, "", func);
+        BasicBlock* dcHitBB = BasicBlock::Create(ctx, "", func, icMissBB /*insertBefore*/);
+        BasicBlock* dcMissBB = BasicBlock::Create(ctx, "", func, icMissBB /*insertBefore*/);
+        BasicBlock* ccHitBB = BasicBlock::Create(ctx, "", func, icMissBB /*insertBefore*/);
+
+        InsertBaselineJitCallIcMagicAsmForDirectCall(ifi->GetModule(), tv, dcHitBB, dcMissBB, icMissBB, unique_ord, origin /*insertBefore*/);
+
+        Value* calleeCbU32 = emitIcClosureCallCheckBlock(dcMissBB, tv, ccHitBB, icMissBB);
+
+        Instruction* ccHitOrigin = origin->clone();
+        ccHitBB->getInstList().push_back(ccHitOrigin);
+        new UnreachableInst(ctx, ccHitBB);
+
+        emitIcClosureCallHitBlock(ccHitOrigin, calleeCbU32);
+
+        Instruction* dcHitOrigin = origin->clone();
+        dcHitBB->getInstList().push_back(dcHitOrigin);
+        new UnreachableInst(ctx, dcHitBB);
+
+        emitIcDirectCallHitBlock(dcHitOrigin);
+
+        Instruction* unreachableAfterOrigin = origin->getNextNode();
+        ReleaseAssert(isa<UnreachableInst>(unreachableAfterOrigin));
+        origin->removeFromParent();
+        unreachableAfterOrigin->removeFromParent();
+
+        icMissBB->getInstList().push_back(origin);
+        icMissBB->getInstList().push_back(unreachableAfterOrigin);
+
+        emitIcMissBlock(origin, functionObject);
 
         ValidateLLVMFunction(func);
+        return finalRes;
     }
-    else
-    {
-        ReleaseAssert(false);
-    }
-
-    return finalRes;
 }
 
 // The input ASM looks like the following:
@@ -863,8 +1033,8 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 // Main function piece:
 //       ....  main func ....
 //   smc_region_start:            ------------------
-//      [ load hidden class ]       Self-Modifying
-//      jmp ic_miss_slowpath         Code Region
+//      ....                        Self-Modifying
+//      ....                         Code Region
 //   smc_region_end:              ------------------
 //
 // At runtime, the SMC region starts with
@@ -884,6 +1054,21 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 // For the DirectCall and ClosureCall IC piece, we can mostly extract directly without any special handling,
 // except that we must change the IC miss branch target to a stencil hole.
 //
+// Note that, the SMC region returned after this function is not final.
+// In order for IC and main function to be extracted correctly, we must correctly preserve the asm CFG
+// (so that our ASM CFG analysis can work correctly), including hidden control flow edges that only exists at runtime.
+//
+// Therefore, the SMC region returned after this function contains unnecessary jumps (only so that our
+// CFG analysis can see those control flow edges). Specifically, it looks like the following:
+//
+//     [ load HC ]
+//     jp ccIcMissEntry     // use a fake conditional jump only to tell our CFG analysis the control flow, same below
+//     jp dcIcMissEntry
+//     jmp __fake_dest
+//
+// After IC extraction, the SMC region needs to be fixed up by calling BaselineJitAsmLoweringResult::FixupSMCRegion,
+// which simply make it unconditionally jump to 'ccIcMissEntry'.
+//
 std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(X64AsmFile* file)
 {
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> r;
@@ -900,8 +1085,9 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
         //     movabsq $cached_val, someReg
         //     cmp someReg, tv
         //     jne closure_call_ic_entry
+        //     jne dc_ic_miss_slowpath
         //
-        ReleaseAssert(dcPayload->m_lines.size() == 4);
+        ReleaseAssert(dcPayload->m_lines.size() == 5);
 
         // Decode the movl $uniq_id, eax line to get uniq_id
         //
@@ -921,6 +1107,10 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
         std::string ccBlockLabel = dcPayload->m_lines[3].GetWord(1);
         ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(ccBlockLabel));
         ccBlockLabel = file->m_labelNormalizer.GetNormalizedLabel(ccBlockLabel);
+
+        ReleaseAssert(dcPayload->m_lines[4].IsConditionalJumpInst());
+        std::string dcIcMissSlowPathLabel = dcPayload->m_lines[4].GetWord(1);
+        dcIcMissSlowPathLabel = file->m_labelNormalizer.GetNormalizedLabel(dcIcMissSlowPathLabel);
 
         X64AsmBlock* ccBlock = nullptr;
         for (X64AsmBlock* block : file->m_blocks)
@@ -954,18 +1144,20 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
         // The ClosureCall IC magic has the following payload:
         //     movl $uniq_id, eax
         //     cmp $cached_val, hidden_class
-        //     jne ic_slowpath
+        //     jne cc_ic_miss_slowpath
         //
         ReleaseAssert(ccPayload->m_lines.size() == 3);
         ReleaseAssert(getIdFromMagicPayloadLine(ccPayload->m_lines[0]) == icUniqueOrd);
 
         ReleaseAssert(ccPayload->m_lines[2].IsConditionalJumpInst());
-        std::string icSlowPathLabel = ccPayload->m_lines[2].GetWord(1);
-        ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(icSlowPathLabel));
-        icSlowPathLabel = file->m_labelNormalizer.GetNormalizedLabel(icSlowPathLabel);
+        std::string ccIcMissSlowPathLabel = ccPayload->m_lines[2].GetWord(1);
+        ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(ccIcMissSlowPathLabel));
+        ccIcMissSlowPathLabel = file->m_labelNormalizer.GetNormalizedLabel(ccIcMissSlowPathLabel);
 
-        ReleaseAssert(icSlowPathLabel != ccBlockLabel);
-        ReleaseAssert(icSlowPathLabel != dcBlock->m_normalizedLabelName);
+        ReleaseAssert(dcIcMissSlowPathLabel != ccBlockLabel);
+        ReleaseAssert(ccIcMissSlowPathLabel != ccBlockLabel);
+        ReleaseAssert(dcIcMissSlowPathLabel != dcBlock->m_normalizedLabelName);
+        ReleaseAssert(ccIcMissSlowPathLabel != dcBlock->m_normalizedLabelName);
 
         // Now, perform the transform
         // Split 'block' after line 'lineOrd' (the line for DirectCall IC magic)
@@ -1058,20 +1250,27 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
         //     [ magic   ]
         //     jmp ccEntry
         //
-        // Remove the magic line and make it jump to slow path instead
+        // Remove the magic line and append fake jump instructions to demonstrate the control flow edges
+        // (see comments before this function)
         //
         {
             ReleaseAssert(smc->m_lines.size() >= 2);
             ReleaseAssert(smc->m_lines[smc->m_lines.size() - 2].IsMagicInstructionOfKind(MagicAsmKind::CallIcClosureCall));
-            smc->m_lines[smc->m_lines.size() - 2] = smc->m_lines.back();
+
+            X64AsmLine termJmp = smc->m_lines.back();
+            smc->m_lines.pop_back();
             smc->m_lines.pop_back();
 
-            ReleaseAssert(smc->m_lines.back().IsDirectUnconditionalJumpInst());
-            ReleaseAssert(smc->m_lines.back().GetWord(1) == ccEntry->m_normalizedLabelName);
+            ReleaseAssert(termJmp.IsDirectUnconditionalJumpInst() && termJmp.GetWord(1) == ccEntry->m_normalizedLabelName);
+            termJmp.GetWord(1) = "__deegen_fake_jmp_dest";
 
-            smc->m_lines.back().GetWord(1) = icSlowPathLabel;
+            smc->m_lines.push_back(X64AsmLine::Parse("\tjp\t" + ccIcMissSlowPathLabel));
+            smc->m_lines.push_back(X64AsmLine::Parse("\tjp\t" + dcIcMissSlowPathLabel));
+            smc->m_lines.push_back(termJmp);
+
             ReleaseAssert(smc->m_endsWithJmpToLocalLabel);
-            smc->m_terminalJmpTargetLabel = icSlowPathLabel;
+            smc->m_endsWithJmpToLocalLabel = false;
+            smc->m_terminalJmpTargetLabel = "";
         }
 
         // Now the control flow looks like this (detached = no longer reachable from function entry):
@@ -1114,10 +1313,11 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
         file->Validate();
 
         r.push_back({
-            .m_labelForPatchableJump = smc->m_normalizedLabelName,
+            .m_labelForSMCRegion = smc->m_normalizedLabelName,
             .m_labelForDirectCallIc = dcEntry->m_normalizedLabelName,
             .m_labelForClosureCallIc = ccEntry->m_normalizedLabelName,
-            .m_labelForIcMissLogic = icSlowPathLabel,
+            .m_labelForCcIcMissLogic = ccIcMissSlowPathLabel,
+            .m_labelForDcIcMissLogic = dcIcMissSlowPathLabel,
             .m_uniqueOrd = icUniqueOrd
         });
     };
@@ -1154,6 +1354,48 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
     }
 
     return r;
+}
+
+// See comments of the above function
+//
+// Note that the final SMC region in the (pre-processed) ASM code is the logic for closure-call mode
+// because it must be the longest (the SMC region for direct-call mode is simply one jump without any setup logic)
+// This is slightly tricky, but should be fine for now...
+//
+void DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult::FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file)
+{
+    X64AsmBlock* block = nullptr;
+    for (X64AsmBlock* b : file->m_blocks)
+    {
+        if (b->m_normalizedLabelName == m_labelForSMCRegion)
+        {
+            ReleaseAssert(block == nullptr);
+            block = b;
+        }
+    }
+    ReleaseAssert(block != nullptr);
+
+    ReleaseAssert(block->m_lines.size() >= 3);
+    X64AsmLine termJmp = block->m_lines.back();
+    ReleaseAssert(termJmp.IsDirectUnconditionalJumpInst() && termJmp.GetWord(1) == "__deegen_fake_jmp_dest");
+    block->m_lines.pop_back();
+
+    ReleaseAssert(block->m_lines.back().NumWords() == 2 &&
+                  block->m_lines.back().GetWord(0) == "jp" &&
+                  block->m_lines.back().GetWord(1) == m_labelForDcIcMissLogic);
+    block->m_lines.pop_back();
+
+    ReleaseAssert(block->m_lines.back().NumWords() == 2 &&
+                  block->m_lines.back().GetWord(0) == "jp" &&
+                  block->m_lines.back().GetWord(1) == m_labelForCcIcMissLogic);
+    block->m_lines.pop_back();
+
+    termJmp.GetWord(1) = m_labelForCcIcMissLogic;
+    block->m_lines.push_back(termJmp);
+
+    ReleaseAssert(!block->m_endsWithJmpToLocalLabel);
+    block->m_endsWithJmpToLocalLabel = true;
+    block->m_terminalJmpTargetLabel = m_labelForCcIcMissLogic;
 }
 
 }   // namespace dast

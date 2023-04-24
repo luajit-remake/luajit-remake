@@ -838,21 +838,21 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     m_origin = nullptr;
 }
 
-void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
+void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t uniqueOrd)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
-    // Get the code pointer and the callee CodeBlock
-    // TODO: now we always use naive logic, need to employ IC
-    //
     std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> list;
 
     ReleaseAssert(m_origin->getParent() != nullptr);
     Function* func = m_origin->getParent()->getParent();
     ReleaseAssert(func != nullptr);
 
-    if (!x_deegen_unit_test)
+    // Get the code pointer and the callee CodeBlock
+    //
+    bool shouldDisableCallIc = ifi->IsBaselineJitSlowPath();
+    if (shouldDisableCallIc)
     {
         Value* calleeCbHeapPtr = nullptr;
         Value* codePointer = nullptr;
@@ -868,7 +868,7 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
     }
     else
     {
-        list = DeegenCallIcLogicCreator::EmitForBaselineJIT(ifi, m_target, 0 /*unique_ord for now*/, m_origin);
+        list = DeegenCallIcLogicCreator::EmitForBaselineJIT(ifi, m_target, uniqueOrd, m_origin);
         m_origin = nullptr;
     }
 

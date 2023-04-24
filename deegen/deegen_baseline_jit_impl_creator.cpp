@@ -535,7 +535,8 @@ void BaselineJitImplCreator::DoLowering()
 
     // Run the ASM phase of the stencil lowering pass
     //
-    asmFile = slPass.RunAsmRewritePhase(asmFile);
+    slPass.RunAsmRewritePhase(asmFile);
+    asmFile = slPass.m_primaryPostTransformAsmFile;
 
     m_stencilPreTransformAsmFile = std::move(slPass.m_rawInputFileForAudit);
 
@@ -548,7 +549,7 @@ void BaselineJitImplCreator::DoLowering()
     // Note that we cannot further lower the stencil to concrete copy-and-patch logic yet, because at this stage
     // we cannot determine if we are allowed to eliminate the tail jump to fallthrough. So our lowering ends here.
     //
-    m_stencil = DeegenStencil::Parse(m_module->getContext(), m_stencilObjectFile);
+    m_stencil = DeegenStencil::ParseMainLogic(m_module->getContext(), m_stencilObjectFile);
 }
 
 }   // namespace dast

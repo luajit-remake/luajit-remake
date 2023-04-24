@@ -4,7 +4,7 @@
 namespace dast {
 
 std::vector<DeegenStencilExtractedICAsm> WARN_UNUSED RunStencilInlineCacheLogicExtractionPass(X64AsmFile* file /*inout*/,
-                                                                                              llvm::Function* func,
+                                                                                              DeegenAsmCfg cfg,
                                                                                               std::vector<std::string> icLabels)
 {
     ReleaseAssert(file->m_blocks.size() > 0);
@@ -20,8 +20,6 @@ std::vector<DeegenStencilExtractedICAsm> WARN_UNUSED RunStencilInlineCacheLogicE
     {
         ReleaseAssert(labelToBlockMap.count(label));
     }
-
-    DeegenAsmCfgAnalyzer cfg = DeegenAsmCfgAnalyzer::DoAnalysis(file, func);
 
     std::unordered_set<std::string> reachableFromEntry;
 
@@ -181,9 +179,33 @@ std::vector<DeegenStencilExtractedICAsm> WARN_UNUSED RunStencilInlineCacheLogicE
         item.m_blocks = clonedList;
     }
 
+    // Figure out the blocks that doesn't belong to 'mainFnBlocks' and move them to m_icPath
+    //
+    {
+        std::unordered_set<X64AsmBlock*> mainFnBlockSet;
+        for (X64AsmBlock* block : mainFnBlocks)
+        {
+            ReleaseAssert(!mainFnBlockSet.count(block));
+            mainFnBlockSet.insert(block);
+        }
+
+        std::vector<X64AsmBlock*> icPathBlocks;
+        for (X64AsmBlock* block : file->m_blocks)
+        {
+            if (!mainFnBlockSet.count(block))
+            {
+                icPathBlocks.push_back(block);
+            }
+        }
+        ReleaseAssert(mainFnBlockSet.size() + icPathBlocks.size() == file->m_blocks.size());
+        file->m_icPath = icPathBlocks;
+    }
+
     // Update the main function block list to remove the blocks only used by IC
     //
     file->m_blocks = mainFnBlocks;
+
+    file->Validate();
 
     return r;
 }

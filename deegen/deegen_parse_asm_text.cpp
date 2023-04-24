@@ -308,6 +308,10 @@ void X64AsmBlock::SplitAtLine(X64AsmFile* owner, size_t line, X64AsmBlock*& part
 {
     ReleaseAssert(0 < line && line < m_lines.size());
 
+    // For now, disallow splitting a block with a trailing label line, as that could break the size computation
+    //
+    ReleaseAssert(m_trailingLabelLine.IsCommentOrEmptyLine());
+
     std::string uniqLabel = owner->m_labelNormalizer.GetUniqueLabel();
 
     std::unique_ptr<X64AsmBlock> p1 = std::make_unique<X64AsmBlock>();
@@ -326,6 +330,7 @@ void X64AsmBlock::SplitAtLine(X64AsmFile* owner, size_t line, X64AsmBlock*& part
     p2->m_normalizedLabelName = uniqLabel;
     p2->m_endsWithJmpToLocalLabel = m_endsWithJmpToLocalLabel;
     p2->m_terminalJmpTargetLabel = m_terminalJmpTargetLabel;
+    p2->m_indirectBranchTargets = m_indirectBranchTargets;
     for (size_t i = line; i < m_lines.size(); i++)
     {
         p2->m_lines.push_back(m_lines[i]);
@@ -344,6 +349,8 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
     std::unique_ptr<X64AsmFile> resHolder = std::make_unique<X64AsmFile>();
     X64AsmFile* r = resHolder.get();
+
+    r->m_hasAnalyzedIndirectBranchTargets = false;
 
     diInfo.UpdateAfterCodegen();
 
@@ -903,6 +910,7 @@ void X64AsmFile::RemoveAsmMagic(MagicAsmKind magicKind)
 
     removeForBlockList(m_blocks);
     removeForBlockList(m_slowpath);
+    removeForBlockList(m_icPath);
 }
 
 void X64AsmFile::InsertBlocksAfter(const std::vector<X64AsmBlock*>& blocksToBeInserted, X64AsmBlock* insertAfter)
@@ -943,6 +951,19 @@ X64AsmBlock* WARN_UNUSED X64AsmBlock::Clone(X64AsmFile* owner)
 {
     std::unique_ptr<X64AsmBlock> holder = std::make_unique<X64AsmBlock>(*this);
     X64AsmBlock* res = holder.get();
+    owner->m_blockHolders.push_back(std::move(holder));
+    return res;
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmBlock::Create(X64AsmFile* owner, X64AsmBlock* jmpDst)
+{
+    std::unique_ptr<X64AsmBlock> holder = std::make_unique<X64AsmBlock>();
+    X64AsmBlock* res = holder.get();
+    res->m_normalizedLabelName = owner->m_labelNormalizer.GetUniqueLabel();
+    res->m_prefixText = res->m_normalizedLabelName + ":\n";
+    res->m_endsWithJmpToLocalLabel = true;
+    res->m_terminalJmpTargetLabel = jmpDst->m_normalizedLabelName;
+    res->m_lines.push_back(X64AsmLine::Parse("\tjmp\t" + jmpDst->m_normalizedLabelName));
     owner->m_blockHolders.push_back(std::move(holder));
     return res;
 }
@@ -1082,8 +1103,10 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::Clone()
         return clonedBlocks;
     };
 
+    r->m_hasAnalyzedIndirectBranchTargets = m_hasAnalyzedIndirectBranchTargets;
     r->m_blocks = cloneBlocks(m_blocks);
     r->m_slowpath = cloneBlocks(m_slowpath);
+    r->m_icPath = cloneBlocks(m_icPath);
     r->m_labelNormalizer = m_labelNormalizer;
     r->m_filePreheader = m_filePreheader;
     r->m_fileFooter = m_fileFooter;
@@ -1128,6 +1151,7 @@ void X64AsmFile::Validate()
 
             if (block->m_lines.back().IsDirectUnconditionalJumpInst())
             {
+                ReleaseAssert(block->m_indirectBranchTargets.empty());
                 std::string label = block->m_lines.back().GetWord(1);
                 if (m_labelNormalizer.QueryLabelExists(label))
                 {
@@ -1142,12 +1166,43 @@ void X64AsmFile::Validate()
             else
             {
                 ReleaseAssert(!block->m_endsWithJmpToLocalLabel);
+                if (!m_hasAnalyzedIndirectBranchTargets)
+                {
+                    ReleaseAssert(block->m_indirectBranchTargets.empty());
+                }
+                else
+                {
+                    for (const std::string& label : block->m_indirectBranchTargets)
+                    {
+                        ReleaseAssert(m_labelNormalizer.QueryLabelExists(label));
+                        ReleaseAssert(label == m_labelNormalizer.GetNormalizedLabel(label));
+                    }
+                }
             }
         }
     };
 
     validateBlocks(m_blocks);
     validateBlocks(m_slowpath);
+    validateBlocks(m_icPath);
+}
+
+void X64AsmFile::AssertAllMagicRemoved()
+{
+    auto checkForBlockList = [&](const std::vector<X64AsmBlock*>& blocks)
+    {
+        for (X64AsmBlock* block : blocks)
+        {
+            for (X64AsmLine& line : block->m_lines)
+            {
+                ReleaseAssert(!line.IsMagicInstruction());
+            }
+        }
+    };
+
+    checkForBlockList(m_blocks);
+    checkForBlockList(m_slowpath);
+    checkForBlockList(m_icPath);
 }
 
 std::string WARN_UNUSED X64AsmFile::ToString()
@@ -1186,12 +1241,35 @@ std::string WARN_UNUSED X64AsmFile::ToString()
                     fprintf(fp, "%s", line.ToString().c_str());
                 }
             }
+
+            if (!block->m_trailingLabelLine.IsCommentOrEmptyLine())
+            {
+                ReleaseAssert(block->m_trailingLabelLine.IsLocalLabel());
+                fprintf(fp, "%s", block->m_trailingLabelLine.ToString().c_str());
+            }
         }
     };
 
     printSection(m_blocks);
+
+    if (m_slowpath.size() > 0)
+    {
+        std::string sectionDirective = "\t.section\t.text.deegen_slow,\"ax\",@progbits\n";
+        fprintf(fp, "%s", sectionDirective.c_str());
+    }
     printSection(m_slowpath);
 
+    if (m_icPath.size() > 0)
+    {
+        std::string sectionDirective = "\t.section\t.text.deegen_ic_logic,\"ax\",@progbits\n";
+        fprintf(fp, "%s", sectionDirective.c_str());
+    }
+    printSection(m_icPath);
+
+    {
+        std::string sectionDirective = "\t.section\t.text,\"ax\",@progbits\n";
+        fprintf(fp, "%s", sectionDirective.c_str());
+    }
     fprintf(fp, "%s", m_fileFooter.c_str());
     fclose(fp);
     return file.GetFileContents();

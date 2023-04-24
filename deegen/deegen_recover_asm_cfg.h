@@ -9,13 +9,19 @@ namespace dast {
 // Direct branch targets are analyzed directly. Indirect branch targets are analyzed by
 // using debug info to remap it back to LLVM IR.
 //
-struct DeegenAsmCfgAnalyzer
+struct DeegenAsmCfg
 {
     // If 'addHumanDebugHint' is true, a comment is added after each branch instruction showing its destination
     // We assume that the function entry is the real function entry so it must map to the LLVM entry block (which is obviously
     // true unless the caller has already done some weird transformation)
     //
-    static DeegenAsmCfgAnalyzer WARN_UNUSED DoAnalysis(X64AsmFile* file, llvm::Function* func, bool addHumanDebugComment = true);
+    // Only needs to be called once
+    //
+    static void AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* func, bool addHumanDebugComment = true);
+
+    // Must be called after AnalyzeIndirectBranch
+    //
+    static DeegenAsmCfg WARN_UNUSED GetCFG(X64AsmFile* file);
 
     bool WARN_UNUSED HasEdge(const std::string& fromLabel, const std::string& toLabel)
     {
@@ -28,6 +34,10 @@ struct DeegenAsmCfgAnalyzer
         ReleaseAssert(m_cfg.count(fromLabel));
         return m_cfg[fromLabel];
     }
+
+    // Return the list of blocks that are reachable from 'entryBlock', but must pass through at least one block in 'dominatorBlockList'
+    //
+    std::vector<std::string> WARN_UNUSED GetAllBlocksDominatedBy(const std::vector<std::string>& dominatorBlockList, const std::string& entryBlock);
 
     std::map<std::string, std::set<std::string>> m_cfg;
 };

@@ -5,20 +5,34 @@
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "deegen_call_inline_cache.h"
+#include "deegen_stencil_inline_cache_extraction_pass.h"
 
 namespace dast {
 
 // Split the function into a fast path part and a slow path part
 //
-// Note that the ASM blocks in m_slowPath will already have been reordered to minimize fallthrough jmps
-// Also, the first ASM block has been prefixed with ".deegen_slow" section annotation,
-// so one is not supposed to reorder the blocks in m_slowPath any more
+// Note that after this pass, the ASM blocks in m_slowPath will already have been reordered to minimize fallthrough jmps
 //
 // The ASM blocks in m_fastPath retain the original order they show up in the input file
 //
-static void RunAsmHotColdSplittingPass(X64AsmFile* file /*inout*/, std::vector<llvm::BasicBlock*> llvmColdBlocks)
+static void RunAsmHotColdSplittingPass(X64AsmFile* file /*inout*/,
+                                       std::vector<llvm::BasicBlock*> llvmColdBlocks,
+                                       std::unordered_set<std::string> forceFastPathBlocks,
+                                       std::unordered_set<std::string> forceSlowPathBlocks)
 {
     ReleaseAssert(file->m_slowpath.size() == 0);
+
+    // Assert that 'forceFastPathBlocks' and 'forceSlowPathBlocks' should have no intersection
+    //
+    for (const std::string& label : forceFastPathBlocks)
+    {
+        ReleaseAssert(!forceSlowPathBlocks.count(label));
+    }
+    for (const std::string& label : forceSlowPathBlocks)
+    {
+        ReleaseAssert(!forceFastPathBlocks.count(label));
+    }
 
     std::unordered_set<llvm::BasicBlock*> llvmColdBBSet;
     for (llvm::BasicBlock* bb : llvmColdBlocks)
@@ -32,6 +46,20 @@ static void RunAsmHotColdSplittingPass(X64AsmFile* file /*inout*/, std::vector<l
     {
         bool isEntryBlock = (block == file->m_blocks[0]);
 
+        if (forceFastPathBlocks.count(block->m_normalizedLabelName))
+        {
+            list.push_back(block);
+            continue;
+        }
+
+        if (forceSlowPathBlocks.count(block->m_normalizedLabelName))
+        {
+            ReleaseAssert(!isEntryBlock);
+            list.push_back(block);
+            coldAsmBlocks.push_back(block);
+            continue;
+        }
+
         // We find all the transition lines from hot to cold or from cold to hot.
         // For each transition line, search backward for a conditional jump instruction, and split the block there
         //
@@ -44,6 +72,7 @@ static void RunAsmHotColdSplittingPass(X64AsmFile* file /*inout*/, std::vector<l
             bool seenColdBB = false;
             bool seenHotBB = false;
             size_t line = 0;
+
 retry:
             while (line < curBlock->m_lines.size())
             {
@@ -158,23 +187,6 @@ retry:
         // Layout the cold ASM blocks to minimize jumps
         //
         coldAsmBlocks = X64AsmBlock::ReorderBlocksToMaximizeFallthroughs(coldAsmBlocks, 0 /*entryOrd*/);
-
-        // Put the cold BBs into the slow path section
-        // Very important to put the directive BEFORE m_prefixText, not after, because m_prefixText contains labels!
-        //
-        {
-            std::string sectionDirective = "\t.section\t.text.deegen_slow,\"ax\",@progbits\n";
-            coldAsmBlocks[0]->m_prefixText = sectionDirective + coldAsmBlocks[0]->m_prefixText;
-        }
-    }
-
-    // Reset the section directive at function end
-    // Similarly, important to append before m_fileFooter, not after
-    // TODO: the section directive should be printed by ToString(), not appended by us
-    //
-    {
-        std::string sectionDirective = "\t.section\t.text,\"ax\",@progbits\n";
-        file->m_fileFooter = sectionDirective + file->m_fileFooter;
     }
 
     file->m_blocks = hotAsmBlocks;
@@ -225,7 +237,8 @@ retry:
 static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* file /*inout*/,
                                                                     uint32_t locIdent,
                                                                     const std::string& fnNameForDebug,
-                                                                    const std::string& fallthroughPlaceholderName)
+                                                                    const std::string& fallthroughPlaceholderName,
+                                                                    std::unordered_set<std::string> blocksMustNotSplit)
 {
     if (locIdent == 0)
     {
@@ -346,81 +359,84 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
 
         X64AsmBlock* block = file->m_blocks[curBlockOrd];
 
-        // Reverse scan for JCC instruction
-        //
-        for (size_t instOrd = block->m_lines.size(); instOrd-- > 0; /*no-op*/)
+        if (!blocksMustNotSplit.count(block->m_normalizedLabelName))
         {
-            if (block->m_lines[instOrd].IsConditionalJumpInst())
+            // Reverse scan for JCC instruction
+            //
+            for (size_t instOrd = block->m_lines.size(); instOrd-- > 0; /*no-op*/)
             {
-                std::string dstLabel = block->m_lines[instOrd].GetWord(1);
-                // If the label doesn't exist, it might be a symbol or a label in slow path, don't bother
-                //
-                if (labelMap.count(dstLabel))
+                if (block->m_lines[instOrd].IsConditionalJumpInst())
                 {
-                    size_t definedBlockOrd = labelMap[dstLabel];
-                    ReleaseAssert(file->m_blocks[definedBlockOrd]->m_normalizedLabelName == dstLabel);
-                    if (definedBlockOrd > targetBlockOrd)
+                    std::string dstLabel = block->m_lines[instOrd].GetWord(1);
+                    // If the label doesn't exist, it might be a symbol or a label in slow path, don't bother
+                    //
+                    if (labelMap.count(dstLabel))
                     {
-                        // We can do the rewrite if 'definedLine' cannot be reached by fallthrough
-                        //
-                        ReleaseAssert(definedBlockOrd > 0);
-                        bool dstLabelCanBeReachedByFallthrough = file->IsTerminatorInstructionFallthrough(definedBlockOrd - 1);
-                        if (!dstLabelCanBeReachedByFallthrough)
+                        size_t definedBlockOrd = labelMap[dstLabel];
+                        ReleaseAssert(file->m_blocks[definedBlockOrd]->m_normalizedLabelName == dstLabel);
+                        if (definedBlockOrd > targetBlockOrd)
                         {
-                            //  /- jcc ...                jncc   -|
-                            //  |  XXXXX                  ZZZZZ   |
-                            //  |  jmp next_bc    ===>    YYYYY   |
-                            //  |  YYYYY                  XXXXX <--
-                            //  \->ZZZZZ                  jmp next_bc
+                            // We can do the rewrite if 'definedLine' cannot be reached by fallthrough
                             //
-                            std::vector<X64AsmBlock*> newList;
-                            for (size_t i = 0; i < curBlockOrd; i++)
+                            ReleaseAssert(definedBlockOrd > 0);
+                            bool dstLabelCanBeReachedByFallthrough = file->IsTerminatorInstructionFallthrough(definedBlockOrd - 1);
+                            if (!dstLabelCanBeReachedByFallthrough)
                             {
-                                newList.push_back(file->m_blocks[i]);
+                                //  /- jcc ...                jncc   -|
+                                //  |  XXXXX                  ZZZZZ   |
+                                //  |  jmp next_bc    ===>    YYYYY   |
+                                //  |  YYYYY                  XXXXX <--
+                                //  \->ZZZZZ                  jmp next_bc
+                                //
+                                std::vector<X64AsmBlock*> newList;
+                                for (size_t i = 0; i < curBlockOrd; i++)
+                                {
+                                    newList.push_back(file->m_blocks[i]);
+                                }
+
+                                // Split 'block' after JCC
+                                //
+                                X64AsmBlock* p1 = nullptr;
+                                X64AsmBlock* p2 = nullptr;
+                                block->SplitAtLine(file, instOrd + 1, p1 /*out*/, p2 /*out*/);
+                                ReleaseAssert(p1 != nullptr && p2 != nullptr);
+
+                                ReleaseAssert(p1->m_lines.size() == instOrd + 2);
+
+                                ReleaseAssert(p1->m_lines[instOrd].IsConditionalJumpInst());
+                                ReleaseAssert(p1->m_lines[instOrd].GetWord(1) == file->m_blocks[definedBlockOrd]->m_normalizedLabelName);
+                                ReleaseAssert(p1->m_lines[instOrd + 1].IsDirectUnconditionalJumpInst());
+                                ReleaseAssert(p1->m_lines[instOrd + 1].GetWord(1) == p2->m_normalizedLabelName);
+
+                                p1->m_lines[instOrd].FlipConditionalJumpCondition();
+                                p1->m_lines[instOrd].GetWord(1) = p2->m_normalizedLabelName;
+                                p1->m_lines[instOrd + 1].GetWord(1) = file->m_blocks[definedBlockOrd]->m_normalizedLabelName;
+                                ReleaseAssert(p1->m_endsWithJmpToLocalLabel);
+                                p1->m_terminalJmpTargetLabel = file->m_blocks[definedBlockOrd]->m_normalizedLabelName;
+
+                                newList.push_back(p1);
+
+                                for (size_t i = definedBlockOrd; i < file->m_blocks.size(); i++)
+                                {
+                                    newList.push_back(file->m_blocks[i]);
+                                }
+
+                                for (size_t i = targetBlockOrd + 1; i < definedBlockOrd; i++)
+                                {
+                                    newList.push_back(file->m_blocks[i]);
+                                }
+
+                                newList.push_back(p2);
+
+                                for (size_t i = curBlockOrd + 1; i <= targetBlockOrd; i++)
+                                {
+                                    newList.push_back(file->m_blocks[i]);
+                                }
+
+                                ReleaseAssert(newList.size() == file->m_blocks.size() + 1);
+                                file->m_blocks = newList;
+                                return;
                             }
-
-                            // Split 'block' after JCC
-                            //
-                            X64AsmBlock* p1 = nullptr;
-                            X64AsmBlock* p2 = nullptr;
-                            block->SplitAtLine(file, instOrd + 1, p1 /*out*/, p2 /*out*/);
-                            ReleaseAssert(p1 != nullptr && p2 != nullptr);
-
-                            ReleaseAssert(p1->m_lines.size() == instOrd + 2);
-
-                            ReleaseAssert(p1->m_lines[instOrd].IsConditionalJumpInst());
-                            ReleaseAssert(p1->m_lines[instOrd].GetWord(1) == file->m_blocks[definedBlockOrd]->m_normalizedLabelName);
-                            ReleaseAssert(p1->m_lines[instOrd + 1].IsDirectUnconditionalJumpInst());
-                            ReleaseAssert(p1->m_lines[instOrd + 1].GetWord(1) == p2->m_normalizedLabelName);
-
-                            p1->m_lines[instOrd].FlipConditionalJumpCondition();
-                            p1->m_lines[instOrd].GetWord(1) = p2->m_normalizedLabelName;
-                            p1->m_lines[instOrd + 1].GetWord(1) = file->m_blocks[definedBlockOrd]->m_normalizedLabelName;
-                            ReleaseAssert(p1->m_endsWithJmpToLocalLabel);
-                            p1->m_terminalJmpTargetLabel = file->m_blocks[definedBlockOrd]->m_normalizedLabelName;
-
-                            newList.push_back(p1);
-
-                            for (size_t i = definedBlockOrd; i < file->m_blocks.size(); i++)
-                            {
-                                newList.push_back(file->m_blocks[i]);
-                            }
-
-                            for (size_t i = targetBlockOrd + 1; i < definedBlockOrd; i++)
-                            {
-                                newList.push_back(file->m_blocks[i]);
-                            }
-
-                            newList.push_back(p2);
-
-                            for (size_t i = curBlockOrd + 1; i <= targetBlockOrd; i++)
-                            {
-                                newList.push_back(file->m_blocks[i]);
-                            }
-
-                            ReleaseAssert(newList.size() == file->m_blocks.size() + 1);
-                            file->m_blocks = newList;
-                            return;
                         }
                     }
                 }
@@ -527,26 +543,220 @@ DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePha
     return r;
 }
 
-std::string WARN_UNUSED DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
+void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
 {
     std::unique_ptr<X64AsmFile> fileHolder = X64AsmFile::ParseFile(asmFile, m_diInfo);
     X64AsmFile* file = fileHolder.get();
     m_rawInputFileForAudit = file->Clone();
 
-    DeegenAsmCfgAnalyzer dummy = DeegenAsmCfgAnalyzer::DoAnalysis(file, m_diInfo.GetFunc());
+    // AnalyzeIndirectBranch works by attempting to find mapping between ASM branches and LLVM CFG,
+    // so it must be called before we do any transform to the ASM.
+    //
+    DeegenAsmCfg::AnalyzeIndirectBranch(file, m_diInfo.GetFunc(), false /*addDebugComment*/);
 
-    RunAsmHotColdSplittingPass(file /*inout*/, m_coldBlocks);
+    // Lower the Call IC asm magic
+    //
+    using CallIcAsmLoweringResult = DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult;
+    std::vector<CallIcAsmLoweringResult> callICs = DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(file);
 
     file->Validate();
 
-    AttemptToTransformDispatchToNextBytecodeIntoFallthrough(file /*inout*/,
-                                                            m_locIdentForJmpToFallthroughCandidate,
-                                                            m_diInfo.GetFunc()->getName().str(),
-                                                            m_nextBytecodeFallthroughPlaceholderName);
+    std::vector<std::string> icEntryLabelList;
+    for (CallIcAsmLoweringResult& item : callICs)
+    {
+        icEntryLabelList.push_back(item.m_labelForDirectCallIc);
+        icEntryLabelList.push_back(item.m_labelForClosureCallIc);
+    }
+
+    DeegenAsmCfg cfg = DeegenAsmCfg::GetCFG(file);
+
+    std::vector<DeegenStencilExtractedICAsm> icAsmList = RunStencilInlineCacheLogicExtractionPass(file, cfg, icEntryLabelList);
+    ReleaseAssert(icAsmList.size() == icEntryLabelList.size());
+
+    // Run hot-cold splitting pass
+    //
+    {
+        // Our IC creator requires for correctness that the patchable block is in the fast path, enforce it.
+        //
+        std::unordered_set<std::string> forceFastPathBlocks;
+        for (CallIcAsmLoweringResult& item : callICs)
+        {
+            ReleaseAssert(!forceFastPathBlocks.count(item.m_labelForSMCRegion));
+            forceFastPathBlocks.insert(item.m_labelForSMCRegion);
+        }
+
+        // Unfortunately LLVM does not support BranchWeight metadata on CallBr, so it cannot understand by itself that
+        // the IC slow path is cold. As an imperfect workaround, we forcefully put these blocks and any blocks dominated
+        // by them into the slow path.
+        //
+        std::unordered_set<std::string> forceSlowPathBlocks;
+        {
+            std::vector<std::string> allIcSlowPathBlocks;
+            for (CallIcAsmLoweringResult& item : callICs)
+            {
+                allIcSlowPathBlocks.push_back(item.m_labelForCcIcMissLogic);
+                allIcSlowPathBlocks.push_back(item.m_labelForDcIcMissLogic);
+            }
+
+            std::vector<std::string> allForceSlowPathBlocksList = cfg.GetAllBlocksDominatedBy(allIcSlowPathBlocks,
+                                                                                              file->m_blocks[0]->m_normalizedLabelName /*entryBlock*/);
+            for (const std::string& label : allForceSlowPathBlocksList)
+            {
+                ReleaseAssert(!forceSlowPathBlocks.count(label));
+                forceSlowPathBlocks.insert(label);
+            }
+            for (const std::string& label : allIcSlowPathBlocks)
+            {
+                ReleaseAssert(forceSlowPathBlocks.count(label));
+            }
+
+            for (const std::string& label : forceFastPathBlocks)
+            {
+                if (forceSlowPathBlocks.count(label))
+                {
+                    forceSlowPathBlocks.erase(forceSlowPathBlocks.find(label));
+                }
+            }
+        }
+
+        RunAsmHotColdSplittingPass(file /*inout*/, m_coldBlocks, forceFastPathBlocks, forceSlowPathBlocks);
+    }
 
     file->Validate();
 
-    return file->ToStringAndRemoveDebugInfo();
+    // Reorder fast path blocks to maximize fallthroughs
+    //
+    ReleaseAssert(file->m_blocks.size() > 0);
+    file->m_blocks = X64AsmBlock::ReorderBlocksToMaximizeFallthroughs(file->m_blocks, 0 /*entryOrd*/);
+
+    file->Validate();
+
+    // Having extracted IC, we can fix up the SMC region for the call ICs now
+    //
+    for (CallIcAsmLoweringResult& item : callICs)
+    {
+        item.FixupSMCRegionAfterCFGAnalysis(file);
+        file->Validate();
+    }
+
+    // Attempt to transform the dispatch to next bytecode to a fallthrough. Note that:
+    // 1. After this step the CFG is invalidated.
+    // 2. This transform may need to split a block into two. We must not do this to any of the SMC regions of the ICs.
+    //
+    {
+        std::unordered_set<std::string> blocksMustNotSplit;
+        for (CallIcAsmLoweringResult& item : callICs)
+        {
+            blocksMustNotSplit.insert(item.m_labelForSMCRegion);
+        }
+
+        AttemptToTransformDispatchToNextBytecodeIntoFallthrough(file /*inout*/,
+                                                                m_locIdentForJmpToFallthroughCandidate,
+                                                                m_diInfo.GetFunc()->getName().str(),
+                                                                m_nextBytecodeFallthroughPlaceholderName,
+                                                                blocksMustNotSplit);
+        cfg.m_cfg.clear();
+        file->Validate();
+    }
+
+    // The call IC's SMC block ends with a jump. The jump must not be eliminated to a fallthrough even if it happens to
+    // jump to the immediate following block, because the jump is only a placeholder.
+    // We enforce this by figuring out all those jumps that happens to fallthrough, and adding a dummy block in between.
+    // Note that this must happen as the LAST transform, since any further reordering can break this.
+    //
+    {
+        std::unordered_set<std::string> preventFallthroughBlockSet;
+        for (CallIcAsmLoweringResult& item : callICs)
+        {
+            ReleaseAssert(!preventFallthroughBlockSet.count(item.m_labelForSMCRegion));
+            preventFallthroughBlockSet.insert(item.m_labelForSMCRegion);
+        }
+        std::unordered_set<std::string> backupForAssertion = preventFallthroughBlockSet;
+
+        std::vector<std::pair<X64AsmBlock*, X64AsmBlock*>> dummyBlockNeededList;
+        for (size_t i = 0; i < file->m_blocks.size(); i++)
+        {
+            std::string label = file->m_blocks[i]->m_normalizedLabelName;
+            if (preventFallthroughBlockSet.count(label))
+            {
+                preventFallthroughBlockSet.erase(preventFallthroughBlockSet.find(label));
+                if (file->IsTerminatorInstructionFallthrough(i))
+                {
+                    dummyBlockNeededList.push_back(std::make_pair(file->m_blocks[i], file->m_blocks[i + 1]));
+                }
+            }
+        }
+        ReleaseAssert(preventFallthroughBlockSet.empty());
+
+        for (auto& blockPair : dummyBlockNeededList)
+        {
+            X64AsmBlock* fromBlock = blockPair.first;
+            X64AsmBlock* toBlock = blockPair.second;
+            X64AsmBlock* dummyBlock = X64AsmBlock::Create(file, toBlock /*jmpDst*/);
+            file->InsertBlocksAfter({ dummyBlock }, fromBlock /*insertAfter*/);
+        }
+
+        file->Validate();
+
+        // Sanity check
+        //
+        for (size_t i = 0; i < file->m_blocks.size(); i++)
+        {
+            if (backupForAssertion.count(file->m_blocks[i]->m_normalizedLabelName))
+            {
+                ReleaseAssert(!file->IsTerminatorInstructionFallthrough(i));
+            }
+        }
+    }
+
+    auto getIcAsmFile = [&](std::vector<X64AsmBlock*> icLogic) WARN_UNUSED -> std::string
+    {
+        std::unique_ptr<X64AsmFile> icFile = file->Clone();
+        icFile->m_icPath.clear();
+        for (X64AsmBlock* block : icLogic)
+        {
+            icFile->m_icPath.push_back(block->Clone(icFile.get()));
+        }
+        icFile->Validate();
+        icFile->AssertAllMagicRemoved();
+        return icFile->ToStringAndRemoveDebugInfo();
+    };
+
+    file->Validate();
+    file->AssertAllMagicRemoved();
+    m_primaryPostTransformAsmFile = file->ToStringAndRemoveDebugInfo();
+
+    // Important to extract IC after all transformation on primary ASM file has been executed,
+    // as the IC ASM and the primary ASM's main logic must be EXACTLY in sync!
+    //
+    std::map<uint64_t, CallIcAsmInfo> callIcInfos;
+
+    size_t offsetInIcEntryLabelList = 0;
+    for (CallIcAsmLoweringResult& item : callICs)
+    {
+        ReleaseAssert(offsetInIcEntryLabelList + 2 <= icEntryLabelList.size());
+        DeegenStencilExtractedICAsm& dcLogic = icAsmList[offsetInIcEntryLabelList];
+        DeegenStencilExtractedICAsm& ccLogic = icAsmList[offsetInIcEntryLabelList + 1];
+        offsetInIcEntryLabelList += 2;
+
+        ReleaseAssert(dcLogic.m_blocks.size() > 0 && dcLogic.m_blocks[0]->m_normalizedLabelName == item.m_labelForDirectCallIc);
+        ReleaseAssert(ccLogic.m_blocks.size() > 0 && ccLogic.m_blocks[0]->m_normalizedLabelName == item.m_labelForClosureCallIc);
+
+        std::string dcAsm = getIcAsmFile(dcLogic.m_blocks);
+        std::string ccAsm = getIcAsmFile(ccLogic.m_blocks);
+
+        ReleaseAssert(!callIcInfos.count(item.m_uniqueOrd));
+        callIcInfos[item.m_uniqueOrd] = {
+            .m_directCallLogicAsm = dcAsm,
+            .m_closureCallLogicAsm = ccAsm,
+            .m_smcBlockLabel = item.m_labelForSMCRegion,
+            .m_ccIcMissPathLabel = item.m_labelForCcIcMissLogic,
+            .m_dcIcMissPathLabel = item.m_labelForDcIcMissLogic
+        };
+    }
+
+    ReleaseAssert(offsetInIcEntryLabelList == icAsmList.size());
+    m_callIcLogicAsmFiles = std::move(callIcInfos);
 }
 
 }   // namespace dast

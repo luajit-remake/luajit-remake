@@ -25,7 +25,6 @@
 
 using namespace dast;
 using namespace llvm;
-
 #if 0
 TEST(XX, XX)
 {
@@ -46,44 +45,7 @@ TEST(XX, XX)
     BaselineJitImplCreator mainJic(*b.m_jitMainComponent.get());
     mainJic.DoLowering();
 
-    // mainJic.GetModule()->dump();
-
-    X64AsmFile* file = mainJic.GetStencilPreTransformAsmFile();
-    auto res = DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(file);
-
-    for (auto& item : res)
-    {
-        fprintf(stderr, "patchable jump: %s\n", item.m_labelForPatchableJump.c_str());
-        fprintf(stderr, "direct-call IC: %s\n", item.m_labelForDirectCallIc.c_str());
-        fprintf(stderr, "closure-call IC: %s\n", item.m_labelForClosureCallIc.c_str());
-        fprintf(stderr, "IC-miss: %s\n", item.m_labelForIcMissLogic.c_str());
-        fprintf(stderr, "unique ord = %llu\n", static_cast<unsigned long long>(item.m_uniqueOrd));
-    }
-
-    std::vector<std::string> icLabels;
-    for (auto& item : res)
-    {
-        icLabels.push_back(item.m_labelForDirectCallIc);
-        icLabels.push_back(item.m_labelForClosureCallIc);
-    }
-
-    auto extractionRes = RunStencilInlineCacheLogicExtractionPass(file,
-                                                                  mainJic.GetModule()->getFunction(mainJic.GetResultFunctionName()),
-                                                                  icLabels);
-    fprintf(stderr, "post-processing file:\n\n%s\n", file->ToStringAndRemoveDebugInfo().c_str());
-
-    for (auto& item : extractionRes)
-    {
-        std::unique_ptr<X64AsmFile> fileClone = file->Clone();
-        fileClone->m_blocks.clear();
-        for (X64AsmBlock* block : item.m_blocks)
-        {
-            fileClone->m_blocks.push_back(block->Clone(fileClone.get()));
-        }
-
-        fileClone->m_slowpath.clear();
-        fprintf(stderr, "post-processing IC piece:\n\n%s\n", fileClone->ToStringAndRemoveDebugInfo().c_str());
-    }
+    fprintf(stderr, "%s\n", mainJic.GetStencilPostTransformAsmFile().c_str());
 }
 #endif
 
@@ -203,7 +165,7 @@ TEST(StencilCreator, DataSectionHandling_1)
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    DeegenStencil ds = DeegenStencil::Parse(ctx, ReadFileContentAsString("test_inputs/test_stencil_parser_1.o"));
+    DeegenStencil ds = DeegenStencil::ParseMainLogic(ctx, ReadFileContentAsString("test_inputs/test_stencil_parser_1.o"));
 
     ReleaseAssert(ds.m_privateDataObject.m_bytes.size() == 64);
     ReleaseAssert(ds.m_privateDataObject.m_relocations.size() == 8);

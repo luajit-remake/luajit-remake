@@ -31,7 +31,7 @@ static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint6
         dst += 2;
         i += 2;
     }
-    while (i < num);
+    while (i < num);    // TODO: investigate if we should add a unlikely here
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("CopyVariadicResultsToArgumentsForwardMayOvercopy", DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy)

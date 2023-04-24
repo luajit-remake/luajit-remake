@@ -18,8 +18,8 @@ namespace dast {
 // The pass has two phases: one phase is executed at LLVM IR level (IR -> IR transformation), and one phase
 // is executed at ASM (.s file) level (ASM -> ASM transformation).
 //
-// Note that this pass must be executed right before the LLVM module is compiled to assembly.
-// After this pass, no further transformation to the LLVM IR is allowed.
+// Note that the IR-level rewrite pass must be executed right before the LLVM module is compiled to assembly.
+// After it, no further transformation to the LLVM IR is allowed.
 //
 class DeegenStencilLoweringPass
 {
@@ -33,7 +33,7 @@ public:
 
     // Run the ASM phase (ASM -> ASM transformation), returns the transformed ASM file
     //
-    std::string WARN_UNUSED RunAsmRewritePhase(const std::string& asmFile);
+    void RunAsmRewritePhase(const std::string& asmFile);
 
     InjectedMagicDiLocationInfo m_diInfo;
     std::vector<llvm::BasicBlock*> m_coldBlocks;
@@ -43,6 +43,26 @@ public:
     // The rawly-parsed input ASM file without any transformation (except the parser-applied ones) applied yet, for audit and debug purpose only
     //
     std::unique_ptr<X64AsmFile> m_rawInputFileForAudit;
+
+    struct CallIcAsmInfo
+    {
+        // Assembly files for the extracted DirectCall and ClosureCall IC logic
+        //
+        std::string m_directCallLogicAsm;
+        std::string m_closureCallLogicAsm;
+        // The label for the self-modifying code
+        // The length of the region is measured in the primary assembly file
+        //
+        std::string m_smcBlockLabel;
+        // The label for the IC miss slow path
+        // Its offset from slow path start is measured in the primary assembly file
+        //
+        std::string m_ccIcMissPathLabel;
+        std::string m_dcIcMissPathLabel;
+    };
+
+    std::string m_primaryPostTransformAsmFile;
+    std::map<uint64_t /*callIcUniqId*/, CallIcAsmInfo> m_callIcLogicAsmFiles;
 };
 
 }   // namespace dast

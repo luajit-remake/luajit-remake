@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "deegen_parse_asm_text.h"
+#include "deegen_recover_asm_cfg.h"
 
 namespace dast {
 
@@ -20,10 +21,11 @@ struct DeegenStencilExtractedICAsm
 // Analyze and extract inline caching logic from the input file.
 // Each piece of IC logic is identified by its entry point label, as specified in 'icLabels'.
 //
-// The extracted IC logic is removed from the input file and returned as a vector, in the same order as 'icLabels'.
+// The extracted IC logic is returned as a vector, in the same order as 'icLabels'.
+// The input file is modified so that all the blocks that belongs to (any) IC are removed from m_blocks and moved to m_icPath
 //
 std::vector<DeegenStencilExtractedICAsm> WARN_UNUSED RunStencilInlineCacheLogicExtractionPass(X64AsmFile* file /*inout*/,
-                                                                                              llvm::Function* func,
+                                                                                              DeegenAsmCfg cfg,
                                                                                               std::vector<std::string> icLabels);
 
 }   // namespace dast

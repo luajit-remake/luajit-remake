@@ -260,7 +260,8 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     std::string asmFile = CompileLLVMModuleToAssemblyFile(srcModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
 
-    asmFile = slPass.RunAsmRewritePhase(asmFile);
+    slPass.RunAsmRewritePhase(asmFile);
+    asmFile = slPass.m_primaryPostTransformAsmFile;
 
     // Save contents for audit
     //
@@ -281,7 +282,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     }
 
     std::string objectFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");
-    DeegenStencil stencil = DeegenStencil::Parse(ctx, objectFile);
+    DeegenStencil stencil = DeegenStencil::ParseMainLogic(ctx, objectFile);
 
     DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(true /*mayAttemptToEliminateJmpToFallthrough*/,
                                                                      0 /*numBytecodeOperands*/,
@@ -317,18 +318,20 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     dataSecPatchFn->setLinkage(GlobalValue::InternalLinkage);
     dataSecPatchFn->addFnAttr(Attribute::AlwaysInline);
 
+    constexpr size_t x_numArgsBeforeBytecodeOperands = 6;
+
     // Currently patch functions takes 4 fixed operands even if they don't exists (placeholder ordinal 100, 101, 103, 104)
     //
-    constexpr size_t x_numExpectedArgsInPatchFn = 4 + 4;
+    constexpr size_t x_numExpectedArgsInPatchFn = x_numArgsBeforeBytecodeOperands + 4;
     auto validatePatchFnProto = [&](Function* f)
     {
         ReleaseAssert(f->arg_size() == x_numExpectedArgsInPatchFn);
         // Our stencil doesn't have any runtime constants to provide, so no patch values should exist.
         // The only usable inputs are the first 4 arguments (dstAddr, fastPathAddr, slowPathAddr, dataSecAddr)
         //
-        for (size_t i = 4; i < fastPathPatchFn->arg_size(); i++)
+        for (size_t i = x_numArgsBeforeBytecodeOperands; i < fastPathPatchFn->arg_size(); i++)
         {
-            if (i == 5 /*ordinal 101*/) { continue; }
+            if (i == x_numArgsBeforeBytecodeOperands + 1 /*ordinal 101*/) { continue; }
             ReleaseAssert(fastPathPatchFn->getArg(static_cast<uint32_t>(i))->use_empty());
         }
     };
@@ -400,6 +403,8 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
         args.push_back(dstAddr);
         args.push_back(fastPathAddrI64);
         args.push_back(slowPathAddrI64);
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // icCodeAddr
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // icDataAddr
         args.push_back(dataSecAddrI64);
         args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 100
         args.push_back(fastPathEndI64);                                 // ordinal 101

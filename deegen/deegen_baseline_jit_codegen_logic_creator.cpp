@@ -554,12 +554,12 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     }
 
     // Assert that there is no invalid use: all the operands that does not exist should never be actually used by any of the patch functions
-    // Note that the patch functions take 4 fixed arguments (dstAddr, fast/slow/data addr) before the bytecode operand value list
+    // Note that the patch functions take 6 fixed arguments (dstAddr, fast/slow/ic/icData/data addr) before the bytecode operand value list
     //
     {
         auto validate = [&](Function* func)
         {
-            constexpr size_t x_argPfxCnt = 4;
+            constexpr size_t x_argPfxCnt = 6;
             ReleaseAssert(func->arg_size() == x_argPfxCnt + bytecodeValList.size());
             for (size_t i = 0; i < bytecodeValList.size(); i++)
             {
@@ -571,6 +571,11 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
                 ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
                 ReleaseAssert(arg->user_empty());
             }
+
+            // For the main codegen function, the 'icCodeAddr' and 'icDataAddr' arg is undefined and should never be used
+            //
+            ReleaseAssert(func->getArg(3)->user_empty());
+            ReleaseAssert(func->getArg(4)->user_empty());
         };
 
         for (StencilCgInfo& cgi : stencilCgInfos)
@@ -674,6 +679,8 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             args.push_back(dstAddr);
             args.push_back(fastPathAddrI64);
             args.push_back(slowPathAddrI64);
+            args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // icCodeAddr
+            args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // icDataSecAddr
             args.push_back(dataSecAddrI64);
             for (Value* val : bytecodeValList)
             {

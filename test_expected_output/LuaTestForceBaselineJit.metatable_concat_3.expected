@@ -1,0 +1,26 @@
+enter concat b	b	234
+x789345.6123qwerty
+
+enter concat b	b	234x
+789345.6123qwerty
+
+enter concat b	b	234x789345.6
+123qwerty
+
+enter concat b	b	234
+enter concat b	b	345.6123qwerty
+xqwerty
+
+enter concat b	b	a	234
+x789345.6123qwerty
+
+enter concat b	b	a	234x
+789345.6123qwerty
+
+enter concat b	b	a	234x789345.6
+123qwerty
+
+enter concat b	b	a	234
+enter concat b	b	a	345.6123qwerty
+xqwerty
+

@@ -39,7 +39,9 @@ struct MagicAsm
     static bool WARN_UNUSED IsMagic(llvm::Instruction* inst, MagicAsmKind& magicKind /*out*/, std::string& magicStr /*out*/)
     {
         using namespace llvm;
-        CallInst* ci = dyn_cast<CallInst>(inst);
+        // Important to use CallBase, not CallInst, since it may also be a CallBrInst
+        //
+        CallBase* ci = dyn_cast<CallBase>(inst);
         if (ci == nullptr)
         {
             return false;

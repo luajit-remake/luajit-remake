@@ -101,6 +101,16 @@ struct RelocationRecord
         // The start address of the slow path logic for this bytecode
         //
         SlowPathAddr,
+        // The start address of the current piece of IC logic
+        // Only possible to show up if this is an object file for IC extraction
+        //
+        ICPathAddr,
+        // Only possible to show up if this is an object file for IC extraction
+        // For IC logic, 'PrivateDataAddr' refers to its own private data section.
+        // However, it may also need to know the main logic's private data section.
+        // This SymKind represents this case.
+        //
+        MainLogicPrivateDataAddr,
         // The start address of the private data object for this stencil
         //
         PrivateDataAddr,
@@ -199,13 +209,27 @@ struct DeegenStencilCodegenResult
 
 struct DeegenStencil
 {
+    // Note:
+    // For isExtractIcLogic == true:
+    //     m_icPathCode / m_icPathRelos will be populated to store the result
+    //     m_fastPathCode / m_slowPathCode will be populated for assertion purpose, but m_fastPathRelos / m_slowPathRelos are not populated
+    //
+    // For isExtractIcLogic == false:
+    //     m_fastPathCode / m_fastPathRelos / m_slowPathCode / m_slowPathRelos will be populated to store the result
+    //
+    //
     std::vector<StencilSharedConstantDataObject*> m_sharedDataObjs;
     std::vector<uint8_t> m_fastPathCode;
     std::vector<RelocationRecord> m_fastPathRelos;
     std::vector<uint8_t> m_slowPathCode;
     std::vector<RelocationRecord> m_slowPathRelos;
+    std::vector<uint8_t> m_icPathCode;
+    std::vector<RelocationRecord> m_icPathRelos;
     StencilPrivateDataObject m_privateDataObject;
+    using SectionToPdoOffsetMapTy = std::unordered_map<std::string /*secName*/, uint64_t /*offset*/>;
+    SectionToPdoOffsetMapTy m_sectionToPdoOffsetMap;
     llvm::Triple m_triple;
+    bool m_isForIcLogicExtraction;
 
     // Prints a C++ file that defines 3 functions 'deegen_do_codegen_[fastpath/slowpath/datasec]' with the following parameters
     //     uint8_t* destAddr,
@@ -223,7 +247,21 @@ struct DeegenStencil
         size_t numBytecodeOperands,
         const std::vector<CPRuntimeConstantNodeBase*>& placeholders);
 
-    static DeegenStencil WARN_UNUSED Parse(llvm::LLVMContext& ctx, const std::string& objFile);
+    static DeegenStencil WARN_UNUSED ParseMainLogic(llvm::LLVMContext& ctx, const std::string& objFile)
+    {
+        return ParseImpl(ctx, objFile, false /*isExtractIcLogic*/, {} /*mainLogicPdoLayout*/);
+    }
+
+    static DeegenStencil WARN_UNUSED ParseIcLogic(llvm::LLVMContext& ctx, const std::string& objFile, const SectionToPdoOffsetMapTy& mainLogicPdoOffsetMap)
+    {
+        return ParseImpl(ctx, objFile, true /*isExtractIcLogic*/, mainLogicPdoOffsetMap);
+    }
+
+private:
+    static DeegenStencil WARN_UNUSED ParseImpl(llvm::LLVMContext& ctx,
+                                               const std::string& objFile,
+                                               bool isExtractIcLogic,
+                                               SectionToPdoOffsetMapTy mainLogicPdoLayout);
 };
 
 // Dump stencil machine code to human-readable diassembly for audit purpose

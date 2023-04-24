@@ -1,13 +1,18 @@
 ﻿#include "deegen_recover_asm_cfg.h"
+#include "deegen_magic_asm_helper.h"
 
 namespace dast {
 
-DeegenAsmCfgAnalyzer WARN_UNUSED DeegenAsmCfgAnalyzer::DoAnalysis(X64AsmFile* file, llvm::Function* func, bool addHumanDebugComment)
+void DeegenAsmCfg::AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* func, bool addHumanDebugComment)
 {
     using namespace llvm;
 
-    ReleaseAssert(file->m_slowpath.empty());
     file->Validate();
+
+    ReleaseAssert(file->m_slowpath.empty());
+    ReleaseAssert(file->m_icPath.empty());
+    ReleaseAssert(!file->m_hasAnalyzedIndirectBranchTargets);
+    file->m_hasAnalyzedIndirectBranchTargets = true;
 
     std::unordered_set<BasicBlock*> allLLVMBBs;
     for (BasicBlock& bb : *func)
@@ -486,7 +491,7 @@ DeegenAsmCfgAnalyzer WARN_UNUSED DeegenAsmCfgAnalyzer::DoAnalysis(X64AsmFile* fi
     }
     ReleaseAssert(indirectBrTargetLabels.size() == indirectBrTargetBB.size());
 
-    // Write comments for debug
+    // Update m_indirectBranchTargets, and write comments for debug if requested
     //
     for (X64AsmBlock* block : file->m_blocks)
     {
@@ -495,10 +500,20 @@ DeegenAsmCfgAnalyzer WARN_UNUSED DeegenAsmCfgAnalyzer::DoAnalysis(X64AsmFile* fi
         {
             X64AsmLine& line = block->m_lines.back();
             ReleaseAssert(line.IsIndirectJumpInst());
+
+            // Update m_indirectBranchTargets
+            //
+            ReleaseAssert(block->m_indirectBranchTargets.empty());
+            block->m_indirectBranchTargets = indirectBrTargetLabels[label];
+
+            // Write comments
+            //
             std::string humanDebugText = " # [CFG]: dest =";
             bool isFirst = true;
             for (const std::string& dstLabel : indirectBrTargetLabels[label])
             {
+                ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(dstLabel));
+                ReleaseAssert(file->m_labelNormalizer.GetNormalizedLabel(dstLabel) == dstLabel);
                 if (!isFirst) { humanDebugText += ","; }
                 isFirst = false;
                 humanDebugText += " " + dstLabel;
@@ -510,6 +525,12 @@ DeegenAsmCfgAnalyzer WARN_UNUSED DeegenAsmCfgAnalyzer::DoAnalysis(X64AsmFile* fi
             }
         }
     }
+}
+
+DeegenAsmCfg WARN_UNUSED DeegenAsmCfg::GetCFG(X64AsmFile* file)
+{
+    file->Validate();
+    ReleaseAssert(file->m_hasAnalyzedIndirectBranchTargets);
 
     // Build the final CFG graph
     //
@@ -521,28 +542,121 @@ DeegenAsmCfgAnalyzer WARN_UNUSED DeegenAsmCfgAnalyzer::DoAnalysis(X64AsmFile* fi
         cfg[block->m_normalizedLabelName] = {};
     }
 
-    for (auto& constraint : labelLabelConstraintList)
+    for (X64AsmBlock* block : file->m_blocks)
     {
-        std::string fromLabel = constraint.first;
-        std::string toLabel = constraint.second;
-        ReleaseAssert(cfg.count(fromLabel));
-        cfg[fromLabel].insert(toLabel);
-    }
-
-    for (auto& indirectJmp : indirectBrTargetLabels)
-    {
-        std::string fromLabel = indirectJmp.first;
-        ReleaseAssert(cfg.count(fromLabel));
-        for (const std::string& toLabel : indirectJmp.second)
+        std::string srcLabel = block->m_normalizedLabelName;
+        ReleaseAssert(cfg.count(srcLabel));
+        for (X64AsmLine& line : block->m_lines)
         {
-            cfg[fromLabel].insert(toLabel);
+            if (line.IsDirectUnconditionalJumpInst() || line.IsConditionalJumpInst())
+            {
+                ReleaseAssert(line.NumWords() == 2);
+                std::string rawLabel = line.GetWord(1);
+                if (file->m_labelNormalizer.QueryLabelExists(rawLabel))
+                {
+                    std::string dstLabel = file->m_labelNormalizer.GetNormalizedLabel(rawLabel);
+                    ReleaseAssert(cfg.count(dstLabel));
+                    cfg[srcLabel].insert(dstLabel);
+                }
+            }
+        }
+
+        if (block->m_lines.back().IsIndirectJumpInst())
+        {
+            for (const std::string& dstLabel : block->m_indirectBranchTargets)
+            {
+                ReleaseAssert(cfg.count(dstLabel));
+                cfg[srcLabel].insert(dstLabel);
+            }
         }
     }
 
-    file->Validate();
-
-    DeegenAsmCfgAnalyzer result;
+    DeegenAsmCfg result;
     result.m_cfg = std::move(cfg);
+    return result;
+}
+
+std::vector<std::string> WARN_UNUSED DeegenAsmCfg::GetAllBlocksDominatedBy(const std::vector<std::string>& dominatorBlockList, const std::string& entryBlock)
+{
+    ReleaseAssert(m_cfg.count(entryBlock));
+
+    std::unordered_set<std::string> dominatorBlockSet;
+    for (const std::string& label : dominatorBlockList)
+    {
+        ReleaseAssert(m_cfg.count(label));
+        dominatorBlockSet.insert(label);
+    }
+
+    std::unordered_set<std::string> reachableFromEntryWithoutDominator;
+    {
+        std::function<void(const std::string&)> dfs = [&](const std::string& label)
+        {
+            ReleaseAssert(m_cfg.count(label));
+            if (dominatorBlockSet.count(label))
+            {
+                return;
+            }
+            if (reachableFromEntryWithoutDominator.count(label))
+            {
+                return;
+            }
+            reachableFromEntryWithoutDominator.insert(label);
+
+            for (const std::string& succ : SuccOf(label))
+            {
+                dfs(succ);
+            }
+        };
+        dfs(entryBlock);
+    }
+    for (const std::string& label : dominatorBlockList)
+    {
+        ReleaseAssert(!reachableFromEntryWithoutDominator.count(label));
+    }
+
+    std::unordered_set<std::string> reachableFromEntry;
+    {
+        std::function<void(const std::string&)> dfs = [&](const std::string& label)
+        {
+            ReleaseAssert(m_cfg.count(label));
+            if (reachableFromEntry.count(label))
+            {
+                return;
+            }
+            reachableFromEntry.insert(label);
+
+            for (const std::string& succ : SuccOf(label))
+            {
+                dfs(succ);
+            }
+        };
+        dfs(entryBlock);
+    }
+
+    for (const std::string& label : dominatorBlockList)
+    {
+        if (!reachableFromEntry.count(label))
+        {
+            fprintf(stderr, "Dominator block '%s' is not reachable from entry block '%s' in CFG!\n", label.c_str(), entryBlock.c_str());
+            abort();
+        }
+    }
+
+    for (const std::string& label : reachableFromEntryWithoutDominator)
+    {
+        ReleaseAssert(reachableFromEntry.count(label));
+    }
+
+    std::vector<std::string> result;
+    for (const std::string& label : reachableFromEntry)
+    {
+        if (!reachableFromEntryWithoutDominator.count(label))
+        {
+            result.push_back(label);
+        }
+    }
+
+    ReleaseAssert(result.size() + reachableFromEntryWithoutDominator.size() == reachableFromEntry.size());
     return result;
 }
 

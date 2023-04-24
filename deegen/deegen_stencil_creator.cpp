@@ -197,7 +197,10 @@ static const ElfSymbol* WARN_UNUSED GetSymbolFromSymbolRef(ELFObjectFileBase* ob
     return *sym;
 }
 
-DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std::string& objFile)
+DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
+                                                   const std::string& objFile,
+                                                   bool isExtractIcLogic,
+                                                   SectionToPdoOffsetMapTy mainLogicPdoLayout)
 {
     ELFObjectFileBase* obj = LoadElfObjectFile(ctx, objFile);
     std::map<SectionRef, std::vector<RelocationRef>> relocMap = GetRelocationMap(*obj);
@@ -206,6 +209,7 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
 
     SectionRef textSection;
     SectionRef textSlowSection;
+    SectionRef textIcSection;
     for (SectionRef sec : obj->sections())
     {
         if (sec.isText())
@@ -218,17 +222,26 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
                 ReleaseAssert(textSection.getObject() == nullptr);
                 textSection = sec;
             }
-            else
+            else if (secName == ".text.deegen_slow")
             {
-                ReleaseAssert(secName == ".text.deegen_slow");
                 ReleaseAssert(textSlowSection.getObject() == nullptr);
                 textSlowSection = sec;
+            }
+            else
+            {
+                ReleaseAssert(secName == ".text.deegen_ic_logic");
+                ReleaseAssert(textIcSection.getObject() == nullptr);
+                textIcSection = sec;
             }
         }
     }
     // Note that '.text.deegen_slow' may not exist if the function does not have slow path
     //
     ReleaseAssert(textSection.getObject() == obj);
+
+    // '.text.deegen_ic_logic' must exist if the object file is for IC extraction
+    //
+    ReleaseAssertImp(isExtractIcLogic, textIcSection.getObject() == obj);
 
     std::unordered_map<std::string, SectionRef> sectionNameToSectionRefMap;
     for (SectionRef sec : obj->sections())
@@ -293,16 +306,33 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
         symbolsInSectionMap[sec].push_back(symName);
     }
 
+    // For normal extract, we want to extract the fast and slow text section; for extractIcLogic, we want to extract the IC text section
+    //
+    std::vector<SectionRef> textSectionExtractTargets;
+    if (!isExtractIcLogic)
+    {
+        textSectionExtractTargets.push_back(textSection);
+        if (textSlowSection.getObject() != nullptr)
+        {
+            textSectionExtractTargets.push_back(textSlowSection);
+        }
+    }
+    else
+    {
+        textSectionExtractTargets.push_back(textIcSection);
+    }
+
     // The set of sections that must be put in private data section because it directly or transitively
-    // contains relocation symbols in the text section
+    // contains relocation symbols in the text section we want to extract
+    //
     // Note that we currently only analyze at section level (instead of symbol level) for simplicity but
     // it should work equally well for the object files that we are targeting
     //
     std::set<SectionRef> privateDataSections;
-    privateDataSections.insert(textSection);
-    if (textSlowSection.getObject() != nullptr)
+    for (auto& section : textSectionExtractTargets)
     {
-        privateDataSections.insert(textSlowSection);
+        ReleaseAssert(!privateDataSections.count(section));
+        privateDataSections.insert(section);
     }
 
     // For simplicity, just O(n^2) naively propagate to fixpoint..
@@ -395,6 +425,13 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
     bool hasMergedPrivateDataSections = false;
     std::map<SectionRef, uint64_t /*offset*/> mergedPrivateDataSectionIndex;
 
+    auto getSectionName = [&](SectionRef sec) WARN_UNUSED -> std::string
+    {
+        Expected<StringRef> expectedSecName = sec.getName();
+        ReleaseAssert(expectedSecName);
+        return expectedSecName->str();
+    };
+
     // Note that this function does not populate 'm_sharedDataObject' field
     // We fixup this field in the end to avoid dependency loop issues
     //
@@ -438,8 +475,28 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
                 constexpr const char* x_placeholderPrefix = "__deegen_cp_placeholder_";
                 if (name.starts_with(x_placeholderPrefix))
                 {
-                    res.m_symKind = RelocationRecord::SymKind::StencilHole;
-                    res.m_stencilHoleOrd = std::stoul(name.substr(strlen(x_placeholderPrefix)));
+                    int placeholderOrd = StoiOrFail(name.substr(strlen(x_placeholderPrefix)));
+                    ReleaseAssert(placeholderOrd >= 0);
+                    // There are two specially reserved placeholderOrd
+                    // placeholderOrd 10004 is used to represent the address of the slow path of this stencil
+                    // placeholderOrd 10005 is used to represent the address of the data section of this stencil
+                    // They should only be used by the main function, never the IC logic
+                    //
+                    if (placeholderOrd == 10004 /*slowPathAddr*/)
+                    {
+                        ReleaseAssert(!isExtractIcLogic);
+                        res.m_symKind = RelocationRecord::SymKind::SlowPathAddr;
+                    }
+                    else if (placeholderOrd == 10005 /*dataSecAddr*/)
+                    {
+                        ReleaseAssert(!isExtractIcLogic);
+                        res.m_symKind = RelocationRecord::SymKind::PrivateDataAddr;
+                    }
+                    else
+                    {
+                        res.m_symKind = RelocationRecord::SymKind::StencilHole;
+                        res.m_stencilHoleOrd = static_cast<size_t>(placeholderOrd);
+                    }
                 }
                 else
                 {
@@ -463,6 +520,22 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
             return res;
         }
 
+        if (sec == textIcSection)
+        {
+            if (!isExtractIcLogic)
+            {
+                // When we process the main logic, we should never see a reference to IC section code
+                // However, LLVM currently does not put individual jump tables into different sections,
+                // and we are doing the extraction on a per-section (instead of per-symbol) basis,
+                // so we might see false positive here.
+                // This is fixable but requires some work, so simply fail here for simplicity.
+                //
+                ReleaseAssert(false && "see comments above");
+            }
+            res.m_symKind = RelocationRecord::SymKind::ICPathAddr;
+            return res;
+        }
+
         res.m_sectionRef = sec;
         if (privateDataSections.count(sec))
         {
@@ -475,7 +548,17 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
         }
         else
         {
-            res.m_symKind = RelocationRecord::SymKind::SharedConstantDataObject;
+            if (isExtractIcLogic && mainLogicPdoLayout.count(getSectionName(sec)))
+            {
+                // This is a section in the main logic's private data section
+                //
+                res.m_symKind = RelocationRecord::SymKind::MainLogicPrivateDataAddr;
+                res.m_addend += static_cast<int64_t>(mainLogicPdoLayout[getSectionName(sec)]);
+            }
+            else
+            {
+                res.m_symKind = RelocationRecord::SymKind::SharedConstantDataObject;
+            }
         }
         return res;
     };
@@ -485,7 +568,13 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
 
     std::function<void(SectionRef)> handleDataSection = [&](SectionRef sec) -> void
     {
-        if (sec == textSection || neededSharedData.count(sec) || neededPrivateData.count(sec))
+        ReleaseAssert(sec != textSection && sec != textSlowSection && sec != textIcSection);
+        if (neededSharedData.count(sec) || neededPrivateData.count(sec))
+        {
+            return;
+        }
+
+        if (isExtractIcLogic && mainLogicPdoLayout.count(getSectionName(sec)))
         {
             return;
         }
@@ -584,20 +673,11 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
         }
     };
 
-    // Collect and process all the data sections needed by the main function
+    // Collect and process all the data sections needed by the text sections we want to extract
     //
-    for (RelocationRef& rref : relocMap[textSection])
+    for (SectionRef& sec : textSectionExtractTargets)
     {
-        RelocationRecord rr = processRelocation(rref);
-        if (rr.m_symKind == RelocationRecord::SymKind::SharedConstantDataObject || rr.m_symKind == RelocationRecord::SymKind::PrivateDataAddr)
-        {
-            handleDataSection(rr.m_sectionRef);
-        }
-    }
-
-    if (textSlowSection.getObject() != nullptr)
-    {
-        for (RelocationRef& rref : relocMap[textSlowSection])
+        for (RelocationRef& rref : relocMap[sec])
         {
             RelocationRecord rr = processRelocation(rref);
             if (rr.m_symKind == RelocationRecord::SymKind::SharedConstantDataObject || rr.m_symKind == RelocationRecord::SymKind::PrivateDataAddr)
@@ -706,6 +786,17 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
     hasMergedPrivateDataSections = true;
 
     DeegenStencil ds;
+
+    ds.m_sectionToPdoOffsetMap.clear();
+    for (auto& it : mergedPrivateDataSectionIndex)
+    {
+        SectionRef sec = it.first;
+        uint64_t offset = it.second;
+        std::string secName = getSectionName(sec);
+        ReleaseAssert(!ds.m_sectionToPdoOffsetMap.count(secName));
+        ds.m_sectionToPdoOffsetMap[secName] = offset;
+    }
+
     for (auto& it : neededSharedData)
     {
         StencilSharedConstantDataObject* cdo = it.second;
@@ -723,13 +814,20 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
 
     // Process the text sections (fast path and slow path)
     //
+    auto getTextSectionPreFixupContents = [&](SectionRef sec) WARN_UNUSED -> std::vector<uint8_t>
+    {
+        ReleaseAssert(sec.getContents());
+        StringRef contents = *sec.getContents();
+        std::vector<uint8_t> data;
+        data.resize(contents.size());
+        memcpy(data.data(), contents.data(), contents.size());
+        return data;
+    };
+
     auto processTextSection = [&](SectionRef sec, std::vector<uint8_t>& data /*out*/, std::vector<RelocationRecord>& relos /*out*/)
     {
         ReleaseAssert(sec.getObject() == obj);
-        ReleaseAssert(sec.getContents());
-        StringRef contents = *sec.getContents();
-        data.resize(contents.size());
-        memcpy(data.data(), contents.data(), contents.size());
+        data = getTextSectionPreFixupContents(sec);
         relos.clear();
         for (RelocationRef rref : relocMap[sec])
         {
@@ -743,10 +841,25 @@ DeegenStencil WARN_UNUSED DeegenStencil::Parse(llvm::LLVMContext& ctx, const std
         }
     };
 
-    processTextSection(textSection, ds.m_fastPathCode /*out*/, ds.m_fastPathRelos /*out*/);
-    if (textSlowSection.getObject() != nullptr)
+    ds.m_isForIcLogicExtraction = isExtractIcLogic;
+    if (!isExtractIcLogic)
     {
-        processTextSection(textSlowSection, ds.m_slowPathCode /*out*/, ds.m_slowPathRelos /*out*/);
+        processTextSection(textSection, ds.m_fastPathCode /*out*/, ds.m_fastPathRelos /*out*/);
+        if (textSlowSection.getObject() != nullptr)
+        {
+            processTextSection(textSlowSection, ds.m_slowPathCode /*out*/, ds.m_slowPathRelos /*out*/);
+        }
+    }
+    else
+    {
+        // Still populate m_fastPathCode and m_slowPathCode for assertion purpose
+        //
+        ds.m_fastPathCode = getTextSectionPreFixupContents(textSection);
+        if (textSlowSection.getObject() != nullptr)
+        {
+            ds.m_slowPathCode = getTextSectionPreFixupContents(textSlowSection);
+        }
+        processTextSection(textIcSection, ds.m_icPathCode /*out*/, ds.m_icPathRelos /*out*/);
     }
 
     return ds;
@@ -799,7 +912,8 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
     const std::vector<RelocationRecord>& relocs,
     const std::string& placeholderComputations,
     size_t placeholderOrdForFallthroughIfFastPath,  // -1 if not fast path or not exist
-    size_t placeholderOrdForCondBranch)             // -1 if not exist
+    size_t placeholderOrdForCondBranch,             // -1 if not exist
+    bool isForIc)
 {
     PrintStencilCodegenLogicResult res;
 
@@ -933,6 +1047,8 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
     fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_dstAddr), RestrictPtr<uint8_t>>);\n");
     fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_fastPathAddr), uint64_t>);\n");
     fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_slowPathAddr), uint64_t>);\n");
+    fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_icPathAddr), uint64_t>);\n");
+    fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_icDataSecAddr), uint64_t>);\n");
     fprintf(fp, "static_assert(std::is_same_v<decltype(deegen_dataSecAddr), uint64_t>);\n");
 
     /*
@@ -987,9 +1103,32 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
             fprintf(fp, "uint64_t deegen_patch_symval = deegen_slowPathAddr;\n");
             break;
         }
+        case RelocationRecord::SymKind::ICPathAddr:
+        {
+            ReleaseAssert(isForIc);
+            fprintf(fp, "uint64_t deegen_patch_symval = deegen_icPathAddr;\n");
+            break;
+        }
+        case RelocationRecord::SymKind::MainLogicPrivateDataAddr:
+        {
+            ReleaseAssert(isForIc);
+            fprintf(fp, "uint64_t deegen_patch_symval = deegen_dataSecAddr;\n");
+            break;
+        }
         case RelocationRecord::SymKind::PrivateDataAddr:
         {
-            fprintf(fp, "uint64_t deegen_patch_symval = deegen_dataSecAddr;\n");
+            // PrivateDataAddr always refer to the private data section of this stencil itself
+            // So if this stencil is IC logic, the PrivateDataAddr is 'icDataSecAddr'.
+            // But if this stenil is main logic, the PrivateDataAddr is 'dataSecAddr'.
+            //
+            if (isForIc)
+            {
+                fprintf(fp, "uint64_t deegen_patch_symval = deegen_icDataSecAddr;\n");
+            }
+            else
+            {
+                fprintf(fp, "uint64_t deegen_patch_symval = deegen_dataSecAddr;\n");
+            }
             break;
         }
         case RelocationRecord::SymKind::SharedConstantDataObject:
@@ -1175,6 +1314,8 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         fprintf(fp, "    [[maybe_unused]] RestrictPtr<uint8_t> deegen_dstAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_fastPathAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_slowPathAddr,\n");
+        fprintf(fp, "    [[maybe_unused]] uint64_t deegen_icPathAddr,\n");
+        fprintf(fp, "    [[maybe_unused]] uint64_t deegen_icDataSecAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_dataSecAddr,\n");
         // This is hacky.. The conditional branch is fixed up in the end because we do not have a valid value until
         // after everything is generated. To ensure this, we do not provide deegen_rc_input_102 (the conditional
@@ -1245,7 +1386,8 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_fastPathRelos,
         placeholderComputations,
         fallthroughPlaceholderOrd,
-        condBrPlaceholderOrd);
+        condBrPlaceholderOrd,
+        false /*isForIc*/);
 
     fprintf(fp, "%s\n", fastPathInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1256,7 +1398,8 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_slowPathRelos,
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
-        condBrPlaceholderOrd);
+        condBrPlaceholderOrd,
+        false /*isForIc*/);
 
     fprintf(fp, "%s\n", slowPathInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1267,7 +1410,8 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         m_privateDataObject.m_relocations,
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
-        condBrPlaceholderOrd);
+        condBrPlaceholderOrd,
+        false /*isForIc*/);
 
     fprintf(fp, "%s\n", dataSecInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");

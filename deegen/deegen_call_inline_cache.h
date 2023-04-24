@@ -108,10 +108,9 @@ struct DeegenCallIcLogicCreator
 
     struct BaselineJitAsmLoweringResult
     {
-        // The label for the ASM block that contains the patchable jump
-        // The block must contain exactly 1 instruction: jmp ic_miss_slowpath
+        // The label for the SMC region
         //
-        std::string m_labelForPatchableJump;
+        std::string m_labelForSMCRegion;
         // The entry label for the direct call IC hit logic
         //
         std::string m_labelForDirectCallIc;
@@ -121,10 +120,13 @@ struct DeegenCallIcLogicCreator
         // Label for the slow path
         // The patchable jump always jumps to here initially
         //
-        std::string m_labelForIcMissLogic;
+        std::string m_labelForCcIcMissLogic;
+        std::string m_labelForDcIcMissLogic;
         // The unique ordinal of this call IC, always corresponds to the ordinal passed to EmitForBaselineJIT()
         //
         uint64_t m_uniqueOrd;
+
+        void FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file);
     };
 
     // See comments in CPP file

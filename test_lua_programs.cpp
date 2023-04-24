@@ -1272,6 +1272,16 @@ TEST(LuaTestForceBaselineJit, metatable_concat_2)
     RunSimpleLuaTest("luatests/metatable_concat_2.lua", LuaTestOption::ForceBaselineJit);
 }
 
+TEST(LuaTest, metatable_concat_3)
+{
+    RunSimpleLuaTest("luatests/metatable_concat_3.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, metatable_concat_3)
+{
+    RunSimpleLuaTest("luatests/metatable_concat_3.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, metatable_eq_1)
 {
     RunSimpleLuaTest("luatests/metatable_eq_1.lua", LuaTestOption::ForceInterpreter);

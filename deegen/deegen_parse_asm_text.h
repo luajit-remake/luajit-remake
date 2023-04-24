@@ -278,6 +278,10 @@ struct X64AsmBlock
 
     X64AsmBlock* WARN_UNUSED Clone(X64AsmFile* owner);
 
+    // Create a block that contains only one instruction: a jmp to 'jmpDst'
+    //
+    static X64AsmBlock* WARN_UNUSED Create(X64AsmFile* owner, X64AsmBlock* jmpDst);
+
     // Reorder blocks to maximize fallthroughs.
     //
     static std::vector<X64AsmBlock*> WARN_UNUSED ReorderBlocksToMaximizeFallthroughs(const std::vector<X64AsmBlock*>& input,
@@ -299,10 +303,15 @@ struct X64AsmBlock
     //
     bool m_endsWithJmpToLocalLabel;
     std::string m_terminalJmpTargetLabel;
+    std::vector<std::string> m_indirectBranchTargets;
 
     // The lines of ASM instructions. Each line must be IsInstruction()
     //
     std::vector<X64AsmLine> m_lines;
+
+    // Only one valid use case: used to append a label after the end of the block, so we can compute the length of this block
+    //
+    X64AsmLine m_trailingLabelLine;
 };
 
 // Inject magic DILocation metadata, so we can reliably recover the CFG from the assembly after compilation
@@ -354,6 +363,7 @@ struct X64AsmFile
     // Originally empty, may be set up by user
     //
     std::vector<X64AsmBlock*> m_slowpath;
+    std::vector<X64AsmBlock*> m_icPath;
 
     X64LabelNameNormalizer m_labelNormalizer;
 
@@ -365,6 +375,8 @@ struct X64AsmFile
     // Memory owner
     //
     std::vector<std::unique_ptr<X64AsmBlock>> m_blockHolders;
+
+    bool m_hasAnalyzedIndirectBranchTargets;
 
     // Whether the terminator instruction of m_blocks[ord] is a jmp to next block (thus a no-op)
     //
@@ -389,6 +401,7 @@ struct X64AsmFile
     std::unique_ptr<X64AsmFile> WARN_UNUSED Clone();
 
     void Validate();
+    void AssertAllMagicRemoved();
 
     static std::unique_ptr<X64AsmFile> WARN_UNUSED ParseFile(std::string fileContents, InjectedMagicDiLocationInfo diInfo);
 

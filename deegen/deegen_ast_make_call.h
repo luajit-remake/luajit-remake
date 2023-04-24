@@ -11,8 +11,6 @@ class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
 class BaselineJitImplCreator;
 
-inline bool x_deegen_unit_test = false;
-
 class AstMakeCall
 {
 public:
@@ -105,14 +103,14 @@ public:
         ValidateLLVMFunction(func);
     }
 
-    void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi);
+    void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t uniqueOrd);
 
     static void LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
     {
         std::vector<AstMakeCall> res = GetAllUseInFunction(func);
-        for (AstMakeCall& item : res)
+        for (size_t i = 0; i < res.size(); i++)
         {
-            item.DoLoweringForBaselineJIT(ifi);
+            res[i].DoLoweringForBaselineJIT(ifi, i /*uniqueOrd*/);
         }
 
         ValidateLLVMFunction(func);
