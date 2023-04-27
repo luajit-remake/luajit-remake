@@ -4,6 +4,7 @@
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
 #include "invoke_clang_helper.h"
 #include "base64_util.h"
+#include "deegen_stencil_reserved_placeholder_ords.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -62,7 +63,7 @@ std::string WARN_UNUSED StencilSharedConstantDataObject::PrintDefinition()
 {
     AnonymousFile file;
     FILE* fp = file.GetFStream("w");
-    fprintf(fp, "constexpr deegen_stencil_constant_%llu_ty deegen_stencil_constant_%llu = {\n",
+    fprintf(fp, "[[maybe_unused]] constexpr deegen_stencil_constant_%llu_ty deegen_stencil_constant_%llu = {\n",
             static_cast<unsigned long long>(GetUniqueLabel()),
             static_cast<unsigned long long>(GetUniqueLabel()));
 
@@ -478,16 +479,16 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                     int placeholderOrd = StoiOrFail(name.substr(strlen(x_placeholderPrefix)));
                     ReleaseAssert(placeholderOrd >= 0);
                     // There are two specially reserved placeholderOrd
-                    // placeholderOrd 10004 is used to represent the address of the slow path of this stencil
-                    // placeholderOrd 10005 is used to represent the address of the data section of this stencil
+                    // CP_PLACEHOLDER_STENCIL_SLOW_PATH_ADDR is used to represent the address of the slow path of this stencil
+                    // CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR is used to represent the address of the data section of this stencil
                     // They should only be used by the main function, never the IC logic
                     //
-                    if (placeholderOrd == 10004 /*slowPathAddr*/)
+                    if (placeholderOrd == CP_PLACEHOLDER_STENCIL_SLOW_PATH_ADDR)
                     {
                         ReleaseAssert(!isExtractIcLogic);
                         res.m_symKind = RelocationRecord::SymKind::SlowPathAddr;
                     }
-                    else if (placeholderOrd == 10005 /*dataSecAddr*/)
+                    else if (placeholderOrd == CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR)
                     {
                         ReleaseAssert(!isExtractIcLogic);
                         res.m_symKind = RelocationRecord::SymKind::PrivateDataAddr;
@@ -862,6 +863,26 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
         processTextSection(textIcSection, ds.m_icPathCode /*out*/, ds.m_icPathRelos /*out*/);
     }
 
+    // Retrieve the result of all the label distance computations
+    //
+    {
+        ds.m_labelDistanceComputations.clear();
+        for (SectionRef sec : obj->sections())
+        {
+            std::string secName = getSectionName(sec);
+            if (secName.starts_with(".rodata.deegen_label_distance_computation_result_"))
+            {
+                std::string varName = secName.substr(strlen(".rodata."));
+                std::vector<uint8_t> contents = getTextSectionPreFixupContents(sec);
+                ReleaseAssert(contents.size() == 8);
+                ReleaseAssert(relocMap[sec].empty());
+                uint64_t resultValue = UnalignedLoad<uint64_t>(contents.data());
+                ReleaseAssert(!ds.m_labelDistanceComputations.count(varName));
+                ds.m_labelDistanceComputations[varName] = resultValue;
+            }
+        }
+    }
+
     return ds;
 }
 
@@ -1149,11 +1170,22 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
         {
             if (rr.m_stencilHoleOrd == placeholderOrdForCondBranch)
             {
-                // Bytecode conditional branch targets are fixed up in the end
-                //
-                fprintf(fp, "uint64_t deegen_patch_symval = 0;\n");
-                bool is64 = (rr.m_relocationType == ELF::R_X86_64_64);
-                res.m_condBrFixupOffsets.push_back({ .m_offset = rr.m_offset, .m_is64Bit = is64 });
+                if (!isForIc)
+                {
+                    // For bytecode, conditional branch targets are fixed up in the end
+                    //
+                    fprintf(fp, "uint64_t deegen_patch_symval = 0;\n");
+                    bool is64 = (rr.m_relocationType == ELF::R_X86_64_64);
+                    res.m_condBrFixupOffsets.push_back({ .m_offset = rr.m_offset, .m_is64Bit = is64 });
+                }
+                else
+                {
+                    // For IC, the conditional branch target is represented by a special ordinal
+                    // If our caller failed to pass in this ordinal, we'll get a compile error so all is fine
+                    //
+                    fprintf(fp, "uint64_t deegen_patch_symval = deegen_stencil_patch_value_%llu;\n",
+                            static_cast<unsigned long long>(CP_PLACEHOLDER_BYTECODE_CONDBR_DEST));
+                }
             }
             else
             {
@@ -1259,8 +1291,14 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
 }
 
 DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
-    bool mayAttemptToEliminateJmpToFallthrough, size_t numBytecodeOperands, const std::vector<CPRuntimeConstantNodeBase*>& placeholders)
+    bool mayAttemptToEliminateJmpToFallthrough,
+    size_t numBytecodeOperands,
+    const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
+    const std::vector<size_t>& extraPlaceholderOrds)
 {
+    ReleaseAssert(placeholders.size() < 10000);
+    for (size_t ord : extraPlaceholderOrds) { ReleaseAssert(ord >= 10000); }
+
     AnonymousFile file;
     FILE* fp = file.GetFStream("w");
 
@@ -1286,8 +1324,15 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
 
     fprintf(fp, "\n");
 
-    fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_fastPathRelos).c_str());
-    fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_slowPathRelos).c_str());
+    if (!m_isForIcLogicExtraction)
+    {
+        fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_fastPathRelos).c_str());
+        fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_slowPathRelos).c_str());
+    }
+    else
+    {
+        fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_icPathRelos).c_str());
+    }
     fprintf(fp, "%s", PrintStencilFakeExternalSymbolDefs(m_privateDataObject.m_relocations).c_str());
 
     fprintf(fp, "\n");
@@ -1335,6 +1380,11 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         {
             fprintf(fp, "    , [[maybe_unused]] int64_t deegen_rc_input_%llu\n", static_cast<unsigned long long>(i));
         }
+        for (size_t ord : extraPlaceholderOrds)
+        {
+            ReleaseAssert(ord >= 10000);
+            fprintf(fp, "    , [[maybe_unused]] uint64_t deegen_stencil_patch_value_%llu\n", static_cast<unsigned long long>(ord));
+        }
         fprintf(fp, ") {\n");
     };
 
@@ -1380,29 +1430,54 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         placeholderComputations = printer.GetFile().GetFileContents();
     }
 
-    printFunctionProto(DeegenStencilCodegenResult::x_fastPathCodegenFuncName);
-    PrintStencilCodegenLogicResult fastPathInfo = PrintStencilCodegenLogicImpl(
-        m_fastPathCode,
-        m_fastPathRelos,
-        placeholderComputations,
-        fallthroughPlaceholderOrd,
-        condBrPlaceholderOrd,
-        false /*isForIc*/);
+    PrintStencilCodegenLogicResult fastPathInfo;
+    PrintStencilCodegenLogicResult slowPathInfo;
+    PrintStencilCodegenLogicResult icPathInfo;
 
-    fprintf(fp, "%s\n", fastPathInfo.m_cppCode.c_str());
-    fprintf(fp, "}\n\n");
+    if (!m_isForIcLogicExtraction)
+    {
+        printFunctionProto(DeegenStencilCodegenResult::x_fastPathCodegenFuncName);
+        fastPathInfo = PrintStencilCodegenLogicImpl(
+            m_fastPathCode,
+            m_fastPathRelos,
+            placeholderComputations,
+            fallthroughPlaceholderOrd,
+            condBrPlaceholderOrd,
+            false /*isForIc*/);
 
-    printFunctionProto(DeegenStencilCodegenResult::x_slowPathCodegenFuncName);
-    PrintStencilCodegenLogicResult slowPathInfo = PrintStencilCodegenLogicImpl(
-        m_slowPathCode,
-        m_slowPathRelos,
-        placeholderComputations,
-        static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
-        condBrPlaceholderOrd,
-        false /*isForIc*/);
+        fprintf(fp, "%s\n", fastPathInfo.m_cppCode.c_str());
+        fprintf(fp, "}\n\n");
 
-    fprintf(fp, "%s\n", slowPathInfo.m_cppCode.c_str());
-    fprintf(fp, "}\n\n");
+        printFunctionProto(DeegenStencilCodegenResult::x_slowPathCodegenFuncName);
+        slowPathInfo = PrintStencilCodegenLogicImpl(
+            m_slowPathCode,
+            m_slowPathRelos,
+            placeholderComputations,
+            static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
+            condBrPlaceholderOrd,
+            false /*isForIc*/);
+
+        fprintf(fp, "%s\n", slowPathInfo.m_cppCode.c_str());
+        fprintf(fp, "}\n\n");
+    }
+    else
+    {
+        printFunctionProto(DeegenStencilCodegenResult::x_icPathCodegenFuncName);
+        icPathInfo = PrintStencilCodegenLogicImpl(
+            m_icPathCode,
+            m_icPathRelos,
+            placeholderComputations,
+            static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
+            condBrPlaceholderOrd,
+            true /*isForIc*/);
+
+        // For IC, CondBr placeholders are automatically redirected to CP_PLACEHOLDER_BYTECODE_CONDBR_DEST, no late patch should exist
+        //
+        ReleaseAssert(icPathInfo.m_condBrFixupOffsets.empty());
+
+        fprintf(fp, "%s\n", icPathInfo.m_cppCode.c_str());
+        fprintf(fp, "}\n\n");
+    }
 
     printFunctionProto(DeegenStencilCodegenResult::x_dataSecCodegenFuncName);
     PrintStencilCodegenLogicResult dataSecInfo = PrintStencilCodegenLogicImpl(
@@ -1411,7 +1486,9 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
         condBrPlaceholderOrd,
-        false /*isForIc*/);
+        m_isForIcLogicExtraction /*isForIc*/);
+
+    ReleaseAssertImp(m_isForIcLogicExtraction, dataSecInfo.m_condBrFixupOffsets.empty());
 
     fprintf(fp, "%s\n", dataSecInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1423,6 +1500,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         .m_cppCode = file.GetFileContents(),
         .m_fastPathPreFixupCode = fastPathInfo.m_preFixupMachineCode,
         .m_slowPathPreFixupCode = slowPathInfo.m_preFixupMachineCode,
+        .m_icPathPreFixupCode = icPathInfo.m_preFixupMachineCode,
         .m_dataSecPreFixupCode = dataSecInfo.m_preFixupMachineCode,
         .m_dataSecAlignment = m_privateDataObject.m_alignment,
         .m_condBrFixupOffsetsInFastPath = fastPathInfo.m_condBrFixupOffsets,
@@ -1430,7 +1508,9 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         .m_condBrFixupOffsetsInDataSec = dataSecInfo.m_condBrFixupOffsets,
         .m_fastPathRelocMarker = fastPathInfo.m_isPartOfReloc,
         .m_slowPathRelocMarker = slowPathInfo.m_isPartOfReloc,
-        .m_dataSecRelocMarker = dataSecInfo.m_isPartOfReloc
+        .m_icPathRelocMarker = icPathInfo.m_isPartOfReloc,
+        .m_dataSecRelocMarker = dataSecInfo.m_isPartOfReloc,
+        .m_isForIcLogicExtraction = m_isForIcLogicExtraction
     };
 }
 
@@ -1445,9 +1525,25 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
 
     // Sanity check that the module is as expected
     //
-    ReleaseAssert(cgMod->getFunction(x_fastPathCodegenFuncName) != nullptr);
-    ReleaseAssert(cgMod->getFunction(x_slowPathCodegenFuncName) != nullptr);
-    ReleaseAssert(cgMod->getFunction(x_dataSecCodegenFuncName) != nullptr);
+    auto sanityCheckModule = [&](Module* m)
+    {
+        if (!m_isForIcLogicExtraction)
+        {
+            ReleaseAssert(m->getFunction(x_fastPathCodegenFuncName) != nullptr);
+            ReleaseAssert(m->getFunction(x_slowPathCodegenFuncName) != nullptr);
+            ReleaseAssert(m->getFunction(x_icPathCodegenFuncName) == nullptr);
+            ReleaseAssert(m->getFunction(x_dataSecCodegenFuncName) != nullptr);
+        }
+        else
+        {
+            ReleaseAssert(m->getFunction(x_fastPathCodegenFuncName) == nullptr);
+            ReleaseAssert(m->getFunction(x_slowPathCodegenFuncName) == nullptr);
+            ReleaseAssert(m->getFunction(x_icPathCodegenFuncName) != nullptr);
+            ReleaseAssert(m->getFunction(x_dataSecCodegenFuncName) != nullptr);
+        }
+    };
+
+    sanityCheckModule(cgMod.get());
 
     constexpr const char* x_fakeGlobalPrefix = "deegen_fakeglobal_";
 
@@ -1521,7 +1617,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
                 }
             }
         }
-        else if (name != x_fastPathCodegenFuncName && name != x_slowPathCodegenFuncName && name != x_dataSecCodegenFuncName)
+        else if (name != x_fastPathCodegenFuncName && name != x_slowPathCodegenFuncName && name != x_dataSecCodegenFuncName && name != x_icPathCodegenFuncName)
         {
             // All the other non-declaration globals should have local linkage
             // This must be enforced to make sure that we will not introduce link errors or ODR violations caused by name collision
@@ -1614,9 +1710,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
 
     RunLLVMDeadGlobalElimination(module.get());
 
-    ReleaseAssert(module->getFunction(x_fastPathCodegenFuncName) != nullptr);
-    ReleaseAssert(module->getFunction(x_slowPathCodegenFuncName) != nullptr);
-    ReleaseAssert(module->getFunction(x_dataSecCodegenFuncName) != nullptr);
+    sanityCheckModule(module.get());
 
     for (GlobalValue& gv : module->global_values())
     {

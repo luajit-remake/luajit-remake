@@ -116,7 +116,8 @@ constexpr int WARN_UNUSED GetLuaMetamethodOrdinalFromStringHash(uint8_t hashHigh
 //
 #define SPDS_ALLOCATABLE_CLASS_LIST             \
   /* C++ class name   Use lockfree freelist */  \
-    (WatchpointSet,             false)
+    (WatchpointSet,             false)          \
+  , (JitCallInlineCacheEntry,   false)
 
 #define SPDS_CPP_NAME(e) PP_TUPLE_GET_1(e)
 #define SPDS_USE_LOCKFREE_FREELIST(e) PP_TUPLE_GET_2(e)
@@ -245,7 +246,7 @@ private:
         assert(m_curChunk <= 0 && length > 0 && length % alignment == 0);
 
         m_curChunk &= ~static_cast<int>(alignment - 1);
-        assert(m_curChunk % alignment == 0);
+        assert(m_curChunk % static_cast<int32_t>(alignment) == 0);
         if (likely((static_cast<uint32_t>(m_curChunk) & (x_spdsAllocationPageSize - 1)) >= length))
         {
             m_curChunk -= length;
@@ -260,7 +261,7 @@ private:
             {
                 m_lastChunkInTheChain = m_curChunk;
             }
-            assert(m_curChunk % x_spdsAllocationPageSize == 0);
+            assert(m_curChunk % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
             if constexpr(isTempAlloc)
             {
                 m_curChunk -= 4;
@@ -636,12 +637,12 @@ public:
             {
                 HeapPtr<void> result = freelist.AsPtr();
                 freelist = TCGet(*reinterpret_cast<HeapPtr<SpdsPtr<void>>>(result));
-                return GetHeapPtrTranslator().TranslateToRawPtr(result);
+                return GetHeapPtrTranslator().TranslateToRawPtr<T>(reinterpret_cast<HeapPtr<T>>(result));
             }
             else
             {
                 SpdsPtr<T> result = GetSpdsAllocForCurrentThread().template Alloc<T, true /*collectedByFreeList*/>();
-                return GetHeapPtrTranslator().TranslateToRawPtr(result.Get());
+                return GetHeapPtrTranslator().TranslateToRawPtr<T>(result.AsPtr());
             }
         }
         else
@@ -670,7 +671,7 @@ public:
                         m_spdsExecutionThreadFreeList[x_spdsAllocatableClassOrdinal<T>];
 
             UnalignedStore<int32_t>(object, freelist.m_value);
-            freelist = GetHeapPtrTranslator().TranslateToSpdsPtr(object);
+            freelist = GetHeapPtrTranslator().TranslateToSpdsPtr<void>(object);
         }
         else
         {

@@ -6,6 +6,7 @@
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
 #include "deegen_stencil_creator.h"
 #include "deegen_parse_asm_text.h"
+#include "deegen_call_inline_cache.h"
 
 namespace dast {
 
@@ -43,6 +44,8 @@ public:
     std::string WARN_UNUSED GetResultFunctionName() { return m_resultFuncName; }
 
     bool WARN_UNUSED IsBaselineJitSlowPathReturnContinuation() { return m_isSlowPathReturnContinuation; }
+
+    bool WARN_UNUSED IsMainComponent() { return m_processKind == BytecodeIrComponentKind::Main; }
 
     // The baseline JIT slow path has access to the BaselineJitSlowPathData struct
     //
@@ -87,6 +90,11 @@ public:
     llvm::CallInst* WARN_UNUSED CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
     llvm::CallInst* WARN_UNUSED CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
 
+    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult>& GetAllCallIcInfo()
+    {
+        return m_callIcInfo;
+    }
+
 private:
     void CreateWrapperFunction();
     std::unique_ptr<llvm::Module> m_module;
@@ -115,6 +123,8 @@ private:
     std::string m_stencilObjectFile;
 
     DeegenStencil m_stencil;
+
+    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> m_callIcInfo;
 
     bool m_generated;
 

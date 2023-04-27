@@ -186,6 +186,7 @@ struct DeegenStencilCodegenResult
 
     std::vector<uint8_t> m_fastPathPreFixupCode;
     std::vector<uint8_t> m_slowPathPreFixupCode;
+    std::vector<uint8_t> m_icPathPreFixupCode;
     std::vector<uint8_t> m_dataSecPreFixupCode;
     size_t m_dataSecAlignment;
 
@@ -195,10 +196,14 @@ struct DeegenStencilCodegenResult
 
     std::vector<bool> m_fastPathRelocMarker;
     std::vector<bool> m_slowPathRelocMarker;
+    std::vector<bool> m_icPathRelocMarker;
     std::vector<bool> m_dataSecRelocMarker;
+
+    bool m_isForIcLogicExtraction;
 
     static constexpr const char* x_fastPathCodegenFuncName = "deegen_do_codegen_fastpath";
     static constexpr const char* x_slowPathCodegenFuncName = "deegen_do_codegen_slowpath";
+    static constexpr const char* x_icPathCodegenFuncName = "deegen_do_codegen_icpath";
     static constexpr const char* x_dataSecCodegenFuncName = "deegen_do_codegen_datasec";
 
     // Return a LLVM module that contains actually linkable codegen logic
@@ -217,7 +222,6 @@ struct DeegenStencil
     // For isExtractIcLogic == false:
     //     m_fastPathCode / m_fastPathRelos / m_slowPathCode / m_slowPathRelos will be populated to store the result
     //
-    //
     std::vector<StencilSharedConstantDataObject*> m_sharedDataObjs;
     std::vector<uint8_t> m_fastPathCode;
     std::vector<RelocationRecord> m_fastPathRelos;
@@ -228,6 +232,7 @@ struct DeegenStencil
     StencilPrivateDataObject m_privateDataObject;
     using SectionToPdoOffsetMapTy = std::unordered_map<std::string /*secName*/, uint64_t /*offset*/>;
     SectionToPdoOffsetMapTy m_sectionToPdoOffsetMap;
+    std::unordered_map<std::string, uint64_t> m_labelDistanceComputations;
     llvm::Triple m_triple;
     bool m_isForIcLogicExtraction;
 
@@ -242,10 +247,14 @@ struct DeegenStencil
     // merge multiple stencils into one, and it turns out that LLVM optimizer is not smart enough to merge multiple
     // memcpy together, so we instead do it by hand afterwards.
     //
+    // 'extraPlaceholderOrds' may be optionally provided if the stencil uses manually-reserved special placeholder ordinals
+    // All of those ordinals must be >= 10000 to avoid interfering with normal placeholders.
+    //
     DeegenStencilCodegenResult WARN_UNUSED PrintCodegenFunctions(
         bool mayAttemptToEliminateJmpToFallthrough,
         size_t numBytecodeOperands,
-        const std::vector<CPRuntimeConstantNodeBase*>& placeholders);
+        const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
+        const std::vector<size_t>& extraPlaceholderOrds = {});
 
     static DeegenStencil WARN_UNUSED ParseMainLogic(llvm::LLVMContext& ctx, const std::string& objFile)
     {
@@ -255,6 +264,12 @@ struct DeegenStencil
     static DeegenStencil WARN_UNUSED ParseIcLogic(llvm::LLVMContext& ctx, const std::string& objFile, const SectionToPdoOffsetMapTy& mainLogicPdoOffsetMap)
     {
         return ParseImpl(ctx, objFile, true /*isExtractIcLogic*/, mainLogicPdoOffsetMap);
+    }
+
+    uint64_t WARN_UNUSED RetrieveLabelDistanceComputationResult(const std::string& varName) const
+    {
+        ReleaseAssert(m_labelDistanceComputations.count(varName));
+        return m_labelDistanceComputations.find(varName)->second;
     }
 
 private:

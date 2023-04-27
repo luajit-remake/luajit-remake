@@ -212,6 +212,22 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             auditFile.write(auditFileContents);
             auditFile.Commit();
         }
+
+        for (auto& extraAuditFile : res.m_baselineJitInfo.m_extraAuditFiles)
+        {
+            std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("baseline_jit" /*dirSuffix*/, extraAuditFile.first);
+            TransactionalOutputFile auditFile(auditFilePath);
+            auditFile.write(extraAuditFile.second);
+            auditFile.Commit();
+        }
+
+        for (auto& verboseAuditFile : res.m_baselineJitInfo.m_extraVerboseAuditFiles)
+        {
+            std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("baseline_jit_verbose" /*dirSuffix*/, verboseAuditFile.first);
+            TransactionalOutputFile auditFile(auditFilePath);
+            auditFile.write(verboseAuditFile.second);
+            auditFile.Commit();
+        }
     }
 
     // Parse the origin module and each additional module generated from the interpreter lowering stage

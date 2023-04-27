@@ -128,6 +128,68 @@ static_assert(sizeof(BaselineJitFunctionEntryLogicTraits) == 16);
 constexpr size_t x_baselineJitFunctionEntrySpecializeThresholdForNonVarargsFunction = x_isDebugBuild ? 3 : 10;
 constexpr size_t x_baselineJitFunctionEntrySpecializeThresholdForVarargsFunction = x_isDebugBuild ? 3 : 10;
 
+// Describes the traits of one kind of JIT IC piece
+// Struct name and member names are hardcoded as they are used by generated C++ code!
+//
+struct alignas(4) JitCallInlineCacheTraits
+{
+    struct alignas(4) PatchRecord
+    {
+        uint16_t m_offset;
+        bool m_is64;
+    };
+    static_assert(sizeof(PatchRecord) == 4);
+
+    consteval JitCallInlineCacheTraits(uint16_t length, bool isDirectCallMode, uint8_t numPatches)
+        : m_length(length)
+        , m_isDirectCallMode(isDirectCallMode)
+        , m_numCodePtrUpdatePatches(numPatches)
+    {
+        ReleaseAssert(numPatches > 0);
+    }
+
+    // The allocation length of the JIT code
+    //
+    uint16_t m_length;
+    // Whether this IC is for direct-call mode or closure-call mode, for assertion only
+    //
+    bool m_isDirectCallMode;
+    // Number of CodePtr update patches
+    //
+    uint8_t m_numCodePtrUpdatePatches;
+    PatchRecord m_codePtrPatchRecords[0];
+};
+static_assert(sizeof(JitCallInlineCacheTraits) == 4);
+
+template<size_t N>
+struct JitCallInlineCacheTraitsHolder final : public JitCallInlineCacheTraits
+{
+    static_assert(N >= 1, "doesn't make sense if a call IC doesn't even have the target codePtr!");
+    static_assert(N <= 255);
+
+    using PatchRecord = JitCallInlineCacheTraits::PatchRecord;
+
+    consteval JitCallInlineCacheTraitsHolder(uint16_t length, bool isDirectCallMode, std::array<PatchRecord, N> patches)
+        : JitCallInlineCacheTraits(length, isDirectCallMode, static_cast<uint8_t>(N))
+    {
+        static_assert(offsetof_member_v<&JitCallInlineCacheTraitsHolder::m_recordsHolder> == offsetof_member_v<&JitCallInlineCacheTraits::m_codePtrPatchRecords>);
+        for (size_t i = 0; i < N; i++)
+        {
+            ReleaseAssert(patches[i].m_offset < length && patches[i].m_offset + (patches[i].m_is64 ? 8 : 4) <= length);
+            m_recordsHolder[i] = patches[i];
+        }
+    }
+
+    PatchRecord m_recordsHolder[N];
+};
+
+extern "C" const JitCallInlineCacheTraits* const deegen_jit_call_inline_cache_trait_table[];
+
+// TODO: tune
+// TODO: if we implement a binary search tree strategy like JSC does, we could probably do more entries
+//
+constexpr size_t x_maxJitCallInlineCacheEntries = 5;
+
 class BaselineCodeBlock;
 
 extern "C" BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb);

@@ -556,13 +556,13 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
 
     // Lower the Call IC asm magic
     //
-    using CallIcAsmLoweringResult = DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult;
-    std::vector<CallIcAsmLoweringResult> callICs = DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(file);
+    using CallIcAsmTransformResult = DeegenCallIcLogicCreator::BaselineJitAsmTransformResult;
+    std::vector<CallIcAsmTransformResult> callICs = DeegenCallIcLogicCreator::DoBaselineJitAsmTransform(file);
 
     file->Validate();
 
     std::vector<std::string> icEntryLabelList;
-    for (CallIcAsmLoweringResult& item : callICs)
+    for (CallIcAsmTransformResult& item : callICs)
     {
         icEntryLabelList.push_back(item.m_labelForDirectCallIc);
         icEntryLabelList.push_back(item.m_labelForClosureCallIc);
@@ -579,7 +579,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         // Our IC creator requires for correctness that the patchable block is in the fast path, enforce it.
         //
         std::unordered_set<std::string> forceFastPathBlocks;
-        for (CallIcAsmLoweringResult& item : callICs)
+        for (CallIcAsmTransformResult& item : callICs)
         {
             ReleaseAssert(!forceFastPathBlocks.count(item.m_labelForSMCRegion));
             forceFastPathBlocks.insert(item.m_labelForSMCRegion);
@@ -592,7 +592,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         std::unordered_set<std::string> forceSlowPathBlocks;
         {
             std::vector<std::string> allIcSlowPathBlocks;
-            for (CallIcAsmLoweringResult& item : callICs)
+            for (CallIcAsmTransformResult& item : callICs)
             {
                 allIcSlowPathBlocks.push_back(item.m_labelForCcIcMissLogic);
                 allIcSlowPathBlocks.push_back(item.m_labelForDcIcMissLogic);
@@ -633,7 +633,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
 
     // Having extracted IC, we can fix up the SMC region for the call ICs now
     //
-    for (CallIcAsmLoweringResult& item : callICs)
+    for (CallIcAsmTransformResult& item : callICs)
     {
         item.FixupSMCRegionAfterCFGAnalysis(file);
         file->Validate();
@@ -645,7 +645,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     //
     {
         std::unordered_set<std::string> blocksMustNotSplit;
-        for (CallIcAsmLoweringResult& item : callICs)
+        for (CallIcAsmTransformResult& item : callICs)
         {
             blocksMustNotSplit.insert(item.m_labelForSMCRegion);
         }
@@ -662,11 +662,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     // The call IC's SMC block ends with a jump. The jump must not be eliminated to a fallthrough even if it happens to
     // jump to the immediate following block, because the jump is only a placeholder.
     // We enforce this by figuring out all those jumps that happens to fallthrough, and adding a dummy block in between.
-    // Note that this must happen as the LAST transform, since any further reordering can break this.
+    // Note that this must happen after all the basic block orders has been finalized, as any further reordering can break this.
     //
     {
         std::unordered_set<std::string> preventFallthroughBlockSet;
-        for (CallIcAsmLoweringResult& item : callICs)
+        for (CallIcAsmTransformResult& item : callICs)
         {
             ReleaseAssert(!preventFallthroughBlockSet.count(item.m_labelForSMCRegion));
             preventFallthroughBlockSet.insert(item.m_labelForSMCRegion);
@@ -709,6 +709,16 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         }
     }
 
+    // Emit label distance / offset information needed by Call IC
+    // Similarly, this must happen after all the basic block orders has been finalized, as any further reordering can break this.
+    //
+    for (CallIcAsmTransformResult& item : callICs)
+    {
+        item.EmitComputeLabelOffsetAndLengthSymbol(file);
+    }
+
+    file->Validate();
+
     auto getIcAsmFile = [&](std::vector<X64AsmBlock*> icLogic) WARN_UNUSED -> std::string
     {
         std::unique_ptr<X64AsmFile> icFile = file->Clone();
@@ -729,10 +739,10 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     // Important to extract IC after all transformation on primary ASM file has been executed,
     // as the IC ASM and the primary ASM's main logic must be EXACTLY in sync!
     //
-    std::map<uint64_t, CallIcAsmInfo> callIcInfos;
+    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> callIcInfos;
 
     size_t offsetInIcEntryLabelList = 0;
-    for (CallIcAsmLoweringResult& item : callICs)
+    for (CallIcAsmTransformResult& item : callICs)
     {
         ReleaseAssert(offsetInIcEntryLabelList + 2 <= icEntryLabelList.size());
         DeegenStencilExtractedICAsm& dcLogic = icAsmList[offsetInIcEntryLabelList];
@@ -745,18 +755,19 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         std::string dcAsm = getIcAsmFile(dcLogic.m_blocks);
         std::string ccAsm = getIcAsmFile(ccLogic.m_blocks);
 
-        ReleaseAssert(!callIcInfos.count(item.m_uniqueOrd));
-        callIcInfos[item.m_uniqueOrd] = {
+        callIcInfos.push_back({
             .m_directCallLogicAsm = dcAsm,
             .m_closureCallLogicAsm = ccAsm,
-            .m_smcBlockLabel = item.m_labelForSMCRegion,
-            .m_ccIcMissPathLabel = item.m_labelForCcIcMissLogic,
-            .m_dcIcMissPathLabel = item.m_labelForDcIcMissLogic
-        };
+            .m_symbolNameForSMCLabelOffset = item.m_symbolNameForSMCLabelOffset,
+            .m_symbolNameForSMCRegionLength = item.m_symbolNameForSMCRegionLength,
+            .m_symbolNameForCcIcMissLogicLabelOffset = item.m_symbolNameForCcIcMissLogicLabelOffset,
+            .m_symbolNameForDcIcMissLogicLabelOffset = item.m_symbolNameForDcIcMissLogicLabelOffset,
+            .m_uniqueOrd = item.m_uniqueOrd
+        });
     }
 
     ReleaseAssert(offsetInIcEntryLabelList == icAsmList.size());
-    m_callIcLogicAsmFiles = std::move(callIcInfos);
+    m_callIcLoweringResults = std::move(callIcInfos);
 }
 
 }   // namespace dast

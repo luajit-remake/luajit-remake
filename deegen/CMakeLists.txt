@@ -48,6 +48,7 @@ add_library(deegen_utils
   deegen_parse_asm_text.cpp
   deegen_recover_asm_cfg.cpp
   deegen_stencil_inline_cache_extraction_pass.cpp
+  deegen_stencil_fixup_cross_reference_helper.cpp
 ) 
 
 # Build the main Futamura projection stage binary

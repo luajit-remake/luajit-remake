@@ -6,6 +6,7 @@
 #include "api_define_bytecode.h"
 #include "deegen_bytecode_metadata.h"
 #include "deegen_call_inline_cache.h"
+#include "runtime_utils.h"
 
 namespace dast {
 
@@ -211,6 +212,7 @@ public:
     //
     llvm::Value* WARN_UNUSED GetOperandValueFromBaselineJitSlowPathData(BaselineJitImplCreator* ifi, llvm::BasicBlock* targetBB);
 
+    llvm::Value* WARN_UNUSED GetOperandValueFromBaselineJitSlowPathData(llvm::Value* slowPathDataPtr, llvm::BasicBlock* targetBB);
 
     virtual json WARN_UNUSED SaveToJSON() = 0;
 
@@ -885,6 +887,17 @@ public:
 
     void ComputeBaselineJitSlowPathDataLayout();
 
+    size_t WARN_UNUSED GetNumCallICsInJitTier()
+    {
+        ReleaseAssert(m_numJitCallICs != static_cast<size_t>(-1));
+        return m_numJitCallICs;
+    }
+
+    // Return a ptr for the address of the JIT'ed code of the current bytecode
+    //
+    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
     // Return a ptr for the address of the JIT'ed code of the next bytecode
     //
     llvm::Value* WARN_UNUSED GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
@@ -899,6 +912,13 @@ public:
     //
     llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
     llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
+    size_t WARN_UNUSED GetBaselineJitCallIcSiteOffsetInSlowPathData(size_t ord)
+    {
+        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+        ReleaseAssert(ord < GetNumCallICsInJitTier());
+        return m_baselineJitCallIcBaseOffset + sizeof(JitCallInlineCacheSite) * ord;
+    }
 
     json WARN_UNUSED SaveToJSON();
 
@@ -943,6 +963,7 @@ public:
 
     bool m_isInterpreterCallIcExplicitlyDisabled;
     bool m_isInterpreterCallIcEverUsed;
+    size_t m_numJitCallICs;
 
     BytecodeQuickeningKind m_quickeningKind;
     // Populated if m_quickeningKind == LockedQuickening or Quickened or QuickeningSelector
@@ -957,6 +978,7 @@ public:
     //
     std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
 
+
 private:
     void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)
     {
@@ -969,6 +991,7 @@ private:
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 
     size_t m_baselineJitSlowPathDataLength;
+    size_t m_baselineJitCallIcBaseOffset;
 
     // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
     //

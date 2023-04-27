@@ -595,16 +595,19 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
         // Note that we must do this check here after all optimizations have happened, as optimizations could have
         // deduced that calls are unreachable and removed them.
         //
-        bool needCallIc = false;
-        if (AstMakeCall::GetAllUseInFunction(r.m_interpreterMainComponent->m_impl).size() > 0)
+        bool needInterpreterCallIc = false;
+        size_t numMakeCallsInMainFn = AstMakeCall::GetAllUseInFunction(r.m_interpreterMainComponent->m_impl).size();
+        ReleaseAssert(bytecodeDef->m_numJitCallICs == static_cast<size_t>(-1));
+        bytecodeDef->m_numJitCallICs = numMakeCallsInMainFn;
+        if (numMakeCallsInMainFn > 0)
         {
-            needCallIc = true;
+            needInterpreterCallIc = true;
         }
         if (bytecodeDef->m_isInterpreterCallIcExplicitlyDisabled)
         {
-            needCallIc = false;
+            needInterpreterCallIc = false;
         }
-        if (needCallIc)
+        if (needInterpreterCallIc)
         {
             bytecodeDef->AddInterpreterCallIc();
         }

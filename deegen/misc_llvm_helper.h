@@ -1643,4 +1643,111 @@ inline int WARN_UNUSED StoiOrFail(const std::string& s)
     return res;
 }
 
+// Emit a memcpy_inline.
+// If 'mustBeExact' is false (which is the default!), this function will be allowed to overwrite at most 7 bytes (so that we can have less instructions)
+// The caller is responsible for accounting for the extra bytes when doing the allocation in such case.
+//
+inline void EmitCopyLogicForBaselineJitCodeGen(llvm::Module* module,
+                                               const std::vector<uint8_t>& bytes,
+                                               llvm::Value* dst,
+                                               const std::string& gvName,
+                                               llvm::BasicBlock* insertAtEnd,
+                                               bool mustBeExact = false)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    ReleaseAssert(llvm_value_has_type<void*>(dst));
+    size_t roundedLen = bytes.size();
+    if (!mustBeExact)
+    {
+        roundedLen = RoundUpToMultipleOf<8>(roundedLen);
+    }
+
+    std::vector<Constant*> arr;
+    for (size_t i = 0; i < roundedLen; i++)
+    {
+        uint8_t value;
+        if (i < bytes.size())
+        {
+            value = bytes[i];
+        }
+        else
+        {
+            value = 0;
+        }
+
+        arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, value));
+    }
+
+    ReleaseAssert(arr.size() == roundedLen);
+    ReleaseAssertImp(mustBeExact, roundedLen == bytes.size());
+
+    ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), roundedLen);
+    Constant* ca = ConstantArray::get(aty, arr);
+
+    ReleaseAssert(module->getNamedValue(gvName) == nullptr);
+    GlobalVariable* gv = new GlobalVariable(*module, aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, gvName);
+    ReleaseAssert(gv->getName() == gvName);
+    gv->setAlignment(Align(16));
+
+    // TODO: LLVM lowers memcpy.inline to 'rep movsb' if the buffer is too long (>128 bytes?),
+    // which has disastrous performance on older CPUs without FSRM, but (should?) work well on Golden Cove
+    // or later (but really? our output buffer is not aligned..)
+    // Think about if we need to do anything to this later..
+    //
+    EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(module, dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, roundedLen), insertAtEnd);
+};
+
+// Find the first non-alloca instruction in the entry block of the specified function, which is the earliest safe place to insert new instructions
+//
+inline llvm::Instruction* WARN_UNUSED FindFirstNonAllocaInstInEntryBB(llvm::Function* func)
+{
+    using namespace llvm;
+    ReleaseAssert(!func->empty());
+    auto it = func->getEntryBlock().getFirstInsertionPt();
+    while (it != func->getEntryBlock().end())
+    {
+        Instruction& inst = *it;
+        if (!isa<AllocaInst>(&inst))
+        {
+            return &inst;
+        }
+        it++;
+    }
+    ReleaseAssert(false);
+};
+
+// Populate multi-byte NOP instruction to an address range
+//
+inline void FillAddressRangeWithX64MultiByteNOPs(uint8_t* addr, size_t length)
+{
+    // From Intel's Manual:
+    //    https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2b-manual.pdf
+    //    Page 165, table 4-12, "Recommended Multi-Byte Sequence of NOP Instruction"
+    //
+    // AMD Manual recommends the same byte sequence.
+    //
+    static constexpr uint8_t nop1[] = { 0x90 };
+    static constexpr uint8_t nop2[] = { 0x66, 0x90 };
+    static constexpr uint8_t nop3[] = { 0x0F, 0x1F, 0x00 };
+    static constexpr uint8_t nop4[] = { 0x0F, 0x1F, 0x40, 0x00 };
+    static constexpr uint8_t nop5[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
+    static constexpr uint8_t nop6[] = { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
+    static constexpr uint8_t nop7[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
+    static constexpr uint8_t nop8[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    static constexpr uint8_t nop9[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    static constexpr const uint8_t* nops[10] = {
+        nullptr, nop1, nop2, nop3, nop4, nop5, nop6, nop7, nop8, nop9
+    };
+    while (length > 0)
+    {
+        size_t choice = 9;
+        choice = std::min(choice, length);
+        memcpy(addr, nops[choice], choice);
+        length -= choice;
+        addr += choice;
+    }
+}
+
 }   // namespace dast

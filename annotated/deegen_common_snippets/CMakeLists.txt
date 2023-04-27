@@ -46,6 +46,8 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_baseline_jit_codeblock_from_codeblock.cpp
   get_callee_cb_u32.cpp
   check_is_tvalue_heap_entity.cpp
+  create_new_jit_call_ic_for_direct_call_mode_site.cpp
+  create_new_jit_call_ic_for_closure_call_mode_site.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

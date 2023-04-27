@@ -88,6 +88,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
 
     CodeBlock* cb = reinterpret_cast<CodeBlock*>(addressBegin + sizeof(TValue) * ucb->m_cstTableLength);
+    ConstructInPlace(cb);
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
@@ -118,6 +119,17 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     }
 
     return cb;
+}
+
+void CodeBlock::UpdateBestEntryPoint(void* newEntryPoint)
+{
+    void* oldBestEntryPoint = m_bestEntryPoint;
+    uint64_t diff = reinterpret_cast<uint64_t>(newEntryPoint) - reinterpret_cast<uint64_t>(oldBestEntryPoint);
+    for (JitCallInlineCacheEntry* icEntry : m_jitCallIcList.elements())
+    {
+        icEntry->UpdateTargetFunctionCodePtr(diff);
+    }
+    m_bestEntryPoint = newEntryPoint;
 }
 
 std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModule* module)
@@ -218,3 +230,235 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
 
     return res;
 }
+
+JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
+                                                                     ExecutableCode* targetExecutableCode,
+                                                                     SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
+                                                                     HeapPtr<void> entity,
+                                                                     size_t icTraitKind)
+{
+    JitCallInlineCacheEntry* entry = vm->AllocateFromSpdsRegionUninitialized<JitCallInlineCacheEntry>();
+    ConstructInPlace(entry);
+    entry->m_callSiteNextNode = callSiteNextNode;
+    entry->m_entity = entity;
+    assert(icTraitKind <= std::numeric_limits<uint16_t>::max());
+    const JitCallInlineCacheTraits* trait = deegen_jit_call_inline_cache_trait_table[icTraitKind];
+
+    AssertImp(trait->m_isDirectCallMode, entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
+    AssertImp(!trait->m_isDirectCallMode, !entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
+    AssertImp(!trait->m_isDirectCallMode, targetExecutableCode == TranslateToRawPointer(vm, entity));
+
+    // TODO: need a codegen memory allocator...
+    //
+    void* regionVoidPtr = mmap(nullptr,
+                               RoundUpToMultipleOf<4096>(trait->m_length),
+                               PROT_READ | PROT_WRITE | PROT_EXEC,
+                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_32BIT, -1, 0);
+    VM_FAIL_WITH_ERRNO_IF(regionVoidPtr == MAP_FAILED, "Failed to allocate baseline JIT code region");
+
+    assert(reinterpret_cast<uint64_t>(regionVoidPtr) < (1ULL << 48));
+    entry->m_taggedPtr = reinterpret_cast<uint64_t>(regionVoidPtr) | (static_cast<uint64_t>(icTraitKind) << 48);
+
+    assert(entry->GetJitRegionStart() == regionVoidPtr);
+    assert(entry->GetIcTrait() == trait);
+
+    assert(!entry->IsOnDoublyLinkedList());
+    if (targetExecutableCode->IsBytecodeFunction())
+    {
+        CodeBlock* targetCb = static_cast<CodeBlock*>(targetExecutableCode);
+        targetCb->m_jitCallIcList.InsertAtHead(entry);
+        assert(entry->IsOnDoublyLinkedList());
+    }
+
+    return entry;
+}
+
+void JitCallInlineCacheEntry::Destroy(VM* vm)
+{
+    AssertIff(IsOnDoublyLinkedList(), GetTargetExecutableCode(vm)->IsBytecodeFunction());
+    if (IsOnDoublyLinkedList())
+    {
+        RemoveFromDoublyLinkedList();
+    }
+
+    // TODO: give back JIT memory to codegen allocator once we have one..
+    //
+
+    vm->DeallocateSpdsRegionObject(this);
+}
+
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/)
+{
+    assert(m_numEntries < x_maxEntries);
+    assert(m_mode == Mode::DirectCall);
+    assert(tv.Is<tFunction>());
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    // Compute bloom filter hash mask
+    //
+    uint16_t bloomFilterMask;
+    {
+        uint64_t hashValue64 = HashPrimitiveTypes(tv.As<tFunction>()->m_executable.m_value);
+        bloomFilterMask = static_cast<uint16_t>((1 << (hashValue64 & 15)) | (1 << ((hashValue64 >> 8) & 15)));
+    }
+
+    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+
+    // Figure out if we shall transition to closure call mode, we do this when we notice that
+    // the passed-in call target has the same ExecutableCode as an existing cached target
+    //
+    bool shouldTransitToCCMode = false;
+    if (unlikely((m_bloomFilter & bloomFilterMask) == bloomFilterMask))
+    {
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        // if the IC site is empty, m_bloomFilter should be 0 and the above check shall never pass
+        //
+        assert(!linkListNode.IsInvalidPtr());
+        do {
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            assert(entry->GetIcTraitKind() == dcIcTraitKind);
+            if (entry->GetTargetExecutableCodeKnowingDirectCall(vm) == targetEc)
+            {
+                shouldTransitToCCMode = true;
+                break;
+            }
+            linkListNode = TCGet(entry->m_callSiteNextNode);
+        } while (!linkListNode.IsInvalidPtr());
+    }
+
+#ifndef NDEBUG
+    // In debug mode, validate that the shouldTransitToCCMode decision is correct by brute force,
+    // and also validate that assorted information of the linked list is as expected
+    //
+    {
+        std::unordered_set<ExecutableCode*> checkUnique;
+        bool goldDecision = false;
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        while (!linkListNode.IsInvalidPtr())
+        {
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            assert(entry->GetIcTraitKind() == dcIcTraitKind);
+
+            // We should never reach here if the IC ought to hit
+            //
+            assert(entry->m_entity.IsUserHeapPointer());
+            assert(entry->m_entity.As() != tv.As<tFunction>());
+
+            // All the ExecutableCode in the IC list should be distinct
+            //
+            ExecutableCode* ec = entry->GetTargetExecutableCodeKnowingDirectCall(vm);
+            assert(!checkUnique.count(ec));
+            checkUnique.insert(ec);
+
+            if (ec == targetEc)
+            {
+                goldDecision = true;
+            }
+
+            linkListNode = TCGet(entry->m_callSiteNextNode);
+        }
+        assert(checkUnique.size() == m_numEntries);
+        assert(goldDecision == shouldTransitToCCMode);
+    }
+#endif
+
+    if (likely(!shouldTransitToCCMode))
+    {
+        // No transition to closure-call mode, just create a new IC entry for the target
+        //
+        m_bloomFilter |= bloomFilterMask;
+        m_numEntries++;
+
+        JitCallInlineCacheEntry* newEntry = JitCallInlineCacheEntry::Create(vm,
+                                                                            targetEc,
+                                                                            TCGet(m_linkedListHead) /*callSiteNextNode*/,
+                                                                            tv.As<tFunction>(),
+                                                                            dcIcTraitKind);
+        TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
+
+        *transitedToCCMode = 0;
+        return newEntry->GetJitRegionStart();
+    }
+
+    // We need to transit to closure-call mode
+    //
+    {
+        // Invalidate all existing ICs
+        //
+        SpdsPtr<JitCallInlineCacheEntry> node = TCGet(m_linkedListHead);
+        assert(!node.IsInvalidPtr());
+        do {
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, node.AsPtr());
+            node = TCGet(entry->m_callSiteNextNode);
+            entry->Destroy(vm);
+        } while (!node.IsInvalidPtr());
+    }
+
+    // Create the new IC entry
+    //
+    JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
+                                                                     targetEc,
+                                                                     SpdsPtr<JitCallInlineCacheEntry> { 0 } /*callSiteNextNode*/,
+                                                                     TranslateToHeapPtr(targetEc),
+                                                                     dcIcTraitKind + 1 /*icTraitKind*/);
+    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_mode = (m_numEntries > 1) ? Mode::ClosureCallWithMoreThanOneTargetObserved : Mode::ClosureCall;
+    m_numEntries = 1;
+    m_bloomFilter = 0;
+
+    *transitedToCCMode = 1;
+    return entry->GetJitRegionStart();
+}
+
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv)
+{
+    assert(m_numEntries < x_maxEntries);
+    assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
+    assert(tv.Is<tFunction>());
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+
+#ifndef NDEBUG
+    // In debug mode, validate that assorted information of the linked list is as expected
+    //
+    {
+        std::unordered_set<ExecutableCode*> checkUnique;
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        while (!linkListNode.IsInvalidPtr())
+        {
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            assert(entry->GetIcTraitKind() == dcIcTraitKind + 1);
+            assert(!entry->GetIcTrait()->m_isDirectCallMode);
+
+            // We should never reach here if the IC ought to hit
+            //
+            ExecutableCode* ec = entry->GetTargetExecutableCode(vm);
+            assert(ec != targetEc);
+
+            // All the ExecutableCode in the IC list should be distinct
+            //
+            assert(!checkUnique.count(ec));
+            checkUnique.insert(ec);
+
+            linkListNode = TCGet(entry->m_callSiteNextNode);
+        }
+        assert(checkUnique.size() == m_numEntries);
+    }
+#endif
+
+    // Create the new IC entry
+    //
+    JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
+                                                                     targetEc,
+                                                                     TCGet(m_linkedListHead) /*callSiteNextNode*/,
+                                                                     TranslateToHeapPtr(targetEc),
+                                                                     dcIcTraitKind + 1 /*icTraitKind*/);
+    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_numEntries++;
+    return entry->GetJitRegionStart();
+}
+
+// TODO: FIXME turn this to real logic
+const JitCallInlineCacheTraits* const deegen_jit_call_inline_cache_trait_table[1] = {nullptr};

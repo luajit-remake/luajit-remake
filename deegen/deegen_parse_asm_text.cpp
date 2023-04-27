@@ -947,6 +947,53 @@ void X64AsmFile::RemoveBlock(X64AsmBlock* blockToRemove)
     m_blocks.erase(m_blocks.begin() + static_cast<int64_t>(ord));
 }
 
+// Return nullptr if not found
+//
+static X64AsmBlock* WARN_UNUSED X64AsmFileFindLabelInBlocksImpl(const std::vector<X64AsmBlock*>& blocks, const std::string& normalizedLabel)
+{
+    for (size_t i = 0; i < blocks.size(); i++)
+    {
+        if (blocks[i]->m_normalizedLabelName == normalizedLabel)
+        {
+            return blocks[i];
+        }
+    }
+    return nullptr;
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmFile::FindBlockInFastPath(const std::string& normalizedLabel)
+{
+    return X64AsmFileFindLabelInBlocksImpl(m_blocks, normalizedLabel);
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmFile::FindBlockInSlowPath(const std::string& normalizedLabel)
+{
+    return X64AsmFileFindLabelInBlocksImpl(m_slowpath, normalizedLabel);
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmFile::FindBlockInIcPath(const std::string& normalizedLabel)
+{
+    return X64AsmFileFindLabelInBlocksImpl(m_icPath, normalizedLabel);
+}
+
+std::string WARN_UNUSED X64AsmFile::EmitComputeLabelDistanceAsm(const std::string& labelBegin, const std::string& labelEnd)
+{
+    std::string uniqueName = m_labelNormalizer.GetUniqueLabel();
+    ReleaseAssert(uniqueName.starts_with("."));
+    uniqueName = uniqueName.substr(1);
+    std::string varName = "deegen_label_distance_computation_result_" + uniqueName;
+    std::string s = "";
+    s += "\n\n\t.type\t" + varName + ",@object\n";
+    s += "\t.section\t.rodata." + varName + ",\"a\",@progbits\n";
+    s += "\t.globl\t" + varName + "\n";
+    s += "\t.p2align\t3\n";
+    s += varName + ":\n";
+    s += "\t.quad\t" + labelEnd + "-" + labelBegin + "\n";
+    s += ".size\t" + varName + ", 8\n\n";
+    m_fileFooter += s;
+    return varName;
+}
+
 X64AsmBlock* WARN_UNUSED X64AsmBlock::Clone(X64AsmFile* owner)
 {
     std::unique_ptr<X64AsmBlock> holder = std::make_unique<X64AsmBlock>(*this);

@@ -30,6 +30,14 @@ struct DeegenBytecodeBaselineJitInfo
     //
     std::vector<std::pair<std::unique_ptr<llvm::Module>, std::string /*fnName*/>> m_implModulesForAudit;
 
+    // Extra list of audit files to be stored into the audit folder
+    //
+    std::vector<std::pair<std::string /*fileName*/, std::string /*fileContents*/>> m_extraAuditFiles;
+
+    // Extra list of verbose audit files to be stored into the verbose audit folder
+    //
+    std::vector<std::pair<std::string /*fileName*/, std::string /*fileContents*/>> m_extraVerboseAuditFiles;
+
     // Human-readable disassembly of what code will be generated, for audit purpose only
     //
     std::string m_disasmForAudit;

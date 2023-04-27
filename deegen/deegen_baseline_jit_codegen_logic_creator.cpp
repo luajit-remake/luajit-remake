@@ -4,6 +4,7 @@
 #include "llvm/IR/ReplaceConstant.h"
 #include "drt/baseline_jit_codegen_helper.h"
 #include "deegen_ast_inline_cache.h"
+#include "deegen_stencil_fixup_cross_reference_helper.h"
 
 namespace dast {
 
@@ -281,6 +282,15 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     mainJic.DoLowering();
     res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*mainJic.GetModule()), mainJic.GetResultFunctionName()));
 
+    /*
+    for (auto& item : mainJic.GetAllCallIcInfo())
+    {
+        std::string fileName = mainJic.GetResultFunctionName() + "_call_ic" + std::to_string(item.first);
+        res.m_extraVerboseAuditFiles.push_back(std::make_pair(fileName + "_dc.s", item.second.m_dcInfo.m_disasmForAudit));
+        res.m_extraVerboseAuditFiles.push_back(std::make_pair(fileName + "_cc.s", item.second.m_ccInfo.m_disasmForAudit));
+    }
+    */
+
     BytecodeVariantDefinition* bytecodeDef = mainJic.GetBytecodeDef();
 
     std::vector<std::unique_ptr<BaselineJitImplCreator>> rcJicList;
@@ -301,11 +311,51 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     // return continuation fallthrough to the next bytecode.
     // This is good enough, because almost all bytecodes have only 1 possible (non-slowpath) return continuation
     //
-    std::vector<BaselineJitImplCreator*> stencilList;
-    stencilList.push_back(&mainJic);
+    std::vector<BaselineJitImplCreator*> stencilGeneratorList;
+    stencilGeneratorList.push_back(&mainJic);
     for (auto& rcJic : rcJicList)
     {
-        stencilList.push_back(rcJic.get());
+        stencilGeneratorList.push_back(rcJic.get());
+    }
+
+    std::vector<DeegenStencil> stencilList;
+    for (BaselineJitImplCreator* jic : stencilGeneratorList)
+    {
+        stencilList.push_back(jic->GetStencil());
+    }
+
+    ReleaseAssert(stencilList.size() == stencilGeneratorList.size());
+    ReleaseAssert(stencilList.size() > 0);
+
+    std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap;
+    {
+        size_t offset = 0;
+        for (size_t i = 0; i < stencilList.size(); i++)
+        {
+            std::string name = stencilGeneratorList[i]->GetResultFunctionName();
+            ReleaseAssert(!stencilToFastPathOffsetMap.count(name));
+            stencilToFastPathOffsetMap[name] = offset;
+            offset += stencilList[i].m_fastPathCode.size();
+        }
+    }
+
+    for (auto& callIcInfo : mainJic.GetAllCallIcInfo())
+    {
+        DeegenCallIcLogicCreator::BaselineJitCodegenResult callIcCgRes =
+            DeegenCallIcLogicCreator::CreateBaselineJitCallIcCreator(&mainJic,
+                                                                     stencilToFastPathOffsetMap,
+                                                                     stencilList[0] /*inout*/,
+                                                                     callIcInfo);
+
+        std::string asmFile = CompileLLVMModuleToAssemblyFile(callIcCgRes.m_module.get(), Reloc::Static, CodeModel::Small);
+
+        {
+            // Dump audit log
+            //
+            std::string icAuditLog = callIcCgRes.m_disasmForAudit + asmFile;
+            std::string icAuditLogFileName = mainJic.GetBytecodeDef()->GetBytecodeIdName() + "_call_ic_" + std::to_string(callIcCgRes.m_uniqueOrd) + ".s";
+            res.m_extraAuditFiles.push_back(std::make_pair(icAuditLogFileName, icAuditLog));
+        }
     }
 
     struct StencilCgInfo
@@ -321,14 +371,14 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     };
 
     std::vector<StencilCgInfo> stencilCgInfos;
-    for (size_t i = 0; i < stencilList.size(); i++)
+    for (size_t i = 0; i < stencilGeneratorList.size(); i++)
     {
         // Only the last stencil may eliminate the tail jmp to fallthrough
         //
-        bool mayEliminateJmpToFallthrough = (i + 1 == stencilList.size());
+        bool mayEliminateJmpToFallthrough = (i + 1 == stencilGeneratorList.size());
 
-        BaselineJitImplCreator* jic = stencilList[i];
-        DeegenStencilCodegenResult cgResult = jic->GetStencil().PrintCodegenFunctions(
+        BaselineJitImplCreator* jic = stencilGeneratorList[i];
+        DeegenStencilCodegenResult cgResult = stencilList[i].PrintCodegenFunctions(
             mayEliminateJmpToFallthrough,
             bii.m_bytecodeDef->m_list.size() /*numBytecodeOperands*/,
             jic->GetStencilRcDefinitions() /*placeholderDefs*/);
@@ -349,10 +399,18 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     res.m_dataSectionCodeLen = dataSec.m_code.size();
     res.m_dataSectionAlignment = dataSec.m_alignment;
 
+    ReleaseAssert(stencilCgInfos.size() == stencilGeneratorList.size());
+    for (size_t i = 0; i < stencilGeneratorList.size(); i++)
+    {
+        std::string name = stencilGeneratorList[i]->GetResultFunctionName();
+        ReleaseAssert(stencilToFastPathOffsetMap.count(name));
+        ReleaseAssert(stencilCgInfos[i].offsetInFastPath == stencilToFastPathOffsetMap[name]);
+    }
+
     // Generate the audit log
     //
     {
-        Triple targetTriple = mainJic.GetStencil().m_triple;
+        Triple targetTriple = stencilList[0].m_triple;
 
         std::string fastPathAuditLog = DumpStencilDisassemblyForAuditPurpose(
             targetTriple, false /*isDataSection*/, fastPath.m_code, fastPath.m_relocMarker, "# " /*linePrefix*/);
@@ -602,48 +660,10 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     }
 
     // Create logic that copies the pre-fixup bytes for each section
-    // Note that we may over-copy at most 7 bytes without worrying about clobbering
-    // anything: the allocation logic has already accounted for that.
     //
-    auto emitCopyLogic = [&](const std::vector<uint8_t>& bytes, llvm::Value* dst, const std::string& dbgName)
-    {
-        ReleaseAssert(llvm_value_has_type<void*>(dst));
-        size_t roundedLen = RoundUpToMultipleOf<8>(bytes.size());
-        std::vector<Constant*> arr;
-        for (size_t i = 0; i < roundedLen; i++)
-        {
-            uint8_t value;
-            if (i < bytes.size())
-            {
-                value = bytes[i];
-            }
-            else
-            {
-                value = 0;
-            }
-
-            arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, value));
-        }
-
-        ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), roundedLen);
-        Constant* ca = ConstantArray::get(aty, arr);
-
-        ReleaseAssert(module->getNamedValue(dbgName) == nullptr);
-        GlobalVariable* gv = new GlobalVariable(*module.get(), aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, dbgName);
-        ReleaseAssert(gv->getName() == dbgName);
-        gv->setAlignment(Align(16));
-
-        // TODO: LLVM lowers memcpy.inline to 'rep movsb' if the buffer is too long (>128 bytes?),
-        // which has disastrous performance on older CPUs without FSRM, but (should?) work well on Golden Cove
-        // or later (but really? our output buffer is not aligned..)
-        // Think about if we need to do anything to this later..
-        //
-        EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(module.get(), dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, roundedLen), entryBB);
-    };
-
-    emitCopyLogic(fastPath.m_code, fastPathBaseAddr, "deegen_fastpath_prefixup_code");
-    emitCopyLogic(slowPath.m_code, slowPathBaseAddr, "deegen_slowpath_prefixup_code");
-    emitCopyLogic(dataSec.m_code, dataSecBaseAddr, "deegen_datasec_prefixup_code");
+    EmitCopyLogicForBaselineJitCodeGen(module.get(), fastPath.m_code, fastPathBaseAddr, "deegen_fastpath_prefixup_code", entryBB /*insertAtEnd*/);
+    EmitCopyLogicForBaselineJitCodeGen(module.get(), slowPath.m_code, slowPathBaseAddr, "deegen_slowpath_prefixup_code", entryBB /*insertAtEnd*/);
+    EmitCopyLogicForBaselineJitCodeGen(module.get(), dataSec.m_code, dataSecBaseAddr, "deegen_datasec_prefixup_code", entryBB /*insertAtEnd*/);
 
     // Emit calls to the patch logic
     //
@@ -819,6 +839,9 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             writeOperand(bytecodeDef->m_outputOperand.get(), outputSlot);
         }
 
+        // TODO: FIXME initialize Call IC sites
+        //
+
         Constant* advanceOffset = CreateLLVMConstantInt<uint64_t>(ctx, bytecodeDef->GetBaselineJitSlowPathDataLength());
         advancedSlowPathData = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                                  { advanceOffset }, "", entryBB);
@@ -953,9 +976,6 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     //
     // We have to fix up the cross-reference after inlining, because fastPathBaseAddr is only available in the main codegen logic.
     //
-    // Conceptually what we are trying to do is pretty simple: replace all use of 'return_cont_fn_name' with 'fastPathBaseAddr + offsetInFastPath'.
-    // However, due to the complexity and constraints of LLVM Constant/ConstantExpr, the logic is not as simple as it seems...
-    //
     {
         std::vector<std::pair<Function*, size_t /*offsetInFastPath*/>> crFixupList;
         for (StencilCgInfo& cgi : stencilCgInfos)
@@ -984,140 +1004,14 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             }
         }
 
-        // Find the first non-alloca instruction, which is the earliest safe place to insert new instructions
-        //
-        auto findFirstInsertionPt = [&](Function* func) WARN_UNUSED -> Instruction*
-        {
-            ReleaseAssert(!func->empty());
-            auto it = func->getEntryBlock().getFirstInsertionPt();
-            while (it != func->getEntryBlock().end())
-            {
-                Instruction& inst = *it;
-                if (!isa<AllocaInst>(&inst))
-                {
-                    return &inst;
-                }
-                it++;
-            }
-            ReleaseAssert(false);
-        };
-
         auto fixCrossReference = [&](Function* func, size_t offsetInFastPath)
         {
-            // Figure out all ConstantExpr users that uses 'func'
-            //
-            std::unordered_set<Constant*> cstUsers;
-            cstUsers.insert(func);
+            Instruction* insPt = FindFirstNonAllocaInstInEntryBB(mainFn);
+            Instruction* replacement = GetElementPtrInst::CreateInBounds(
+                llvm_type_of<uint8_t>(ctx), cg.GetJitFastPathPtr(),
+                { CreateLLVMConstantInt<uint64_t>(ctx, offsetInFastPath) }, "", insPt);
 
-            {
-                std::queue<Constant*> worklist;
-                worklist.push(func);
-                while (!worklist.empty())
-                {
-                    Constant* cst = worklist.front();
-                    worklist.pop();
-                    for (User* u : cst->users())
-                    {
-                        if (isa<Constant>(u))
-                        {
-                            if (isa<ConstantExpr>(u))
-                            {
-                                ConstantExpr* ce = cast<ConstantExpr>(u);
-                                if (!cstUsers.count(ce))
-                                {
-                                    cstUsers.insert(ce);
-                                    worklist.push(ce);
-                                }
-                            }
-                            else
-                            {
-                                // This shouldn't happen for our module..
-                                //
-                                fprintf(stderr, "[ERROR] Unexpected non-ConstantExpr use of constant, a bug?\n");
-                                cst->dump();
-                                module->dump();
-                                abort();
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Replace every use of constant in 'cstUsers'
-            //
-            std::unordered_map<Constant*, Instruction*> replacementMap;
-            Instruction* insPt = findFirstInsertionPt(mainFn);
-
-            {
-                Instruction* replacement = GetElementPtrInst::CreateInBounds(
-                    llvm_type_of<uint8_t>(ctx), cg.GetJitFastPathPtr(),
-                    { CreateLLVMConstantInt<uint64_t>(ctx, offsetInFastPath) }, "", insPt);
-
-                replacementMap[func] = replacement;
-            }
-
-            std::function<Instruction*(Constant*, Instruction*)> handleConstant = [&](Constant* cst, Instruction* insertBefore) WARN_UNUSED -> Instruction*
-            {
-                if (replacementMap.count(cst))
-                {
-                    Instruction* inst = replacementMap[cst];
-                    ReleaseAssert(inst != nullptr);
-                    return inst;
-                }
-
-                ReleaseAssert(isa<ConstantExpr>(cst));
-                ConstantExpr* ce = cast<ConstantExpr>(cst);
-                Instruction* inst = ce->getAsInstruction(insertBefore);
-                ReleaseAssert(inst != nullptr);
-
-                // Expanding ConstantExpr should never result in cycle. Fire assert if a cycle is detected.
-                //
-                replacementMap[cst] = nullptr;
-                for (Use& u : inst->operands())
-                {
-                    Value* val = u.get();
-                    if (isa<Constant>(val))
-                    {
-                        Constant* c = cast<Constant>(val);
-                        if (cstUsers.count(c))
-                        {
-                            Instruction* replacement = handleConstant(c, inst /*insertBefore*/);
-                            u.set(replacement);
-                        }
-                    }
-                }
-
-                replacementMap[cst] = inst;
-                return inst;
-            };
-
-            std::vector<Instruction*> instList;
-            for (BasicBlock& bb : *mainFn)
-            {
-                for (Instruction& inst : bb)
-                {
-                    instList.push_back(&inst);
-                }
-            }
-
-            for (Instruction* inst : instList)
-            {
-                for (Use& u : inst->operands())
-                {
-                    Value* val = u.get();
-                    if (isa<Constant>(val))
-                    {
-                        Constant* c = cast<Constant>(val);
-                        if (cstUsers.count(c))
-                        {
-                            Instruction* replacement = handleConstant(c, insPt /*insertBefore*/);
-                            u.set(replacement);
-                        }
-                    }
-                }
-            }
-
-            func->removeDeadConstantUsers();
+            DeegenStencilFixupCrossRefHelper::RunOnFunction(mainFn, func /*gvToReplace*/, replacement);
 
             if (!func->use_empty())
             {
@@ -1125,10 +1019,6 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
                 module->dump();
                 abort();
             }
-
-            // Catch bugs as early as possible if any of the crap above went wrong..
-            //
-            ValidateLLVMModule(module.get());
         };
 
         for (auto& it : crFixupList)

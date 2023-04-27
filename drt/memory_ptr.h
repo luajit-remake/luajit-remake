@@ -342,7 +342,7 @@ struct GeneralHeapPointer
         {
             if constexpr(TypeMayLiveInSystemHeap<U>)
             {
-                assert((x_minimum_valid_heap_address >> x_shiftFromRawOffset) <= m_value && m_value <= x_posMaxValue);
+                assert(static_cast<int32_t>(x_minimum_valid_heap_address >> x_shiftFromRawOffset) <= m_value && m_value <= x_posMaxValue);
                 assert(reinterpret_cast<HeapPtr<SystemHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
             }
             else
@@ -359,6 +359,8 @@ struct GeneralHeapPointer
     {
         return m_value == rhs.m_value;
     }
+
+    bool WARN_UNUSED IsUserHeapPointer() const { return m_value < 0; }
 
     static constexpr uint32_t x_shiftFromRawOffset = 3;
     static constexpr int32_t x_negMinValue = static_cast<int32_t>(0x80000000);
@@ -377,7 +379,7 @@ struct SpdsPtr
     {
         if constexpr(!std::is_same_v<T, void>)
         {
-            assert(m_value % alignof(T) == 0);
+            assert(m_value % static_cast<int32_t>(alignof(T)) == 0);
         }
         assert(m_value < static_cast<int32_t>(x_minimum_valid_heap_address));
     }
@@ -446,7 +448,7 @@ struct SpdsOrSystemHeapPtr
 
     bool IsInvalidPtr() const
     {
-        return 0 <= m_value && m_value < x_minimum_valid_heap_address;
+        return 0 <= m_value && m_value < static_cast<int32_t>(x_minimum_valid_heap_address);
     }
 
     HeapPtr<T> WARN_UNUSED ALWAYS_INLINE AsPtr() const

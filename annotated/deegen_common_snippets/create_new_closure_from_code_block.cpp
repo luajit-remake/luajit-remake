@@ -9,4 +9,3 @@ static HeapPtr<FunctionObject> DeegenSnippet_CreateNewClosureFromCodeBlock(CodeB
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("CreateNewClosureFromCodeBlock", DeegenSnippet_CreateNewClosureFromCodeBlock)
-

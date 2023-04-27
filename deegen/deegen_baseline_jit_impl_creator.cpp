@@ -546,10 +546,16 @@ void BaselineJitImplCreator::DoLowering()
     //
     m_stencilObjectFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");
 
-    // Note that we cannot further lower the stencil to concrete copy-and-patch logic yet, because at this stage
-    // we cannot determine if we are allowed to eliminate the tail jump to fallthrough. So our lowering ends here.
+    // Parse object file into copy-and-patch stencil
     //
     m_stencil = DeegenStencil::ParseMainLogic(m_module->getContext(), m_stencilObjectFile);
+
+    m_callIcInfo = slPass.m_callIcLoweringResults;
+
+    // Note that we cannot further lower the main logic stencil to concrete copy-and-patch logic yet, because at this stage
+    // we cannot determine if we are allowed to eliminate the tail jump to fallthrough. So our lowering ends here.
+    //
+    return;
 }
 
 }   // namespace dast

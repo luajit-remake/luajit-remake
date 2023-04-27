@@ -68,7 +68,8 @@ std::string WARN_UNUSED CompileAssemblyFileToObjectFile(const std::string& asmFi
     int retVal = system(cmd.c_str());
     if (retVal != 0)
     {
-        fprintf(stderr, "[ERROR] Command '%s' failed with return value %d\n", cmd.c_str(), retVal);
+        fprintf(stderr, "Input ASM file: %s\n", asmFileContents.c_str());
+        fprintf(stderr, "[ERROR] Compilation command '%s' failed with return value %d\n", cmd.c_str(), retVal);
         abort();
     }
 

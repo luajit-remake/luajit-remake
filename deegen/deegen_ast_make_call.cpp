@@ -849,10 +849,16 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
     Function* func = m_origin->getParent()->getParent();
     ReleaseAssert(func != nullptr);
 
-    // Get the code pointer and the callee CodeBlock
+    // Get the code pointer and the callee CodeBlock, employing call IC as needed
     //
-    bool shouldDisableCallIc = ifi->IsBaselineJitSlowPath();
-    if (shouldDisableCallIc)
+    // Currently, for simplicity, we only enable call IC in the main component.
+    // Any return continuation that further makes call does not use IC.
+    //
+    // The main motivation for this is simply because it makes the SlowPathData layout simpler,
+    // and that we don't have the use case that a return continuation can benefit significantly from call IC.
+    //
+    bool shouldEmployCallIc = ifi->IsMainComponent();
+    if (!shouldEmployCallIc)
     {
         Value* calleeCbHeapPtr = nullptr;
         Value* codePointer = nullptr;

@@ -398,6 +398,26 @@ struct X64AsmFile
     void InsertBlocksAfter(const std::vector<X64AsmBlock*>& blocksToBeInserted, X64AsmBlock* insertAfter);
     void RemoveBlock(X64AsmBlock* blockToRemove);
 
+    // Return nullptr if not found
+    //
+    X64AsmBlock* WARN_UNUSED FindBlockInFastPath(const std::string& normalizedLabel);
+    X64AsmBlock* WARN_UNUSED FindBlockInSlowPath(const std::string& normalizedLabel);
+    X64AsmBlock* WARN_UNUSED FindBlockInIcPath(const std::string& normalizedLabel);
+
+    // To compute distance between labels, we emit special symbols with value defined by GNU ASM expressions, like the following:
+    //     .type __special_sym,@object
+    //     .section .rodata.__special_sym,"a",@progbits
+    //     .globl __special_sym
+    //     .p2align 3
+    // __special_sym:
+    //     .quad __label_end-__label_start
+    //     .size 8
+    //
+    // We can then parse the object file to retrieve the computation result back
+    // Return the special symbol name that stores the result
+    //
+    std::string WARN_UNUSED EmitComputeLabelDistanceAsm(const std::string& labelBegin, const std::string& labelEnd);
+
     std::unique_ptr<X64AsmFile> WARN_UNUSED Clone();
 
     void Validate();

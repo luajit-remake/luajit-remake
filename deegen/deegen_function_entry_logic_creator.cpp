@@ -353,42 +353,11 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     BasicBlock* bb = BasicBlock::Create(ctx, "", patchFn);
 
-    auto emitCopyLogic = [&](const std::vector<uint8_t>& bytes, llvm::Value* dst, const std::string& dbgName)
-    {
-        ReleaseAssert(llvm_value_has_type<void*>(dst));
-        size_t roundedLen = RoundUpToMultipleOf<8>(bytes.size());
-        std::vector<Constant*> arr;
-        for (size_t i = 0; i < roundedLen; i++)
-        {
-            uint8_t value;
-            if (i < bytes.size())
-            {
-                value = bytes[i];
-            }
-            else
-            {
-                value = 0;
-            }
-
-            arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, value));
-        }
-
-        ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), roundedLen);
-        Constant* ca = ConstantArray::get(aty, arr);
-
-        ReleaseAssert(cgMod->getNamedValue(dbgName) == nullptr);
-        GlobalVariable* gv = new GlobalVariable(*cgMod.get(), aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, dbgName);
-        ReleaseAssert(gv->getName() == dbgName);
-        gv->setAlignment(Align(16));
-
-        EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(cgMod.get(), dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, roundedLen), bb);
-    };
-
     // Note that we don't have to align the data section pointer since it is at offset 0 and must already be aligned
     //
-    emitCopyLogic(cgRes.m_fastPathPreFixupCode, fastPathAddr, "deegen_fastpath_prefixup_code");
-    emitCopyLogic(cgRes.m_slowPathPreFixupCode, slowPathAddr, "deegen_slowpath_prefixup_code");
-    emitCopyLogic(cgRes.m_dataSecPreFixupCode, dataSecAddr, "deegen_datasec_prefixup_code");
+    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_fastPathPreFixupCode, fastPathAddr, "deegen_fastpath_prefixup_code", bb /*insertAtEnd*/);
+    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_slowPathPreFixupCode, slowPathAddr, "deegen_slowpath_prefixup_code", bb /*insertAtEnd*/);
+    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_dataSecPreFixupCode, dataSecAddr, "deegen_datasec_prefixup_code", bb /*insertAtEnd*/);
 
     Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
     Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);

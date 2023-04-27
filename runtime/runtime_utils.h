@@ -7,6 +7,8 @@
 #include "vm.h"
 #include "structure.h"
 #include "table_object.h"
+#include "spds_doubly_linked_list.h"
+#include "baseline_jit_codegen_helper.h"
 
 class IRNode
 {
@@ -303,6 +305,180 @@ public:
     uint32_t m_slot;
 };
 
+// Describes one entry of JIT call inline cache
+//
+// Each CodeBlock keeps a circular doubly-linked list of all the call IC entries caching on it,
+// so that it can update the codePtr for all of them when tiering up or when the JIT code is jettisoned
+// CodeBlock never invalidate any call IC. It only updates their CodePtr.
+//
+// If the IC is not caching on a CodeBlock (but a C function, for example), its DoublyLinkedListNode is not linked.
+//
+// Each call site that employs IC keeps a singly-linked list of all the IC entries it owns,
+// so that it can know the cached targets, do invalidatation when transitioning from direct-call mode to closure-call mode,
+// and to reclaim memory when the JIT code is jettisoned
+//
+// This struct always resides in the VM short-pointer data structure region
+//
+class JitCallInlineCacheEntry final : public SpdsDoublyLinkedListNode<JitCallInlineCacheEntry>
+{
+public:
+    // The singly-linked list anchored at the callsite, 0 if last node
+    //
+    SpdsPtr<JitCallInlineCacheEntry> m_callSiteNextNode;
+
+    // If this IC is a direct-call IC, this is the FunctionObject being cached on
+    // If this IC is a closure-call IC, this is the ExecutableCode being cached on
+    //
+    GeneralHeapPointer<void> m_entity;
+
+    // High 16 bits: index into the prebuilt IC trait table, to access all sorts of traits about this IC
+    // Lower 48 bits: pointer to the JIT code piece
+    //
+    uint64_t m_taggedPtr;
+
+    // Get the ExecutableCode of the function target cached by this IC
+    //
+    ExecutableCode* WARN_UNUSED GetTargetExecutableCode(VM* vm);
+    ExecutableCode* WARN_UNUSED GetTargetExecutableCodeKnowingDirectCall(VM* vm);
+
+    size_t WARN_UNUSED GetIcTraitKind()
+    {
+        return m_taggedPtr >> 48;
+    }
+
+    const JitCallInlineCacheTraits* WARN_UNUSED GetIcTrait()
+    {
+        return deegen_jit_call_inline_cache_trait_table[GetIcTraitKind()];
+    }
+
+    uint8_t* WARN_UNUSED GetJitRegionStart()
+    {
+        return reinterpret_cast<uint8_t*>(m_taggedPtr & ((1ULL << 48) - 1));
+    }
+
+    static JitCallInlineCacheEntry* WARN_UNUSED Create(VM* vm,
+                                                       ExecutableCode* targetExecutableCode,
+                                                       SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
+                                                       HeapPtr<void> entity,
+                                                       size_t icTraitKind);
+
+    // Note that this function removes the IC from the doubly-linked list (anchored at the CodeBlock) as needed,
+    // but doesn't do anything about the singly-linked list (anchored at the call site)!
+    //
+    // So the only valid use case for this function is when a call site decides to destroy all the IC it owns.
+    //
+    void Destroy(VM* vm);
+
+    // Update the target function entry point for this IC
+    //
+    // diff := (uint64_t)newCodePtr - (uint64_t)oldCodePtr
+    //
+    void UpdateTargetFunctionCodePtr(uint64_t diff)
+    {
+        const JitCallInlineCacheTraits* trait = GetIcTrait();
+        uint8_t* jitBaseAddr = GetJitRegionStart();
+        size_t numPatches = trait->m_numCodePtrUpdatePatches;
+        assert(numPatches > 0);
+        size_t i = 0;
+        do {
+            uint8_t* addr = jitBaseAddr + trait->m_codePtrPatchRecords[i].m_offset;
+            if (trait->m_codePtrPatchRecords[i].m_is64)
+            {
+                UnalignedStore<uint64_t>(addr, UnalignedLoad<uint64_t>(addr) + diff);
+            }
+            else
+            {
+                UnalignedStore<uint32_t>(addr, UnalignedLoad<uint32_t>(addr) + static_cast<uint32_t>(diff));
+            }
+            i++;
+        } while (unlikely(i < numPatches));
+    }
+};
+static_assert(sizeof(JitCallInlineCacheEntry) == 24);
+
+// Describes one call site in JIT'ed code that employs inline caching
+// Note that this must have a 1-byte alignment since this struct currently lives in the SlowPathData stream
+//
+struct __attribute__((__packed__, __aligned__(1))) JitCallInlineCacheSite
+{
+    static constexpr size_t x_maxEntries = x_maxJitCallInlineCacheEntries;
+
+    // Try to keep this a zero initialization to avoid unnecessary work..
+    //
+    JitCallInlineCacheSite()
+        : m_linkedListHead(SpdsPtr<JitCallInlineCacheEntry> { 0 })
+        , m_numEntries(0)
+        , m_mode(Mode::DirectCall)
+        , m_bloomFilter(0)
+    { }
+
+    // The singly-linked list head of all the IC entries owned by this site
+    //
+    Packed<SpdsPtr<JitCallInlineCacheEntry>> m_linkedListHead;
+
+    // The total number of IC entries
+    //
+    uint8_t m_numEntries;
+
+    enum class Mode : uint8_t
+    {
+        DirectCall,
+        ClosureCall,
+        // When we transit from direct-call mode to closure-call mode, we invalidate all IC and start back from one IC (the target we just seen)
+        // So the information of whether we have already seen more than one call targets is temporarily lost.
+        // However, this information is useful for the higher tiers.
+        // So we record this info here: it means even if there is only one IC entry, we actually have seen more.
+        //
+        ClosureCallWithMoreThanOneTargetObserved
+    };
+
+    // Whether this site is in direct-call or closure-call mode
+    //
+    Mode m_mode;
+
+    // When in direct-call mode, a mini bloom filter recording all the ExecutableCode pointers cached by the ICs,
+    // so we can usually rule out transition to closure-call mode without iterating through all the ICs
+    //
+    // With 2 hash functions, false positive rate with 3/4/5 existing items is 9.8% / 15.5% / 21.6% respectively
+    //
+    uint16_t m_bloomFilter;
+
+    bool WARN_UNUSED ObservedNoTarget()
+    {
+        AssertImp(m_numEntries == 0, m_mode == Mode::DirectCall);
+        return m_numEntries == 0;
+    }
+
+    bool WARN_UNUSED ObservedExactlyOneTarget()
+    {
+        return m_numEntries == 1 && m_mode != Mode::ClosureCallWithMoreThanOneTargetObserved;
+    }
+
+    // May only be called if m_numEntries < x_maxEntries and m_mode == DirectCall
+    // This function handles everything except actually JIT'ting code
+    //
+    // Returns the address to populate JIT code
+    //
+    // Note that only dcIcTraitKind is passed in, because ccIcTraitKind for one IC site is always dcIcTraitKind + 1
+    //
+    // 'transitedToCCMode' will be written either 0 (false) or 1 (true), we use uint8_t instead of bool to avoid subtle C++ -> LLVM ABI issues
+    //
+    // Use attribute 'malloc' to teach LLVM that the returned address is noalias, which is very useful due to how our codegen function is written
+    //
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/);
+
+    // May only be called if m_numEntries < x_maxEntries and m_mode != DirectCall
+    // This function handles everything except actually JIT'ting code
+    //
+    // Returns the address to populate JIT code
+    //
+    // Note that the passed in IcTraitKind is the DC one, not the CC one!
+    //
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv);
+};
+static_assert(sizeof(JitCallInlineCacheSite) == 8);
+static_assert(alignof(JitCallInlineCacheSite) == 1);
+
 class UnlinkedCodeBlock;
 
 // The constant table stores all constants in one bytecode function.
@@ -313,6 +489,7 @@ class UnlinkedCodeBlock;
 // which mean when a pointer is interpreted as a TValue, it will always be interpreted into a double, so the GC marking
 // algorithm will correctly ignore it for the marking.
 //
+// TODO: what is the above comment? Is it still up to date? figure out later..
 
 // This uniquely corresponds to each pair of <UnlinkedCodeBlock, GlobalObject>
 // It owns the bytecode and the corresponding metadata (the bytecode is copied from the UnlinkedCodeBlock,
@@ -341,6 +518,8 @@ public:
         return reinterpret_cast<uintptr_t>(this) + GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(m_bytecodeLength);
     }
 
+    void UpdateBestEntryPoint(void* newEntryPoint);
+
     UserHeapPointer<TableObject> m_globalObject;
 
     uint32_t m_stackFrameNumSlots;
@@ -352,6 +531,10 @@ public:
     FLOCodeBlock* m_floCodeBlock;
 
     UnlinkedCodeBlock* m_owner;
+
+    // All JIT call inline caches that cache on this CodeBlock
+    //
+    SpdsDoublyLinkedList<JitCallInlineCacheEntry> m_jitCallIcList;
 
     uint64_t m_bytecodeStream[0];
 };
@@ -853,6 +1036,34 @@ public:
     TValue m_upvalues[0];
 };
 static_assert(sizeof(FunctionObject) == 8);
+
+inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCode(VM* vm)
+{
+    AssertIff(m_entity.IsUserHeapPointer(), GetIcTrait()->m_isDirectCallMode);
+    ExecutableCode* ec;
+    if (m_entity.IsUserHeapPointer())
+    {
+        assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
+        ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
+    }
+    else
+    {
+        assert(m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
+        ec = TranslateToRawPointer(vm, m_entity.As<ExecutableCode>());
+    }
+    AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
+    return ec;
+}
+
+inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCodeKnowingDirectCall(VM* vm)
+{
+    assert(GetIcTrait()->m_isDirectCallMode);
+    assert(m_entity.IsUserHeapPointer());
+    assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
+    ExecutableCode* ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
+    AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
+    return ec;
+}
 
 // Corresponds to a file
 //

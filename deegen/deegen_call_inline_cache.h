@@ -5,6 +5,7 @@
 #include "deegen_bytecode_metadata.h"
 #include "tvalue.h"
 #include "deegen_parse_asm_text.h"
+#include "deegen_stencil_creator.h"
 
 namespace dast {
 
@@ -84,7 +85,7 @@ struct DeegenCallIcLogicCreator
         llvm::Value*& codePointer /*out*/,
         llvm::Instruction* insertBefore);
 
-    // The baseline JIT lowering splits one MakeCall into multiple paths for IC
+    // The baseline JIT lowering splits one MakeCall into multiple paths for different IC cases
     // Each path is described by the struct below
     //
     struct BaselineJitLLVMLoweringResult
@@ -106,7 +107,7 @@ struct DeegenCallIcLogicCreator
         uint64_t unique_ord,
         llvm::Instruction* origin);
 
-    struct BaselineJitAsmLoweringResult
+    struct BaselineJitAsmTransformResult
     {
         // The label for the SMC region
         //
@@ -126,12 +127,100 @@ struct DeegenCallIcLogicCreator
         //
         uint64_t m_uniqueOrd;
 
+        // Special symbols which stores the results of label offset / distance computation (see EmitComputeLabelOffsetAndLengthSymbol)
+        //
+        std::string m_symbolNameForSMCLabelOffset;
+        std::string m_symbolNameForSMCRegionLength;
+        std::string m_symbolNameForCcIcMissLogicLabelOffset;
+        std::string m_symbolNameForDcIcMissLogicLabelOffset;
+
         void FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file);
+
+        // We need to know the offset of certain labels / distance between certain labels in the machine code, specifically:
+        // 1. The machine code offset and length of the SMC region in the fast path, so we can know how to repatch it
+        // 2. The offset of CC/DC IC miss logic in the slow path, so we can know how to produce a jump to it
+        //
+        void EmitComputeLabelOffsetAndLengthSymbol(X64AsmFile* file);
     };
 
-    // See comments in CPP file
+    // Perform the ASM transformation pass for Call IC lowering
+    // See comments in CPP file for detail
     //
-    static std::vector<BaselineJitAsmLoweringResult> WARN_UNUSED DoBaselineJitAsmLowering(X64AsmFile* file);
+    static std::vector<BaselineJitAsmTransformResult> WARN_UNUSED DoBaselineJitAsmTransform(X64AsmFile* file);
+
+    // Final result after all ASM-level lowering, produced by stencil lowering pipeline
+    //
+    struct BaselineJitAsmLoweringResult
+    {
+        // Assembly files for the extracted DirectCall and ClosureCall IC logic
+        //
+        std::string m_directCallLogicAsm;
+        std::string m_closureCallLogicAsm;
+
+        // The special symbols holding the offset and length of the SMC region in the fast path
+        //
+        std::string m_symbolNameForSMCLabelOffset;
+        std::string m_symbolNameForSMCRegionLength;
+
+        // The special symbols holding the offset of CC/DC IC miss logic in the slow path
+        //
+        std::string m_symbolNameForCcIcMissLogicLabelOffset;
+        std::string m_symbolNameForDcIcMissLogicLabelOffset;
+
+        // The unique ordinal of this call IC, always corresponds to the ordinal passed to EmitForBaselineJIT()
+        //
+        uint64_t m_uniqueOrd;
+    };
+
+    struct BaselineJitCodegenResult
+    {
+        // Contains a function '__deegen_baseline_jit_codegen_<bytecodeId>_jit_call_ic_<ord>',
+        // the final implementation of the call-IC-miss slowpath, doing everything needed.
+        //
+        // The function takes the following arguments:
+        //    CodeBlock* codeBlock: the function CodeBlock
+        //    uint64_t slowPathDataOffset: the offset of this bytecode's SlowPathData in the stream
+        //    void* slowPathPtr: the JIT slowpath addr of this stencil (not this bytecode!)
+        //    void* dataSecPtr: the JIT data section addr of this stencil (not this bytecode!)
+        //    TValue tv: the function object being called, boxed into TValue but always a function object
+        //
+        std::unique_ptr<llvm::Module> m_module;
+        std::string m_resultFnName;
+
+        // Describes how to modify the codePtr for this IC, which is needed for tiering-up or code invalidation
+        // Each item is a pair <offset, is64>, meaning the 32/64-bit value at address 'icAddr + offset' shall be patched
+        // by adding (newCodePtr - oldCodePtr).
+        //
+        std::vector<std::pair<size_t /*offset*/, bool /*is64*/>> m_dcIcCodePtrPatchRecords;
+        std::vector<std::pair<size_t /*offset*/, bool /*is64*/>> m_ccIcCodePtrPatchRecords;
+
+        // The JIT code size of this IC in bytes
+        // Note that for simplicity, currently we always put the data section (if exists) right after the code section,
+        // so there is only one size which accounts for everything.
+        //
+        size_t m_dcIcSize;
+        size_t m_ccIcSize;
+
+        // Human-readable disassembly for audit purpose, note that it's inaccurate as all runtime constants are missing
+        //
+        std::string m_disasmForAudit;
+
+        size_t m_uniqueOrd;
+    };
+
+    // Argument notes:
+    //     stencilBaseOffsetInFastPath: the bytecode may consists of multiple stencils, we need the fast path offset
+    //         of the stencil containing this IC in order to correctly patch address references to other stencils
+    //
+    // Creates the IC JIT'ter, and all needed traits about this IC
+    //
+    // Note that the mainLogicStencil will be modified, since the code in the SMC region of the input mainLogicStencil
+    // is placeholder logic and not final. This function will rewrite the SMC region to the final logic.
+    //
+    static BaselineJitCodegenResult WARN_UNUSED CreateBaselineJitCallIcCreator(BaselineJitImplCreator* ifi,
+                                                                               std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
+                                                                               DeegenStencil& mainLogicStencil /*inout*/,
+                                                                               BaselineJitAsmLoweringResult& icInfo);
 };
 
 }   // namespace dast

@@ -74,6 +74,11 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     return EmitGetOperandValueImpl(ifi->GetCurBytecode(), targetBB, true /*isBytecodeStruct*/);
 }
 
+llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBaselineJitSlowPathData(llvm::Value* slowPathDataPtr, llvm::BasicBlock* targetBB)
+{
+    return EmitGetOperandValueImpl(slowPathDataPtr, targetBB, false /*isBytecodeStruct*/);
+}
+
 llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBaselineJitSlowPathData(BaselineJitImplCreator* ifi, llvm::BasicBlock* targetBB)
 {
     return EmitGetOperandValueImpl(ifi->GetJitSlowPathData(), targetBB, false /*isBytecodeStruct*/);
@@ -512,6 +517,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_metadataStructInfoAssigned = false;
             def->m_isInterpreterCallIcEverUsed = false;
             def->m_isInterpreterCallIcExplicitlyDisabled = false;
+            def->m_numJitCallICs = static_cast<size_t>(-1);
             def->m_implFunctionName = implFuncName;
             def->m_hasOutputValue = hasTValueOutput;
             def->m_hasConditionalBranchTarget = canPerformBranch;
@@ -775,6 +781,7 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
 
     JSONCheckedGet(j, "is_interpreter_call_ic_explicitly_disabled", m_isInterpreterCallIcExplicitlyDisabled);
     JSONCheckedGet(j, "is_interpreter_call_ic_ever_used", m_isInterpreterCallIcEverUsed);
+    JSONCheckedGet(j, "num_jit_call_ic", m_numJitCallICs);
 
     {
         int quickeningKindInt = JSONCheckedGet<int>(j, "quickening_kind");
@@ -840,6 +847,8 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
 
     j["is_interpreter_call_ic_explicitly_disabled"] = m_isInterpreterCallIcExplicitlyDisabled;
     j["is_interpreter_call_ic_ever_used"] = m_isInterpreterCallIcEverUsed;
+    ReleaseAssert(m_numJitCallICs != static_cast<size_t>(-1));
+    j["num_jit_call_ic"] = m_numJitCallICs;
 
     j["quickening_kind"] = static_cast<int>(m_quickeningKind);
 
@@ -913,6 +922,11 @@ void BytecodeVariantDefinition::ComputeBaselineJitSlowPathDataLayout()
         update(m_outputOperand.get(), 2 /*maxWidthBytes*/);
     }
 
+    // Reserve space for each Call IC site
+    //
+    m_baselineJitCallIcBaseOffset = currentOffset;
+    currentOffset += GetNumCallICsInJitTier() * sizeof(JitCallInlineCacheSite);
+
     m_baselineJitSlowPathDataLength = currentOffset;
 }
 
@@ -933,6 +947,33 @@ static llvm::Value* DecodeJitAddrFromSlowPathDataImpl(llvm::Value* storageAddr, 
 
     Value* ptr = new IntToPtrInst(addr64, llvm_type_of<void*>(ctx), "", insertBefore);
     return ptr;
+}
+
+llvm::Value* WARN_UNUSED BytecodeVariantDefinition::GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+
+    LLVMContext& ctx = slowPathDataAddr->getContext();
+
+    // The jitAddr of every SlowPathData is always at offset x_opcodeSizeBytes
+    //
+    size_t offset = x_opcodeSizeBytes;
+
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathDataAddr));
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathDataAddr,
+                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
+
+    return DecodeJitAddrFromSlowPathDataImpl(gep, insertBefore);
+}
+
+llvm::Value* WARN_UNUSED BytecodeVariantDefinition::GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(slowPathDataAddr->getContext(), insertAtEnd);
+    Value* res = GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathDataAddr, dummy);
+    dummy->eraseFromParent();
+    return res;
 }
 
 llvm::Value* WARN_UNUSED BytecodeVariantDefinition::GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore)

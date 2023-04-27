@@ -6,7 +6,12 @@
 #include "deegen_baseline_jit_codegen_logic_creator.h"
 #include "deegen_magic_asm_helper.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/Linker/Linker.h"
 #include "deegen_parse_asm_text.h"
+#include "invoke_clang_helper.h"
+#include "drt/baseline_jit_codegen_helper.h"
+#include "deegen_stencil_reserved_placeholder_ords.h"
+#include "deegen_stencil_fixup_cross_reference_helper.h"
 
 namespace dast {
 
@@ -489,7 +494,7 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
 
     ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
 
-    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 10000 /*CallIcDirectCallCachedValue*/);
+    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, CP_PLACEHOLDER_CALL_IC_DIRECT_CALL_TVALUE);
     ReleaseAssert(llvm_value_has_type<void*>(cpSym));
 
     FunctionType* fty = FunctionType::get(llvm_type_of<uint64_t>(ctx), { llvm_type_of<uint64_t>(ctx), llvm_type_of<void*>(ctx) }, false);
@@ -545,7 +550,7 @@ static void InsertBaselineJitCallIcMagicAsmForClosureCall(llvm::Module* module,
 
     ReleaseAssert(llvm_value_has_type<uint32_t>(codeBlockSysHeapPtrVal));
 
-    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, 10001 /*CallIcClosureCallCachedValue*/);
+    GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, CP_PLACEHOLDER_CALL_IC_CALLEE_CB32);
     ReleaseAssert(llvm_value_has_type<void*>(cpSym));
 
     FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<uint32_t>(ctx), llvm_type_of<void*>(ctx) }, false);
@@ -610,25 +615,6 @@ static llvm::Instruction* WARN_UNUSED CloneBasicBlockContainingInstruction(llvm:
     return result;
 }
 
-std::string WARN_UNUSED EmitComputeLabelOffsetAsm(const std::string& fnName, const std::string& labelName)
-{
-    ReleaseAssert(labelName.length() > 0 && labelName[0] != '.');
-    ReleaseAssert(fnName.length() > 0);
-    ReleaseAssert(labelName.find("XYZyZYX") == std::string::npos);
-    ReleaseAssert(labelName.find(" ")== std::string::npos);
-    ReleaseAssert(fnName.find(" ")== std::string::npos);
-    std::string varName = "offset_of_label_XYZyZYX_" + labelName + "_XYZyZYX_in_function_" + fnName;
-    std::string res = "";
-    res += "\n\n\t.type\t" + varName + ",@object\n";
-    res += "\t.section\t.rodata." + varName + ",\"a\",@progbits\n";
-    res += "\t.globl\t" + varName + "\n";
-    res += "\t.p2align\t3\n";
-    res += varName + ":\n";
-    res += "\t.quad\t." + labelName + "-" + fnName + "\n";
-    res += ".size\t" + varName + ", 8\n\n";
-    return res;
-}
-
 std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::EmitForBaselineJIT(
     BaselineJitImplCreator* ifi,
     llvm::Value* functionObject,
@@ -655,9 +641,9 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     {
         ReleaseAssert(isa<CallInst>(dcHitOrigin));
 
-        GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10001 /*CallIcClosureCallCachedValue*/);
+        GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CB32);
         Value* dcHitCalleeCb = new AddrSpaceCastInst(gv, llvm_type_of<HeapPtr<void>>(ctx), "", dcHitOrigin);
-        Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
+        Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({
             .calleeCbHeapPtr = dcHitCalleeCb,
@@ -698,7 +684,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 
         Value* calleeCbU64 = new ZExtInst(calleeCbU32, llvm_type_of<uint64_t>(ctx), "", ccHitOrigin);
         Value* calleeCbHeapPtr = new IntToPtrInst(calleeCbU64, llvm_type_of<HeapPtr<void>>(ctx), "", ccHitOrigin);
-        Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), 10002 /*CallIcCachedCodePtr*/);
+        Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({
             .calleeCbHeapPtr = calleeCbHeapPtr,
@@ -1066,12 +1052,12 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 //     jp dcIcMissEntry
 //     jmp __fake_dest
 //
-// After IC extraction, the SMC region needs to be fixed up by calling BaselineJitAsmLoweringResult::FixupSMCRegion,
+// After IC extraction, the SMC region needs to be fixed up by calling BaselineJitAsmTransformResult::FixupSMCRegion,
 // which simply make it unconditionally jump to 'ccIcMissEntry'.
 //
-std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::DoBaselineJitAsmLowering(X64AsmFile* file)
+std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> WARN_UNUSED DeegenCallIcLogicCreator::DoBaselineJitAsmTransform(X64AsmFile* file)
 {
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> r;
+    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> r;
 
     // Process one IC use, identified by a DirectCallIC asm magic (from this magic we can find everything we need)
     //
@@ -1184,7 +1170,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
             newList.push_back(dcPayload->m_lines[2]);
             newList.push_back(dcPayload->m_lines[3]);
             ReleaseAssert(newList.back().IsConditionalJumpInst());
-            newList.back().GetWord(1) = "__deegen_cp_placeholder_10003" /*ic_miss*/;
+            newList.back().GetWord(1) = "__deegen_cp_placeholder_" + std::to_string(CP_PLACEHOLDER_CALL_IC_MISS_DEST);
 
             for (size_t i = 0; i < dcEntry->m_lines.size(); i++)
             {
@@ -1215,7 +1201,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
             newList.push_back(ccPayload->m_lines[1]);
             newList.push_back(ccPayload->m_lines[2]);
             ReleaseAssert(newList.back().IsConditionalJumpInst());
-            newList.back().GetWord(1) = "__deegen_cp_placeholder_10003" /*ic_miss*/;
+            newList.back().GetWord(1) = "__deegen_cp_placeholder_" + std::to_string(CP_PLACEHOLDER_CALL_IC_MISS_DEST);
 
             for (size_t i = 0; i < ccEntry->m_lines.size(); i++)
             {
@@ -1362,7 +1348,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> WARN_UNUSED 
 // because it must be the longest (the SMC region for direct-call mode is simply one jump without any setup logic)
 // This is slightly tricky, but should be fine for now...
 //
-void DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult::FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file)
+void DeegenCallIcLogicCreator::BaselineJitAsmTransformResult::FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file)
 {
     X64AsmBlock* block = nullptr;
     for (X64AsmBlock* b : file->m_blocks)
@@ -1396,6 +1382,1306 @@ void DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult::FixupSMCRegionAfter
     ReleaseAssert(!block->m_endsWithJmpToLocalLabel);
     block->m_endsWithJmpToLocalLabel = true;
     block->m_terminalJmpTargetLabel = m_labelForCcIcMissLogic;
+}
+
+void DeegenCallIcLogicCreator::BaselineJitAsmTransformResult::EmitComputeLabelOffsetAndLengthSymbol(X64AsmFile* file)
+{
+    // Compute the offset and length of SMC region
+    //
+    {
+        X64AsmBlock* smcBlock = file->FindBlockInFastPath(m_labelForSMCRegion);
+        ReleaseAssert(smcBlock->m_trailingLabelLine.IsCommentOrEmptyLine());
+        std::string uniqLabel = file->m_labelNormalizer.GetUniqueLabel();
+        smcBlock->m_trailingLabelLine = X64AsmLine::Parse(uniqLabel + ":");
+        ReleaseAssert(smcBlock->m_trailingLabelLine.IsLocalLabel());
+        m_symbolNameForSMCRegionLength = file->EmitComputeLabelDistanceAsm(smcBlock->m_normalizedLabelName /*begin*/, uniqLabel /*end*/);
+        m_symbolNameForSMCLabelOffset = file->EmitComputeLabelDistanceAsm(file->m_blocks[0]->m_normalizedLabelName /*begin*/, smcBlock->m_normalizedLabelName /*end*/);
+    }
+
+    // Compute the offset of m_labelForCcIcMissLogic in slow path
+    //
+    ReleaseAssert(file->FindBlockInSlowPath(m_labelForCcIcMissLogic) != nullptr);
+    m_symbolNameForCcIcMissLogicLabelOffset = file->EmitComputeLabelDistanceAsm(file->m_slowpath[0]->m_normalizedLabelName, m_labelForCcIcMissLogic);
+
+    // Compute the offset of m_labelForDcIcMissLogic in slow path
+    //
+    ReleaseAssert(file->FindBlockInSlowPath(m_labelForDcIcMissLogic) != nullptr);
+    m_symbolNameForDcIcMissLogicLabelOffset = file->EmitComputeLabelDistanceAsm(file->m_slowpath[0]->m_normalizedLabelName, m_labelForDcIcMissLogic);
+}
+
+// Fix up cross reference to other stencils in the bytecode
+// 'argForFastPathAddr' is the fast path addr of the owning stencil, not owning bytecode
+//
+static void FixupCrossReferenceToOtherStencilsInBytecodeForCallIcCodegen(llvm::Function* func,
+                                                                         llvm::Instruction* stencilMainLogicFastPathAddr,
+                                                                         size_t stencilBaseOffsetInFastPath,
+                                                                         std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap)
+{
+    using namespace llvm;
+    Module* module = func->getParent();
+    ReleaseAssert(module != nullptr);
+
+    LLVMContext& ctx = module->getContext();
+
+    for (auto& item : stencilToFastPathOffsetMap)
+    {
+        std::string gvName = item.first;
+        uint64_t offsetRelativeToBytecodeEntry = item.second;
+        uint64_t offsetRelativeToStencilEntry = offsetRelativeToBytecodeEntry - stencilBaseOffsetInFastPath;
+
+        Function* gvToReplace = module->getFunction(gvName);
+        if (gvToReplace != nullptr)
+        {
+            Instruction* insPt = stencilMainLogicFastPathAddr->getNextNode();
+            ReleaseAssert(insPt != nullptr);
+            Instruction* replacement = GetElementPtrInst::CreateInBounds(
+                llvm_type_of<uint8_t>(ctx), stencilMainLogicFastPathAddr,
+                { CreateLLVMConstantInt<uint64_t>(ctx, offsetRelativeToStencilEntry) }, "", insPt);
+
+            DeegenStencilFixupCrossRefHelper::RunOnFunction(func, gvToReplace /*gvToReplace*/, replacement);
+
+            if (!gvToReplace->use_empty())
+            {
+                fprintf(stderr, "[ERROR] Unexpected use of '%s' that is not handled correctly, a bug?\n", gvToReplace->getName().str().c_str());
+                module->dump();
+                abort();
+            }
+        }
+        else
+        {
+            ReleaseAssert(module->getNamedValue(gvName) == nullptr);
+        }
+    }
+}
+
+struct CreateCodegenCallIcLogicImplResult
+{
+    std::unique_ptr<llvm::Module> m_module;
+    std::string m_disasmForAudit;
+    std::vector<std::pair<size_t /*offset*/, bool /*is64*/>> m_codePtrPatchRecords;
+    size_t m_icSize;
+    std::string m_resFnName;
+};
+
+// Produce a function that codegen one IC
+//
+// The function takes the following arguments:
+//    0 void* addr: the address to codegen the IC
+//    1 uint64_t slowPathDataOffset: the offset of slowPathData in SlowPathData stream
+//    2 uint64_t codeBlock32: the owning function's codeblock32
+//  3-5 uint64_t fastPathAddr/slowPathAddr/dataSecAddr: the owning stencil (not bytecode!)'s fast/slow/data section address
+//    6 uint64_t icMissAddr: where to transfer control if IC misses
+//  7-8 uint64_t cbHeapU32/codePtr: info of the cached call target
+//    9 uint64_t tv: the TValue to call, caller shall pass in undef for closure-call case
+//   10 uint64_t condBrDest: the condBr dest of the bytecode, caller shall pass in undef if not exists
+//
+// followed by the standard vector of bytecode operand info.
+//
+static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicImpl(BaselineJitImplCreator* ifi,
+                                                                                   size_t stencilBaseOffsetInFastPath,
+                                                                                   std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
+                                                                                   const DeegenStencil& mainLogicStencil,
+                                                                                   const std::string& asmFile,
+                                                                                   bool isDirectCallIc)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    std::string objFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");
+
+    DeegenStencil stencil = DeegenStencil::ParseIcLogic(ctx, objFile, mainLogicStencil.m_sectionToPdoOffsetMap);
+
+    // The main logic must be perfectly in sync, or we are going to have big trouble at runtime
+    // This check is not a complete check because we didn't check relocations, but at least gives us some confidence..
+    //
+    // Unfortunately for m_fastPath we cannot assert byte equal, since it may contain SMC region that has already been updated by earlier transforms..
+    //
+    ReleaseAssert(stencil.m_fastPathCode.size() == mainLogicStencil.m_fastPathCode.size());
+    ReleaseAssert(stencil.m_slowPathCode == mainLogicStencil.m_slowPathCode);
+
+    std::vector<size_t> extraPlaceholderOrds {
+        CP_PLACEHOLDER_CALL_IC_CALLEE_CB32,
+        CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR,
+        CP_PLACEHOLDER_CALL_IC_MISS_DEST
+    };
+    if (isDirectCallIc)
+    {
+        extraPlaceholderOrds.push_back(CP_PLACEHOLDER_CALL_IC_DIRECT_CALL_TVALUE);
+    }
+    if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+    {
+        extraPlaceholderOrds.push_back(CP_PLACEHOLDER_BYTECODE_CONDBR_DEST);
+    }
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(false /*mayEliminateTailJump*/,
+                                                                     ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
+                                                                     ifi->GetStencilRcDefinitions(),
+                                                                     extraPlaceholderOrds);
+
+    // For simplicity, the stencil currently always put its private data section right after the code section
+    //
+    size_t dataSectionOffset;
+    {
+        dataSectionOffset = cgRes.m_icPathPreFixupCode.size();
+        size_t alignment = cgRes.m_dataSecAlignment;
+        ReleaseAssert(alignment > 0);
+        ReleaseAssert(alignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+        // Our codegen allocator allocates 16-byte-aligned memory, so the data section alignment must not exceed that
+        //
+        ReleaseAssert(alignment <= 16);
+        dataSectionOffset = (dataSectionOffset + alignment - 1) / alignment * alignment;
+    }
+
+    std::vector<uint8_t> codeAndData;
+    {
+        codeAndData = cgRes.m_icPathPreFixupCode;
+        ReleaseAssert(dataSectionOffset >= codeAndData.size());
+        while (codeAndData.size() < dataSectionOffset)
+        {
+            codeAndData.push_back(0);
+        }
+        ReleaseAssert(codeAndData.size() == dataSectionOffset);
+        codeAndData.insert(codeAndData.end(), cgRes.m_dataSecPreFixupCode.begin(), cgRes.m_dataSecPreFixupCode.end());
+    }
+
+    std::string disasmForAudit;
+    {
+        if (isDirectCallIc)
+        {
+            disasmForAudit = "# Direct Call IC:\n\n";
+        }
+        else
+        {
+            disasmForAudit = "# Closure Call IC:\n\n";
+        }
+
+        disasmForAudit += DumpStencilDisassemblyForAuditPurpose(
+            stencil.m_triple, false /*isDataSection*/, cgRes.m_icPathPreFixupCode, cgRes.m_icPathRelocMarker, "# " /*linePrefix*/);
+
+        if (cgRes.m_dataSecPreFixupCode.size() > 0)
+        {
+            disasmForAudit += std::string("#\n# Data Section:\n");
+            disasmForAudit += DumpStencilDisassemblyForAuditPurpose(
+                stencil.m_triple, true /*isDataSection*/, cgRes.m_dataSecPreFixupCode, cgRes.m_dataSecRelocMarker, "# " /*linePrefix*/);
+        }
+        disasmForAudit += "\n";
+    }
+
+    std::unique_ptr<Module> module = cgRes.GenerateCodegenLogicLLVMModule(ifi->GetModule());
+
+    Function* cgCodeFn = module->getFunction(cgRes.x_icPathCodegenFuncName);
+    ReleaseAssert(cgCodeFn != nullptr);
+    cgCodeFn->addFnAttr(Attribute::AlwaysInline);
+    cgCodeFn->setLinkage(GlobalValue::InternalLinkage);
+
+    Function* cgDataFn = module->getFunction(cgRes.x_dataSecCodegenFuncName);
+    ReleaseAssert(cgDataFn != nullptr);
+    cgDataFn->addFnAttr(Attribute::AlwaysInline);
+    cgDataFn->setLinkage(GlobalValue::InternalLinkage);
+
+    // Create the codegen function implementation
+    //
+    std::vector<Type*> cgArgTys;
+    cgArgTys.push_back(llvm_type_of<void*>(ctx));       // outputAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // slowPathDataOffset
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // codeBlock32
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // fastPathAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // slowPathAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // dataSecAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // icMissAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // calleeCbU32
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // codePtr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // tv
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // condBrDest
+
+    size_t bytecodeValListStartOrd = cgArgTys.size();
+
+    // The bytecode operand value vector
+    //
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 100
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 101
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 103
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 104
+
+    for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
+    {
+        cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));
+    }
+
+    std::string resFnName = std::string("deegen_codegen_ic_") + (isDirectCallIc ? "dc" : "cc");
+
+    FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), cgArgTys, false /*isVarArg*/);
+    Function* fn = Function::Create(fty, GlobalValue::ExternalLinkage, resFnName, module.get());
+
+    fn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(fn, cgCodeFn);
+    fn->setDSOLocal(true);
+
+    fn->addParamAttr(0, Attribute::NoAlias);
+
+    BasicBlock* entryBB = BasicBlock::Create(ctx, "", fn);
+
+    Value* icCodeAddr = fn->getArg(0);
+    // Value* slowPathDataOffset = fn->getArg(1);
+    // Value* codeBlock32 = fn->getArg(2);
+
+    Value* fastPathAddrI64 = fn->getArg(3);
+    Value* slowPathAddrI64 = fn->getArg(4);
+    Value* dataSecAddrI64 = fn->getArg(5);
+
+    Value* icMissDest = fn->getArg(6);
+    Value* calleeCbU32 = fn->getArg(7);
+    Value* targetFnCodePtr = fn->getArg(8);
+
+    Value* calledFnTValue = fn->getArg(9);
+    Value* condBrDest = fn->getArg(10);
+
+    auto getExtraPlaceholderValue = [&](size_t placeholderOrd) WARN_UNUSED -> Value*
+    {
+        switch (placeholderOrd)
+        {
+        case CP_PLACEHOLDER_CALL_IC_CALLEE_CB32:
+        {
+            return calleeCbU32;
+        }
+        case CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR:
+        {
+            return targetFnCodePtr;
+        }
+        case CP_PLACEHOLDER_CALL_IC_MISS_DEST:
+        {
+            return icMissDest;
+        }
+        case CP_PLACEHOLDER_CALL_IC_DIRECT_CALL_TVALUE:
+        {
+            ReleaseAssert(isDirectCallIc);
+            return calledFnTValue;
+        }
+        case CP_PLACEHOLDER_BYTECODE_CONDBR_DEST:
+        {
+            ReleaseAssert(ifi->GetBytecodeDef()->m_hasConditionalBranchTarget);
+            return condBrDest;
+        }
+        default:
+        {
+            ReleaseAssert(false);
+        }
+        }   /* switch placeholderOrd */
+    };
+
+    std::vector<Value*> extraPlaceholderValues;
+    for (size_t placeholderOrd : extraPlaceholderOrds)
+    {
+        extraPlaceholderValues.push_back(getExtraPlaceholderValue(placeholderOrd));
+    }
+
+    Value* icCodeAddrI64 = new PtrToIntInst(icCodeAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+    Value* icDataAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icCodeAddr,
+                                                          { CreateLLVMConstantInt<uint64_t>(ctx, dataSectionOffset) }, "", entryBB);
+
+    Value* icDataAddrI64 = new PtrToIntInst(icDataAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+
+    auto buildArgVector = [&](Function* target, Value* dstAddr) WARN_UNUSED -> std::vector<Value*>
+    {
+        std::vector<Value*> args;
+        args.push_back(dstAddr);
+        args.push_back(fastPathAddrI64);
+        args.push_back(slowPathAddrI64);
+        args.push_back(icCodeAddrI64);
+        args.push_back(icDataAddrI64);
+        args.push_back(dataSecAddrI64);
+
+        for (size_t i = bytecodeValListStartOrd; i < fn->arg_size(); i++)
+        {
+            args.push_back(fn->getArg(static_cast<uint32_t>(i)));
+        }
+
+        for (Value* val : extraPlaceholderValues)
+        {
+            ReleaseAssert(llvm_value_has_type<uint64_t>(val));
+            args.push_back(val);
+        }
+
+        ReleaseAssert(args.size() == target->arg_size());
+        for (size_t i = 0; i < args.size(); i++)
+        {
+            ReleaseAssert(args[i] != nullptr);
+            ReleaseAssert(args[i]->getType() == target->getArg(static_cast<uint32_t>(i))->getType());
+        }
+
+        return args;
+    };
+
+    EmitCopyLogicForBaselineJitCodeGen(module.get(), codeAndData, icCodeAddr, "deegen_ic_pre_fixup_code_and_data", entryBB);
+
+    auto emitPatchFnCall = [&](Function* target, Value* dstAddr)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(dstAddr));
+        std::vector<Value*> args = buildArgVector(target, dstAddr);
+        CallInst::Create(target, args, "", entryBB);
+    };
+
+    emitPatchFnCall(cgCodeFn, icCodeAddr);
+    emitPatchFnCall(cgDataFn, icDataAddr);
+
+    ReturnInst::Create(ctx, nullptr, entryBB);
+
+    ValidateLLVMModule(module.get());
+
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::Top);
+
+    ReleaseAssert(module->getFunction(resFnName) != nullptr);
+    for (Function& func : *module)
+    {
+        if (!func.isDeclaration())
+        {
+            ReleaseAssert(func.getName() == resFnName);
+        }
+    }
+
+    // Fix up cross reference to other stencils in the bytecode
+    //
+    {
+        Instruction* insPt = FindFirstNonAllocaInstInEntryBB(fn);
+        Instruction* stencilMainLogicFastPathAddr = new IntToPtrInst(fastPathAddrI64, llvm_type_of<void*>(ctx), "", insPt);
+        FixupCrossReferenceToOtherStencilsInBytecodeForCallIcCodegen(fn, stencilMainLogicFastPathAddr, stencilBaseOffsetInFastPath, stencilToFastPathOffsetMap);
+    }
+
+    RunLLVMOptimizePass(module.get());
+
+    std::vector<std::pair<size_t /*offset*/, bool /*is64*/>> codePtrPatchRecords;
+    auto scanRelocationListForCodePtrPatches = [&](const std::vector<RelocationRecord>& rlist, size_t baseOffset)
+    {
+        for (const RelocationRecord& rr : rlist)
+        {
+            if (rr.m_symKind == RelocationRecord::SymKind::StencilHole)
+            {
+                if (rr.m_stencilHoleOrd == CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR)
+                {
+                    bool is64 = (rr.m_relocationType == ELF::R_X86_64_64);
+                    codePtrPatchRecords.push_back(std::make_pair(baseOffset + rr.m_offset, is64));
+                }
+            }
+        }
+    };
+
+    scanRelocationListForCodePtrPatches(stencil.m_icPathRelos, 0 /*baseOffset*/);
+    scanRelocationListForCodePtrPatches(stencil.m_privateDataObject.m_relocations, dataSectionOffset /*baseOffset*/);
+
+    std::sort(codePtrPatchRecords.begin(), codePtrPatchRecords.end());
+
+    for (size_t i = 0; i + 1 < codePtrPatchRecords.size(); i++)
+    {
+        ReleaseAssert(codePtrPatchRecords[i].first + (codePtrPatchRecords[i].second ? 8 : 4) <= codePtrPatchRecords[i + 1].first);
+    }
+    ReleaseAssertImp(codePtrPatchRecords.size() > 0, codePtrPatchRecords.back().first + (codePtrPatchRecords.back().second ? 8 : 4) <= codeAndData.size());
+
+    return {
+        .m_module = std::move(module),
+        .m_disasmForAudit = disasmForAudit,
+        .m_codePtrPatchRecords = codePtrPatchRecords,
+        .m_icSize = codeAndData.size(),
+        .m_resFnName = resFnName
+    };
+}
+
+struct CreateCodegenCallIcRepatchSmcRegionImplResult
+{
+    std::unique_ptr<llvm::Module> m_module;
+    std::string m_disasmForAudit;
+    std::string m_resFnName;
+};
+
+// Create the codegen logic that repatch the SMC region to closure call logic
+//
+// The function takes the following arguments:
+//     void* fastPathAddr: the fastPathAddr of the owning stencil (not bytecode!)
+//     uint64_t slowPathAddr / dataSecAddr: the slowPath/dataSec addr of the owning stencil (not bytecode!)
+// followed by the standard bytecode operand value list.
+//
+static CreateCodegenCallIcRepatchSmcRegionImplResult WARN_UNUSED CreateRepatchCallIcSmcRegionToClosureModeImpl(BaselineJitImplCreator* ifi,
+                                                                                                               size_t stencilBaseOffsetInFastPath,
+                                                                                                               std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
+                                                                                                               const DeegenStencil& mainLogicStencil,
+                                                                                                               size_t smcRegionOffset,
+                                                                                                               size_t smcRegionSize)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    DeegenStencil stencil = mainLogicStencil;
+    ReleaseAssert(!stencil.m_isForIcLogicExtraction);
+    stencil.m_slowPathRelos.clear();
+    stencil.m_privateDataObject.m_relocations.clear();
+
+    // Filter out the relocations in the SMC region: we need and only need them
+    //
+    {
+        std::vector<RelocationRecord> rlist;
+        for (RelocationRecord& rr : stencil.m_fastPathRelos)
+        {
+            if (smcRegionOffset <= rr.m_offset && rr.m_offset < smcRegionOffset + smcRegionSize)
+            {
+                ReleaseAssert(rr.m_offset + (rr.m_relocationType == ELF::R_X86_64_64 ? 8 : 4) <= smcRegionOffset + smcRegionSize);
+                rlist.push_back(rr);
+            }
+        }
+        stencil.m_fastPathRelos = rlist;
+    }
+
+    // Generate patch logic to fix up the relocations in SMC region
+    //
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(false /*mayEliminateTailJump*/,
+                                                                     ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
+                                                                     ifi->GetStencilRcDefinitions());
+
+    ReleaseAssert(cgRes.m_fastPathPreFixupCode.size() >= smcRegionOffset + smcRegionSize);
+    ReleaseAssert(cgRes.m_condBrFixupOffsetsInFastPath.empty());
+
+    std::string disasmForAudit;
+    disasmForAudit += "# SMC region:\n";
+    disasmForAudit += "#     offset = " + std::to_string(smcRegionOffset) + " size = " + std::to_string(smcRegionSize) + "\n";
+    disasmForAudit += "# SMC region logic for Closure Call:\n\n";
+    {
+        std::vector<uint8_t> codeSlice;
+        std::vector<bool> isPartOfRelocSlice;
+        for (size_t i = smcRegionOffset; i < smcRegionOffset + smcRegionSize; i++)
+        {
+            ReleaseAssert(i < cgRes.m_fastPathPreFixupCode.size() && i < cgRes.m_fastPathRelocMarker.size());
+            codeSlice.push_back(cgRes.m_fastPathPreFixupCode[i]);
+            isPartOfRelocSlice.push_back(cgRes.m_fastPathRelocMarker[i]);
+        }
+
+        disasmForAudit += DumpStencilDisassemblyForAuditPurpose(
+            stencil.m_triple, false /*isDataSection*/, codeSlice, isPartOfRelocSlice, "# " /*linePrefix*/);
+
+        disasmForAudit += "\n";
+    }
+
+    std::unique_ptr<Module> module = cgRes.GenerateCodegenLogicLLVMModule(ifi->GetModule());
+
+    Function* cgFastPathFn = module->getFunction(cgRes.x_fastPathCodegenFuncName);
+    ReleaseAssert(cgFastPathFn != nullptr);
+    cgFastPathFn->addFnAttr(Attribute::AlwaysInline);
+    cgFastPathFn->setLinkage(GlobalValue::InternalLinkage);
+
+    // We don't need slow path & data sec codegen function, set them to internal so they get removed
+    //
+    {
+        Function* fn = module->getFunction(cgRes.x_slowPathCodegenFuncName);
+        ReleaseAssert(fn != nullptr);
+        fn->addFnAttr(Attribute::AlwaysInline);
+        fn->setLinkage(GlobalValue::InternalLinkage);
+
+        fn = module->getFunction(cgRes.x_dataSecCodegenFuncName);
+        ReleaseAssert(fn != nullptr);
+        fn->addFnAttr(Attribute::AlwaysInline);
+        fn->setLinkage(GlobalValue::InternalLinkage);
+    }
+
+    std::vector<Type*> cgArgTys;
+    cgArgTys.push_back(llvm_type_of<void*>(ctx));       // outputAddr, also fastPathAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // slowPathAddr
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // dataSecAddr
+
+    size_t bytecodeValListStartOrd = cgArgTys.size();
+
+    // The bytecode operand value vector
+    //
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 100
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 101
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 103
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 104
+
+    for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
+    {
+        cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));
+    }
+
+    constexpr const char* x_resFnName = "deegen_codegen_rewrite_smc";
+
+    FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), cgArgTys, false /*isVarArg*/);
+    Function* fn = Function::Create(fty, GlobalValue::ExternalLinkage, x_resFnName, module.get());
+
+    fn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(fn, cgFastPathFn);
+    fn->setDSOLocal(true);
+
+    fn->addParamAttr(0, Attribute::NoAlias);
+
+    BasicBlock* entryBB = BasicBlock::Create(ctx, "", fn);
+
+    Value* fastPathAddr = fn->getArg(0);
+    Value* slowPathAddrI64 = fn->getArg(1);
+    Value* dataSecAddrI64 = fn->getArg(2);
+
+    Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+
+    // Copy pre-fixup code to SMC region
+    //
+    {
+        std::vector<uint8_t> smcRegionPreFixupCode;
+        for (size_t i = smcRegionOffset; i < smcRegionOffset + smcRegionSize; i++)
+        {
+            ReleaseAssert(i < cgRes.m_fastPathPreFixupCode.size());
+            smcRegionPreFixupCode.push_back(cgRes.m_fastPathPreFixupCode[i]);
+        }
+        ReleaseAssert(smcRegionPreFixupCode.size() == smcRegionSize);
+
+        Value* dstAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddr,
+                                                           { CreateLLVMConstantInt<uint64_t>(ctx, smcRegionOffset) }, "", entryBB);
+
+        // The memcpy must not clobber anything after, so mustBeExact is true
+        //
+        EmitCopyLogicForBaselineJitCodeGen(module.get(),
+                                           smcRegionPreFixupCode,
+                                           dstAddr,
+                                           "deegen_ic_pre_fixup_smc_region_for_closure_call",
+                                           entryBB,
+                                           true /*mustBeExact*/);
+    }
+
+    auto buildArgVector = [&](Function* target) WARN_UNUSED -> std::vector<Value*>
+    {
+        std::vector<Value*> args;
+        args.push_back(fastPathAddr);
+        args.push_back(fastPathAddrI64);
+        args.push_back(slowPathAddrI64);
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));
+        args.push_back(dataSecAddrI64);
+
+        for (size_t i = bytecodeValListStartOrd; i < fn->arg_size(); i++)
+        {
+            args.push_back(fn->getArg(static_cast<uint32_t>(i)));
+        }
+
+        ReleaseAssert(args.size() == target->arg_size());
+        for (size_t i = 0; i < args.size(); i++)
+        {
+            ReleaseAssert(args[i] != nullptr);
+            ReleaseAssert(args[i]->getType() == target->getArg(static_cast<uint32_t>(i))->getType());
+            ReleaseAssertImp(isa<UndefValue>(args[i]), target->getArg(static_cast<uint32_t>(i))->use_empty());
+        }
+
+        return args;
+    };
+
+    CallInst::Create(cgFastPathFn, buildArgVector(cgFastPathFn), "", entryBB);
+    ReturnInst::Create(ctx, nullptr, entryBB);
+
+    ValidateLLVMModule(module.get());
+
+    DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::Top);
+
+    ReleaseAssert(module->getFunction(x_resFnName) != nullptr);
+    for (Function& func : *module)
+    {
+        if (!func.isDeclaration())
+        {
+            ReleaseAssert(func.getName() == x_resFnName);
+        }
+    }
+
+    // Fix up cross reference to other stencils in the bytecode
+    //
+    {
+        Instruction* insPt = FindFirstNonAllocaInstInEntryBB(fn);
+        // 'FixupCrossReferenceToOtherStencilsInBytecodeForCallIcCodegen' expects 'stencilMainLogicFastPathAddr' to be an instruction,
+        // workaround by creating a no-op gep
+        //
+        Instruction* stencilMainLogicFastPathAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddr,
+                                                                                      { CreateLLVMConstantInt<uint64_t>(ctx, 0) }, "", insPt);
+        FixupCrossReferenceToOtherStencilsInBytecodeForCallIcCodegen(fn, stencilMainLogicFastPathAddr, stencilBaseOffsetInFastPath, stencilToFastPathOffsetMap);
+    }
+
+    RunLLVMOptimizePass(module.get());
+
+    return {
+        .m_module = std::move(module),
+        .m_disasmForAudit = disasmForAudit,
+        .m_resFnName = x_resFnName
+    };
+}
+
+// The main logic stencil's SMC region initially hold the logic for closure-call mode,
+// because that's the longest instruction sequence and we need it to hold up space of the SMC region
+// However, at runtime, the SMC region starts in direct-call mode, which simply contains a jump to slow path.
+//
+// This function fix up the initial contents in the SMC region to a jump + NOPs.
+//
+static void SetupCallIcSmcRegionInitialInstructions(DeegenStencil& mainLogicStencil /*inout*/,
+                                                    size_t smcRegionOffset,
+                                                    size_t smcRegionSize,
+                                                    size_t dcIcMissDestOffsetInSlowPath)
+{
+    {
+        ReleaseAssert(smcRegionSize >= 5);
+        std::vector<uint8_t> byteSeq;
+        byteSeq.resize(smcRegionSize, 0);
+        byteSeq[0] = 0xe9;  // jmp
+        FillAddressRangeWithX64MultiByteNOPs(byteSeq.data() + 5, byteSeq.size() - 5);
+
+        for (size_t i = 0; i < smcRegionSize; i++)
+        {
+            ReleaseAssert(smcRegionOffset + i < mainLogicStencil.m_fastPathCode.size());
+            mainLogicStencil.m_fastPathCode[smcRegionOffset + i] = byteSeq[i];
+        }
+    }
+
+    std::vector<RelocationRecord> rlist;
+    for (RelocationRecord& rr : mainLogicStencil.m_fastPathRelos)
+    {
+        if (smcRegionOffset <= rr.m_offset && rr.m_offset < smcRegionOffset + smcRegionSize)
+        {
+            ReleaseAssert(rr.m_offset + (rr.m_relocationType == llvm::ELF::R_X86_64_64 ? 8 : 4) <= smcRegionOffset + smcRegionSize);
+            continue;
+        }
+
+        rlist.push_back(rr);
+    }
+
+    {
+        RelocationRecord rr;
+        rr.m_relocationType = llvm::ELF::R_X86_64_PC32;
+        rr.m_symKind = RelocationRecord::SymKind::SlowPathAddr;
+        rr.m_offset = smcRegionOffset + 1;
+        // SlowPathAddr + dcIcMissDestOffsetInSlowPath - PC - 4
+        //
+        rr.m_addend = static_cast<int64_t>(dcIcMissDestOffsetInSlowPath - 4);
+        rlist.push_back(rr);
+    }
+
+    // For sanity, sort everything by m_offset
+    //
+    {
+        std::map<uint64_t, RelocationRecord> sortedList;
+        for (RelocationRecord& rr : rlist)
+        {
+            ReleaseAssert(!sortedList.count(rr.m_offset));
+            sortedList[rr.m_offset] = rr;
+        }
+
+        rlist.clear();
+        for (auto& it : sortedList)
+        {
+            rlist.push_back(it.second);
+        }
+    }
+
+    mainLogicStencil.m_fastPathRelos = rlist;
+}
+
+DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogicCreator::CreateBaselineJitCallIcCreator(
+    BaselineJitImplCreator* ifi,
+    std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
+    DeegenStencil& mainLogicStencil /*inout*/,
+    BaselineJitAsmLoweringResult& icInfo)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    ReleaseAssert(stencilToFastPathOffsetMap.count(ifi->GetResultFunctionName()));
+    size_t stencilBaseOffsetInFastPath = stencilToFastPathOffsetMap[ifi->GetResultFunctionName()];
+
+    size_t smcRegionOffset = mainLogicStencil.RetrieveLabelDistanceComputationResult(icInfo.m_symbolNameForSMCLabelOffset);
+    size_t smcRegionLength = mainLogicStencil.RetrieveLabelDistanceComputationResult(icInfo.m_symbolNameForSMCRegionLength);
+    ReleaseAssert(smcRegionOffset < mainLogicStencil.m_fastPathCode.size());
+    ReleaseAssert(smcRegionOffset + smcRegionLength <= mainLogicStencil.m_fastPathCode.size());
+    // The SMC region should at least be long enough to hold a jmp instruction, check that for sanity
+    //
+    ReleaseAssert(smcRegionLength >= 5);
+
+    size_t dcIcMissDestOffset = mainLogicStencil.RetrieveLabelDistanceComputationResult(icInfo.m_symbolNameForDcIcMissLogicLabelOffset);
+    ReleaseAssert(dcIcMissDestOffset < mainLogicStencil.m_slowPathCode.size());
+
+    size_t ccIcMissDestOffset = mainLogicStencil.RetrieveLabelDistanceComputationResult(icInfo.m_symbolNameForCcIcMissLogicLabelOffset);
+    ReleaseAssert(ccIcMissDestOffset < mainLogicStencil.m_slowPathCode.size());
+
+    CreateCodegenCallIcLogicImplResult dcRes = CreateCodegenCallIcLogicImpl(ifi,
+                                                                            stencilBaseOffsetInFastPath,
+                                                                            stencilToFastPathOffsetMap,
+                                                                            mainLogicStencil,
+                                                                            icInfo.m_directCallLogicAsm,
+                                                                            true /*isDirectCallIc*/);
+
+    CreateCodegenCallIcLogicImplResult ccRes = CreateCodegenCallIcLogicImpl(ifi,
+                                                                            stencilBaseOffsetInFastPath,
+                                                                            stencilToFastPathOffsetMap,
+                                                                            mainLogicStencil,
+                                                                            icInfo.m_closureCallLogicAsm,
+                                                                            false /*isDirectCallIc*/);
+
+    CreateCodegenCallIcRepatchSmcRegionImplResult smcRes = CreateRepatchCallIcSmcRegionToClosureModeImpl(ifi,
+                                                                                                         stencilBaseOffsetInFastPath,
+                                                                                                         stencilToFastPathOffsetMap,
+                                                                                                         mainLogicStencil,
+                                                                                                         smcRegionOffset,
+                                                                                                         smcRegionLength);
+
+    // Must be done last since the functions above expect the unmodified mainLogicStencil
+    //
+    SetupCallIcSmcRegionInitialInstructions(mainLogicStencil /*inout*/, smcRegionOffset, smcRegionLength, dcIcMissDestOffset);
+
+    // Put everything together
+    //
+    std::unique_ptr<Module> module = std::move(dcRes.m_module);
+
+    {
+        Linker linker(*module.get());
+        ReleaseAssert(linker.linkInModule(std::move(ccRes.m_module)) == false);
+        ReleaseAssert(linker.linkInModule(std::move(smcRes.m_module)) == false);
+    }
+
+    auto getFnAndChangeToInternalAndInline = [&](const std::string& targetFnName) WARN_UNUSED -> Function*
+    {
+        Function* target = module->getFunction(targetFnName);
+        ReleaseAssert(target != nullptr);
+        ReleaseAssert(target->hasExternalLinkage());
+        ReleaseAssert(!target->hasFnAttribute(Attribute::NoInline));
+        target->setLinkage(GlobalValue::InternalLinkage);
+        target->addFnAttr(Attribute::AlwaysInline);
+        return target;
+    };
+
+    Function* dcCgFn = getFnAndChangeToInternalAndInline(dcRes.m_resFnName);
+    Function* ccCgFn = getFnAndChangeToInternalAndInline(ccRes.m_resFnName);
+    Function* smcCgFn = getFnAndChangeToInternalAndInline(smcRes.m_resFnName);
+
+    // This is not the final function prototype
+    // We do not directly generate the final function because teaching LLVM that the SlowPathData is 'noalias'
+    // is *really* important as we heavily rely on LLVM code sinking pass to sink access to SlowPathData to
+    // where the data is actually used. And the easiest way to achieve this is to use a parameter 'noalias' attribute.
+    //
+    StructType* retTy = StructType::create(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
+    FunctionType* fty = FunctionType::get(
+        retTy,
+        {
+            llvm_type_of<void*>(ctx),           // CodeBlock
+            llvm_type_of<void*>(ctx),           // BaselineCodeBlock
+            llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
+            llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
+            llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
+            llvm_type_of<uint64_t>(ctx)         // target tvalue
+        },
+        false /*isVarArg*/);
+
+    std::string resultFuncName = std::string("__deegen_baseline_jit_codegen_") + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_jit_call_ic_" + std::to_string(icInfo.m_uniqueOrd);
+    Function* fn = Function::Create(fty, GlobalValue::ExternalLinkage, resultFuncName + "_impl", module.get());
+
+    fn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(fn, dcCgFn);
+    fn->setDSOLocal(true);
+
+    fn->addParamAttr(0, Attribute::NoAlias);
+    fn->addParamAttr(1, Attribute::NoAlias);
+
+    BasicBlock* entryBB = BasicBlock::Create(ctx, "", fn);
+    AllocaInst* transitedToCCModeAlloca = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", entryBB);
+    AllocaInst* jitAddrAlloca = new AllocaInst(llvm_type_of<void*>(ctx), 0 /*addrSpace*/, "", entryBB);
+
+    new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), transitedToCCModeAlloca, entryBB);
+
+    Value* codeBlock = fn->getArg(0);
+    Value* baselineCodeBlock = fn->getArg(1);
+    Value* slowPathDataOffset = fn->getArg(2);
+    Value* slowPathData = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineCodeBlock, { slowPathDataOffset }, "", entryBB);
+
+    Value* slowPathAddrOfOwningStencil = fn->getArg(3);
+    Value* dataSecAddrOfOwningStencil = fn->getArg(4);
+    Value* targetTv = fn->getArg(5);
+
+    Value* fastPathAddrOfOwningBytecode = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, entryBB);
+    Value* fastPathAddrOfOwningStencil = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddrOfOwningBytecode,
+                                                                           { CreateLLVMConstantInt<uint64_t>(ctx, stencilBaseOffsetInFastPath) }, "", entryBB);
+
+    Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddrOfOwningStencil, llvm_type_of<uint64_t>(ctx), "", entryBB);
+    Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddrOfOwningStencil, llvm_type_of<uint64_t>(ctx), "", entryBB);
+    Value* dataSecAddrI64 = new PtrToIntInst(dataSecAddrOfOwningStencil, llvm_type_of<uint64_t>(ctx), "", entryBB);
+
+    Value* codeBlock32;
+    {
+        Value* tmp = new PtrToIntInst(codeBlock, llvm_type_of<uint64_t>(ctx), "", entryBB);
+        tmp = new TruncInst(tmp, llvm_type_of<uint32_t>(ctx), "", entryBB);
+        codeBlock32 = new ZExtInst(tmp, llvm_type_of<uint64_t>(ctx), "", entryBB);
+    }
+
+    size_t icSiteOffsetInSlowPathData = ifi->GetBytecodeDef()->GetBaselineJitCallIcSiteOffsetInSlowPathData(icInfo.m_uniqueOrd);
+    Value* icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                      { CreateLLVMConstantInt<uint64_t>(ctx, icSiteOffsetInSlowPathData) }, "", entryBB);
+
+    // Read icSite->m_numEntries
+    //
+    Value* numExistingICs;
+    {
+        static_assert(std::is_same_v<typeof_member_t<&JitCallInlineCacheSite::m_numEntries>, uint8_t>);
+        Value* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icSite,
+                                                       { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&JitCallInlineCacheSite::m_numEntries>) }, "", entryBB);
+        numExistingICs = new LoadInst(llvm_type_of<uint8_t>(ctx), ptr, "", entryBB);
+    }
+
+    // If m_numEntries >= x_maxJitCallInlineCacheEntries, don't create more ICs. Just get the result and return.
+    //
+    Value* isIcCountReachedMaximum = new ICmpInst(*entryBB, ICmpInst::ICMP_UGE, numExistingICs, CreateLLVMConstantInt<uint8_t>(ctx, x_maxJitCallInlineCacheEntries));
+
+    BasicBlock* skipIcCreationBB = BasicBlock::Create(ctx, "", fn);
+    BasicBlock* prepareCreateIcBB = BasicBlock::Create(ctx, "", fn);
+
+    BranchInst::Create(skipIcCreationBB /*trueBB*/, prepareCreateIcBB /*falseBB*/, isIcCountReachedMaximum, entryBB);
+
+
+    auto createReturnLogic = [&](Value* cbHeapPtr, Value* entryPoint, BasicBlock* bb)
+    {
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(cbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(entryPoint));
+        Value* tmp = InsertValueInst::Create(UndefValue::get(retTy), cbHeapPtr, { 0 /*idx*/ }, "", bb);
+        tmp = InsertValueInst::Create(tmp, entryPoint, { 1 /*idx*/ }, "", bb);
+        ReturnInst::Create(ctx, tmp, bb);
+    };
+
+    {
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetTv));
+        CallInst* targetFnObject = CreateCallToDeegenCommonSnippet(module.get(), "GetFuncObjAsU64FromTValue", { targetTv }, skipIcCreationBB);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, skipIcCreationBB);
+
+        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", skipIcCreationBB);
+        Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", skipIcCreationBB);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        createReturnLogic(calleeCbHeapPtr, codePointer, skipIcCreationBB);
+    }
+
+    // Read icSite->m_mode
+    //
+    Value* currentIcMode;
+    {
+        static_assert(std::is_same_v<std::underlying_type_t<typeof_member_t<&JitCallInlineCacheSite::m_mode>>, uint8_t>);
+        Value* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), icSite,
+                                                       { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&JitCallInlineCacheSite::m_mode>) }, "", prepareCreateIcBB);
+        currentIcMode = new LoadInst(llvm_type_of<uint8_t>(ctx), ptr, "", prepareCreateIcBB);
+    }
+
+    // Depending on if m_mode == DirectCall, we need to execute different logic
+    //
+    Value* isIcSiteInDirectCallMode = new ICmpInst(*prepareCreateIcBB, ICmpInst::ICMP_EQ, currentIcMode, CreateLLVMConstantInt<uint8_t>(ctx, static_cast<uint8_t>(JitCallInlineCacheSite::Mode::DirectCall)));
+
+    BasicBlock* dcBB = BasicBlock::Create(ctx, "", fn);
+    BasicBlock* ccBB = BasicBlock::Create(ctx, "", fn);
+
+    BranchInst::Create(dcBB /*trueBB*/, ccBB /*falseBB*/, isIcSiteInDirectCallMode, prepareCreateIcBB);
+
+    // TODO: FIXME turn this to real logic
+    //
+    Value* dcIcTraitOrd = CreateLLVMConstantInt<uint16_t>(ctx, 0);
+
+    // Generate decode SlowPathData logic and produce the bytecode operand vector expected by the codegen implementation functions
+    //
+    auto decodeSlowPathDataStruct = [&](BasicBlock* bb) WARN_UNUSED -> std::vector<Value*>
+    {
+        std::vector<Value*> opcodeRawValues;
+
+        for (auto& operand : ifi->GetBytecodeDef()->m_list)
+        {
+            if (!operand->SupportsGetOperandValueFromBytecodeStruct())
+            {
+                opcodeRawValues.push_back(nullptr);
+            }
+            else
+            {
+                opcodeRawValues.push_back(operand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, bb));
+            }
+        }
+
+        Value* outputSlot = nullptr;
+        if (ifi->GetBytecodeDef()->m_hasOutputValue)
+        {
+            outputSlot = ifi->GetBytecodeDef()->m_outputOperand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, bb);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
+        }
+
+        auto extendTo64 = [&](Value* val, bool shouldSExt) WARN_UNUSED -> Value*
+        {
+            ReleaseAssert(val != nullptr);
+            ReleaseAssert(val->getType()->isIntegerTy());
+            ReleaseAssert(val->getType()->getIntegerBitWidth() <= 64);
+            if (val->getType()->getIntegerBitWidth() == 64)
+            {
+                return val;
+            }
+
+            if (shouldSExt)
+            {
+                return new SExtInst(val, llvm_type_of<int64_t>(ctx), "", bb);
+            }
+            else
+            {
+                return new ZExtInst(val, llvm_type_of<int64_t>(ctx), "", bb);
+            }
+        };
+
+        // Build up the bytecode value list in the order expected by the codegen impl
+        //
+        std::vector<Value*> bytecodeValList;
+
+        // ordinal 100 (output)
+        //
+        if (outputSlot == nullptr)
+        {
+            bytecodeValList.push_back(nullptr);
+        }
+        else
+        {
+            bytecodeValList.push_back(extendTo64(outputSlot, ifi->GetBytecodeDef()->m_outputOperand->IsSignedValue()));
+        }
+
+        // ordinal 101 (nextBytecodeAddr)
+        //
+        {
+            Value* nextBytecodePtr = ifi->GetBytecodeDef()->GetFallthroughCodePtrForBaselineJit(slowPathData, bb);
+            ReleaseAssert(llvm_value_has_type<void*>(nextBytecodePtr));
+            Value* nextBytecodePtrI64 = new PtrToIntInst(nextBytecodePtr, llvm_type_of<uint64_t>(ctx), "", bb);
+            bytecodeValList.push_back(nextBytecodePtrI64);
+        }
+
+        // ordinal 103 (slowPathDataOffset) and ordinal 104 (CodeBlock32)
+        //
+        bytecodeValList.push_back(slowPathDataOffset);
+        bytecodeValList.push_back(codeBlock32);
+
+        for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
+        {
+            if (opcodeRawValues[i] == nullptr)
+            {
+                bytecodeValList.push_back(nullptr);
+            }
+            else
+            {
+                bytecodeValList.push_back(extendTo64(opcodeRawValues[i], ifi->GetBytecodeDef()->m_list[i]->IsSignedValue()));
+            }
+        }
+
+        return bytecodeValList;
+    };
+
+    auto getCondBrDestU64 = [&](BasicBlock* bb) WARN_UNUSED -> Value*
+    {
+        Value* condBrDest = nullptr;
+        if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+        {
+            condBrDest = ifi->GetBytecodeDef()->GetCondBrTargetCodePtrForBaselineJit(slowPathData, bb);
+            ReleaseAssert(llvm_value_has_type<void*>(condBrDest));
+            condBrDest = new PtrToIntInst(condBrDest, llvm_type_of<uint64_t>(ctx), "", bb);
+        }
+        return condBrDest;
+    };
+
+    auto emitCallToIcCodegenFn = [&](Function* target,
+                                     Value* outputAddr,
+                                     Value* icMissAddr,
+                                     Value* calleeCbU32,
+                                     Value* codePtr,
+                                     Value* condBrDestU64,
+                                     std::vector<Value*> bytecodeOperandArgs,
+                                     BasicBlock* bb)
+    {
+        std::vector<Value*> args;
+        args.push_back(outputAddr);
+        args.push_back(slowPathDataOffset);
+        args.push_back(codeBlock32);
+        args.push_back(fastPathAddrI64);
+        args.push_back(slowPathAddrI64);
+        args.push_back(dataSecAddrI64);
+        args.push_back(icMissAddr);
+        args.push_back(calleeCbU32);
+        args.push_back(codePtr);
+        args.push_back(targetTv);
+        args.push_back(condBrDestU64);
+        for (Value* val : bytecodeOperandArgs)
+        {
+            args.push_back(val);
+        }
+
+        ReleaseAssert(args.size() == target->arg_size());
+        for (size_t i = 0; i < args.size(); i++)
+        {
+            if (args[i] == nullptr)
+            {
+                ReleaseAssert(target->getArg(static_cast<uint32_t>(i))->use_empty());
+            }
+            else
+            {
+                ReleaseAssert(args[i]->getType() == target->getArg(static_cast<uint32_t>(i))->getType());
+            }
+        }
+
+        for (size_t i = 0; i < args.size(); i++)
+        {
+            if (args[i] == nullptr)
+            {
+                args[i] = UndefValue::get(target->getArg(static_cast<uint32_t>(i))->getType());
+            }
+        }
+
+        CallInst::Create(target, args, "", bb);
+    };
+
+    auto getJumpDest = [&](Value* jmpEndAddr, BasicBlock* bb) WARN_UNUSED -> Value*
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(jmpEndAddr));
+        GetElementPtrInst* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr,
+                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(-4)) }, "", bb);
+        Value* val32 = new LoadInst(llvm_type_of<uint32_t>(ctx), ptr, "", false /*isVolatile*/, Align(1), bb);
+        Value* val64 = new SExtInst(val32, llvm_type_of<uint64_t>(ctx), "", bb);
+        GetElementPtrInst* dest = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr, { val64 }, "", bb);
+        return dest;
+    };
+
+    auto setJumpDest = [&](Value* jmpEndAddr, Value* newDest, BasicBlock* bb)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(jmpEndAddr));
+        ReleaseAssert(llvm_value_has_type<void*>(newDest));
+        Value* jmpEndAddr64 = new PtrToIntInst(jmpEndAddr, llvm_type_of<uint64_t>(ctx), "", bb);
+        Value* newDest64 = new PtrToIntInst(newDest, llvm_type_of<uint64_t>(ctx), "", bb);
+        Instruction* diff = CreateSub(newDest64, jmpEndAddr64);
+        bb->getInstList().push_back(diff);
+        Value* diff32 = new TruncInst(diff, llvm_type_of<uint32_t>(ctx), "", bb);
+        GetElementPtrInst* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr,
+                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(-4)) }, "", bb);
+        new StoreInst(diff32, ptr, false /*isVolatile*/, Align(1), bb);
+    };
+
+    // For direct-call mode, we want to call InsertInDirectCallMode
+    //
+    {
+        CallInst* dcJitAddr = CreateCallToDeegenCommonSnippet(module.get(), "CreateNewJitCallIcForDirectCallModeSite",
+                                                              { icSite, dcIcTraitOrd, targetTv, transitedToCCModeAlloca }, dcBB);
+        ReleaseAssert(llvm_value_has_type<void*>(dcJitAddr));
+
+        new StoreInst(dcJitAddr, jitAddrAlloca, dcBB);
+
+        Value* transitedToCCModeU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), transitedToCCModeAlloca, "", dcBB);
+        Value* transitedToCCMode = new ICmpInst(*dcBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
+
+        BasicBlock* insertIcDcModeBB = BasicBlock::Create(ctx, "", fn);
+
+        BranchInst::Create(ccBB /*trueBB*/, insertIcDcModeBB /*falseBB*/, transitedToCCMode, dcBB);
+
+        Value* patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddrOfOwningStencil,
+                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, smcRegionOffset + 5) }, "", insertIcDcModeBB);
+
+        Value* icMissAddr = getJumpDest(patchableJmpEndAddr, insertIcDcModeBB);
+        Value* icMissAddrI64 = new PtrToIntInst(icMissAddr, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
+
+        setJumpDest(patchableJmpEndAddr, dcJitAddr /*newDest*/, insertIcDcModeBB);
+
+        CallInst* targetFnObject = CreateCallToDeegenCommonSnippet(module.get(), "GetFuncObjAsU64FromTValue", { targetTv }, insertIcDcModeBB);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcDcModeBB);
+
+        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcDcModeBB);
+        Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcDcModeBB);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
+        Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
+
+        std::vector<Value*> bytecodeOperandList = decodeSlowPathDataStruct(insertIcDcModeBB);
+        Value* condBrDest = getCondBrDestU64(insertIcDcModeBB);
+        emitCallToIcCodegenFn(dcCgFn,
+                              dcJitAddr /*outputAddr*/,
+                              icMissAddrI64,
+                              calleeCbU32,
+                              codePtrU64,
+                              condBrDest,
+                              bytecodeOperandList,
+                              insertIcDcModeBB);
+
+        createReturnLogic(calleeCbHeapPtr, codePointer, insertIcDcModeBB);
+    }
+
+    std::vector<Value*> bytecodeOperandList = decodeSlowPathDataStruct(ccBB);
+    Value* condBrDest = getCondBrDestU64(ccBB);
+
+    // For closure-call mode, first check if we just transited from direct-call to closure-call.
+    // If so, we need to first repatch the SMC region
+    //
+    BasicBlock* prepareInsertIcCcModeBB = BasicBlock::Create(ctx, "", fn);
+    BasicBlock* insertIcCcModeBB = BasicBlock::Create(ctx, "", fn);
+
+    {
+        Value* transitedToCCModeU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), transitedToCCModeAlloca, "", ccBB);
+        Value* transitedToCCMode = new ICmpInst(*ccBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
+
+        BasicBlock* repatchSmcBB = BasicBlock::Create(ctx, "", fn);
+
+        BranchInst::Create(repatchSmcBB /*trueBB*/, prepareInsertIcCcModeBB /*falseBB*/, transitedToCCMode, ccBB);
+
+        {
+            std::vector<Value*> args;
+            args.push_back(fastPathAddrOfOwningStencil /*outputAddr*/);
+            args.push_back(slowPathAddrI64);
+            args.push_back(dataSecAddrI64);
+            for (Value* val : bytecodeOperandList)
+            {
+                args.push_back(val);
+            }
+
+            ReleaseAssert(args.size() == smcCgFn->arg_size());
+            for (size_t i = 0; i < args.size(); i++)
+            {
+                if (args[i] == nullptr)
+                {
+                    ReleaseAssert(smcCgFn->getArg(static_cast<uint32_t>(i))->use_empty());
+                    args[i] = UndefValue::get(smcCgFn->getArg(static_cast<uint32_t>(i))->getType());
+                }
+                else
+                {
+                    ReleaseAssert(args[i]->getType() == smcCgFn->getArg(static_cast<uint32_t>(i))->getType());
+                }
+            }
+
+            CallInst::Create(smcCgFn, args, "", repatchSmcBB);
+        }
+
+        BranchInst::Create(insertIcCcModeBB /*destBB*/, repatchSmcBB /*insertAtEnd*/);
+    }
+
+    // When we reach 'prepareInsertIcCcModeBB', we know we start in clousure call mode, and hasn't inserted IC entry yet
+    //
+    {
+        CallInst* ccJitAddr = CreateCallToDeegenCommonSnippet(module.get(), "CreateNewJitCallIcForClosureCallModeSite",
+                                                              { icSite, dcIcTraitOrd, targetTv }, prepareInsertIcCcModeBB);
+        ReleaseAssert(llvm_value_has_type<void*>(ccJitAddr));
+
+        new StoreInst(ccJitAddr, jitAddrAlloca, prepareInsertIcCcModeBB);
+        BranchInst::Create(insertIcCcModeBB /*destBB*/, prepareInsertIcCcModeBB /*insertAtEnd*/);
+    }
+
+    // Emit insertIcCcModeBB, which should actually generate the closure-call mode IC
+    //
+    {
+        Value* jitAddr = new LoadInst(llvm_type_of<void*>(ctx), jitAddrAlloca, "", insertIcCcModeBB);
+
+        Value* patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddrOfOwningStencil,
+                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, smcRegionOffset + smcRegionLength) }, "", insertIcCcModeBB);
+
+        Value* icMissAddr = getJumpDest(patchableJmpEndAddr, insertIcCcModeBB);
+        Value* icMissAddrI64 = new PtrToIntInst(icMissAddr, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
+
+        setJumpDest(patchableJmpEndAddr, jitAddr /*newDest*/, insertIcCcModeBB);
+
+        CallInst* targetFnObject = CreateCallToDeegenCommonSnippet(module.get(), "GetFuncObjAsU64FromTValue", { targetTv }, insertIcCcModeBB);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcCcModeBB);
+        // ReleaseAssert(codeBlockAndEntryPoint->getType() == retTy);
+
+        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
+        Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcCcModeBB);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
+        Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
+
+        emitCallToIcCodegenFn(ccCgFn,
+                              jitAddr /*outputAddr*/,
+                              icMissAddrI64,
+                              calleeCbU32,
+                              codePtrU64,
+                              condBrDest,
+                              bytecodeOperandList,
+                              insertIcCcModeBB);
+
+        createReturnLogic(calleeCbHeapPtr, codePointer, insertIcCcModeBB);
+    }
+
+    ValidateLLVMModule(module.get());
+    RunLLVMOptimizePass(module.get());
+
+    fn = module->getFunction(resultFuncName + "_impl");
+    ReleaseAssert(fn != nullptr);
+    fn->setLinkage(GlobalValue::InternalLinkage);
+    fn->addFnAttr(Attribute::AlwaysInline);
+
+    FunctionType* finalFTy = FunctionType::get(
+        retTy,
+        {
+            llvm_type_of<void*>(ctx),           // CodeBlock
+            llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
+            llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
+            llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
+            llvm_type_of<uint64_t>(ctx)         // target tvalue
+        },
+        false /*isVarArg*/);
+
+    Function* finalFn = Function::Create(finalFTy, GlobalValue::ExternalLinkage, resultFuncName, module.get());
+    ReleaseAssert(finalFn->getName() == resultFuncName);
+
+    finalFn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(finalFn, fn);
+    finalFn->setDSOLocal(true);
+
+    // This is expected by our caller
+    //
+    finalFn->setCallingConv(CallingConv::PreserveMost);
+
+    {
+        BasicBlock* finalFnBB = BasicBlock::Create(ctx, "", finalFn);
+        CallInst* bcbPtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlock", { finalFn->getArg(0) }, finalFnBB);
+        CallInst* finalFnRes = CallInst::Create(fn, { finalFn->getArg(0), bcbPtr, finalFn->getArg(1), finalFn->getArg(2), finalFn->getArg(3), finalFn->getArg(4) }, "", finalFnBB);
+        ReturnInst::Create(ctx, finalFnRes, finalFnBB);
+    }
+
+    ValidateLLVMModule(module.get());
+    RunLLVMOptimizePass(module.get());
+
+    ReleaseAssert(module->getFunction(resultFuncName) != nullptr);
+    for (Function& func : *module)
+    {
+        if (!func.isDeclaration())
+        {
+            ReleaseAssert(func.getName() == resultFuncName);
+        }
+    }
+
+    std::string disasmForAudit;
+    {
+        disasmForAudit = dcRes.m_disasmForAudit + ccRes.m_disasmForAudit;
+
+        disasmForAudit += "# Initial DC miss dest offset (relative to stencil, not bytecode) = " + std::to_string(dcIcMissDestOffset) +
+            ", CC miss dest offset = " + std::to_string(ccIcMissDestOffset) + "\n\n";
+
+        disasmForAudit += smcRes.m_disasmForAudit;
+
+        disasmForAudit += "# Direct-call IC code length = " + std::to_string(dcRes.m_icSize) + "\n";
+        disasmForAudit += "# Direct-call IC CodePtr patch records:\n";
+        for (auto& item : dcRes.m_codePtrPatchRecords)
+        {
+            disasmForAudit += std::string("#     offset = ") + std::to_string(item.first) + (item.second ? " (64-bit)\n" : " (32-bit)\n");
+        }
+        disasmForAudit += "\n";
+
+        disasmForAudit += "# Closure-call IC code length = " + std::to_string(ccRes.m_icSize) + "\n";
+        disasmForAudit += "# Closure-call IC CodePtr patch records:\n";
+        for (auto& item : ccRes.m_codePtrPatchRecords)
+        {
+            disasmForAudit += std::string("#     offset = ") + std::to_string(item.first) + (item.second ? " (64-bit)\n" : " (32-bit)\n");
+        }
+        disasmForAudit += "\n";
+    }
+
+    return {
+        .m_module = std::move(module),
+        .m_resultFnName = resultFuncName,
+        .m_dcIcCodePtrPatchRecords = dcRes.m_codePtrPatchRecords,
+        .m_ccIcCodePtrPatchRecords = ccRes.m_codePtrPatchRecords,
+        .m_dcIcSize = dcRes.m_icSize,
+        .m_ccIcSize = ccRes.m_icSize,
+        .m_disasmForAudit = disasmForAudit,
+        .m_uniqueOrd = icInfo.m_uniqueOrd
+    };
 }
 
 }   // namespace dast
