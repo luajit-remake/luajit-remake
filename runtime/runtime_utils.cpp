@@ -459,6 +459,3 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
     m_numEntries++;
     return entry->GetJitRegionStart();
 }
-
-// TODO: FIXME turn this to real logic
-const JitCallInlineCacheTraits* const deegen_jit_call_inline_cache_trait_table[1] = {nullptr};

@@ -125,12 +125,14 @@ void DeegenAsmCfg::AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* func,
         std::unordered_set<BasicBlock*> termBBSet;
         if (terminator.IsIndirectJumpInst())
         {
-            // Must not be nullptr because we have annotated them with magic asm
+            // We've asserted this when we parse the IndirectBr magic asm annotation, so should always be true here
             //
-            ReleaseAssert(terminator.m_originCertain != nullptr);
-            Instruction* origin = terminator.m_originCertain;
-            ReleaseAssert(origin->getParent() != nullptr);
-            termBBSet.insert(origin->getParent());
+            ReleaseAssert(terminator.m_originCertainList.size() > 0);
+            for (Instruction* origin : terminator.m_originCertainList)
+            {
+                ReleaseAssert(origin->getParent() != nullptr);
+                termBBSet.insert(origin->getParent());
+            }
         }
         else if (terminator.IsDirectUnconditionalJumpInst())
         {
@@ -196,15 +198,46 @@ void DeegenAsmCfg::AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* func,
         X64AsmLine& terminator = block->m_lines.back();
         if (terminator.IsIndirectJumpInst())
         {
-            // Must not be nullptr because we have annotated them with magic asm
-            //
-            ReleaseAssert(terminator.m_originCertain != nullptr);
-            Instruction* origin = terminator.m_originCertain;
-            if (isa<CallInst>(origin))
+            ReleaseAssert(terminator.m_originCertainList.size() > 0);
+            std::unordered_set<BasicBlock*> bbSet;
+            bool isTailDispatch = false;
+            bool isIndirectBr = false;
+            for (Instruction* origin : terminator.m_originCertainList)
             {
-                // This is a tail dispatch to somewhere outside the function, don't bother
-                //
-                ReleaseAssert(cast<CallInst>(origin)->isMustTailCall());
+                if (isa<CallInst>(origin))
+                {
+                    // This is a tail dispatch to somewhere outside the function, don't bother
+                    //
+                    ReleaseAssert(cast<CallInst>(origin)->isMustTailCall());
+                    isTailDispatch = true;
+                }
+                else
+                {
+                    isIndirectBr = true;
+                    if (isa<IndirectBrInst>(origin))
+                    {
+                        IndirectBrInst* ibi = cast<IndirectBrInst>(origin);
+                        for (uint32_t i = 0; i < ibi->getNumDestinations(); i++)
+                        {
+                            bbSet.insert(ibi->getDestination(i));
+                        }
+                    }
+                    else
+                    {
+                        ReleaseAssert(isa<SwitchInst>(origin));
+                        SwitchInst* si = cast<SwitchInst>(origin);
+                        bbSet.insert(si->getDefaultDest());
+                        for (auto& caseIt : si->cases())
+                        {
+                            bbSet.insert(caseIt.getCaseSuccessor());
+                        }
+                    }
+                }
+            }
+
+            if (isTailDispatch)
+            {
+                ReleaseAssert(!isIndirectBr);
                 if (addHumanDebugComment)
                 {
                     std::string humanDebugText = " # [CFG]: dest = <INDIRECT_TAILCALL>";
@@ -213,27 +246,8 @@ void DeegenAsmCfg::AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* func,
             }
             else
             {
-                std::unordered_set<BasicBlock*> bbSet;
-                if (isa<IndirectBrInst>(origin))
-                {
-                    IndirectBrInst* ibi = cast<IndirectBrInst>(origin);
-                    for (uint32_t i = 0; i < ibi->getNumDestinations(); i++)
-                    {
-                        bbSet.insert(ibi->getDestination(i));
-                    }
-                }
-                else
-                {
-                    ReleaseAssert(isa<SwitchInst>(origin));
-                    SwitchInst* si = cast<SwitchInst>(origin);
-                    bbSet.insert(si->getDefaultDest());
-                    for (auto& caseIt : si->cases())
-                    {
-                        bbSet.insert(caseIt.getCaseSuccessor());
-                    }
-                }
+                ReleaseAssert(!isTailDispatch);
                 ReleaseAssert(bbSet.size() > 0);
-
                 std::vector<BasicBlock*> bbList;
                 for (BasicBlock* bb : bbSet)
                 {

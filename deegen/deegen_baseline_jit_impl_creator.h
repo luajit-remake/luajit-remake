@@ -90,6 +90,12 @@ public:
     llvm::CallInst* WARN_UNUSED CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
     llvm::CallInst* WARN_UNUSED CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
 
+    // Get the SlowPathData offset (uint64_t) for the current bytecode
+    // Only available for use in JIT'ed code
+    //
+    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd);
+    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore);
+
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult>& GetAllCallIcInfo()
     {
         return m_callIcInfo;

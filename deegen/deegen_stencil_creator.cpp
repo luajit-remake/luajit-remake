@@ -488,11 +488,6 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                         ReleaseAssert(!isExtractIcLogic);
                         res.m_symKind = RelocationRecord::SymKind::SlowPathAddr;
                     }
-                    else if (placeholderOrd == CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR)
-                    {
-                        ReleaseAssert(!isExtractIcLogic);
-                        res.m_symKind = RelocationRecord::SymKind::PrivateDataAddr;
-                    }
                     else
                     {
                         res.m_symKind = RelocationRecord::SymKind::StencilHole;
@@ -507,6 +502,8 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                 return res;
             }
         }
+
+        ReleaseAssert(sec.getObject() != nullptr);
 
         if (sec == textSection)
         {
@@ -569,6 +566,7 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
 
     std::function<void(SectionRef)> handleDataSection = [&](SectionRef sec) -> void
     {
+        ReleaseAssert(sec.getObject() != nullptr);
         ReleaseAssert(sec != textSection && sec != textSlowSection && sec != textIcSection);
         if (neededSharedData.count(sec) || neededPrivateData.count(sec))
         {
@@ -786,6 +784,15 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
 
     hasMergedPrivateDataSections = true;
 
+    for (RelocationRecord& rr : mergedPdo.m_relocations)
+    {
+        if (rr.m_symKind == RelocationRecord::SymKind::StencilHole && rr.m_stencilHoleOrd == CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR)
+        {
+            ReleaseAssert(!isExtractIcLogic);
+            rr.m_symKind = RelocationRecord::SymKind::PrivateDataAddr;
+        }
+    }
+
     DeegenStencil ds;
 
     ds.m_sectionToPdoOffsetMap.clear();
@@ -837,6 +844,11 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
             {
                 ReleaseAssert(neededSharedData.count(rr.m_sectionRef));
                 rr.m_sharedDataObject = neededSharedData[rr.m_sectionRef];
+            }
+            if (rr.m_symKind == RelocationRecord::SymKind::StencilHole && rr.m_stencilHoleOrd == CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR)
+            {
+                ReleaseAssert(!isExtractIcLogic);
+                rr.m_symKind = RelocationRecord::SymKind::PrivateDataAddr;
             }
             relos.push_back(rr);
         }

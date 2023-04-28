@@ -330,7 +330,28 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         }
     }
 
+    std::string bytecodeIdName = mainJic.GetBytecodeDef()->GetBytecodeIdName();
     ReleaseAssert(mainJic.GetAllCallIcInfo().size() == mainJic.GetBytecodeDef()->GetNumCallICsInJitTier());
+    ReleaseAssert(bcTraitAccessor.GetNumJitCallICSites(bytecodeIdName) == mainJic.GetBytecodeDef()->GetNumCallICsInJitTier());
+
+    // For sanity, assert that the ordinals of callIcInfo should exactly cover [0, numCallIc)
+    //
+    {
+        std::unordered_set<uint64_t> checkSet;
+        for (size_t i = 0; i < mainJic.GetBytecodeDef()->GetNumCallICsInJitTier(); i++)
+        {
+            checkSet.insert(i);
+        }
+        for (auto& callIcInfo : mainJic.GetAllCallIcInfo())
+        {
+            uint64_t ord = callIcInfo.m_uniqueOrd;
+            ReleaseAssert(checkSet.count(ord));
+            checkSet.erase(checkSet.find(ord));
+        }
+        ReleaseAssert(checkSet.empty());
+    }
+
+    std::unique_ptr<Module> icCodegenSlowpathModule;
 
     for (auto& callIcInfo : mainJic.GetAllCallIcInfo())
     {
@@ -338,16 +359,51 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             DeegenCallIcLogicCreator::CreateBaselineJitCallIcCreator(&mainJic,
                                                                      stencilToFastPathOffsetMap,
                                                                      stencilList[0] /*inout*/,
-                                                                     callIcInfo);
+                                                                     callIcInfo,
+                                                                     bcTraitAccessor);
 
-        std::string asmFile = CompileLLVMModuleToAssemblyFile(callIcCgRes.m_module.get(), Reloc::Static, CodeModel::Small);
-
+        // Dump audit log
+        //
         {
-            // Dump audit log
+            // CompileLLVMModuleToAssemblyFile unfortunately can make subtle changes to the module..
+            // Even though hopefully those changes are harmless, just don't take unnecessary risks only to dump an audit log
             //
+            std::unique_ptr<Module> clonedModule = CloneModule(*callIcCgRes.m_module.get());
+            std::string asmFile = CompileLLVMModuleToAssemblyFile(clonedModule.get(), Reloc::Static, CodeModel::Small);
+
             std::string icAuditLog = callIcCgRes.m_disasmForAudit + asmFile;
             std::string icAuditLogFileName = mainJic.GetBytecodeDef()->GetBytecodeIdName() + "_call_ic_" + std::to_string(callIcCgRes.m_uniqueOrd) + ".s";
             res.m_extraAuditFiles.push_back(std::make_pair(icAuditLogFileName, icAuditLog));
+        }
+
+        // Emit info for the call IC trait table
+        //
+        res.m_allCallIcTraitDescs.push_back({
+            .m_ordInTraitTable = bcTraitAccessor.GetJitCallIcTraitOrd(bytecodeIdName, callIcCgRes.m_uniqueOrd, true /*isDirectCall*/),
+            .m_allocationLength = callIcCgRes.m_dcIcSize,
+            .m_isDirectCall = true,
+            .m_codePtrPatchRecords = callIcCgRes.m_dcIcCodePtrPatchRecords
+        });
+
+        res.m_allCallIcTraitDescs.push_back({
+            .m_ordInTraitTable = bcTraitAccessor.GetJitCallIcTraitOrd(bytecodeIdName, callIcCgRes.m_uniqueOrd, false /*isDirectCall*/),
+            .m_allocationLength = callIcCgRes.m_ccIcSize,
+            .m_isDirectCall = false,
+            .m_codePtrPatchRecords = callIcCgRes.m_ccIcCodePtrPatchRecords
+        });
+
+        ReleaseAssert(callIcCgRes.m_module->getFunction(callIcCgRes.m_resultFnName) != nullptr);
+
+        // Store the codegen function
+        //
+        if (icCodegenSlowpathModule.get() == nullptr)
+        {
+            icCodegenSlowpathModule = std::move(callIcCgRes.m_module);
+        }
+        else
+        {
+            Linker linker(*icCodegenSlowpathModule.get());
+            ReleaseAssert(linker.linkInModule(std::move(callIcCgRes.m_module)) == false);
         }
     }
 
@@ -832,8 +888,16 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             writeOperand(bytecodeDef->m_outputOperand.get(), outputSlot);
         }
 
-        // TODO: FIXME initialize Call IC sites
+        // Initialize all the Call IC site data
         //
+        size_t numJitCallIcSites = bytecodeDef->GetNumCallICsInJitTier();
+        for (size_t i = 0; i < numJitCallIcSites; i++)
+        {
+            size_t offset = bytecodeDef->GetBaselineJitCallIcSiteOffsetInSlowPathData(i);
+            Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                            { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
+            CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitCallIcSite", { addr }, entryBB);
+        }
 
         Constant* advanceOffset = CreateLLVMConstantInt<uint64_t>(ctx, bytecodeDef->GetBaselineJitSlowPathDataLength());
         advancedSlowPathData = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
@@ -1056,6 +1120,15 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     ReleaseAssert(module->getFunction(res.m_resultFuncName) != nullptr);
 
     res.m_cgMod = std::move(module);
+
+    // Link in the IC codegen slowpath logic if needed
+    //
+    if (icCodegenSlowpathModule.get() != nullptr)
+    {
+        Linker linker(*res.m_cgMod.get());
+        ReleaseAssert(linker.linkInModule(std::move(icCodegenSlowpathModule)) == false);
+    }
+
     return res;
 }
 

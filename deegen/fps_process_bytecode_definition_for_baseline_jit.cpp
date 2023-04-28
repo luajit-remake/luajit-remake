@@ -134,6 +134,39 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             fprintf(hdrFp, "}\n};\n}\n\n");
         }
 
+        // Emit C++ code that populates the Call IC trait table entries
+        //
+        {
+            using CallIcTraitDesc = DeegenBytecodeBaselineJitInfo::CallIcTraitDesc;
+            std::vector<CallIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allCallIcTraitDescs;
+            size_t icTraitTableLength = bcTraitAccessor.GetJitCallIcTraitTableLength();
+            for (CallIcTraitDesc& icTrait : icTraitList)
+            {
+                ReleaseAssert(icTrait.m_ordInTraitTable < icTraitTableLength);
+                fprintf(hdrFp, "__attribute__((__section__(\"deegen_call_ic_trait_table_section\"))) constexpr JitCallInlineCacheTraitsHolder<%llu> ",
+                        static_cast<unsigned long long>(icTrait.m_codePtrPatchRecords.size()));
+                fprintf(hdrFp, "x_deegen_jit_call_ic_trait_ord_%llu(\n", static_cast<unsigned long long>(icTrait.m_ordInTraitTable));
+
+                ReleaseAssert(icTrait.m_allocationLength <= 65535);
+                fprintf(hdrFp, "    %llu,\n", static_cast<unsigned long long>(icTrait.m_allocationLength));
+                fprintf(hdrFp, "    %s /*isDirectCallMode*/,\n", (icTrait.m_isDirectCall ? "true" : "false"));
+                fprintf(hdrFp, "    std::array<JitCallInlineCacheTraits::PatchRecord, %llu> {", static_cast<unsigned long long>(icTrait.m_codePtrPatchRecords.size()));
+
+                for (size_t i = 0; i < icTrait.m_codePtrPatchRecords.size(); i++)
+                {
+                    uint64_t offset = icTrait.m_codePtrPatchRecords[i].first;
+                    bool is64 = icTrait.m_codePtrPatchRecords[i].second;
+                    ReleaseAssert(offset <= 65535);
+                    if (i > 0) { fprintf(hdrFp, ","); }
+                    fprintf(hdrFp, "\n        JitCallInlineCacheTraits::PatchRecord {\n");
+                    fprintf(hdrFp, "            .m_offset = %llu,\n", static_cast<unsigned long long>(offset));
+                    fprintf(hdrFp, "            .m_is64 = %s\n", (is64 ? "true" : "false"));
+                    fprintf(hdrFp, "        }");
+                }
+                fprintf(hdrFp, "\n    });\n\n");
+            }
+        }
+
         // Push generated modules to the list of modules to be linked, and also set section
         //
         for (auto& m : res.m_aotSlowPaths)
@@ -347,6 +380,7 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
     FILE* fp = cppOutput.fp();
 
     BytecodeOpcodeRawValueMap byOpMap = BytecodeOpcodeRawValueMap::ParseFromCommandLineArgs();
+    DeegenGlobalBytecodeTraitAccessor bcTraitAccessor = DeegenGlobalBytecodeTraitAccessor::ParseFromCommandLineArgs();
 
     fprintf(fp, "#define DEEGEN_POST_FUTAMURA_PROJECTION\n");
     fprintf(fp, "#include \"drt/constexpr_array_builder_helper.h\"\n\n");
@@ -421,6 +455,23 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
         fprintf(fp, "\n");
     }
     fprintf(fp, "};\n\n");
+
+    // Generate the JIT Call IC trait table
+    //
+    {
+        size_t callIcTraitTableLen = bcTraitAccessor.GetJitCallIcTraitTableLength();
+
+        fprintf(fp, "constexpr const JitCallInlineCacheTraits* deegen_jit_call_inline_cache_trait_table[%llu] = {\n",
+                static_cast<unsigned long long>(callIcTraitTableLen));
+
+        for (size_t i = 0; i < callIcTraitTableLen; i++)
+        {
+            fprintf(fp, "    &x_deegen_jit_call_ic_trait_ord_%llu", static_cast<unsigned long long>(i));
+            if (i + 1 < callIcTraitTableLen) { fprintf(fp, ","); }
+            fprintf(fp, "\n");
+        }
+        fprintf(fp, "};\n\n");
+    }
 
     std::unique_ptr<llvm::Module> helperLogicModule = GenerateBaselineJitHelperLogic(ctx);
     std::string asmFileContents = CompileLLVMModuleToAssemblyFile(helperLogicModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);

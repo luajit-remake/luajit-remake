@@ -113,11 +113,7 @@ void TypeBasedHCSHelper::GenerateCheckConditionLogic(DeegenBytecodeImplCreatorBa
             //
             BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
             ReleaseAssert(!j->IsBaselineJitSlowPath());
-            Value* offset = j->CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
-                                                                        llvm_type_of<uint64_t>(ctx),
-                                                                        1 /*lowerBound*/,
-                                                                        StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
-                                                                        tmp /*insertBefore*/);
+            Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(tmp /*insertBefore*/);
             Value* baselineJitCodeBlock = j->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { j->GetCodeBlock() }, tmp /*insertBefore*/);
             ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
             callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", tmp /*insertBefore*/);

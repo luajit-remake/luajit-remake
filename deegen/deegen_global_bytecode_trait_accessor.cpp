@@ -1,5 +1,5 @@
 #include "deegen_global_bytecode_trait_accessor.h"
-
+#include "deegen_bytecode_operand.h"
 
 namespace dast {
 

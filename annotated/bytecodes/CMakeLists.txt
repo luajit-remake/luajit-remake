@@ -139,8 +139,8 @@ list(JOIN baseline_jit_dispatch_table_hdr_file_list "," comma_separated_baseline
 add_custom_command(
   OUTPUT ${baseline_jit_dispatch_and_trait_table_cpp}
   OUTPUT ${baseline_jit_misc_helper_logic_asm}
-  COMMAND ${fps_exec} --generate-baseline-jit-dispatch-and-bytecode-trait-table --input-list='${comma_separated_baseline_jit_dispatch_table_hdr_file_list}' --cpp-output=${baseline_jit_dispatch_and_trait_table_cpp} --bytecode-name-table=${interpreter_opcode_name_table_json} --asm-output=${baseline_jit_misc_helper_logic_asm}
-  DEPENDS fps ${generated_src_list} ${baseline_jit_dispatch_table_hdr_file_list} ${interpreter_opcode_name_table_json}
+  COMMAND ${fps_exec} --generate-baseline-jit-dispatch-and-bytecode-trait-table --input-list='${comma_separated_baseline_jit_dispatch_table_hdr_file_list}' --cpp-output=${baseline_jit_dispatch_and_trait_table_cpp} --bytecode-name-table=${interpreter_opcode_name_table_json} --bytecode-trait-table=${bytecode_opcode_trait_table_json} --asm-output=${baseline_jit_misc_helper_logic_asm}
+  DEPENDS fps ${generated_src_list} ${baseline_jit_dispatch_table_hdr_file_list} ${interpreter_opcode_name_table_json} ${bytecode_opcode_trait_table_json}
 )
 
 # generate the baseline JIT entry logic

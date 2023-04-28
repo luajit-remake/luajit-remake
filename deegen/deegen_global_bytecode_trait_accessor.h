@@ -1,9 +1,11 @@
 #pragma once
 
 #include "common.h"
-#include "deegen_bytecode_operand.h"
+#include "json_utils.h"
 
 namespace dast {
+
+struct BytecodeOpcodeRawValueMap;
 
 // Normally, when Deegen process a bytecode, it only has access to the bytecode being processed,
 // not any other bytecodes. This works fine in most cases as normally bytecodes traits are independent
@@ -67,6 +69,16 @@ public:
     {
         Trait trait = GetTraitFromBytecodeName(bytecodeName);
         return trait.m_numInterpreterFusedIcVariants;
+    }
+
+    uint64_t GetJitCallIcTraitTableLength() const
+    {
+        uint64_t res = 0;
+        for (const auto& it : m_traitSet)
+        {
+            res += it.second.m_numJitCallIC * 2;
+        }
+        return res;
     }
 
 private:

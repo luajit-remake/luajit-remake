@@ -48,6 +48,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   check_is_tvalue_heap_entity.cpp
   create_new_jit_call_ic_for_direct_call_mode_site.cpp
   create_new_jit_call_ic_for_closure_call_mode_site.cpp
+  initialize_jit_call_ic_site.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

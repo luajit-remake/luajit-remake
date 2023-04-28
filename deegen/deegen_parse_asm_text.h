@@ -20,6 +20,7 @@ struct X64AsmLine
     AsmMagicPayload* m_magicPayload;    // If it is a ASM magic, carries the details of the magic
     llvm::Instruction* m_originCertain;
     llvm::Instruction* m_originMaybe;
+    std::vector<llvm::Instruction*> m_originCertainList;    // only used by indirect jump analysis
     uint32_t m_rawLocIdent;             // 0 if doesn't exist
 
     X64AsmLine()

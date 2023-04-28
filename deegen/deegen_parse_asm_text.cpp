@@ -824,23 +824,24 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
         block->m_lines = std::move(list);
     }
 
-    // Process and remove IndirectBrMarkerForCfgRecovery magic
-    //
-    for (X64AsmBlock* block : r->m_blocks)
     {
-        // If the terminator is an indirect jump, update its origin using the inserted asm magic annotation
-        //
-        X64AsmLine& terminator = block->m_lines.back();
-        if (block->m_lines.back().IsIndirectJumpInst())
+        std::unordered_map<std::string, X64AsmBlock*> labelToBlockMap;
+        for (X64AsmBlock* block : r->m_blocks)
         {
-            size_t loc = block->m_lines.size() - 1;
-            while (true)
+            ReleaseAssert(!labelToBlockMap.count(block->m_normalizedLabelName));
+            labelToBlockMap[block->m_normalizedLabelName] = block;
+        }
+
+        // Process IndirectBrMarkerForCfgRecovery magic
+        //
+        for (X64AsmBlock* block : r->m_blocks)
+        {
+            for (size_t loc = 0; loc < block->m_lines.size(); loc++)
             {
-                X64AsmLine& line = block->m_lines[loc];
-                if (line.IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
+                if (block->m_lines[loc].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
                 {
-                    ReleaseAssert(line.m_magicPayload->m_lines.size() == 1);
-                    X64AsmLine& payload = line.m_magicPayload->m_lines[0];
+                    ReleaseAssert(block->m_lines[loc].m_magicPayload->m_lines.size() == 1);
+                    X64AsmLine& payload = block->m_lines[loc].m_magicPayload->m_lines[0];
                     ReleaseAssert(payload.NumWords() == 3);
                     ReleaseAssert(payload.GetWord(0) == "movl");
                     std::string val = payload.GetWord(1);
@@ -849,14 +850,81 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
                     uint32_t ident = SafeIntegerCast<uint32_t>(StoiOrFail(val));
                     llvm::Instruction* originInst = diInfo.GetIndirectBrSourceFromMagicAsmAnnotation(ident);
 
-                    ReleaseAssertImp(terminator.m_originCertain != nullptr, terminator.m_originCertain == originInst);
-                    ReleaseAssertImp(terminator.m_originMaybe != nullptr, terminator.m_originMaybe == originInst);
-                    terminator.m_originCertain = originInst;
-                    terminator.m_originMaybe = originInst;
-                    break;
+                    bool invalidated = false;
+                    for (size_t i = loc + 1; i < block->m_lines.size(); i++)
+                    {
+                        if (block->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
+                        {
+                            // We encountered another magic IndirectBr annotation.
+                            // This means LLVM has chosen to not use an indirect jump to implement the current multi-target branch
+                            //
+                            invalidated = true;
+                            break;
+                        }
+                    }
+
+                    if (!invalidated)
+                    {
+                        X64AsmLine& terminator = block->m_lines.back();
+                        if (terminator.IsIndirectJumpInst())
+                        {
+                            terminator.m_originCertainList.push_back(originInst);
+                        }
+                        else if (block->m_lines.back().IsDirectUnconditionalJumpInst())
+                        {
+                            // Sometimes LLVM tail-merge indirect branches.. So if we see a branch,
+                            // try to follow it and see if it leads to an indirect-jump block.
+                            //
+                            std::string label = terminator.GetWord(1);
+                            if (labelToBlockMap.count(label))
+                            {
+                                X64AsmBlock* dstBlock = labelToBlockMap[label];
+                                for (size_t i = 0; i < dstBlock->m_lines.size(); i++)
+                                {
+                                    if (dstBlock->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
+                                    {
+                                        // We encountered another magic IndirectBr annotation.
+                                        // This means LLVM has chosen to not use an indirect jump to implement the current multi-target branch
+                                        //
+                                        invalidated = true;
+                                        break;
+                                    }
+                                }
+                                if (!invalidated && dstBlock->m_lines.back().IsIndirectJumpInst())
+                                {
+                                    dstBlock->m_lines.back().m_originCertainList.push_back(originInst);
+                                }
+                            }
+                        }
+                    }
                 }
-                ReleaseAssert(loc > 0);
-                loc--;
+            }
+        }
+    }
+
+    for (X64AsmBlock* block : r->m_blocks)
+    {
+        X64AsmLine& terminator = block->m_lines.back();
+        if (terminator.IsIndirectJumpInst())
+        {
+            ReleaseAssert(terminator.m_originCertainList.size() > 0);
+            std::unordered_set<llvm::Instruction*> removeDup;
+            for (llvm::Instruction* inst : terminator.m_originCertainList)
+            {
+                removeDup.insert(inst);
+            }
+            terminator.m_originCertainList.clear();
+            for (llvm::Instruction* inst : removeDup)
+            {
+                terminator.m_originCertainList.push_back(inst);
+            }
+            ReleaseAssert(terminator.m_originCertainList.size() > 0);
+            ReleaseAssertImp(terminator.m_originCertain != nullptr,
+                             terminator.m_originCertainList.size() == 1 && terminator.m_originCertainList[0] == terminator.m_originCertain);
+
+            if (terminator.m_originCertainList.size() == 1)
+            {
+                terminator.m_originCertain = terminator.m_originCertainList[0];
             }
         }
     }

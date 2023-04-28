@@ -403,11 +403,7 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         }
         else
         {
-            Value* offset = j->CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
-                                                                        llvm_type_of<uint64_t>(ctx),
-                                                                        1 /*lowerBound*/,
-                                                                        StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
-                                                                        m_origin);
+            Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(m_origin);
             Value* baselineJitCodeBlock = j->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { j->GetCodeBlock() }, m_origin);
             ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
             callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", m_origin);

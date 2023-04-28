@@ -18,6 +18,16 @@ struct DeegenBytecodeBaselineJitInfo
     size_t m_numCondBrLatePatches;
     size_t m_slowPathDataLen;
 
+    struct CallIcTraitDesc
+    {
+        size_t m_ordInTraitTable;
+        size_t m_allocationLength;
+        bool m_isDirectCall;
+        std::vector<std::pair<size_t /*offset*/, bool /*is64*/>> m_codePtrPatchRecords;
+    };
+
+    std::vector<CallIcTraitDesc> m_allCallIcTraitDescs;
+
     // The module that contains the full logic of the baseline JIT codegen function for this bytecode, which
     // emits the JIT code, creates the slow path data and dispatches to the codegen function for the next bytecode
     //

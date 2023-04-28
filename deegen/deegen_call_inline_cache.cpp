@@ -615,6 +615,24 @@ static llvm::Instruction* WARN_UNUSED CloneBasicBlockContainingInstruction(llvm:
     return result;
 }
 
+static llvm::FunctionType* WARN_UNUSED GetBaselineJitCallIcSlowPathFnPrototype(llvm::LLVMContext& ctx)
+{
+    using namespace llvm;
+    StructType* retTy = StructType::get(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
+    FunctionType* fty = FunctionType::get(
+        retTy,
+        {
+            llvm_type_of<void*>(ctx),           // CodeBlock
+            llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
+            llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
+            llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
+            llvm_type_of<uint64_t>(ctx)         // target tvalue
+        },
+        false /*isVarArg*/);
+
+    return fty;
+}
+
 std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED DeegenCallIcLogicCreator::EmitForBaselineJIT(
     BaselineJitImplCreator* ifi,
     llvm::Value* functionObject,
@@ -702,28 +720,47 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     //
     auto emitIcMissBlock = [&](Instruction* icMissOrigin, Value* functionObjectTarget)
     {
-#if 0
-        std::string icCreatorFnName = "__deegen_baseline_jit_codegen_" + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_call_ic_" + std::to_string(unique_ord);
-        FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<void*>(ctx), llvm_type_of<void*>(ctx), llvm_type_of<uint64_t>(ctx) }, false);
-
+        // Currently we only employ call IC in main component, and the slow path function name assumes that
+        //
+        ReleaseAssert(ifi->IsMainComponent());
+        std::string icCreatorFnName = "__deegen_baseline_jit_codegen_" + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_jit_call_ic_" + std::to_string(unique_ord);
+        FunctionType* fty = GetBaselineJitCallIcSlowPathFnPrototype(ctx);
         ReleaseAssert(ifi->GetModule()->getNamedValue(icCreatorFnName) == nullptr);
         Function* icCreatorFn = Function::Create(fty, GlobalValue::ExternalLinkage, icCreatorFnName, ifi->GetModule());
         icCreatorFn->addFnAttr(Attribute::NoUnwind);
+        icCreatorFn->addFnAttr(Attribute::NoInline);
         ReleaseAssert(icCreatorFn->getName() == icCreatorFnName);
         icCreatorFn->setCallingConv(CallingConv::PreserveMost);
 
-        CallInst* ci = CallInst::Create(icCreatorFn, { ifi->GetCodeBlock(), func, functionObjectTarget }, "", icMissOrigin);
-        ci->setCallingConv(CallingConv::PreserveMost);
-#endif
+        Value* slowPathDataOffset = ifi->GetSlowPathDataOffsetFromJitFastPath(icMissOrigin /*insertBefore*/);
+        Value* slowPathAddrOfThisStencil = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_STENCIL_SLOW_PATH_ADDR);
+        Value* dataSecAddrOfThisStencil = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR);
+        Value* targetTV = ifi->CallDeegenCommonSnippet("BoxFunctionObjectToTValue", { functionObjectTarget }, icMissOrigin);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetTV));
 
-        Value* calleeCbHeapPtr = nullptr;
-        Value* codePtr = nullptr;
-        EmitGenericGetCallTargetLogic(ifi, functionObjectTarget, calleeCbHeapPtr /*out*/, codePtr /*out*/, icMissOrigin);
-        ReleaseAssert(calleeCbHeapPtr != nullptr && codePtr != nullptr);
+        CallInst* codeBlockAndEntryPoint = CallInst::Create(
+            icCreatorFn,
+            {
+                ifi->GetCodeBlock(),
+                slowPathDataOffset,
+                slowPathAddrOfThisStencil,
+                dataSecAddrOfThisStencil,
+                targetTV
+            },
+            "", icMissOrigin);
+        codeBlockAndEntryPoint->setCallingConv(CallingConv::PreserveMost);
+
+        ReleaseAssert(codeBlockAndEntryPoint->getType()->isStructTy());
+        ReleaseAssert(dyn_cast<StructType>(codeBlockAndEntryPoint->getType())->getNumElements() == 2);
+
+        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", icMissOrigin);
+        Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", icMissOrigin);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
         finalRes.push_back({
             .calleeCbHeapPtr = calleeCbHeapPtr,
-            .codePointer = codePtr,
+            .codePointer = codePointer,
             .origin = icMissOrigin
         });
     };
@@ -2075,7 +2112,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     BaselineJitImplCreator* ifi,
     std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
     DeegenStencil& mainLogicStencil /*inout*/,
-    BaselineJitAsmLoweringResult& icInfo)
+    BaselineJitAsmLoweringResult& icInfo,
+    const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -2152,7 +2190,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     // is *really* important as we heavily rely on LLVM code sinking pass to sink access to SlowPathData to
     // where the data is actually used. And the easiest way to achieve this is to use a parameter 'noalias' attribute.
     //
-    StructType* retTy = StructType::create(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
+    StructType* retTy = StructType::get(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
     FunctionType* fty = FunctionType::get(
         retTy,
         {
@@ -2228,7 +2266,6 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     BranchInst::Create(skipIcCreationBB /*trueBB*/, prepareCreateIcBB /*falseBB*/, isIcCountReachedMaximum, entryBB);
 
-
     auto createReturnLogic = [&](Value* cbHeapPtr, Value* entryPoint, BasicBlock* bb)
     {
         ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(cbHeapPtr));
@@ -2271,9 +2308,14 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     BranchInst::Create(dcBB /*trueBB*/, ccBB /*falseBB*/, isIcSiteInDirectCallMode, prepareCreateIcBB);
 
-    // TODO: FIXME turn this to real logic
-    //
-    Value* dcIcTraitOrd = CreateLLVMConstantInt<uint16_t>(ctx, 0);
+    Value* dcIcTraitOrd;
+    {
+        size_t dcIcTraitOrdVal = bcTraitAccessor.GetJitCallIcTraitOrd(ifi->GetBytecodeDef()->GetBytecodeIdName(),
+                                                                      icInfo.m_uniqueOrd /*icSiteOrd*/,
+                                                                      true /*isDirectCall*/);
+        ReleaseAssert(dcIcTraitOrdVal <= 65534);
+        dcIcTraitOrd = CreateLLVMConstantInt<uint16_t>(ctx, static_cast<uint16_t>(dcIcTraitOrdVal));
+    }
 
     // Generate decode SlowPathData logic and produce the bytecode operand vector expected by the codegen implementation functions
     //
@@ -2575,7 +2617,6 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         CallInst* targetFnObject = CreateCallToDeegenCommonSnippet(module.get(), "GetFuncObjAsU64FromTValue", { targetTv }, insertIcCcModeBB);
         ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcCcModeBB);
-        // ReleaseAssert(codeBlockAndEntryPoint->getType() == retTy);
 
         Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcCcModeBB);
@@ -2605,20 +2646,13 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     fn->setLinkage(GlobalValue::InternalLinkage);
     fn->addFnAttr(Attribute::AlwaysInline);
 
-    FunctionType* finalFTy = FunctionType::get(
-        retTy,
-        {
-            llvm_type_of<void*>(ctx),           // CodeBlock
-            llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
-            llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
-            llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
-            llvm_type_of<uint64_t>(ctx)         // target tvalue
-        },
-        false /*isVarArg*/);
+    FunctionType* finalFTy = GetBaselineJitCallIcSlowPathFnPrototype(ctx);
+    ReleaseAssert(finalFTy->getReturnType() == retTy);
 
     Function* finalFn = Function::Create(finalFTy, GlobalValue::ExternalLinkage, resultFuncName, module.get());
     ReleaseAssert(finalFn->getName() == resultFuncName);
 
+    finalFn->addFnAttr(Attribute::NoInline);
     finalFn->addFnAttr(Attribute::NoUnwind);
     CopyFunctionAttributes(finalFn, fn);
     finalFn->setDSOLocal(true);

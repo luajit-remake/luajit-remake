@@ -50,26 +50,20 @@ TEST(XX, XX)
 #endif
 
 #if 0
-
 TEST(BaselineJit, Fib_Upvalue)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    vm->SetEngineStartingTier(VM::EngineStartingTier::Interpreter);
+    vm->SetEngineStartingTier(VM::EngineStartingTier::BaselineJIT);
 
     ParseResult res = ParseLuaScript(vm->GetRootCoroutine(), ReadFileContentAsString("test_fib_upvalue.lua"));
 
     ScriptModule* sm = res.m_scriptModule.get();
-    /*
-    for (UnlinkedCodeBlock* ucb : sm->m_unlinkedCodeBlocks)
-    {
-        CodeBlock* cb = ucb->GetCodeBlock(sm->m_defaultGlobalObject);
-        BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
-        cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
-    }
-*/
-    vm->LaunchScript(sm);
 
+    //std::ignore = sm;
+    //ReleaseAssert(false);
+    vm->LaunchScript(sm);
+    ReleaseAssert(false);
 }
 
 TEST(XX, YY)

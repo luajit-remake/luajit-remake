@@ -6,6 +6,7 @@
 #include "tvalue.h"
 #include "deegen_parse_asm_text.h"
 #include "deegen_stencil_creator.h"
+#include "deegen_global_bytecode_trait_accessor.h"
 
 namespace dast {
 
@@ -220,7 +221,8 @@ struct DeegenCallIcLogicCreator
     static BaselineJitCodegenResult WARN_UNUSED CreateBaselineJitCallIcCreator(BaselineJitImplCreator* ifi,
                                                                                std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
                                                                                DeegenStencil& mainLogicStencil /*inout*/,
-                                                                               BaselineJitAsmLoweringResult& icInfo);
+                                                                               BaselineJitAsmLoweringResult& icInfo,
+                                                                               const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor);
 };
 
 }   // namespace dast

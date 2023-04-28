@@ -78,6 +78,26 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlacehold
     return res;
 }
 
+llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    ReleaseAssert(!IsBaselineJitSlowPath());
+    return CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
+                                                    llvm_type_of<uint64_t>(insertBefore->getContext()),
+                                                    1 /*lowerBound*/,
+                                                    StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
+                                                    insertBefore);
+}
+
+llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(insertAtEnd->getContext(), insertAtEnd);
+    Value* res = GetSlowPathDataOffsetFromJitFastPath(dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
 BaselineJitImplCreator::BaselineJitImplCreator(BytecodeIrComponent& bic)
     : DeegenBytecodeImplCreatorBase(bic.m_bytecodeDef, bic.m_processKind)
 {
