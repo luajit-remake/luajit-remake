@@ -389,8 +389,8 @@ void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator
 
     ifi->GetBytecodeDef()->m_isInterpreterCallIcEverUsed = true;
 
-    // Currently, the call inline cache is (probably?) not too beneficial for performance unless when the IC check
-    // can be hoisted to eliminate a prior 'target.Is<tFunction>()' check (which should happen in the important
+    // Currently, the interpreter call inline cache is (probably?) not too beneficial for performance unless when the IC
+    // check can be hoisted to eliminate a prior 'target.Is<tFunction>()' check (which should happen in the important
     // cases, but note that even if that cannot happen, we still want the IC since it collects important information
     // on the callee).
     //
@@ -1779,7 +1779,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
         .m_module = std::move(module),
         .m_disasmForAudit = disasmForAudit,
         .m_codePtrPatchRecords = codePtrPatchRecords,
-        .m_icSize = codeAndData.size(),
+        .m_icSize = RoundUpToMultipleOf<8>(codeAndData.size()),
         .m_resFnName = resFnName
     };
 }

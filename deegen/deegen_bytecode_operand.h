@@ -1019,6 +1019,41 @@ struct BytecodeOpcodeRawValueMap
         return m_list[opcodeOrd];
     }
 
+    // Get the list of all primary (not fused-ic) bytecodes in the order they show up in the interpreter dispatch table
+    //
+    std::vector<std::string> WARN_UNUSED GetPrimaryBytecodeList() const
+    {
+        std::vector<std::string> res;
+        for (const std::string& name : m_list)
+        {
+            if (!IsFusedIcVariant(name))
+            {
+                res.push_back(name);
+            }
+        }
+        return res;
+    }
+
+    size_t WARN_UNUSED GetNumInterpreterFusedIcVariants(const std::string& bytecodeName) const
+    {
+        size_t opOrd = GetOpcode(bytecodeName);
+        // This check is really.. hacky.. but for now let's just make things simple..
+        //
+        size_t numFusedIcVariants = 0;
+        while (opOrd + numFusedIcVariants + 1 < GetDispatchTableLength())
+        {
+            if (GetBytecode(opOrd + numFusedIcVariants + 1) == bytecodeName + "_fused_ic_" + std::to_string(numFusedIcVariants))
+            {
+                numFusedIcVariants++;
+            }
+            else
+            {
+                break;
+            }
+        }
+        return numFusedIcVariants;
+    }
+
     static bool WARN_UNUSED IsFusedIcVariant(const std::string& bytecodeName)
     {
         return bytecodeName.find("_fused_ic_") != std::string::npos;

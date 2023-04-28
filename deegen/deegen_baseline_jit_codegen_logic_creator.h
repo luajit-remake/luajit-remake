@@ -5,6 +5,7 @@
 #include "deegen_bytecode_ir_components.h"
 #include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_bytecode_operand.h"
+#include "deegen_global_bytecode_trait_accessor.h"
 
 namespace dast {
 
@@ -42,7 +43,7 @@ struct DeegenBytecodeBaselineJitInfo
     //
     std::string m_disasmForAudit;
 
-    static DeegenBytecodeBaselineJitInfo WARN_UNUSED Create(BytecodeIrInfo& bii, const BytecodeOpcodeRawValueMap& byToOpcodeMap);
+    static DeegenBytecodeBaselineJitInfo WARN_UNUSED Create(BytecodeIrInfo& bii, const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor);
 };
 
 // Emit the implementation of 'deegen_baseline_jit_do_codegen_impl'

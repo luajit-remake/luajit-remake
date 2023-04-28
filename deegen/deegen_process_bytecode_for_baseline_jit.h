@@ -4,6 +4,7 @@
 #include "misc_llvm_helper.h"
 #include "deegen_baseline_jit_codegen_logic_creator.h"
 #include "deegen_bytecode_ir_components.h"
+#include "deegen_global_bytecode_trait_accessor.h"
 
 namespace dast {
 
@@ -31,7 +32,7 @@ struct DeegenProcessBytecodeForBaselineJitResult
     std::vector<SlowPathInfo> m_aotSlowPaths;
     std::vector<SlowPathInfo> m_aotSlowPathReturnConts;
 
-    static DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED Create(BytecodeIrInfo* bii, const BytecodeOpcodeRawValueMap& byOpMap);
+    static DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED Create(BytecodeIrInfo* bii, const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor);
 };
 
 }   // namespace dast

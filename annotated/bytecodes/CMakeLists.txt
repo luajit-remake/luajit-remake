@@ -95,6 +95,14 @@ add_custom_command(
   DEPENDS deegen_generate_interpreter_opcode_name_table_json
 )
 
+set(bytecode_opcode_trait_table_json "${GENERATED_FILES_DIR}/bytecode_opcode_trait_table.json")
+set_source_files_properties(${bytecode_opcode_trait_table_json} PROPERTIES GENERATED true)
+add_custom_command(
+  OUTPUT ${bytecode_opcode_trait_table_json}
+  COMMAND ${fps_exec} --generate-bytecode-opcode-trait-table --input-list='${comma_separated_json_file_list}' --bytecode-name-table=${interpreter_opcode_name_table_json} --json-output=${bytecode_opcode_trait_table_json} 
+  DEPENDS fps ${generated_json_list} ${interpreter_opcode_name_table_json} 
+)
+
 # generate the baseline jit
 #
 set(baseline_jit_dispatch_table_hdr_file_list "")
@@ -114,8 +122,8 @@ foreach(cur_src ${DEEGEN_BYTECODE_DEFINITION_SOURCES})
   add_custom_command(
     OUTPUT ${post_process_src}
     OUTPUT ${post_process_hdr}
-    COMMAND ${fps_exec} --process-bytecode-definition-for-baseline-jit --bytecode-name-table=${interpreter_opcode_name_table_json} --json-input=${input_json} --asm-output=${post_process_src} --hdr-output=${post_process_hdr} --audit-dir=${GENERATED_FILES_DIR}/../audit 
-    DEPENDS fps ${interpreter_opcode_name_table_json} ${input_json}
+    COMMAND ${fps_exec} --process-bytecode-definition-for-baseline-jit --bytecode-name-table=${interpreter_opcode_name_table_json} --bytecode-trait-table=${bytecode_opcode_trait_table_json} --json-input=${input_json} --asm-output=${post_process_src} --hdr-output=${post_process_hdr} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+    DEPENDS fps ${interpreter_opcode_name_table_json} ${input_json} ${bytecode_opcode_trait_table_json}
   )
 endforeach()
 

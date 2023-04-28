@@ -2,7 +2,7 @@
 
 namespace dast {
 
-DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBaselineJitResult::Create(BytecodeIrInfo* bii, const BytecodeOpcodeRawValueMap& byOpMap)
+DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBaselineJitResult::Create(BytecodeIrInfo* bii, const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor)
 {
     using namespace llvm;
     DeegenProcessBytecodeForBaselineJitResult res;
@@ -11,7 +11,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
 
     // Create the main JIT logic
     //
-    res.m_baselineJitInfo = DeegenBytecodeBaselineJitInfo::Create(*bii, byOpMap);
+    res.m_baselineJitInfo = DeegenBytecodeBaselineJitInfo::Create(*bii, bcTraitAccessor);
 
     // Process each slow path and return continuation
     // We simply assume each return continuation could potentially be used by slow path,
@@ -44,25 +44,8 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
     // Figure out the range to populate in the dispatch table
     //
     std::string opName = res.m_bytecodeDef->GetBytecodeIdName();
-    size_t opOrd = byOpMap.GetOpcode(opName);
-
-    // This check is really.. hacky.. but for now let's just make things simple..
-    //
-    size_t numFusedIcVariants = 0;
-    while (opOrd + numFusedIcVariants + 1 < byOpMap.GetDispatchTableLength())
-    {
-        if (byOpMap.GetBytecode(opOrd + numFusedIcVariants + 1) == opName + "_fused_ic_" + std::to_string(numFusedIcVariants))
-        {
-            numFusedIcVariants++;
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    res.m_opcodeRawValue = opOrd;
-    res.m_opcodeNumFuseIcVariants = numFusedIcVariants;
+    res.m_opcodeRawValue = bcTraitAccessor.GetBytecodeOpcodeOrd(opName);
+    res.m_opcodeNumFuseIcVariants = bcTraitAccessor.GetNumInterpreterFusedIcVariants(opName);
 
     // Some simple sanity checks
     //

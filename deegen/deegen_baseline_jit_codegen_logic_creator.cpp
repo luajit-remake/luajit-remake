@@ -265,7 +265,7 @@ static llvm::Value* WARN_UNUSED GetBaselineJitCodegenFnDispatchTableEntry(llvm::
     return res;
 }
 
-DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(BytecodeIrInfo& bii, const BytecodeOpcodeRawValueMap& byToOpcodeMap)
+DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(BytecodeIrInfo& bii, const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor)
 {
     using namespace llvm;
     ReleaseAssert(bii.m_jitMainComponent.get() != nullptr);
@@ -281,15 +281,6 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     BaselineJitImplCreator mainJic(*bii.m_jitMainComponent.get());
     mainJic.DoLowering();
     res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*mainJic.GetModule()), mainJic.GetResultFunctionName()));
-
-    /*
-    for (auto& item : mainJic.GetAllCallIcInfo())
-    {
-        std::string fileName = mainJic.GetResultFunctionName() + "_call_ic" + std::to_string(item.first);
-        res.m_extraVerboseAuditFiles.push_back(std::make_pair(fileName + "_dc.s", item.second.m_dcInfo.m_disasmForAudit));
-        res.m_extraVerboseAuditFiles.push_back(std::make_pair(fileName + "_cc.s", item.second.m_ccInfo.m_disasmForAudit));
-    }
-    */
 
     BytecodeVariantDefinition* bytecodeDef = mainJic.GetBytecodeDef();
 
@@ -338,6 +329,8 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             offset += stencilList[i].m_fastPathCode.size();
         }
     }
+
+    ReleaseAssert(mainJic.GetAllCallIcInfo().size() == mainJic.GetBytecodeDef()->GetNumCallICsInJitTier());
 
     for (auto& callIcInfo : mainJic.GetAllCallIcInfo())
     {
@@ -490,7 +483,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     std::string mainFnName = std::string("__deegen_baseline_jit_codegen_") + opcodeName;
     res.m_resultFuncName = mainFnName;
 
-    ReleaseAssert(!byToOpcodeMap.IsFusedIcVariant(opcodeName));
+    ReleaseAssert(!BytecodeOpcodeRawValueMap::IsFusedIcVariant(opcodeName));
 
     BaselineJitCodegenFnProto cg = BaselineJitCodegenFnProto::Create(module.get(), mainFnName);
     Function* mainFn = cg.GetFunction();
@@ -766,7 +759,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
         // Write opcode (offset 0)
         //
-        size_t opcodeOrd = byToOpcodeMap.GetOpcode(opcodeName);
+        size_t opcodeOrd = bcTraitAccessor.GetBytecodeOpcodeOrd(opcodeName);
         ReleaseAssert(opcodeOrd <= 65535);
         static_assert(BytecodeVariantDefinition::x_opcodeSizeBytes == 2);
         new StoreInst(CreateLLVMConstantInt<uint16_t>(ctx, SafeIntegerCast<uint16_t>(opcodeOrd)), slowPathData, false /*isVolatile*/, Align(1), entryBB);

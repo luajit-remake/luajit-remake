@@ -55,6 +55,11 @@ int main(int argc, char** argv)
         FPS_GenerateBaselineJitFunctionEntryLogic();
         break;
     }
+    case FpsCommand_GenerateBytecodeOpcodeTraitTable:
+    {
+        FPS_GenerateBytecodeOpcodeTraitTable();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

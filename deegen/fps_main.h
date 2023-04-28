@@ -14,7 +14,8 @@ enum FpsCommand
     FpsCommand_GenerateBytecodeBuilderApiHeader,
     FpsCommand_ProcessBytecodeDefinitionForBaselineJit,
     FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable,
-    FpsCommand_GenerateBaselineJitFunctionEntryLogic
+    FpsCommand_GenerateBaselineJitFunctionEntryLogic,
+    FpsCommand_GenerateBytecodeOpcodeTraitTable
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -43,6 +44,9 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_GenerateBaselineJitFunctionEntryLogic,
                    "generate-baseline-jit-function-entry-logic",
                    "Generate the function entry logic emitter for baseline JIT.")
+      , clEnumValN(FpsCommand_GenerateBytecodeOpcodeTraitTable,
+                   "generate-bytecode-opcode-trait-table",
+                   "Generate the bytecode opcode trait table.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
@@ -50,6 +54,7 @@ inline cl::opt<FpsCommand> cl_mainCommand(
 inline cl::opt<std::string> cl_irInputFilename("ir-input", cl::desc("The input LLVM IR file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A comma-separated list of input files"), cl::value_desc("filenames"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_bytecodeNameTable("bytecode-name-table", cl::desc("A JSON file containing the list of all bytecode names, in the same order as the dispatch table"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_bytecodeTraitTable("bytecode-trait-table", cl::desc("A JSON file containing the list of all bytecode traits, in the same order as the dispatch table"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonInputFilename("json-input", cl::desc("The JSON input file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_headerOutputFilename("hdr-output", cl::desc("The output file name for the generated C++ header"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename("cpp-output", cl::desc("The output file name for the generated CPP file"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
@@ -100,6 +105,10 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
 // Generate the baseline JIT function entry logic
 //
 void FPS_GenerateBaselineJitFunctionEntryLogic();
+
+// Generate the bytecode opcode trait table
+///
+void FPS_GenerateBytecodeOpcodeTraitTable();
 
 // Given the desired file name in the audit directory, returns the full file path.
 // This also creates the audit directory if it doesn't exist yet.

@@ -9,6 +9,7 @@
 #include "deegen_postprocess_module_linker.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "llvm_identical_function_merger.h"
+#include "deegen_global_bytecode_trait_accessor.h"
 
 using namespace dast;
 
@@ -28,13 +29,11 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
     json_t inputJson = json_t::parse(ReadFileContentAsString(cl_jsonInputFilename));
 
     BytecodeOpcodeRawValueMap byOpMap = BytecodeOpcodeRawValueMap::ParseFromCommandLineArgs();
+    DeegenGlobalBytecodeTraitAccessor bcTraitAccessor = DeegenGlobalBytecodeTraitAccessor::ParseFromCommandLineArgs();
 
     ReleaseAssert(inputJson.count("all-bytecode-info"));
     json_t& bytecodeInfoListJson = inputJson["all-bytecode-info"];
     ReleaseAssert(bytecodeInfoListJson.is_array());
-
-    std::vector<std::pair<std::string, BytecodeBaselineJitTraits>> dispatchTableEntriesToPopulate;
-    dispatchTableEntriesToPopulate.resize(byOpMap.GetDispatchTableLength());
 
     std::vector<std::unique_ptr<Module>> moduleToLink;
 
@@ -81,7 +80,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         BytecodeIrInfo bii(ctx, curBytecodeInfoJson);
         bii.m_bytecodeDef->ComputeBaselineJitSlowPathDataLayout();
 
-        DeegenProcessBytecodeForBaselineJitResult res = DeegenProcessBytecodeForBaselineJitResult::Create(&bii, byOpMap);
+        DeegenProcessBytecodeForBaselineJitResult res = DeegenProcessBytecodeForBaselineJitResult::Create(&bii, bcTraitAccessor);
 
         bytecodeOriginalImplFunctionNames.push_back(bii.m_bytecodeDef->m_implFunctionName);
 
@@ -432,4 +431,25 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
 
     cppOutput.Commit();
     asmOutputFile.Commit();
+}
+
+void FPS_GenerateBytecodeOpcodeTraitTable()
+{
+    ReleaseAssert(cl_inputListFilenames != "");
+    std::vector<std::string> jsonFileNameList = ParseCommaSeparatedFileList(cl_inputListFilenames);
+
+    BytecodeOpcodeRawValueMap byOpMap = BytecodeOpcodeRawValueMap::ParseFromCommandLineArgs();
+
+    std::vector<json> allJsonInputs;
+    for (auto& fileName : jsonFileNameList)
+    {
+        allJsonInputs.push_back(json::parse(ReadFileContentAsString(fileName)));
+    }
+
+    DeegenGlobalBytecodeTraitAccessor gbta = DeegenGlobalBytecodeTraitAccessor::Build(byOpMap, allJsonInputs);
+
+    ReleaseAssert(cl_jsonOutputFilename != "");
+    TransactionalOutputFile outFile(cl_jsonOutputFilename);
+    outFile.write(gbta.SaveToJson().dump(4 /*indent*/));
+    outFile.Commit();
 }
