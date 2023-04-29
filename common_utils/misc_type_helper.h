@@ -1,3 +1,5 @@
+#pragma once
+
 #include "common.h"
 
 template<typename T>

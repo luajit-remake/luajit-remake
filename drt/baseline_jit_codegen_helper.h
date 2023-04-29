@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "heap_ptr_utils.h"
+#include "jit_memory_allocator.h"
 
 // This struct name and member names are hardcoded as they are used by generated C++ code!
 //
@@ -24,6 +25,11 @@ static_assert(sizeof(BytecodeBaselineJitTraits) == 16);
 // We assert this at build time, so we know this must be true at runtime
 //
 constexpr size_t x_baselineJitMaxPossibleDataSectionAlignment = 16;
+
+// For now, our codegen allocator returns 16-byte-aligned memory.
+// So if we want to support larger alignment, something additional logic must be done.
+//
+static_assert(x_baselineJitMaxPossibleDataSectionAlignment <= 16);
 
 enum class BaselineJitCondBrLatePatchKind : uint32_t
 {
@@ -140,23 +146,26 @@ struct alignas(4) JitCallInlineCacheTraits
     };
     static_assert(sizeof(PatchRecord) == 4);
 
-    consteval JitCallInlineCacheTraits(uint16_t length, bool isDirectCallMode, uint8_t numPatches)
-        : m_length(length)
+    consteval JitCallInlineCacheTraits(uint8_t allocLengthStepping, bool isDirectCallMode, uint8_t numPatches)
+        : m_jitCodeAllocationLengthStepping(allocLengthStepping)
         , m_isDirectCallMode(isDirectCallMode)
         , m_numCodePtrUpdatePatches(numPatches)
+        , m_unused(0)
     {
         ReleaseAssert(numPatches > 0);
+        ReleaseAssert(m_jitCodeAllocationLengthStepping < x_jit_mem_alloc_total_steppings);
     }
 
-    // The allocation length of the JIT code
+    // The allocation length stepping of the JIT code
     //
-    uint16_t m_length;
+    uint8_t m_jitCodeAllocationLengthStepping;
     // Whether this IC is for direct-call mode or closure-call mode, for assertion only
     //
     bool m_isDirectCallMode;
     // Number of CodePtr update patches
     //
     uint8_t m_numCodePtrUpdatePatches;
+    uint8_t m_unused;
     PatchRecord m_codePtrPatchRecords[0];
 };
 static_assert(sizeof(JitCallInlineCacheTraits) == 4);
@@ -169,13 +178,14 @@ struct JitCallInlineCacheTraitsHolder final : public JitCallInlineCacheTraits
 
     using PatchRecord = JitCallInlineCacheTraits::PatchRecord;
 
-    consteval JitCallInlineCacheTraitsHolder(uint16_t length, bool isDirectCallMode, std::array<PatchRecord, N> patches)
-        : JitCallInlineCacheTraits(length, isDirectCallMode, static_cast<uint8_t>(N))
+    consteval JitCallInlineCacheTraitsHolder(uint8_t allocLengthStepping, bool isDirectCallMode, std::array<PatchRecord, N> patches)
+        : JitCallInlineCacheTraits(allocLengthStepping, isDirectCallMode, static_cast<uint8_t>(N))
     {
         static_assert(offsetof_member_v<&JitCallInlineCacheTraitsHolder::m_recordsHolder> == offsetof_member_v<&JitCallInlineCacheTraits::m_codePtrPatchRecords>);
         for (size_t i = 0; i < N; i++)
         {
-            ReleaseAssert(patches[i].m_offset < length && patches[i].m_offset + (patches[i].m_is64 ? 8 : 4) <= length);
+            ReleaseAssert(patches[i].m_offset < x_jit_mem_alloc_stepping_array[allocLengthStepping]);
+            ReleaseAssert(patches[i].m_offset + (patches[i].m_is64 ? 8 : 4) <= x_jit_mem_alloc_stepping_array[allocLengthStepping]);
             m_recordsHolder[i] = patches[i];
         }
     }

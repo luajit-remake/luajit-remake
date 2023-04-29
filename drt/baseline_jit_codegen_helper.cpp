@@ -125,15 +125,9 @@ BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
     size_t totalJitRegionSize = slowPathSectionEnd + x_maxBytesCodegenFnMayOverwrite;
 
     // TODO: right now the data section is also marked executable because we just use one mmap for simplicity..
-    // TODO: we should not use mmap, we need a real codegen memory allocator...
-    // TODO: we are disabling PIC and PIE and put everything in the first 2GB address range for simplicity, think about supporting ASLR later..
     //
-    void* regionVoidPtr = mmap(nullptr,
-                               RoundUpToMultipleOf<4096>(totalJitRegionSize),
-                               PROT_READ | PROT_WRITE | PROT_EXEC,
-                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_32BIT, -1, 0);
-    VM_FAIL_WITH_ERRNO_IF(regionVoidPtr == MAP_FAILED, "Failed to allocate baseline JIT code region");
-
+    JitMemoryAllocator* jitAlloc = VM::GetActiveVMForCurrentThread()->GetJITMemoryAlloc();
+    void* regionVoidPtr = jitAlloc->AllocateGivenSize(totalJitRegionSize);
     assert(regionVoidPtr != nullptr);
 
     uint8_t* dataSecPtr = reinterpret_cast<uint8_t*>(regionVoidPtr);

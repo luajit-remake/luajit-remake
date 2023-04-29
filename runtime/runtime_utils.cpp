@@ -248,13 +248,7 @@ JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
     AssertImp(!trait->m_isDirectCallMode, !entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
     AssertImp(!trait->m_isDirectCallMode, targetExecutableCode == TranslateToRawPointer(vm, entity));
 
-    // TODO: need a codegen memory allocator...
-    //
-    void* regionVoidPtr = mmap(nullptr,
-                               RoundUpToMultipleOf<4096>(trait->m_length),
-                               PROT_READ | PROT_WRITE | PROT_EXEC,
-                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_32BIT, -1, 0);
-    VM_FAIL_WITH_ERRNO_IF(regionVoidPtr == MAP_FAILED, "Failed to allocate baseline JIT code region");
+    void* regionVoidPtr = vm->GetJITMemoryAlloc()->AllocateGivenStepping(trait->m_jitCodeAllocationLengthStepping);
 
     assert(reinterpret_cast<uint64_t>(regionVoidPtr) < (1ULL << 48));
     entry->m_taggedPtr = reinterpret_cast<uint64_t>(regionVoidPtr) | (static_cast<uint64_t>(icTraitKind) << 48);
@@ -280,10 +274,7 @@ void JitCallInlineCacheEntry::Destroy(VM* vm)
     {
         RemoveFromDoublyLinkedList();
     }
-
-    // TODO: give back JIT memory to codegen allocator once we have one..
-    //
-
+    vm->GetJITMemoryAlloc()->Free(GetJitRegionStart());
     vm->DeallocateSpdsRegionObject(this);
 }
 

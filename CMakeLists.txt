@@ -214,6 +214,7 @@ set(UNIT_TEST_SRC
   test_lj_optimized_math_lib.cpp
   test_baseline_jit_gen.cpp
   test_jit_call_inline_cache.cpp
+  test_jit_memory_allocator.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES

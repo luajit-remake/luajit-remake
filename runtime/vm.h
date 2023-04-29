@@ -3,6 +3,7 @@
 #include "memory_ptr.h"
 #include "tvalue.h"
 #include "array_type.h"
+#include "jit_memory_allocator.h"
 
 enum ThreadKind : uint8_t
 {
@@ -891,6 +892,11 @@ public:
         return GetEngineStartingTier() == EngineStartingTier::BaselineJIT;
     }
 
+    JitMemoryAllocator* GetJITMemoryAlloc()
+    {
+        return &m_jitMemoryAllocator;
+    }
+
     static constexpr size_t x_pageSize = 4096;
 
 private:
@@ -1031,6 +1037,8 @@ private:
     uint32_t m_systemHeapCurPtr;
 
     SpdsPtr<void> m_spdsExecutionThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
+
+    JitMemoryAllocator m_jitMemoryAllocator;
 
     alignas(64) std::mutex m_spdsAllocationMutex;
 

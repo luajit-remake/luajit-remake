@@ -147,8 +147,13 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
                         static_cast<unsigned long long>(icTrait.m_codePtrPatchRecords.size()));
                 fprintf(hdrFp, "x_deegen_jit_call_ic_trait_ord_%llu(\n", static_cast<unsigned long long>(icTrait.m_ordInTraitTable));
 
-                ReleaseAssert(icTrait.m_allocationLength <= 65535);
-                fprintf(hdrFp, "    %llu,\n", static_cast<unsigned long long>(icTrait.m_allocationLength));
+                // If one IC has more than 8KB of code, probably something is seriously wrong...
+                //
+                ReleaseAssert(icTrait.m_allocationLength <= x_jit_mem_alloc_stepping_array[x_jit_mem_alloc_total_steppings - 1]);
+                size_t icAllocationLengthStepping = GetJitMemoryAllocatorSteppingFromSmallAllocationSize(icTrait.m_allocationLength);
+                ReleaseAssert(icAllocationLengthStepping < x_jit_mem_alloc_total_steppings);
+                ReleaseAssert(x_jit_mem_alloc_stepping_array[icAllocationLengthStepping] >= icTrait.m_allocationLength);
+                fprintf(hdrFp, "    %llu,\n", static_cast<unsigned long long>(icAllocationLengthStepping));
                 fprintf(hdrFp, "    %s /*isDirectCallMode*/,\n", (icTrait.m_isDirectCall ? "true" : "false"));
                 fprintf(hdrFp, "    std::array<JitCallInlineCacheTraits::PatchRecord, %llu> {", static_cast<unsigned long long>(icTrait.m_codePtrPatchRecords.size()));
 
