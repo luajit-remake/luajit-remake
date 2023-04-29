@@ -186,9 +186,8 @@ struct JitCallInlineCacheTraitsHolder final : public JitCallInlineCacheTraits
 extern "C" const JitCallInlineCacheTraits* const deegen_jit_call_inline_cache_trait_table[];
 
 // TODO: tune
-// TODO: if we implement a binary search tree strategy like JSC does, we could probably do more entries
 //
-constexpr size_t x_maxJitCallInlineCacheEntries = 5;
+constexpr size_t x_maxJitCallInlineCacheEntries = 3;
 
 class BaselineCodeBlock;
 

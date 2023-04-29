@@ -63,7 +63,7 @@ TEST(BaselineJit, Fib_Upvalue)
     //std::ignore = sm;
     //ReleaseAssert(false);
     vm->LaunchScript(sm);
-    ReleaseAssert(false);
+
 }
 
 TEST(XX, YY)
