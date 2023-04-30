@@ -127,9 +127,11 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     {
         ReleaseAssert(lambda->arg_size() == 1 && llvm_value_has_type<void*>(lambda->getArg(0)));
         ReleaseAssert(llvm_value_has_type<void*>(capturedValueAddr));
+        uint64_t offset;
         if (capturedValueAddr == lambda->getArg(0))
         {
-            return 0;
+            offset = 0;
+            ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset) && capturedValueOffsetToOrdinalMap[offset] == 0);
         }
         else
         {
@@ -138,10 +140,10 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
             ReleaseAssert(gep->getPointerOperand() == lambda->getArg(0));
             APInt offsetAP(64 /*numBits*/, 0);
             ReleaseAssert(gep->accumulateConstantOffset(dataLayout, offsetAP /*out*/));
-            uint64_t offset = offsetAP.getZExtValue();
-            ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset));
-            return capturedValueOffsetToOrdinalMap[offset];
+            offset = offsetAP.getZExtValue();
         }
+        ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset));
+        return capturedValueOffsetToOrdinalMap[offset];
     };
 
     struct CaptureValueRangeInfo

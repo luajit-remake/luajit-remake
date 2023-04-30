@@ -423,8 +423,8 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                         ArrayType c_newArrayType = c_info.m_newArrayType;
                         return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
                             IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
-                            IcSpecifyCaptureAs2GBPointer(c_expectedHiddenClass);
-                            IcSpecifyCaptureAs2GBPointer(c_newHiddenClass);
+                            IcSpecifyCaptureAs2GBPointerNotNull(c_expectedHiddenClass);
+                            IcSpecifyCaptureAs2GBPointerNotNull(c_newHiddenClass);
                             if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                             {
                                 if (likely(tableObj->m_butterfly != nullptr && index == ArrayGrowthPolicy::x_arrayBaseOrd))
@@ -532,8 +532,8 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                         ArrayType c_newArrayType = c_info.m_newArrayType;
                         return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
                             IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
-                            IcSpecifyCaptureAs2GBPointer(c_expectedHiddenClass);
-                            IcSpecifyCaptureAs2GBPointer(c_newHiddenClass);
+                            IcSpecifyCaptureAs2GBPointerNotNull(c_expectedHiddenClass);
+                            IcSpecifyCaptureAs2GBPointerNotNull(c_newHiddenClass);
 
                             {
                                 // Check for metamethod call

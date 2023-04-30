@@ -155,7 +155,7 @@ void ALWAYS_INLINE IcSpecifyCaptureValueRange(const T& capture, int64_t rangeLow
 // Convenient function to specify that the capture represents a small pointer value
 //
 template<typename T>
-void ALWAYS_INLINE IcSpecifyCaptureAs2GBPointer(const T& capture)
+void ALWAYS_INLINE IcSpecifyCaptureAs2GBPointerNotNull(const T& capture)
 {
     constexpr int64_t x_rangeHighInclusive = (static_cast<int64_t>(1) << 31) - (16 << 20) - 2048;
     DeegenImpl_MakeIC_SpecifyIcCaptureValueRange(&capture, 1 /*rangeLow*/, x_rangeHighInclusive);
