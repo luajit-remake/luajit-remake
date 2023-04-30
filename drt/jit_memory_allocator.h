@@ -15,7 +15,7 @@
 
 // The exponentially-growing stepping array for the segregated allocator
 //
-constexpr size_t x_jit_mem_alloc_stepping_array[] = {
+constexpr uint16_t x_jit_mem_alloc_stepping_array[] = {
 // cellSize      num cells       remain
     32,     //      511            32
     64,     //      255            64
@@ -219,6 +219,7 @@ public:
         assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
         assert(reinterpret_cast<uint64_t>(this) + sizeof(JitMemoryPageHeader) <= reinterpret_cast<uint64_t>(addr));
         assert(reinterpret_cast<uint64_t>(addr) + m_cellSize <= reinterpret_cast<uint64_t>(this) + x_pageSize);
+        assert((reinterpret_cast<uint64_t>(addr) - reinterpret_cast<uint64_t>(this) - sizeof(JitMemoryPageHeader)) % m_cellSize == 0);
         assert(m_numAllocatedCells > 0);
         m_numAllocatedCells--;
         bool res = (m_freeListHead == 0);

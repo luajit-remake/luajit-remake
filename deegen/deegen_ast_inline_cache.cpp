@@ -121,7 +121,40 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
         capturedValueOffsetToOrdinalMap[offset] = i;
     }
 
+    DataLayout dataLayout(module);
+
+    auto getOrdinalInCaptureStruct = [&](Value* capturedValueAddr) WARN_UNUSED -> size_t
+    {
+        ReleaseAssert(lambda->arg_size() == 1 && llvm_value_has_type<void*>(lambda->getArg(0)));
+        ReleaseAssert(llvm_value_has_type<void*>(capturedValueAddr));
+        if (capturedValueAddr == lambda->getArg(0))
+        {
+            return 0;
+        }
+        else
+        {
+            ReleaseAssert(isa<GetElementPtrInst>(capturedValueAddr));
+            GetElementPtrInst* gep = cast<GetElementPtrInst>(capturedValueAddr);
+            ReleaseAssert(gep->getPointerOperand() == lambda->getArg(0));
+            APInt offsetAP(64 /*numBits*/, 0);
+            ReleaseAssert(gep->accumulateConstantOffset(dataLayout, offsetAP /*out*/));
+            uint64_t offset = offsetAP.getZExtValue();
+            ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset));
+            return capturedValueOffsetToOrdinalMap[offset];
+        }
+    };
+
+    struct CaptureValueRangeInfo
+    {
+        CallInst* m_origin;
+        size_t m_ordInCaptureStruct;
+        int64_t m_lbInclusive;
+        int64_t m_ubInclusive;
+        Value* m_valueInBodyFn;
+    };
+
     std::vector<EffectSpecializationInfo> allEffectSpecializationInfo;
+    std::vector<CaptureValueRangeInfo> allCaptureValueRangeInfo;
     ReleaseAssert(lambda->arg_size() == 1);
     for (BasicBlock& bb : *lambda)
     {
@@ -133,7 +166,8 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
                 Function* callee = ci->getCalledFunction();
                 if (callee != nullptr && IsCXXSymbol(callee->getName().str()))
                 {
-                    if (DemangleCXXSymbol(callee->getName().str()).find(" DeegenImpl_MakeIC_SpecializeIcEffect<") != std::string::npos)
+                    std::string demangledCxxSymbolName = DemangleCXXSymbol(callee->getName().str());
+                    if (demangledCxxSymbolName.find(" DeegenImpl_MakeIC_SpecializeIcEffect<") != std::string::npos)
                     {
                         EffectSpecializationInfo esi;
                         ReleaseAssert(ci->arg_size() > 2);
@@ -141,24 +175,8 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
                         esi.m_isFullCoverage = GetValueOfLLVMConstantInt<bool>(ci->getArgOperand(0));
                         Value* capturedValueAddr = ci->getArgOperand(1);
                         ReleaseAssert(llvm_value_has_type<void*>(capturedValueAddr));
-                        size_t offsetInCapture;
-                        if (capturedValueAddr == lambda->getArg(0))
-                        {
-                            offsetInCapture = 0;
-                        }
-                        else
-                        {
-                            ReleaseAssert(isa<GetElementPtrInst>(capturedValueAddr));
-                            GetElementPtrInst* gep = cast<GetElementPtrInst>(capturedValueAddr);
-                            ReleaseAssert(gep->getPointerOperand() == lambda->getArg(0));
-                            DataLayout dataLayout(module);
-                            APInt offsetAP(64 /*numBits*/, 0);
-                            ReleaseAssert(gep->accumulateConstantOffset(dataLayout, offsetAP /*out*/));
-                            uint64_t offset = offsetAP.getZExtValue();
-                            ReleaseAssert(capturedValueOffsetToOrdinalMap.count(offset));
-                            offsetInCapture = capturedValueOffsetToOrdinalMap[offset];
-                        }
-                        esi.m_ordInCaptureStruct = offsetInCapture;
+                        size_t ordinalInCaptureStruct = getOrdinalInCaptureStruct(capturedValueAddr);
+                        esi.m_ordInCaptureStruct = ordinalInCaptureStruct;
 
                         std::unordered_set<Constant*> checkUnique;
                         for (uint32_t i = 2; i < ci->arg_size(); i++)
@@ -183,13 +201,13 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
                         }
                         ReleaseAssert(esi.m_specializationValues.size() > 0);
 
-                        if (!effectFnLocalCaptures.count(offsetInCapture))
+                        if (!effectFnLocalCaptures.count(ordinalInCaptureStruct))
                         {
                             fprintf(stderr, "[ERROR] IC effect specialization must specialize on a IC state constant (a variable defined in IC body), not a fresh value!\n");
                             abort();
                         }
 
-                        esi.m_valueInBodyFn = effectFnLocalCaptures[offsetInCapture];
+                        esi.m_valueInBodyFn = effectFnLocalCaptures[ordinalInCaptureStruct];
                         if (!llvm_value_has_type<bool>(esi.m_specializationValues[0]))
                         {
                             ReleaseAssert(esi.m_valueInBodyFn->getType() == esi.m_specializationValues[0]->getType());
@@ -212,6 +230,62 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
                         }
                         allEffectSpecializationInfo.push_back(esi);
                     }
+
+                    if (demangledCxxSymbolName.find(" DeegenImpl_MakeIC_SpecifyIcCaptureValueRange<") != std::string::npos)
+                    {
+                        CaptureValueRangeInfo cvi;
+                        ReleaseAssert(ci->arg_size() == 3);
+                        cvi.m_origin = ci;
+                        ReleaseAssert(llvm_value_has_type<int64_t>(ci->getArgOperand(1)));
+                        if (!isa<ConstantInt>(ci->getArgOperand(1)))
+                        {
+                            fprintf(stderr, "[ERROR] Range value (lower bound) passed to SpecifyIcCaptureValueRange is not a constant!\n");
+                            abort();
+                        }
+                        cvi.m_lbInclusive = GetValueOfLLVMConstantInt<int64_t>(ci->getArgOperand(1));
+
+                        ReleaseAssert(llvm_value_has_type<int64_t>(ci->getArgOperand(2)));
+                        if (!isa<ConstantInt>(ci->getArgOperand(2)))
+                        {
+                            fprintf(stderr, "[ERROR] Range value (upper bound) passed to SpecifyIcCaptureValueRange is not a constant!\n");
+                            abort();
+                        }
+                        cvi.m_ubInclusive = GetValueOfLLVMConstantInt<int64_t>(ci->getArgOperand(2));
+
+                        if (cvi.m_lbInclusive > cvi.m_ubInclusive)
+                        {
+                            fprintf(stderr, "[ERROR] Range value passed to SpecifyIcCaptureValueRange is an empty interval!\n");
+                            abort();
+                        }
+
+                        Value* capturedValueAddr = ci->getArgOperand(0);
+                        ReleaseAssert(llvm_value_has_type<void*>(capturedValueAddr));
+                        size_t ordinalInCaptureStruct = getOrdinalInCaptureStruct(capturedValueAddr);
+                        cvi.m_ordInCaptureStruct = ordinalInCaptureStruct;
+
+                        if (!effectFnLocalCaptures.count(ordinalInCaptureStruct))
+                        {
+                            fprintf(stderr, "[ERROR] SpecifyIcCaptureValueRange must specify on a IC state constant (a variable defined in IC body), not a fresh value!\n");
+                            abort();
+                        }
+
+                        cvi.m_valueInBodyFn = effectFnLocalCaptures[ordinalInCaptureStruct];
+
+                        Type* captureTy = cvi.m_valueInBodyFn->getType();
+                        if (captureTy->isIntegerTy() && captureTy->getIntegerBitWidth() < 32)
+                        {
+                            fprintf(stderr, "[ERROR] No need to use SpecifyIcCaptureValueRange on values < 32 bit!\n");
+                            abort();
+                        }
+
+                        if (captureTy->isStructTy() && dataLayout.getStructLayout(cast<StructType>(captureTy))->getSizeInBytes() < 4)
+                        {
+                            fprintf(stderr, "[ERROR] No need to use SpecifyIcCaptureValueRange on values < 32 bit!\n");
+                            abort();
+                        }
+
+                        allCaptureValueRangeInfo.push_back(cvi);
+                    }
                 }
             }
         }
@@ -230,7 +304,129 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
         }
     }
 
+    {
+        std::unordered_set<size_t> checkUnique;
+        for (auto& it : allCaptureValueRangeInfo)
+        {
+            if (checkUnique.count(it.m_ordInCaptureStruct))
+            {
+                fprintf(stderr, "[ERROR] Cannot use SpecifyIcCaptureValueRange API on the same capture twice!\n");
+                abort();
+            }
+            checkUnique.insert(it.m_ordInCaptureStruct);
+        }
+    }
+
+    for (auto& captureIter : effectFnLocalCaptures)
+    {
+        size_t ord = captureIter.first;
+        Value* valueInBodyFn = captureIter.second;
+
+        bool requiresRangeAnnotation;
+        Type* captureTy = valueInBodyFn->getType();
+        if (!captureTy->isIntOrPtrTy())
+        {
+            if (!captureTy->isStructTy())
+            {
+                fprintf(stderr, "[ERROR] Non-integer/pointer/word-sized struct type local capture in IC is currently unsupported!\n");
+                abort();
+            }
+            StructType* sty = cast<StructType>(captureTy);
+            size_t stySize = dataLayout.getStructLayout(sty)->getSizeInBytes();
+            if (stySize > 8)
+            {
+                fprintf(stderr, "[ERROR] Non word-sized struct type local capture in IC is currently unsupported!\n");
+                abort();
+            }
+
+            requiresRangeAnnotation = (stySize >= 4);
+
+            bool isSingletonType = false;
+            while (true)
+            {
+                if (sty->getNumElements() != 1)
+                {
+                    break;
+                }
+                Type* elementTy = sty->getElementType(0);
+                if (!elementTy->isStructTy())
+                {
+                    if (!elementTy->isIntOrPtrTy())
+                    {
+                        fprintf(stderr, "[ERROR] Non-integer/pointer/word-sized struct type local capture in IC is currently unsupported!\n");
+                        abort();
+                    }
+                    size_t bitWidth;
+                    if (elementTy->isPointerTy())
+                    {
+                        bitWidth = 64;
+                    }
+                    else
+                    {
+                        ReleaseAssert(elementTy->isIntegerTy());
+                        bitWidth = elementTy->getIntegerBitWidth();
+                    }
+                    ReleaseAssert(stySize * 8 == bitWidth);
+                    isSingletonType = true;
+                    break;
+                }
+                else
+                {
+                    sty = cast<StructType>(elementTy);
+                }
+            }
+
+            if (!isSingletonType)
+            {
+                fprintf(stderr, "[WARNING] You captured a complex struct type in IC. You likely will get terrible code!\n");
+            }
+        }
+        else if (captureTy->isPointerTy())
+        {
+            requiresRangeAnnotation = true;
+        }
+        else
+        {
+            ReleaseAssert(captureTy->isIntegerTy());
+            requiresRangeAnnotation = (captureTy->getIntegerBitWidth() >= 32);
+        }
+
+        if (requiresRangeAnnotation)
+        {
+            bool found = false;
+            for (auto& it : allEffectSpecializationInfo)
+            {
+                if (it.m_ordInCaptureStruct == ord && it.m_isFullCoverage)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            for (auto& it : allCaptureValueRangeInfo)
+            {
+                if (it.m_ordInCaptureStruct == ord)
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                fprintf(stderr, "[ERROR] All >=32 bit integral IC captures must have their value range explicitly specified!\n");
+                abort();
+            }
+        }
+    }
+
     for (auto& it : allEffectSpecializationInfo)
+    {
+        CallInst* ci = it.m_origin;
+        ReleaseAssert(ci->use_empty());
+        ci->eraseFromParent();
+        it.m_origin = nullptr;
+    }
+
+    for (auto& it : allCaptureValueRangeInfo)
     {
         CallInst* ci = it.m_origin;
         ReleaseAssert(ci->use_empty());

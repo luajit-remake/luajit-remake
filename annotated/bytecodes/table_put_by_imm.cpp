@@ -188,6 +188,8 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                     ArrayType c_newArrayType = c_info.m_newArrayType;
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
+                        IcSpecifyCaptureAs2GBPointer(c_expectedHiddenClass);
+                        IcSpecifyCaptureAs2GBPointer(c_newHiddenClass);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
                         {
                             // PreparePutByIntegerIndex only create IC with IndexCheckKind::NoArrayPart if the index is x_arrayBaseOrd.
@@ -300,6 +302,9 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                     ArrayType c_newArrayType = c_info.m_newArrayType;
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK, c_expectedHiddenClass, c_newHiddenClass, c_newArrayType]() {
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
+                        IcSpecifyCaptureAs2GBPointer(c_expectedHiddenClass);
+                        IcSpecifyCaptureAs2GBPointer(c_newHiddenClass);
+
                         {
                             // Check for metamethod call
                             // Since the table object has no array part, the old value must be nil

@@ -161,6 +161,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                     assert(!c_info.m_shouldGrowButterfly);
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                        IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                     });
@@ -173,6 +174,8 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                     {
                         return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                            IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
+                            IcSpecifyCaptureAs2GBPointer(c_newStructure);
                             assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
                             uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
                             TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
@@ -185,6 +188,8 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                     {
                         return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                            IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
+                            IcSpecifyCaptureAs2GBPointer(c_newStructure);
                             TCSet(tableObj->m_hiddenClass, c_newStructure);
                             PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                             return std::make_pair(TValue(), ResKind::NoMetamethod);
@@ -203,6 +208,8 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 {
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                        IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
+                        IcSpecifyCaptureAs2GBPointer(c_newStructure);
 
                         // It's critical for us to check the metatable first, and only call GrowButterfly()
                         // when we are certain the metamethod doesn't exist: once we call GrowButterfly(),
@@ -230,6 +237,9 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 {
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                        IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
+                        IcSpecifyCaptureAs2GBPointer(c_newStructure);
+
                         TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
                         if (unlikely(!mm.Is<tNil>()))
                         {
@@ -249,6 +259,8 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 //
                 return ic->Effect([tableObj, valueToPut, c_icKind, c_slot] {
                     IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
+                    IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
+
                     TValue oldValue = PutByIdICHelper::GetOldValueFromTableObject(tableObj, c_icKind, c_slot);
                     if (unlikely(oldValue.Is<tNil>()))
                     {

@@ -82,6 +82,12 @@ static_assert(sizeof(ButterflyHeader) == 8 && sizeof(TValue) == 8, "see comment 
 class alignas(8) Butterfly
 {
 public:
+    // Slightly smaller than 2^28.
+    // This is chosen to prevent signed int32 overflow when doing address calculations.
+    // Deegen's range analysis will make use of this knowledge to generate optimal JIT code.
+    //
+    static constexpr size_t x_maxNamedStorageCapacity = 250000000;
+
     ButterflyHeader* GetHeader()
     {
         return reinterpret_cast<ButterflyHeader*>(this) - (1 - ArrayGrowthPolicy::x_arrayBaseOrd);
@@ -98,6 +104,11 @@ public:
         assert(slot >= inlineCapacity);
         return static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(slot) - 1 - (1 - ArrayGrowthPolicy::x_arrayBaseOrd);
     }
+
+    // Any valid 'ord' for named property must be within [x_namedPropOrdinalRangeMin, x_namedPropOrdinalRangeMax]
+    //
+    static constexpr int64_t x_namedPropOrdinalRangeMin = -static_cast<int64_t>(x_maxNamedStorageCapacity + 1 - ArrayGrowthPolicy::x_arrayBaseOrd);
+    static constexpr int64_t x_namedPropOrdinalRangeMax = static_cast<int64_t>(ArrayGrowthPolicy::x_arrayBaseOrd) - 2;
 
     TValue* GetNamedPropertyAddr(int32_t ord)
     {

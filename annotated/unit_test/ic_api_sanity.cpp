@@ -10,6 +10,7 @@ extern "C" uint32_t testfn1(uint32_t key, uint32_t k2)
         {
             uint32_t k3 = k2 + 200;
             return ic->Effect([key, k3, k2] {
+                IcSpecifyCaptureValueRange(k3, 0, 1000);
                 return key + k3 + k2;
             });
         }

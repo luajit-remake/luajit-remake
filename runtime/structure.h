@@ -6,6 +6,7 @@
 #include "heap_object_common.h"
 #include "vm.h"
 #include "array_type.h"
+#include "butterfly.h"
 
 // We want to solve the following problem. Given a tree of size n and max depth D with a value on each node, we want to support:
 // (1) Insert a new leaf.
@@ -305,9 +306,32 @@ struct ButterflyNamedStorageGrowthPolicy
         return capacity;
     }
 
-    static uint32_t WARN_UNUSED ComputeNextButterflyCapacityForDictionary(uint32_t curButterflyCapacity)
+    static uint32_t WARN_UNUSED ComputeNextButterflyCapacityImpl(uint32_t curButterflyCapacity)
     {
+        assert(curButterflyCapacity > 0);
         uint32_t capacity = curButterflyCapacity * x_butterflyNamedStorageCapacityGrowthFactor;
+        return capacity;
+    }
+
+    // Will not grow over 'x_maxNamedStorageCapacity'
+    // Fail VM if the old capacity is already 'x_maxNamedStorageCapacity'
+    //
+    static uint32_t WARN_UNUSED ComputeNextButterflyCapacityForDictionaryOrFail(uint32_t curButterflyCapacity)
+    {
+        uint32_t capacity = ComputeNextButterflyCapacityImpl(curButterflyCapacity);
+        if (unlikely(capacity > Butterfly::x_maxNamedStorageCapacity))
+        {
+            // If the old capacity is already 'x_maxNamedStorageCapacity', it means we are unable to grow
+            // the vector to accommodate the new element, so fail the VM
+            //
+            VM_FAIL_IF(curButterflyCapacity >= Butterfly::x_maxNamedStorageCapacity,
+                       "too many (>%llu) named properties in table object!", static_cast<unsigned long long>(Butterfly::x_maxNamedStorageCapacity));
+
+            // Otherwise, do not grow over Butterfly::x_maxNamedStorageCapacity
+            //
+            capacity = Butterfly::x_maxNamedStorageCapacity;
+        }
+        assert(capacity > curButterflyCapacity);
         return capacity;
     }
 
@@ -336,7 +360,7 @@ struct ButterflyNamedStorageGrowthPolicy
 
     static uint8_t WARN_UNUSED ComputeNextButterflyCapacityForStructure(uint8_t inlineNamedStorageCapacity, uint8_t curButterflyCapacity, uint8_t maxPropertySlots)
     {
-        uint32_t capacity = ComputeNextButterflyCapacityForDictionary(curButterflyCapacity);
+        uint32_t capacity = ComputeNextButterflyCapacityImpl(curButterflyCapacity);
         return ClampCapacityForStructure(capacity, inlineNamedStorageCapacity, maxPropertySlots);
     }
 };
@@ -1287,7 +1311,7 @@ public:
         else
         {
             uint32_t oldCapacity = self->m_butterflyNamedStorageCapacity;
-            uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeNextButterflyCapacityForDictionary(oldCapacity);
+            uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeNextButterflyCapacityForDictionaryOrFail(oldCapacity);
             assert(newCapacity > oldCapacity);
             return newCapacity;
         }

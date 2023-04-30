@@ -14,6 +14,7 @@ template<typename ResType> ResType DeegenImpl_MakeIC_MarkEffectValue(ICHandler* 
 void DeegenImpl_MakeIC_SetUncacheableForThisExecution(ICHandler* ic);
 template<typename ICCaptureType, typename... Rest> void DeegenImpl_MakeIC_SpecializeIcEffect(bool isFullCoverage, const ICCaptureType* capture, Rest... values);
 void DeegenImpl_MakeIC_SetShouldFuseICIntoInterpreterOpcode(ICHandler* ic);
+template<typename ICCaptureType> void DeegenImpl_MakeIC_SpecifyIcCaptureValueRange(const ICCaptureType* capture, int64_t rangeLowInclusive, int64_t rangeHighInclusive);
 
 template<typename ICKeyType>
 struct ICHandlerKeyRef
@@ -140,4 +141,22 @@ void ALWAYS_INLINE IcSpecializeValueFullCoverage(const T& capture, Ts... values)
         using U = std::underlying_type_t<T>;
         DeegenImpl_MakeIC_SpecializeIcEffect(true /*isFullCoverage*/, reinterpret_cast<const U*>(&capture), static_cast<U>(values)...);
     }
+}
+
+// Specify the value range of an IC capture, only needed for captures .
+// Note that the range interval is inclusive, and must be constants.
+//
+template<typename T>
+void ALWAYS_INLINE IcSpecifyCaptureValueRange(const T& capture, int64_t rangeLowInclusive, int64_t rangeHighInclusive)
+{
+    DeegenImpl_MakeIC_SpecifyIcCaptureValueRange(&capture, rangeLowInclusive, rangeHighInclusive);
+}
+
+// Convenient function to specify that the capture represents a small pointer value
+//
+template<typename T>
+void ALWAYS_INLINE IcSpecifyCaptureAs2GBPointer(const T& capture)
+{
+    constexpr int64_t x_rangeHighInclusive = (static_cast<int64_t>(1) << 31) - (16 << 20) - 2048;
+    DeegenImpl_MakeIC_SpecifyIcCaptureValueRange(&capture, 1 /*rangeLow*/, x_rangeHighInclusive);
 }

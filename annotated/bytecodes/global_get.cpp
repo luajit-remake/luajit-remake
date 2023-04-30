@@ -97,6 +97,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
             int32_t c_slot = c_info.m_slot;
             return ic->Effect([base, c_slot, c_mayHaveMt] {
                 IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
+                IcSpecifyCaptureValueRange(c_slot, 0, 255);
                 return std::make_pair(TCGet(base->m_inlineStorage[c_slot]), c_mayHaveMt);
             });
         }
@@ -105,6 +106,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
             int32_t c_slot = c_info.m_slot;
             return ic->Effect([base, c_slot, c_mayHaveMt] {
                 IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
+                IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, Butterfly::x_namedPropOrdinalRangeMax);
                 return std::make_pair(base->m_butterfly->GetNamedProperty(c_slot), c_mayHaveMt);
             });
         }
