@@ -17,9 +17,9 @@ enum : size_t
     // Used by Call IC, the target function's entry point
     //
     CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR = 10002,
-    // Used by Call IC, where to branch to when the IC misses
+    // Used by IC, where to branch to when the IC misses
     //
-    CP_PLACEHOLDER_CALL_IC_MISS_DEST = 10003,
+    CP_PLACEHOLDER_IC_MISS_DEST = 10003,
     // The SlowPath address of the current stencil (if used by a stencil), or of the owning stencil (not bytecode!) if used by the IC
     // This placeholder is automatically desugared by the stencil parser frontend, so backend does not need to provide anything
     //
@@ -30,7 +30,10 @@ enum : size_t
     CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR = 10005,
     // Used by IC, the owning bytecode's conditional branch destination
     //
-    CP_PLACEHOLDER_BYTECODE_CONDBR_DEST = 10006
+    CP_PLACEHOLDER_BYTECODE_CONDBR_DEST = 10006,
+    // Used by Generic IC, the IC key
+    //
+    CP_PLACEHOLDER_GENERIC_IC_KEY = 10007
 };
 
 }   // namespace dast

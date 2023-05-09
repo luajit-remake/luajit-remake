@@ -7,6 +7,7 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "deegen_call_inline_cache.h"
 #include "deegen_stencil_inline_cache_extraction_pass.h"
+#include "deegen_ast_inline_cache.h"
 
 namespace dast {
 
@@ -561,11 +562,27 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
 
     file->Validate();
 
+    // Lower the Generic IC asm magic
+    //
+    using GenericIcAsmTransformResult = AstInlineCache::BaselineJitAsmTransformResult;
+    std::vector<GenericIcAsmTransformResult> genericICs = AstInlineCache::DoAsmTransformForBaselineJit(file);
+
+    // Collect all the IC entry labels (Call IC and Generic IC)
+    // Note that the order here must agree with the order we extract IC snippets later in this function!
+    //
     std::vector<std::string> icEntryLabelList;
     for (CallIcAsmTransformResult& item : callICs)
     {
         icEntryLabelList.push_back(item.m_labelForDirectCallIc);
         icEntryLabelList.push_back(item.m_labelForClosureCallIc);
+    }
+
+    for (GenericIcAsmTransformResult& item : genericICs)
+    {
+        for (const std::string& label : item.m_labelForEffects)
+        {
+            icEntryLabelList.push_back(label);
+        }
     }
 
     DeegenAsmCfg cfg = DeegenAsmCfg::GetCFG(file);
@@ -584,6 +601,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
             ReleaseAssert(!forceFastPathBlocks.count(item.m_labelForSMCRegion));
             forceFastPathBlocks.insert(item.m_labelForSMCRegion);
         }
+        for (GenericIcAsmTransformResult& item : genericICs)
+        {
+            ReleaseAssert(!forceFastPathBlocks.count(item.m_labelForSMCRegion));
+            forceFastPathBlocks.insert(item.m_labelForSMCRegion);
+        }
 
         // Unfortunately LLVM does not support BranchWeight metadata on CallBr, so it cannot understand by itself that
         // the IC slow path is cold. As an imperfect workaround, we forcefully put these blocks and any blocks dominated
@@ -596,6 +618,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
             {
                 allIcSlowPathBlocks.push_back(item.m_labelForCcIcMissLogic);
                 allIcSlowPathBlocks.push_back(item.m_labelForDcIcMissLogic);
+            }
+
+            for (GenericIcAsmTransformResult& item : genericICs)
+            {
+                allIcSlowPathBlocks.push_back(item.m_labelForIcMissLogic);
             }
 
             std::vector<std::string> allForceSlowPathBlocksList = cfg.GetAllBlocksDominatedBy(allIcSlowPathBlocks,
@@ -649,6 +676,10 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         {
             blocksMustNotSplit.insert(item.m_labelForSMCRegion);
         }
+        for (GenericIcAsmTransformResult& item : genericICs)
+        {
+            blocksMustNotSplit.insert(item.m_labelForSMCRegion);
+        }
 
         AttemptToTransformDispatchToNextBytecodeIntoFallthrough(file /*inout*/,
                                                                 m_locIdentForJmpToFallthroughCandidate,
@@ -659,7 +690,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         file->Validate();
     }
 
-    // The call IC's SMC block ends with a jump. The jump must not be eliminated to a fallthrough even if it happens to
+    // The call IC and generic IC's SMC block ends with a jump. The jump must not be eliminated to a fallthrough even if it happens to
     // jump to the immediate following block, because the jump is only a placeholder.
     // We enforce this by figuring out all those jumps that happens to fallthrough, and adding a dummy block in between.
     // Note that this must happen after all the basic block orders has been finalized, as any further reordering can break this.
@@ -667,6 +698,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     {
         std::unordered_set<std::string> preventFallthroughBlockSet;
         for (CallIcAsmTransformResult& item : callICs)
+        {
+            ReleaseAssert(!preventFallthroughBlockSet.count(item.m_labelForSMCRegion));
+            preventFallthroughBlockSet.insert(item.m_labelForSMCRegion);
+        }
+        for (GenericIcAsmTransformResult& item : genericICs)
         {
             ReleaseAssert(!preventFallthroughBlockSet.count(item.m_labelForSMCRegion));
             preventFallthroughBlockSet.insert(item.m_labelForSMCRegion);
@@ -716,6 +752,16 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     {
         item.EmitComputeLabelOffsetAndLengthSymbol(file);
     }
+    for (GenericIcAsmTransformResult& item : genericICs)
+    {
+        ReleaseAssert(file->FindBlockInFastPath(item.m_labelForSMCRegion) != nullptr);
+        ReleaseAssert(item.m_symbolNameForSMCLabelOffset == "");
+        item.m_symbolNameForSMCLabelOffset = file->EmitComputeLabelDistanceAsm(file->m_blocks[0]->m_normalizedLabelName, item.m_labelForSMCRegion);
+
+        ReleaseAssert(file->FindBlockInSlowPath(item.m_labelForIcMissLogic) != nullptr);
+        ReleaseAssert(item.m_symbolNameForIcMissLogicLabelOffset == "");
+        item.m_symbolNameForIcMissLogicLabelOffset = file->EmitComputeLabelDistanceAsm(file->m_slowpath[0]->m_normalizedLabelName, item.m_labelForIcMissLogic);
+    }
 
     file->Validate();
 
@@ -741,6 +787,8 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     //
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> callIcInfos;
 
+    // The order of extracting IC snippets must agree with the order we collected the IC labels!
+    //
     size_t offsetInIcEntryLabelList = 0;
     for (CallIcAsmTransformResult& item : callICs)
     {
@@ -766,8 +814,37 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         });
     }
 
+    std::vector<AstInlineCache::BaselineJitAsmLoweringResult> genericIcInfos;
+
+    for (GenericIcAsmTransformResult& item : genericICs)
+    {
+        AstInlineCache::BaselineJitAsmLoweringResult info;
+        for (const std::string& label : item.m_labelForEffects)
+        {
+            ReleaseAssert(offsetInIcEntryLabelList < icEntryLabelList.size());
+            DeegenStencilExtractedICAsm& icLogic = icAsmList[offsetInIcEntryLabelList];
+            offsetInIcEntryLabelList += 1;
+
+            ReleaseAssert(icLogic.m_blocks.size() > 0 && icLogic.m_blocks[0]->m_normalizedLabelName == label);
+            info.m_icLogicAsm.push_back(getIcAsmFile(icLogic.m_blocks));
+        }
+
+        info.m_symbolNameForSMCLabelOffset = item.m_symbolNameForSMCLabelOffset;
+        info.m_symbolNameForSMCRegionLength = item.m_symbolNameForSMCRegionLength;
+        info.m_symbolNameForIcMissLogicLabelOffset = item.m_symbolNameForIcMissLogicLabelOffset;
+        info.m_uniqueOrd = item.m_uniqueOrd;
+
+        genericIcInfos.push_back(std::move(info));
+    }
+
     ReleaseAssert(offsetInIcEntryLabelList == icAsmList.size());
+    for (size_t i = 0; i < genericIcInfos.size(); i++)
+    {
+        ReleaseAssert(genericIcInfos[i].m_uniqueOrd == i);
+    }
+
     m_callIcLoweringResults = std::move(callIcInfos);
+    m_genericIcLoweringResults = std::move(genericIcInfos);
 }
 
 }   // namespace dast

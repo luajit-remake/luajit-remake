@@ -34,21 +34,25 @@ TEST(XX, XX)
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    nlohmann::json j = nlohmann::json::parse(ReadFileContentAsString("test_inputs/test_call.json"))["all-bytecode-info"][0];
+    nlohmann::json gbtaJson = nlohmann::json::parse(ReadFileContentAsString("test_inputs/bytecode_opcode_trait_table.json"));
+    DeegenGlobalBytecodeTraitAccessor gbta = DeegenGlobalBytecodeTraitAccessor::LoadFromJson(gbtaJson);
+
+    nlohmann::json j = nlohmann::json::parse(ReadFileContentAsString("test_inputs/global_get.json"))["all-bytecode-info"][0];
 
     BytecodeIrInfo b(ctx, j);
     // b.m_slowPaths[0]->m_module->dump();
 
     b.m_bytecodeDef->ComputeBaselineJitSlowPathDataLayout();
 
-
     BaselineJitImplCreator mainJic(*b.m_jitMainComponent.get());
-    mainJic.DoLowering();
+    mainJic.DoLowering(gbta);
 
-    fprintf(stderr, "%s\n", mainJic.GetStencilPostTransformAsmFile().c_str());
+    // fprintf(stderr, "%s\n", mainJic.GetStencilPostTransformAsmFile().c_str());
+
+    auto& info = mainJic.GetGenericIcLoweringResult();
+    fprintf(stderr, "%s\n", info.m_disasmForAudit.c_str());
 }
 #endif
-
 #if 0
 TEST(BaselineJit, Fib_Upvalue)
 {

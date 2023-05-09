@@ -286,6 +286,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(true /*mayAttemptToEliminateJmpToFallthrough*/,
                                                                      0 /*numBytecodeOperands*/,
+                                                                     0 /*numGenericIcTotalCaptures*/,
                                                                      rcDef);
     // The codegen result must have no late CondBr patches
     //

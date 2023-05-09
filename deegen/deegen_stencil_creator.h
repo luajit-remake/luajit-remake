@@ -173,6 +173,7 @@ struct StencilPrivateDataObject
 };
 
 class CPRuntimeConstantNodeBase;
+class BytecodeVariantDefinition;
 
 struct DeegenStencilCodegenResult
 {
@@ -210,6 +211,15 @@ struct DeegenStencilCodegenResult
     // 'originModule' should be the original module where the stencil object file is compiled from
     //
     std::unique_ptr<llvm::Module> WARN_UNUSED GenerateCodegenLogicLLVMModule(llvm::Module* originModule, const std::string& cppStorePath = "");
+
+    // Create LLVM logic that decodes the SlowPathData and return the bytecode operand vector expected by the codegen function
+    // The vector may contain nullptr, in which case caller should assert that the argument is indeed unused by the codegen function, and pass undef instead
+    //
+    static std::vector<llvm::Value*> WARN_UNUSED BuildBytecodeOperandVectorFromSlowPathData(BytecodeVariantDefinition* bytecodeDef,
+                                                                                            llvm::Value* slowPathData,
+                                                                                            llvm::Value* slowPathDataOffset,
+                                                                                            llvm::Value* codeBlock32,
+                                                                                            llvm::BasicBlock* insertAtEnd);
 };
 
 struct DeegenStencil
@@ -253,6 +263,7 @@ struct DeegenStencil
     DeegenStencilCodegenResult WARN_UNUSED PrintCodegenFunctions(
         bool mayAttemptToEliminateJmpToFallthrough,
         size_t numBytecodeOperands,
+        size_t numGenericIcTotalCaptures,
         const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
         const std::vector<size_t>& extraPlaceholderOrds = {});
 

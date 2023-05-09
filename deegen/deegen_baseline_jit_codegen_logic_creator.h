@@ -28,6 +28,8 @@ struct DeegenBytecodeBaselineJitInfo
 
     std::vector<CallIcTraitDesc> m_allCallIcTraitDescs;
 
+    std::vector<DeegenGenericIcTraitDesc> m_allGenericIcTraitDescs;
+
     // The module that contains the full logic of the baseline JIT codegen function for this bytecode, which
     // emits the JIT code, creates the slow path data and dispatches to the codegen function for the next bytecode
     //

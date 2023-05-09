@@ -172,6 +172,30 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             }
         }
 
+        // Emit C++ code that populates the allocation length stepping table of generic IC
+        //
+        {
+            std::vector<DeegenGenericIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allGenericIcTraitDescs;
+            size_t icTraitTableLength = bcTraitAccessor.GetJitGenericIcEffectTraitTableLength();
+            fprintf(hdrFp, "namespace {\n\n");
+            fprintf(hdrFp, "template<typename T> struct populate_baseline_jit_generic_ic_allocation_length_stepping_table_%s {\n", res.m_bytecodeDef->GetBytecodeIdName().c_str());
+            fprintf(hdrFp, "static consteval void run(T* p) {\n");
+            fprintf(hdrFp, "std::ignore = p;\n");
+            for (DeegenGenericIcTraitDesc& icTrait : icTraitList)
+            {
+                ReleaseAssert(icTrait.m_ordInTraitTable < icTraitTableLength);
+                // If one IC has more than 8KB of code, probably something is seriously wrong...
+                //
+                ReleaseAssert(icTrait.m_allocationLength <= x_jit_mem_alloc_stepping_array[x_jit_mem_alloc_total_steppings - 1]);
+                size_t icAllocationLengthStepping = GetJitMemoryAllocatorSteppingFromSmallAllocationSize(icTrait.m_allocationLength);
+                ReleaseAssert(icAllocationLengthStepping < x_jit_mem_alloc_total_steppings);
+                ReleaseAssert(x_jit_mem_alloc_stepping_array[icAllocationLengthStepping] >= icTrait.m_allocationLength);
+                fprintf(hdrFp, "p->set(%llu, %llu);\n",
+                        static_cast<unsigned long long>(icTrait.m_ordInTraitTable), static_cast<unsigned long long>(icAllocationLengthStepping));
+            }
+            fprintf(hdrFp, "}\n};\n}\n\n");
+        }
+
         // Push generated modules to the list of modules to be linked, and also set section
         //
         for (auto& m : res.m_aotSlowPaths)
@@ -473,6 +497,41 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit()
         {
             fprintf(fp, "    &x_deegen_jit_call_ic_trait_ord_%llu", static_cast<unsigned long long>(i));
             if (i + 1 < callIcTraitTableLen) { fprintf(fp, ","); }
+            fprintf(fp, "\n");
+        }
+        fprintf(fp, "};\n\n");
+    }
+
+    // Generate the JIT generic IC allocation length stepping table
+    //
+    {
+        size_t genericIcTraitTableLen = bcTraitAccessor.GetJitGenericIcEffectTraitTableLength();
+        fprintf(fp, "static constexpr auto deegen_generic_ic_alloc_stepping_trait_table_contents = constexpr_multipart_array_builder_helper<uint8_t, %llu\n",
+                static_cast<unsigned long long>(genericIcTraitTableLen));
+
+        for (size_t i = 0; i < numEntries; i++)
+        {
+            std::string opName = byOpMap.GetBytecode(i);
+            if (!byOpMap.IsFusedIcVariant(opName))
+            {
+                fprintf(fp, ", populate_baseline_jit_generic_ic_allocation_length_stepping_table_%s\n", opName.c_str());
+            }
+        }
+        fprintf(fp, ">::get();\n\n");
+
+        fprintf(fp, "extern \"C\" const uint8_t deegen_baseline_jit_generic_ic_jit_allocation_stepping_table[%llu];\n",
+                static_cast<unsigned long long>(genericIcTraitTableLen));
+
+        fprintf(fp, "constexpr uint8_t deegen_baseline_jit_generic_ic_jit_allocation_stepping_table[%llu] = {\n",
+                static_cast<unsigned long long>(genericIcTraitTableLen));
+
+        for (size_t i = 0; i < genericIcTraitTableLen; i++)
+        {
+            fprintf(fp, "deegen_generic_ic_alloc_stepping_trait_table_contents[%llu]", static_cast<unsigned long long>(i));
+            if (i + 1 < genericIcTraitTableLen)
+            {
+                fprintf(fp, ",");
+            }
             fprintf(fp, "\n");
         }
         fprintf(fp, "};\n\n");

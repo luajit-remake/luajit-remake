@@ -274,12 +274,8 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
     DeegenBytecodeBaselineJitInfo res;
 
-    // TODO: implement
-    //
-    AstInlineCache::TriviallyLowerAllInlineCaches(bii.m_jitMainComponent->m_impl);
-
     BaselineJitImplCreator mainJic(*bii.m_jitMainComponent.get());
-    mainJic.DoLowering();
+    mainJic.DoLowering(bcTraitAccessor);
     res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*mainJic.GetModule()), mainJic.GetResultFunctionName()));
 
     BytecodeVariantDefinition* bytecodeDef = mainJic.GetBytecodeDef();
@@ -294,7 +290,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     }
     for (auto& rcJic : rcJicList)
     {
-        rcJic->DoLowering();
+        rcJic->DoLowering(bcTraitAccessor);
         res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*rcJic->GetModule()), rcJic->GetResultFunctionName()));
     }
 
@@ -353,6 +349,20 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
     std::unique_ptr<Module> icCodegenSlowpathModule;
 
+    auto storeCodegenFunction = [&](std::unique_ptr<Module> cgFnModule)
+    {
+        ReleaseAssert(cgFnModule.get() != nullptr);
+        if (icCodegenSlowpathModule.get() == nullptr)
+        {
+            icCodegenSlowpathModule = std::move(cgFnModule);
+        }
+        else
+        {
+            Linker linker(*icCodegenSlowpathModule.get());
+            ReleaseAssert(linker.linkInModule(std::move(cgFnModule)) == false);
+        }
+    };
+
     for (auto& callIcInfo : mainJic.GetAllCallIcInfo())
     {
         DeegenCallIcLogicCreator::BaselineJitCodegenResult callIcCgRes =
@@ -396,15 +406,17 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
         // Store the codegen function
         //
-        if (icCodegenSlowpathModule.get() == nullptr)
-        {
-            icCodegenSlowpathModule = std::move(callIcCgRes.m_module);
-        }
-        else
-        {
-            Linker linker(*icCodegenSlowpathModule.get());
-            ReleaseAssert(linker.linkInModule(std::move(callIcCgRes.m_module)) == false);
-        }
+        storeCodegenFunction(std::move(callIcCgRes.m_module));
+    }
+
+    auto& genericIcInfo = mainJic.GetGenericIcLoweringResult();
+    if (genericIcInfo.m_icBodyModule.get() != nullptr)
+    {
+        storeCodegenFunction(std::move(genericIcInfo.m_icBodyModule));
+
+        std::string icAuditLogFileName = mainJic.GetBytecodeDef()->GetBytecodeIdName() + "_generic_ic.s";
+        res.m_extraAuditFiles.push_back(std::make_pair(icAuditLogFileName, genericIcInfo.m_disasmForAudit));
+        res.m_allGenericIcTraitDescs = genericIcInfo.m_icTraitInfo;
     }
 
     struct StencilCgInfo
@@ -430,6 +442,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         DeegenStencilCodegenResult cgResult = stencilList[i].PrintCodegenFunctions(
             mayEliminateJmpToFallthrough,
             bii.m_bytecodeDef->m_list.size() /*numBytecodeOperands*/,
+            jic->GetNumTotalGenericIcCaptures(),
             jic->GetStencilRcDefinitions() /*placeholderDefs*/);
 
         stencilCgInfos.push_back(StencilCgInfo { .origin = jic, .cgRes = cgResult });
@@ -664,13 +677,13 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     // Note that the patch functions take 6 fixed arguments (dstAddr, fast/slow/ic/icData/data addr) before the bytecode operand value list
     //
     {
-        auto validate = [&](Function* func)
+        auto validate = [&](size_t numGenericIcCaptures, Function* func)
         {
             constexpr size_t x_argPfxCnt = 6;
-            ReleaseAssert(func->arg_size() == x_argPfxCnt + bytecodeValList.size());
-            for (size_t i = 0; i < bytecodeValList.size(); i++)
+            ReleaseAssert(func->arg_size() == x_argPfxCnt + bytecodeValList.size() + numGenericIcCaptures);
+            for (size_t i = 0; i < bytecodeValList.size() + numGenericIcCaptures; i++)
             {
-                if (bytecodeValList[i] != nullptr)
+                if (i < bytecodeValList.size() && bytecodeValList[i] != nullptr)
                 {
                     continue;
                 }
@@ -687,9 +700,9 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
 
         for (StencilCgInfo& cgi : stencilCgInfos)
         {
-            validate(cgi.fastPathPatchFn);
-            validate(cgi.slowPathPatchFn);
-            validate(cgi.dataSecPatchFn);
+            validate(cgi.origin->GetNumTotalGenericIcCaptures(), cgi.fastPathPatchFn);
+            validate(cgi.origin->GetNumTotalGenericIcCaptures(), cgi.slowPathPatchFn);
+            validate(cgi.origin->GetNumTotalGenericIcCaptures(), cgi.dataSecPatchFn);
         }
     }
 
@@ -754,6 +767,10 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             for (Value* val : bytecodeValList)
             {
                 args.push_back(val);
+            }
+            for (size_t i = 0; i < cgi.origin->GetNumTotalGenericIcCaptures(); i++)
+            {
+                args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));
             }
 
             ReleaseAssert(args.size() == callee->arg_size());
@@ -897,6 +914,44 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                             { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
             CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitCallIcSite", { addr }, entryBB);
+        }
+
+        // Initialize all the Generic IC site data, and the slowpath/datasec address fields (which exist if Generic IC exists)
+        //
+        size_t numJitGenericIcSites = bytecodeDef->GetNumGenericICsInJitTier();
+        if (numJitGenericIcSites > 0)
+        {
+            // Initialize the JIT slowpath address field
+            //
+            {
+                size_t offset = bytecodeDef->GetJitSlowPathOffsetInSlowPathData();
+                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
+                Value* valI64 = new PtrToIntInst(slowPathBaseAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+                Value* valI32 = new TruncInst(valI64, llvm_type_of<uint32_t>(ctx), "", entryBB);
+                new StoreInst(valI32, addr, false /*isVolatile*/, Align(1), entryBB);
+            }
+
+            // Initialize the JIT data section address field
+            //
+            {
+                size_t offset = bytecodeDef->GetJitDataSectionOffsetInSlowPathData();
+                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
+                Value* valI64 = new PtrToIntInst(dataSecBaseAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+                Value* valI32 = new TruncInst(valI64, llvm_type_of<uint32_t>(ctx), "", entryBB);
+                new StoreInst(valI32, addr, false /*isVolatile*/, Align(1), entryBB);
+            }
+
+            // Initialize every IC site
+            //
+            for (size_t i = 0; i < numJitGenericIcSites; i++)
+            {
+                size_t offset = bytecodeDef->GetBaselineJitGenericIcSiteOffsetInSlowPathData(i);
+                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
+                CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitGenericIcSite", { addr }, entryBB);
+            }
         }
 
         Constant* advanceOffset = CreateLLVMConstantInt<uint64_t>(ctx, bytecodeDef->GetBaselineJitSlowPathDataLength());

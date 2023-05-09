@@ -8,6 +8,10 @@
 
 namespace dast {
 
+class BaselineJitImplCreator;
+struct X64AsmFile;
+struct DeegenStencil;
+
 class AstInlineCache
 {
 public:
@@ -24,6 +28,18 @@ public:
             // The list of each specialization
             //
             std::vector<llvm::Constant*> m_specializations;
+        };
+
+        struct IcStateValueInfo
+        {
+            llvm::Value* m_valueInBodyFn;
+            // Always populated, but only matters for JIT lowering
+            //
+            int64_t m_lbInclusive;
+            int64_t m_ubInclusive;
+            // Only used in JIT lowering
+            //
+            size_t m_placeholderOrd;
         };
 
         // The place in the IC body where this effect is called
@@ -58,7 +74,7 @@ public:
 
         // The LLVM values (defined in the IC body) of the IC state
         //
-        std::vector<llvm::Value*> m_icStateVals;
+        std::vector<IcStateValueInfo> m_icStateVals;
 
         // The effect functions in this effect should occupy ordinal [m_effectStartOrdinal, m_effectStartOrdinal + m_effectFnMain.size())
         //
@@ -90,6 +106,95 @@ public:
     // This function also populates 'm_icStruct', the state definition of this IC.
     //
     void DoLoweringForInterpreter();
+
+    struct BaselineJitLLVMLoweringResult
+    {
+        std::string m_bodyFnName;
+
+        // Describes one IC effect codegen function
+        //
+        struct Item
+        {
+            // The global ordinal, which is also the suffix of the function
+            //
+            size_t m_globalOrd;
+            // The parameters passed to the codegen function corresponds to placeholder ordinal [start, start + num)
+            //
+            size_t m_placeholderStart;
+            size_t m_numPlaceholders;
+        };
+
+        std::vector<Item> m_effectPlaceholderDesc;
+    };
+
+    // Do lowering for baseline JIT
+    // Each bytecode in thoery may employ multiple IC sites, so 'icUsageOrdInBytecode' is the ordinal of this IC
+    // The 'globalIcEffectTraitBaseOrd' is the effect trait table base index for this IC,
+    // so to get trait for effect kind 'k' in this IC, the index is globalIcEffectTraitBaseOrd + k
+    //
+    BaselineJitLLVMLoweringResult WARN_UNUSED DoLoweringForBaselineJit(BaselineJitImplCreator* ifi, size_t icUsageOrdInBytecode, size_t globalIcEffectTraitBaseOrd);
+
+    static void LowerIcPtrGetterFunctionForBaselineJit(BaselineJitImplCreator* ifi, llvm::Function* func);
+
+    struct BaselineJitAsmTransformResult
+    {
+        // The label for the SMC region
+        //
+        std::string m_labelForSMCRegion;
+        // The entry label for each effect of this IC, in the order of the oridinal
+        //
+        std::vector<std::string> m_labelForEffects;
+        // Label for the slow path
+        // The patchable jump always jumps to here initially
+        //
+        std::string m_labelForIcMissLogic;
+        // The ordinal of this IC in the bytecode
+        //
+        uint64_t m_uniqueOrd;
+
+        // Special symbols which stores the results of label offset / distance computation
+        //
+        std::string m_symbolNameForSMCLabelOffset;
+        std::string m_symbolNameForSMCRegionLength;
+        std::string m_symbolNameForIcMissLogicLabelOffset;
+    };
+
+    static std::vector<BaselineJitAsmTransformResult> WARN_UNUSED DoAsmTransformForBaselineJit(X64AsmFile* file);
+
+    // Final result after all ASM-level lowering, produced by stencil lowering pipeline
+    //
+    struct BaselineJitAsmLoweringResult
+    {
+        // Assembly files for the extracted DirectCall and ClosureCall IC logic
+        //
+        std::vector<std::string> m_icLogicAsm;
+
+        // Special symbol name storing the various measured values
+        //
+        std::string m_symbolNameForSMCLabelOffset;
+        std::string m_symbolNameForSMCRegionLength;
+        std::string m_symbolNameForIcMissLogicLabelOffset;
+
+        // The ordinal of this IC in the bytecode
+        //
+        uint64_t m_uniqueOrd;
+    };
+
+    struct BaselineJitCodegenResult
+    {
+        std::unique_ptr<llvm::Module> m_module;
+        std::string m_resultFnName;
+        size_t m_icSize;
+        std::string m_disasmForAudit;
+    };
+
+    static BaselineJitCodegenResult WARN_UNUSED CreateJitIcCodegenImplementation(BaselineJitImplCreator* ifi,
+                                                                                 const DeegenStencil& mainStencil,
+                                                                                 BaselineJitLLVMLoweringResult::Item icInfo,
+                                                                                 std::string icAsm,
+                                                                                 size_t smcRegionOffset,
+                                                                                 size_t smcRegionSize,
+                                                                                 size_t icMissLogicOffset);
 
     // Perform trivial lowering: the execution semantics of this inline cache is preserved,
     // but no inling caching ever happens (i.e., execution simply unconditionally execute the IC body).
@@ -140,11 +245,18 @@ public:
     std::unique_ptr<BytecodeMetadataStruct> m_icStruct;
 };
 
+struct DeegenGenericIcTraitDesc
+{
+    size_t m_ordInTraitTable;
+    size_t m_allocationLength;
+};
+
 constexpr const char* x_get_bytecode_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodePtrPlaceholder";
+constexpr const char* x_jit_codegen_ic_impl_placeholder_fn_prefix = "__deegen_baseline_jit_codegen_generic_ic_effect_";
 
-class InterpreterBytecodeImplCreator;
+class DeegenBytecodeImplCreatorBase;
 
-void LowerInterpreterGetBytecodePtrInternalAPI(InterpreterBytecodeImplCreator* ifi, llvm::Function* func);
+void LowerInterpreterGetBytecodePtrInternalAPI(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func);
 
 // Always takes i1 and returns i1
 // Only used if 'FuseICIntoInterpreterOpcode' is true

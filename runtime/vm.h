@@ -117,8 +117,9 @@ constexpr int WARN_UNUSED GetLuaMetamethodOrdinalFromStringHash(uint8_t hashHigh
 //
 #define SPDS_ALLOCATABLE_CLASS_LIST             \
   /* C++ class name   Use lockfree freelist */  \
-    (WatchpointSet,             false)          \
-  , (JitCallInlineCacheEntry,   false)
+    (WatchpointSet,                 false)      \
+  , (JitCallInlineCacheEntry,       false)      \
+  , (JitGenericInlineCacheEntry,    false)
 
 #define SPDS_CPP_NAME(e) PP_TUPLE_GET_1(e)
 #define SPDS_USE_LOCKFREE_FREELIST(e) PP_TUPLE_GET_2(e)

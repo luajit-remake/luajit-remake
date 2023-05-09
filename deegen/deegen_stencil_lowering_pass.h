@@ -2,6 +2,7 @@
 
 #include "common_utils.h"
 #include "misc_llvm_helper.h"
+#include "deegen_ast_inline_cache.h"
 #include "deegen_parse_asm_text.h"
 #include "deegen_call_inline_cache.h"
 
@@ -47,6 +48,7 @@ public:
 
     std::string m_primaryPostTransformAsmFile;
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> m_callIcLoweringResults;
+    std::vector<AstInlineCache::BaselineJitAsmLoweringResult> m_genericIcLoweringResults;
 };
 
 }   // namespace dast

@@ -49,6 +49,8 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   create_new_jit_call_ic_for_direct_call_mode_site.cpp
   create_new_jit_call_ic_for_closure_call_mode_site.cpp
   initialize_jit_call_ic_site.cpp
+  initialize_jit_generic_ic_site.cpp
+  create_new_jit_generic_ic.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

@@ -1,4 +1,5 @@
 #include "deegen_baseline_jit_impl_creator.h"
+#include "deegen_ast_inline_cache.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_ast_slow_path.h"
 #include "llvm_fcmp_extra_optimizations.h"
@@ -12,6 +13,7 @@
 #include "deegen_stencil_lowering_pass.h"
 #include "invoke_clang_helper.h"
 #include "llvm_override_option.h"
+#include "llvm/Linker/Linker.h"
 
 namespace dast {
 
@@ -69,6 +71,23 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlacehold
     return CallInst::Create(func, { }, "", insertBefore);
 }
 
+std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(ty->getContext(), insertAtEnd);
+    auto res = CreateGenericIcStateCapturePlaceholder(ty, lb, ub, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
+std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
+{
+    size_t resultOrd = m_numGenericIcCaptures;
+    m_numGenericIcCaptures++;
+    llvm::CallInst* inst = CreateConstantPlaceholderForOperand(resultOrd + 200, ty, lb, ub, insertBefore);
+    return std::make_pair(inst, resultOrd);
+}
+
 llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
@@ -110,6 +129,7 @@ BaselineJitImplCreator::BaselineJitImplCreator(BytecodeIrComponent& bic)
     m_resultFuncName = bic.m_identFuncName;
     m_generated = false;
     m_isSlowPathReturnContinuation = false;
+    m_numGenericIcCaptures = 0;
 }
 
 BaselineJitImplCreator::BaselineJitImplCreator(BaselineJitImplCreator::SlowPathReturnContinuationTag, BytecodeIrComponent& bic)
@@ -414,7 +434,7 @@ void BaselineJitImplCreator::CreateWrapperFunction()
     ValidateLLVMFunction(m_wrapper);
 }
 
-void BaselineJitImplCreator::DoLowering()
+void BaselineJitImplCreator::DoLowering(const DeegenGlobalBytecodeTraitAccessor& gbta)
 {
     using namespace llvm;
 
@@ -443,6 +463,20 @@ void BaselineJitImplCreator::DoLowering()
 
     m_valuePreserver.RefreshAfterTransform();
 
+    std::vector<AstInlineCache::BaselineJitLLVMLoweringResult> icLLRes;
+
+    if (IsMainComponent())
+    {
+        std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(m_wrapper);
+        size_t globalIcTraitOrdBase = gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName());
+        for (size_t i = 0; i < allIcUses.size(); i++)
+        {
+            icLLRes.push_back(allIcUses[i].DoLoweringForBaselineJit(this, i, globalIcTraitOrdBase));
+            globalIcTraitOrdBase += allIcUses[i].m_totalEffectKinds;
+        }
+        ReleaseAssert(globalIcTraitOrdBase == gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName()) + gbta.GetNumTotalGenericIcEffectKinds(m_bytecodeDef->GetBytecodeIdName()));
+    }
+
     // Now we can do the lowerings
     //
     AstBytecodeReturn::DoLoweringForBaselineJIT(this, m_wrapper);
@@ -451,11 +485,13 @@ void BaselineJitImplCreator::DoLowering()
     DeegenAllSimpleApiLoweringPasses::LowerAllForBaselineJIT(this, m_wrapper);
     AstSlowPath::LowerAllForInterpreterOrBaselineJIT(this, m_wrapper);
 
-#if 0
-
-    LowerGetBytecodeMetadataPtrAPI();
-    LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
-#endif
+    // Lower the remaining function APIs from the generic IC
+    //
+    if (!IsBaselineJitSlowPath())
+    {
+        LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
+        AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(this, m_wrapper);
+    }
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
@@ -519,6 +555,20 @@ void BaselineJitImplCreator::DoLowering()
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
     ReleaseAssert(!m_wrapper->empty());
 
+    // Extract all the IC body functions
+    //
+    std::unique_ptr<Module> icBodyModule;
+    if (icLLRes.size() > 0)
+    {
+        std::vector<std::string> fnNames;
+        for (auto& item : icLLRes)
+        {
+            ReleaseAssert(m_module->getFunction(item.m_bodyFnName) != nullptr);
+            fnNames.push_back(item.m_bodyFnName);
+        }
+        icBodyModule = ExtractFunctions(m_module.get(), fnNames);
+    }
+
     m_module = ExtractFunction(m_module.get(), m_resultFuncName);
 
     // After the extract, 'm_wrapper' is invalidated since a new module is returned. Refresh its value.
@@ -569,6 +619,108 @@ void BaselineJitImplCreator::DoLowering()
     // Parse object file into copy-and-patch stencil
     //
     m_stencil = DeegenStencil::ParseMainLogic(m_module->getContext(), m_stencilObjectFile);
+
+    // Generate generic IC codegen implementations
+    //
+    ReleaseAssert(slPass.m_genericIcLoweringResults.size() == icLLRes.size());
+    if (icLLRes.size() > 0)
+    {
+        std::map<uint64_t /*globalOrd*/, uint64_t /*icSize*/> genericIcSizeMap;
+        std::vector<std::string> genericIcAuditInfo;
+        size_t globalIcTraitOrdBase = gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName());
+        for (size_t icUsageOrd = 0; icUsageOrd < slPass.m_genericIcLoweringResults.size(); icUsageOrd++)
+        {
+            std::string auditInfo;
+            AstInlineCache::BaselineJitAsmLoweringResult& slRes = slPass.m_genericIcLoweringResults[icUsageOrd];
+            AstInlineCache::BaselineJitLLVMLoweringResult& llRes = icLLRes[icUsageOrd];
+            ReleaseAssert(slRes.m_uniqueOrd == icUsageOrd);
+
+            size_t smcRegionOffset = m_stencil.RetrieveLabelDistanceComputationResult(slRes.m_symbolNameForSMCLabelOffset);
+            size_t smcRegionLen = m_stencil.RetrieveLabelDistanceComputationResult(slRes.m_symbolNameForSMCRegionLength);
+            size_t icMissSlowPathOffset = m_stencil.RetrieveLabelDistanceComputationResult(slRes.m_symbolNameForIcMissLogicLabelOffset);
+
+            ReleaseAssert(icBodyModule.get() != nullptr);
+            Linker linker(*icBodyModule.get());
+
+            ReleaseAssert(llRes.m_effectPlaceholderDesc.size() == slRes.m_icLogicAsm.size());
+            for (size_t k = 0; k < llRes.m_effectPlaceholderDesc.size(); k++)
+            {
+                AstInlineCache::BaselineJitCodegenResult cgRes = AstInlineCache::CreateJitIcCodegenImplementation(
+                    this,
+                    m_stencil /*mainStencil*/,
+                    llRes.m_effectPlaceholderDesc[k] /*icInfo*/,
+                    slRes.m_icLogicAsm[k],
+                    smcRegionOffset,
+                    smcRegionLen,
+                    icMissSlowPathOffset);
+
+                ReleaseAssert(icBodyModule->getFunction(cgRes.m_resultFnName) != nullptr);
+                ReleaseAssert(icBodyModule->getFunction(cgRes.m_resultFnName)->empty());
+                ReleaseAssert(linker.linkInModule(std::move(cgRes.m_module)) == false);
+
+                size_t icGlobalOrd = llRes.m_effectPlaceholderDesc[k].m_globalOrd;
+                ReleaseAssert(icGlobalOrd >= globalIcTraitOrdBase);
+                std::string disAsmForAuditPfx = "# IC Effect Kind #" + std::to_string(icGlobalOrd - globalIcTraitOrdBase);
+                disAsmForAuditPfx += " (global ord = " + std::to_string(icGlobalOrd) + ", code len = " + std::to_string(cgRes.m_icSize) + "):\n\n";
+                auditInfo += disAsmForAuditPfx + cgRes.m_disasmForAudit;
+
+                ReleaseAssert(!genericIcSizeMap.count(icGlobalOrd));
+                genericIcSizeMap[icGlobalOrd] = cgRes.m_icSize;
+            }
+
+            auditInfo += "# SMC region offset = " + std::to_string(smcRegionOffset) + ", length = " + std::to_string(smcRegionLen) + "\n";
+            auditInfo += "# IC miss slow path offset = " + std::to_string(icMissSlowPathOffset) + "\n\n";
+
+            globalIcTraitOrdBase += llRes.m_effectPlaceholderDesc.size();
+            genericIcAuditInfo.push_back(auditInfo);
+        }
+        ReleaseAssert(globalIcTraitOrdBase == gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName()) + gbta.GetNumTotalGenericIcEffectKinds(m_bytecodeDef->GetBytecodeIdName()));
+
+        for (auto& it : genericIcSizeMap)
+        {
+            m_genericIcLoweringResult.m_icTraitInfo.push_back({
+                .m_ordInTraitTable = it.first,
+                .m_allocationLength = it.second
+            });
+        }
+
+        // Change all the IC codegen implementations to internal and always_inline
+        //
+        for (Function& fn : *icBodyModule.get())
+        {
+            if (fn.getName().startswith(x_jit_codegen_ic_impl_placeholder_fn_prefix))
+            {
+                ReleaseAssert(fn.hasExternalLinkage());
+                ReleaseAssert(!fn.hasFnAttribute(Attribute::NoInline));
+                fn.setLinkage(GlobalValue::InternalLinkage);
+                fn.addFnAttr(Attribute::AlwaysInline);
+            }
+        }
+
+        RunLLVMOptimizePass(icBodyModule.get());
+
+        // Generate the final generic IC audit log
+        //
+        {
+            std::string finalAuditLog;
+            ReleaseAssert(genericIcAuditInfo.size() == icLLRes.size());
+            for (size_t i = 0; i < genericIcAuditInfo.size(); i++)
+            {
+                if (genericIcAuditInfo.size() > 1)
+                {
+                    finalAuditLog += "# IC Info (IC body = " + icLLRes[i].m_bodyFnName + ")\n\n";
+                }
+                finalAuditLog += genericIcAuditInfo[i];
+            }
+            {
+                std::unique_ptr<Module> clonedModule = CloneModule(*icBodyModule.get());
+                finalAuditLog += CompileLLVMModuleToAssemblyFile(clonedModule.get(), Reloc::Static, CodeModel::Small);
+            }
+            m_genericIcLoweringResult.m_disasmForAudit = finalAuditLog;
+        }
+
+        m_genericIcLoweringResult.m_icBodyModule = std::move(icBodyModule);
+    }
 
     m_callIcInfo = slPass.m_callIcLoweringResults;
 

@@ -1750,4 +1750,38 @@ inline void FillAddressRangeWithX64MultiByteNOPs(uint8_t* addr, size_t length)
     }
 }
 
+// Utility functions for repatchable jumps (jmp imm32)
+//
+struct X64PatchableJumpUtil
+{
+    static llvm::Value* WARN_UNUSED GetDest(llvm::Value* jmpEndAddr, llvm::BasicBlock* insertAtEnd)
+    {
+        using namespace llvm;
+        LLVMContext& ctx = jmpEndAddr->getContext();
+        ReleaseAssert(llvm_value_has_type<void*>(jmpEndAddr));
+        GetElementPtrInst* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr,
+                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(-4)) }, "", insertAtEnd);
+        Value* val32 = new LoadInst(llvm_type_of<uint32_t>(ctx), ptr, "", false /*isVolatile*/, Align(1), insertAtEnd);
+        Value* val64 = new SExtInst(val32, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
+        GetElementPtrInst* dest = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr, { val64 }, "", insertAtEnd);
+        return dest;
+    }
+
+    static void SetDest(llvm::Value* jmpEndAddr, llvm::Value* newDest, llvm::BasicBlock* insertAtEnd)
+    {
+        using namespace llvm;
+        LLVMContext& ctx = jmpEndAddr->getContext();
+        ReleaseAssert(llvm_value_has_type<void*>(jmpEndAddr));
+        ReleaseAssert(llvm_value_has_type<void*>(newDest));
+        Value* jmpEndAddr64 = new PtrToIntInst(jmpEndAddr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
+        Value* newDest64 = new PtrToIntInst(newDest, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
+        Instruction* diff = CreateSub(newDest64, jmpEndAddr64);
+        insertAtEnd->getInstList().push_back(diff);
+        Value* diff32 = new TruncInst(diff, llvm_type_of<uint32_t>(ctx), "", insertAtEnd);
+        GetElementPtrInst* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr,
+                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(-4)) }, "", insertAtEnd);
+        new StoreInst(diff32, ptr, false /*isVolatile*/, Align(1), insertAtEnd);
+    }
+};
+
 }   // namespace dast

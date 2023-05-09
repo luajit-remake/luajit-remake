@@ -27,7 +27,9 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
                 .m_opcodeOrdinal = bytecodeOrderMap.GetOpcode(bytecodeId),
                 .m_numInterpreterFusedIcVariants = bytecodeOrderMap.GetNumInterpreterFusedIcVariants(bytecodeId),
                 .m_numJitCallIC = bytecodeDef->GetNumCallICsInJitTier(),
-                .m_jitCallIcTraitBaseOrdinal = static_cast<uint64_t>(-1)    // compute later
+                .m_jitCallIcTraitBaseOrdinal = static_cast<uint64_t>(-1),                       // compute later
+                .m_numGenericIcTotalEffectKinds = bytecodeDef->GetTotalGenericIcEffectKinds(),
+                .m_genericIcEffectTraitBaseOrdinal = static_cast<uint64_t>(-1)                  // compute later
             };
         }
     }
@@ -57,12 +59,15 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
     // Iterate through each bytecode in order and compute global trait information
     //
     size_t curJitCallIcTraitOrd = 0;
+    size_t curGenericIcEffectKindTraitOrd = 0;
     for (std::string& bytecodeId : bytecodeOrder)
     {
         ReleaseAssert(allTraits.count(bytecodeId));
         Trait& trait = allTraits[bytecodeId];
         trait.m_jitCallIcTraitBaseOrdinal = curJitCallIcTraitOrd;
         curJitCallIcTraitOrd += trait.m_numJitCallIC * 2;
+        trait.m_genericIcEffectTraitBaseOrdinal = curGenericIcEffectKindTraitOrd;
+        curGenericIcEffectKindTraitOrd += trait.m_numGenericIcTotalEffectKinds;
     }
 
     DeegenGlobalBytecodeTraitAccessor r;
@@ -106,7 +111,8 @@ json WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::SaveToJson()
         j["num_fused_ic_variants"] = trait.m_numInterpreterFusedIcVariants;
         j["jit_num_call_ic"] = trait.m_numJitCallIC;
         j["jit_call_ic_base_ord"] = trait.m_jitCallIcTraitBaseOrdinal;
-
+        j["num_generic_ic_total_effect_kinds"] = trait.m_numGenericIcTotalEffectKinds;
+        j["generic_ic_effect_kind_base_ord"] = trait.m_genericIcEffectTraitBaseOrdinal;
         list.push_back(j);
     }
 
@@ -129,6 +135,8 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
         JSONCheckedGet(info, "num_fused_ic_variants", trait.m_numInterpreterFusedIcVariants);
         JSONCheckedGet(info, "jit_num_call_ic", trait.m_numJitCallIC);
         JSONCheckedGet(info, "jit_call_ic_base_ord", trait.m_jitCallIcTraitBaseOrdinal);
+        JSONCheckedGet(info, "num_generic_ic_total_effect_kinds", trait.m_numGenericIcTotalEffectKinds);
+        JSONCheckedGet(info, "generic_ic_effect_kind_base_ord", trait.m_genericIcEffectTraitBaseOrdinal);
 
         bytecodeOrder.push_back(bytecodeId);
 

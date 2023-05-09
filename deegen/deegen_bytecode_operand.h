@@ -893,6 +893,49 @@ public:
         return m_numJitCallICs;
     }
 
+    size_t WARN_UNUSED GetNumGenericICsInJitTier()
+    {
+        ReleaseAssert(m_numJitGenericICs != static_cast<size_t>(-1));
+        return m_numJitGenericICs;
+    }
+
+    size_t WARN_UNUSED GetTotalGenericIcEffectKinds()
+    {
+        ReleaseAssert(m_totalGenericIcEffectKinds != static_cast<size_t>(-1));
+        return m_totalGenericIcEffectKinds;
+    }
+
+    bool WARN_UNUSED HasJitSlowPathAndDataSecInfo()
+    {
+        return GetNumGenericICsInJitTier() > 0;
+    }
+
+    size_t GetJitSlowPathOffsetInSlowPathData()
+    {
+        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+        ReleaseAssert(HasJitSlowPathAndDataSecInfo());
+        return m_baselineJitSlowPathAndDataSecInfoOffset;
+    }
+
+    size_t GetJitDataSectionOffsetInSlowPathData()
+    {
+        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+        ReleaseAssert(HasJitSlowPathAndDataSecInfo());
+        return m_baselineJitSlowPathAndDataSecInfoOffset + 4;
+    }
+
+    // Return a ptr for the address of the JIT'ed code's slow path of current bytecode
+    // Only available to use if HasJitSlowPathAndDataSecInfo()
+    //
+    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
+    // Return a ptr for the address of the JIT'ed code's data section of current bytecode
+    // Only available to use if HasJitSlowPathAndDataSecInfo()
+    //
+    llvm::Value* WARN_UNUSED GetPtrOfCurrentBytecodeDataSectionForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetPtrOfCurrentBytecodeDataSectionForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
     // Return a ptr for the address of the JIT'ed code of the current bytecode
     //
     llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
@@ -918,6 +961,13 @@ public:
         ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
         ReleaseAssert(ord < GetNumCallICsInJitTier());
         return m_baselineJitCallIcBaseOffset + sizeof(JitCallInlineCacheSite) * ord;
+    }
+
+    size_t WARN_UNUSED GetBaselineJitGenericIcSiteOffsetInSlowPathData(size_t ord)
+    {
+        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
+        ReleaseAssert(ord < GetNumGenericICsInJitTier());
+        return m_baselineJitGenericIcBaseOffset + sizeof(JitGenericInlineCacheSite) * ord;
     }
 
     json WARN_UNUSED SaveToJSON();
@@ -964,6 +1014,8 @@ public:
     bool m_isInterpreterCallIcExplicitlyDisabled;
     bool m_isInterpreterCallIcEverUsed;
     size_t m_numJitCallICs;
+    size_t m_numJitGenericICs;
+    size_t m_totalGenericIcEffectKinds;
 
     BytecodeQuickeningKind m_quickeningKind;
     // Populated if m_quickeningKind == LockedQuickening or Quickened or QuickeningSelector
@@ -992,6 +1044,8 @@ private:
 
     size_t m_baselineJitSlowPathDataLength;
     size_t m_baselineJitCallIcBaseOffset;
+    size_t m_baselineJitSlowPathAndDataSecInfoOffset;
+    size_t m_baselineJitGenericIcBaseOffset;
 
     // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
     //

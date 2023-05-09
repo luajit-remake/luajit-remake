@@ -473,9 +473,13 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
         abort();
     }
 
+    size_t numTotalGenericIcEffectKinds = 0;
+
     for (size_t icOrd = 0; icOrd < allIcUses.size(); icOrd++)
     {
         AstInlineCache& ic = allIcUses[icOrd];
+
+        numTotalGenericIcEffectKinds += ic.m_totalEffectKinds;
 
         // Lower the inline caching APIs
         //
@@ -533,6 +537,12 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             LLVMRepeatedInliningInhibitor::GiveOneMoreChance(ic.m_bodyFn);
         }
     }
+
+    ReleaseAssert(bytecodeDef->m_numJitGenericICs == static_cast<size_t>(-1));
+    bytecodeDef->m_numJitGenericICs = allIcUses.size();
+
+    ReleaseAssert(bytecodeDef->m_totalGenericIcEffectKinds == static_cast<size_t>(-1));
+    bytecodeDef->m_totalGenericIcEffectKinds = numTotalGenericIcEffectKinds;
 
     if (hasICFusedIntoInterpreterOpcode)
     {

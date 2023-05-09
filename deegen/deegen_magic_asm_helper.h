@@ -11,6 +11,8 @@ enum class MagicAsmKind
     IndirectBrMarkerForCfgRecovery,
     CallIcDirectCall,
     CallIcClosureCall,
+    GenericIcEntry,
+    DummyAsmToPreventBBMerge,
     X_END_OF_ENUM
 };
 static_assert(static_cast<uint32_t>(MagicAsmKind::X_END_OF_ENUM) <= 155);     // int $XXX can only go up to 255

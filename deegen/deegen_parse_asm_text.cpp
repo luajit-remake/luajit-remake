@@ -600,7 +600,8 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
         ReleaseAssert(block->m_lines.back().IsDefinitelyBarrierInst());
         ReleaseAssertImp(block->m_endsWithJmpToLocalLabel,
-                         block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_terminalJmpTargetLabel == block->m_lines.back().GetWord(1));
+                         block->m_lines.back().IsDirectUnconditionalJumpInst() &&
+                             block->m_terminalJmpTargetLabel == r->m_labelNormalizer.GetNormalizedLabel(block->m_lines.back().GetWord(1)));
     }
 
     // Sanity check that all the label names make sense
@@ -930,6 +931,10 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
     }
 
     r->RemoveAsmMagic(MagicAsmKind::IndirectBrMarkerForCfgRecovery);
+
+    // The dummy ASM to prevent LLVM basic block merge is only there to trick LLVM. At ASM level they are no longer useful.
+    //
+    r->RemoveAsmMagic(MagicAsmKind::DummyAsmToPreventBBMerge);
 
     r->Validate();
 

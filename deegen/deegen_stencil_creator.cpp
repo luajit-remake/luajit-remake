@@ -5,6 +5,7 @@
 #include "invoke_clang_helper.h"
 #include "base64_util.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
+#include "deegen_bytecode_operand.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -1305,6 +1306,7 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
 DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
     bool mayAttemptToEliminateJmpToFallthrough,
     size_t numBytecodeOperands,
+    size_t numGenericIcTotalCaptures,
     const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
     const std::vector<size_t>& extraPlaceholderOrds)
 {
@@ -1391,6 +1393,10 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         for (size_t i = 0; i < numBytecodeOperands; i++)
         {
             fprintf(fp, "    , [[maybe_unused]] int64_t deegen_rc_input_%llu\n", static_cast<unsigned long long>(i));
+        }
+        for (size_t i = 0; i < numGenericIcTotalCaptures; i++)
+        {
+            fprintf(fp, "    , [[maybe_unused]] int64_t deegen_rc_input_%llu\n", static_cast<unsigned long long>(200 + i));
         }
         for (size_t ord : extraPlaceholderOrds)
         {
@@ -1730,6 +1736,105 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
     }
 
     return module;
+}
+
+std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(BytecodeVariantDefinition* bytecodeDef,
+                                                                                                             llvm::Value* slowPathData,
+                                                                                                             llvm::Value* slowPathDataOffset,
+                                                                                                             llvm::Value* codeBlock32,
+                                                                                                             llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathData));
+    ReleaseAssertImp(slowPathDataOffset != nullptr, llvm_value_has_type<uint64_t>(slowPathDataOffset));
+    ReleaseAssertImp(codeBlock32 != nullptr, llvm_value_has_type<uint64_t>(codeBlock32));
+    ReleaseAssert(insertAtEnd != nullptr);
+
+    LLVMContext& ctx = insertAtEnd->getContext();
+    std::vector<Value*> opcodeRawValues;
+
+    for (auto& operand : bytecodeDef->m_list)
+    {
+        if (!operand->SupportsGetOperandValueFromBytecodeStruct())
+        {
+            opcodeRawValues.push_back(nullptr);
+        }
+        else
+        {
+            opcodeRawValues.push_back(operand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, insertAtEnd));
+        }
+    }
+
+    Value* outputSlot = nullptr;
+    if (bytecodeDef->m_hasOutputValue)
+    {
+        outputSlot = bytecodeDef->m_outputOperand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, insertAtEnd);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
+    }
+
+    auto extendTo64 = [&](Value* val, bool shouldSExt) WARN_UNUSED -> Value*
+    {
+        ReleaseAssert(val != nullptr);
+        ReleaseAssert(val->getType()->isIntegerTy());
+        ReleaseAssert(val->getType()->getIntegerBitWidth() <= 64);
+        if (val->getType()->getIntegerBitWidth() == 64)
+        {
+            return val;
+        }
+
+        if (shouldSExt)
+        {
+            return new SExtInst(val, llvm_type_of<int64_t>(ctx), "", insertAtEnd);
+        }
+        else
+        {
+            return new ZExtInst(val, llvm_type_of<int64_t>(ctx), "", insertAtEnd);
+        }
+    };
+
+    // Build up the bytecode value list in the order expected by the codegen impl
+    //
+    std::vector<Value*> bytecodeValList;
+
+    // ordinal 100 (output)
+    //
+    if (outputSlot == nullptr)
+    {
+        bytecodeValList.push_back(nullptr);
+    }
+    else
+    {
+        bytecodeValList.push_back(extendTo64(outputSlot, bytecodeDef->m_outputOperand->IsSignedValue()));
+    }
+
+    // ordinal 101 (nextBytecodeAddr)
+    //
+    {
+        Value* nextBytecodePtr = bytecodeDef->GetFallthroughCodePtrForBaselineJit(slowPathData, insertAtEnd);
+        ReleaseAssert(llvm_value_has_type<void*>(nextBytecodePtr));
+        Value* nextBytecodePtrI64 = new PtrToIntInst(nextBytecodePtr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
+        bytecodeValList.push_back(nextBytecodePtrI64);
+    }
+
+    // ordinal 103 (slowPathDataOffset) and ordinal 104 (CodeBlock32)
+    //
+    bytecodeValList.push_back(slowPathDataOffset);
+    bytecodeValList.push_back(codeBlock32);
+
+    for (size_t i = 0; i < bytecodeDef->m_list.size(); i++)
+    {
+        if (opcodeRawValues[i] == nullptr)
+        {
+            bytecodeValList.push_back(nullptr);
+        }
+        else
+        {
+            bytecodeValList.push_back(extendTo64(opcodeRawValues[i], bytecodeDef->m_list[i]->IsSignedValue()));
+        }
+    }
+
+    return bytecodeValList;
 }
 
 // Logic stolen from llvm-objdump.cpp

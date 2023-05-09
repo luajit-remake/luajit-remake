@@ -71,12 +71,34 @@ public:
         return trait.m_numInterpreterFusedIcVariants;
     }
 
+    uint64_t GetNumTotalGenericIcEffectKinds(const std::string& bytecodeName) const
+    {
+        Trait trait = GetTraitFromBytecodeName(bytecodeName);
+        return trait.m_numGenericIcTotalEffectKinds;
+    }
+
+    uint64_t GetGenericIcEffectTraitBaseOrdinal(const std::string& bytecodeName) const
+    {
+        Trait trait = GetTraitFromBytecodeName(bytecodeName);
+        return trait.m_genericIcEffectTraitBaseOrdinal;
+    }
+
     uint64_t GetJitCallIcTraitTableLength() const
     {
         uint64_t res = 0;
         for (const auto& it : m_traitSet)
         {
             res += it.second.m_numJitCallIC * 2;
+        }
+        return res;
+    }
+
+    uint64_t GetJitGenericIcEffectTraitTableLength() const
+    {
+        uint64_t res = 0;
+        for (const auto& it : m_traitSet)
+        {
+            res += it.second.m_numGenericIcTotalEffectKinds;
         }
         return res;
     }
@@ -100,6 +122,12 @@ private:
         // and the closure-call IC trait ord is base + K * 2 + 1
         //
         uint64_t m_jitCallIcTraitBaseOrdinal;
+        // The total number of effect kinds of all Generic IC used in this bytecode
+        //
+        uint64_t m_numGenericIcTotalEffectKinds;
+        // The base ordinal for the global ordering of all the Generic IC effects
+        //
+        uint64_t m_genericIcEffectTraitBaseOrdinal;
     };
 
     Trait WARN_UNUSED GetTraitFromBytecodeName(const std::string& bytecodeName) const

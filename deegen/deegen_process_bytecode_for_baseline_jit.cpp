@@ -20,7 +20,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
     for (size_t i = 0; i < bii->m_slowPaths.size(); i++)
     {
         BaselineJitImplCreator jic(*(bii->m_slowPaths[i].get()));
-        jic.DoLowering();
+        jic.DoLowering(bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPaths.push_back({ std::move(module), jic.GetResultFunctionName() });
     }
@@ -28,7 +28,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
     if (bii->m_quickeningSlowPath.get() != nullptr)
     {
         BaselineJitImplCreator jic(*(bii->m_quickeningSlowPath.get()));
-        jic.DoLowering();
+        jic.DoLowering(bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPaths.push_back({ std::move(module), jic.GetResultFunctionName() });
     }
@@ -36,7 +36,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
     for (size_t i = 0; i < bii->m_allRetConts.size(); i++)
     {
         BaselineJitImplCreator jic(BaselineJitImplCreator::SlowPathReturnContinuationTag(), *(bii->m_allRetConts[i].get()));
-        jic.DoLowering();
+        jic.DoLowering(bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPathReturnConts.push_back({ std::move(module), jic.GetResultFunctionName() });
     }

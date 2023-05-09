@@ -7,10 +7,12 @@
 #include "deegen_stencil_creator.h"
 #include "deegen_parse_asm_text.h"
 #include "deegen_call_inline_cache.h"
+#include "deegen_ast_inline_cache.h"
 
 namespace dast {
 
 class BytecodeVariantDefinition;
+class DeegenGlobalBytecodeTraitAccessor;
 
 class BaselineJitImplCreator final : public DeegenBytecodeImplCreatorBase
 {
@@ -30,7 +32,7 @@ public:
     struct SlowPathReturnContinuationTag { };
     BaselineJitImplCreator(SlowPathReturnContinuationTag, BytecodeIrComponent& bic);
 
-    void DoLowering();
+    void DoLowering(const DeegenGlobalBytecodeTraitAccessor& gbta);
 
     virtual llvm::Module* GetModule() const override { return m_module.get(); }
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
@@ -96,9 +98,29 @@ public:
     llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd);
     llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore);
 
+    std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
+    std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
+
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult>& GetAllCallIcInfo()
     {
         return m_callIcInfo;
+    }
+
+    size_t GetNumTotalGenericIcCaptures()
+    {
+        return m_numGenericIcCaptures;
+    }
+
+    struct GenericIcLoweringResult
+    {
+        std::unique_ptr<llvm::Module> m_icBodyModule;
+        std::vector<DeegenGenericIcTraitDesc> m_icTraitInfo;
+        std::string m_disasmForAudit;
+    };
+
+    GenericIcLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
+    {
+        return m_genericIcLoweringResult;
     }
 
 private:
@@ -131,6 +153,10 @@ private:
     DeegenStencil m_stencil;
 
     std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> m_callIcInfo;
+
+    size_t m_numGenericIcCaptures;
+
+    GenericIcLoweringResult m_genericIcLoweringResult;
 
     bool m_generated;
 
@@ -165,6 +191,5 @@ struct DeegenPlaceholderUtils
 
     static std::string WARN_UNUSED FindFallthroughPlaceholderSymbolName(std::vector<CPRuntimeConstantNodeBase*>& rcDef);
 };
-
 
 }   // namespace dast

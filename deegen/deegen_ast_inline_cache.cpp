@@ -3,6 +3,11 @@
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_rewrite_closure_call.h"
+#include "deegen_baseline_jit_impl_creator.h"
+#include "deegen_stencil_reserved_placeholder_ords.h"
+#include "deegen_parse_asm_text.h"
+#include "drt/baseline_jit_codegen_helper.h"
+#include "invoke_clang_helper.h"
 
 namespace dast {
 
@@ -319,13 +324,8 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
         }
     }
 
-    for (auto& captureIter : effectFnLocalCaptures)
+    auto validateCapturedValueType = [&](Type* captureTy)
     {
-        size_t ord = captureIter.first;
-        Value* valueInBodyFn = captureIter.second;
-
-        bool requiresRangeAnnotation;
-        Type* captureTy = valueInBodyFn->getType();
         if (!captureTy->isIntOrPtrTy())
         {
             if (!captureTy->isStructTy())
@@ -335,13 +335,11 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
             }
             StructType* sty = cast<StructType>(captureTy);
             size_t stySize = dataLayout.getStructLayout(sty)->getSizeInBytes();
-            if (stySize > 8)
+            if (stySize > 8 || !is_power_of_2(stySize))
             {
                 fprintf(stderr, "[ERROR] Non word-sized struct type local capture in IC is currently unsupported!\n");
                 abort();
             }
-
-            requiresRangeAnnotation = (stySize >= 4);
 
             bool isSingletonType = false;
             while (true)
@@ -382,16 +380,32 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
             {
                 fprintf(stderr, "[WARNING] You captured a complex struct type in IC. You likely will get terrible code!\n");
             }
+
+            return;
         }
         else if (captureTy->isPointerTy())
         {
-            requiresRangeAnnotation = true;
+            return;
         }
         else
         {
             ReleaseAssert(captureTy->isIntegerTy());
-            requiresRangeAnnotation = (captureTy->getIntegerBitWidth() >= 32);
+            size_t bitWidth = captureTy->getIntegerBitWidth();
+            ReleaseAssert(bitWidth % 8 == 0 && is_power_of_2(bitWidth));
+            return;
         }
+    };
+
+    for (auto& captureIter : effectFnLocalCaptures)
+    {
+        size_t ord = captureIter.first;
+        Value* valueInBodyFn = captureIter.second;
+
+        Type* captureTy = valueInBodyFn->getType();
+        validateCapturedValueType(captureTy);
+        size_t typeSize = dataLayout.getTypeAllocSize(captureTy);
+        ReleaseAssert(typeSize <= 8 && is_power_of_2(typeSize));
+        bool requiresRangeAnnotation = (typeSize >= 4);
 
         if (requiresRangeAnnotation)
         {
@@ -733,12 +747,45 @@ static PreprocessIcEffectApiResult WARN_UNUSED PreprocessIcEffectApi(
     }
     annotationFnArgs.push_back(decoderFn);
     annotationFnArgs.push_back(encoderFn);
+
+    std::unordered_map<uint64_t, CaptureValueRangeInfo> captureOrdToRangeInfoMap;
+    for (CaptureValueRangeInfo& cvri : allCaptureValueRangeInfo)
+    {
+        ReleaseAssert(!captureOrdToRangeInfoMap.count(cvri.m_ordInCaptureStruct));
+        captureOrdToRangeInfoMap[cvri.m_ordInCaptureStruct] = cvri;
+    }
+
     annotationFnArgs.push_back(CreateLLVMConstantInt<uint64_t>(ctx, effectFnLocalCaptures.size()) /*numValuesInIcState*/);
     for (auto& it : effectFnLocalCaptures)
     {
+        size_t captureOrd = it.first;
         Value* val = it.second;
         annotationFnArgs.push_back(val);
+
+        Value* lb = nullptr;
+        Value* ub = nullptr;
+        if (captureOrdToRangeInfoMap.count(captureOrd))
+        {
+            CaptureValueRangeInfo& cvri = captureOrdToRangeInfoMap[captureOrd];
+            lb = CreateLLVMConstantInt<int64_t>(ctx, cvri.m_lbInclusive);
+            ub = CreateLLVMConstantInt<int64_t>(ctx, cvri.m_ubInclusive);
+            captureOrdToRangeInfoMap.erase(captureOrdToRangeInfoMap.find(captureOrd));
+        }
+        else
+        {
+            size_t typeSize = dataLayout.getTypeAllocSize(val->getType());
+            ReleaseAssert(typeSize < 4);
+            ReleaseAssert(is_power_of_2(typeSize));
+            lb = CreateLLVMConstantInt<int64_t>(ctx, 0);
+            ub = CreateLLVMConstantInt<int64_t>(ctx, (static_cast<int64_t>(1) << (typeSize * 8)) - 1);
+        }
+
+        ReleaseAssert(lb != nullptr && ub != nullptr);
+        annotationFnArgs.push_back(lb);
+        annotationFnArgs.push_back(ub);
     }
+
+    ReleaseAssert(captureOrdToRangeInfoMap.empty());
 
     std::vector<Type*> annotationFnArgTys;
     for (Value* val : annotationFnArgs)
@@ -1615,12 +1662,26 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         ReleaseAssert(llvm_value_has_type<uint64_t>(numIcStateCapturesV));
         uint64_t numIcStateCaptures = GetValueOfLLVMConstantInt<uint64_t>(numIcStateCapturesV);
 
-        ReleaseAssert(curArgOrd + numIcStateCaptures == target->arg_size());
+        ReleaseAssert(curArgOrd + numIcStateCaptures * 3 == target->arg_size());
         for (uint32_t i = 0; i < numIcStateCaptures; i++)
         {
             Value* icStateCapture = target->getArgOperand(curArgOrd);
-            curArgOrd++;
-            e.m_icStateVals.push_back(icStateCapture);
+            Value* icValueLb = target->getArgOperand(curArgOrd + 1);
+            Value* icValueUb = target->getArgOperand(curArgOrd + 2);
+            curArgOrd += 3;
+
+            ReleaseAssert(isa<ConstantInt>(icValueLb) && llvm_value_has_type<int64_t>(icValueLb));
+            ReleaseAssert(isa<ConstantInt>(icValueUb) && llvm_value_has_type<int64_t>(icValueUb));
+            int64_t lb = GetValueOfLLVMConstantInt<int64_t>(icValueLb);
+            int64_t ub = GetValueOfLLVMConstantInt<int64_t>(icValueUb);
+            ReleaseAssert(lb <= ub);
+
+            e.m_icStateVals.push_back({
+                .m_valueInBodyFn = icStateCapture,
+                .m_lbInclusive = lb,
+                .m_ubInclusive = ub,
+                .m_placeholderOrd = static_cast<size_t>(-1)
+            });
         }
 
         ReleaseAssert(curArgOrd == target->arg_size());
@@ -1629,7 +1690,7 @@ static AstInlineCache WARN_UNUSED AstInlineCacheParseOneUse(llvm::CallInst* orig
         ReleaseAssert(e.m_icStateDecoder->arg_size() == 1 + numIcStateCaptures);
         for (uint32_t i = 0; i < numIcStateCaptures; i++)
         {
-            ReleaseAssert(e.m_icStateEncoder->getArg(1 + i)->getType() == e.m_icStateVals[i]->getType());
+            ReleaseAssert(e.m_icStateEncoder->getArg(1 + i)->getType() == e.m_icStateVals[i].m_valueInBodyFn->getType());
             ReleaseAssert(llvm_value_has_type<void*>(e.m_icStateDecoder->getArg(1 + i)));
         }
 
@@ -1825,10 +1886,11 @@ static llvm::Function* WARN_UNUSED CreateEffectOrdinalGetterFn(
     return fn;
 }
 
-void LowerInterpreterGetBytecodePtrInternalAPI(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
+void LowerInterpreterGetBytecodePtrInternalAPI(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
 {
     using namespace llvm;
     std::vector<CallInst*> allUses;
+    DeegenEngineTier tier = ifi->GetTier();
     for (BasicBlock& bb : *func)
     {
         for (Instruction& inst : bb)
@@ -1843,7 +1905,22 @@ void LowerInterpreterGetBytecodePtrInternalAPI(InterpreterBytecodeImplCreator* i
     for (CallInst* ci : allUses)
     {
         ReleaseAssert(llvm_value_has_type<void*>(ci));
-        ci->replaceAllUsesWith(ifi->GetCurBytecode());
+        if (tier == DeegenEngineTier::Interpreter)
+        {
+            // For interpreter, the bytecodePtr is just the bytecodePtr
+            //
+            ci->replaceAllUsesWith(ifi->GetCurBytecode());
+        }
+        else if (tier == DeegenEngineTier::BaselineJIT)
+        {
+            // For baseline JIT, this should never be needed
+            //
+            ReleaseAssert(ci->use_empty());
+        }
+        else
+        {
+            ReleaseAssert(false && "unhandled");
+        }
         ci->eraseFromParent();
     }
 }
@@ -2088,7 +2165,7 @@ void AstInlineCache::DoLoweringForInterpreter()
             BytecodeMetadataStruct* bms = ms_effects[e.m_ordinalInEffectArray];
             for (size_t i = 0; i < numElementsInIcState; i++)
             {
-                Type* icStateType = e.m_icStateVals[i]->getType();
+                Type* icStateType = e.m_icStateVals[i].m_valueInBodyFn->getType();
                 // Calling 'getTypeStoreSize' is likely incorrect, because the store size does not consider the tail padding,
                 // but the Clang frontend is already implicitly generating memcpy that copies the tail padding.
                 //
@@ -2115,12 +2192,12 @@ void AstInlineCache::DoLoweringForInterpreter()
             std::vector<AllocaInst*> allocas;
             for (size_t i = 0; i < numElementsInIcState; i++)
             {
-                allocas.push_back(new AllocaInst(e.m_icStateVals[i]->getType(), 0 /*addrSpace*/, "", bb));
+                allocas.push_back(new AllocaInst(e.m_icStateVals[i].m_valueInBodyFn->getType(), 0 /*addrSpace*/, "", bb));
             }
 
             for (uint32_t i = 0; i < numElementsInIcState; i++)
             {
-                Type* icStateType = e.m_icStateVals[i]->getType();
+                Type* icStateType = e.m_icStateVals[i].m_valueInBodyFn->getType();
                 Value* src = target->getArg(1 + i);
                 ReleaseAssert(src->getType() == icStateType);
                 new StoreInst(src, allocas[i], bb);
@@ -2248,9 +2325,9 @@ void AstInlineCache::DoLoweringForInterpreter()
             {
                 std::vector<Value*> args;
                 args.push_back(bodyIcPtr);
-                for (Value* val : e.m_icStateVals)
+                for (auto& icStateVal : e.m_icStateVals)
                 {
-                    args.push_back(val);
+                    args.push_back(icStateVal.m_valueInBodyFn);
                 }
                 CallInst* writeIcStateInst = CallInst::Create(e.m_icStateEncoder, args, "", updateIcLogicInsertionPt);
                 ReleaseAssert(llvm_value_has_type<void>(writeIcStateInst));
@@ -2402,6 +2479,1080 @@ void AstInlineCache::TriviallyLowerAllInlineCaches(llvm::Function* func)
     ValidateLLVMFunction(func);
 
     RunLLVMDeadGlobalElimination(func->getParent());
+}
+
+void AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(BaselineJitImplCreator* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    LLVMContext& ctx = func->getContext();
+
+    std::vector<CallInst*> allUses;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            CallInst* ci = dyn_cast<CallInst>(&inst);
+            if (ci != nullptr && ci->getCalledFunction() != nullptr && ci->getCalledFunction()->getName().startswith(x_createIcInitPlaceholderFunctionPrefix))
+            {
+                allUses.push_back(ci);
+            }
+        }
+    }
+
+    // For baseline JIT, the icPtr is always the SlowPathData
+    //
+    for (CallInst* origin : allUses)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(origin));
+        ReleaseAssert(!ifi->IsBaselineJitSlowPath());
+        Value* offset = ifi->GetSlowPathDataOffsetFromJitFastPath(origin);
+        Value* baselineJitCodeBlock = ifi->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { ifi->GetCodeBlock() }, origin);
+        ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
+        Value* replacement = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", origin);
+        origin->replaceAllUsesWith(replacement);
+        origin->eraseFromParent();
+    }
+}
+
+AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLoweringForBaselineJit(BaselineJitImplCreator* ifi, size_t icUsageOrdInBytecode, size_t globalIcEffectTraitBaseOrd)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_origin->getContext();
+    ReleaseAssert(m_origin->getParent() != nullptr);
+    Function* mainFn = m_origin->getParent()->getParent();
+    ReleaseAssert(mainFn != nullptr);
+    Module* module = mainFn->getParent();
+    ReleaseAssert(module != nullptr);
+
+    BaselineJitLLVMLoweringResult r;
+
+    DataLayout dataLayout(module);
+
+    AllocaInst* icResultAlloca = new AllocaInst(m_origin->getType(), 0 /*addrSpace*/, "", &mainFn->getEntryBlock().front() /*insertBefore*/);
+
+    // Split block after instruction 'm_origin'
+    //
+    BasicBlock* icSplitBlock = m_origin->getParent();
+    BasicBlock* joinBlock = SplitBlock(icSplitBlock, m_origin);
+    ReleaseAssert(m_origin->getParent() == joinBlock);
+
+    // After SplitBlock, the old block should have an unconditional branch instruction to the new block
+    //
+    ReleaseAssert(isa<BranchInst>(&icSplitBlock->getInstList().back()));
+
+    std::unordered_map<size_t, BasicBlock*> effectOrdToBBMap;
+
+    for (Effect& e : m_effects)
+    {
+        // Generate the logic in the main function for each specialization, which is simply calling the wrapped effect fn
+        //
+        for (size_t i = 0; i < e.m_effectFnMain.size(); i++)
+        {
+            BasicBlock* bb = BasicBlock::Create(ctx, "", mainFn);
+            size_t effectOrd = e.m_effectStartOrdinal + i;
+            ReleaseAssert(!effectOrdToBBMap.count(effectOrd));
+            effectOrdToBBMap[effectOrd] = bb;
+            Instruction* insertBefore = BranchInst::Create(joinBlock /*dest*/, bb /*insertAtEnd*/);
+
+            // Insert a dummy unique magic assembly to prevent LLVM merging IC entry blocks with non-IC blocks
+            //
+            {
+                size_t icEffectGlobalOrd = globalIcEffectTraitBaseOrd + e.m_effectStartOrdinal + i;
+                std::string asmString = "movl $$" + std::to_string(icEffectGlobalOrd) + ", eax;";
+                asmString = MagicAsm::WrapLLVMAsmPayload(asmString, MagicAsmKind::DummyAsmToPreventBBMerge);
+                FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { }, false);
+                InlineAsm* ia = InlineAsm::get(fty, asmString, "" /*constraints*/, true /*hasSideEffects*/);
+                CallInst* ci = CallInst::Create(ia, "", insertBefore);
+                ci->addFnAttr(Attribute::NoUnwind);
+            }
+
+            std::vector<Value*> args;
+            // In baseline JIT, the IC effect function does not need the IC state
+            //
+            args.push_back(ConstantPointerNull::get(PointerType::get(ctx, 0 /*addressSpace*/)));
+            for (Value* val : e.m_effectFnMainArgs) { args.push_back(val); }
+            Function* effectFn = e.m_effectFnMain[i];
+            Value* effectResult = CallInst::Create(effectFn, args, "", insertBefore);
+            new StoreInst(effectResult, icResultAlloca, insertBefore);
+
+            ReleaseAssert(!effectFn->hasFnAttribute(Attribute::NoInline));
+            effectFn->addFnAttr(Attribute::AlwaysInline);
+            effectFn->setLinkage(GlobalValue::InternalLinkage);
+        }
+
+        // Generate the implementation of the decoder function, which should just populate values with placeholder values
+        //
+        {
+            Function* decoderFn = e.m_icStateDecoder;
+            ReleaseAssert(decoderFn->arg_size() == e.m_icStateVals.size() + 1);
+            ReleaseAssert(decoderFn->empty());
+            BasicBlock* decoderBB = BasicBlock::Create(ctx, "", decoderFn);
+            for (size_t i = 0; i < e.m_icStateVals.size(); i++)
+            {
+                Effect::IcStateValueInfo& svi = e.m_icStateVals[i];
+                ReleaseAssert(svi.m_placeholderOrd == static_cast<size_t>(-1));
+
+                size_t ord = static_cast<size_t>(-1);
+                Value* val = nullptr;
+                bool isNonPrimitiveType = !svi.m_valueInBodyFn->getType()->isIntOrPtrTy();
+                if (isNonPrimitiveType)
+                {
+                    size_t tySize = dataLayout.getTypeAllocSize(svi.m_valueInBodyFn->getType());
+                    ReleaseAssert(is_power_of_2(tySize) && tySize <= 8);
+                    Type* intTyForTySize = Type::getIntNTy(ctx, static_cast<uint32_t>(tySize * 8));
+                    auto tmp = ifi->CreateGenericIcStateCapturePlaceholder(intTyForTySize, svi.m_lbInclusive, svi.m_ubInclusive, decoderBB);
+                    ord = tmp.second;
+                    CallInst* intVal = tmp.first;
+                    AllocaInst* allocaInst1 = new AllocaInst(svi.m_valueInBodyFn->getType(), 0, "", &decoderBB->front());
+                    AllocaInst* allocaInst2 = new AllocaInst(intTyForTySize, 0, "", &decoderBB->front());
+                    new StoreInst(intVal, allocaInst2, decoderBB);
+                    EmitLLVMIntrinsicMemcpy(module, allocaInst1 /*dst*/, allocaInst2 /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, tySize), decoderBB);
+                    val = new LoadInst(svi.m_valueInBodyFn->getType(), allocaInst1, "", decoderBB);
+                }
+                else
+                {
+                    auto tmp = ifi->CreateGenericIcStateCapturePlaceholder(svi.m_valueInBodyFn->getType(), svi.m_lbInclusive, svi.m_ubInclusive, decoderBB);
+                    ord = tmp.second;
+                    val = tmp.first;
+                }
+                ReleaseAssert(ord != static_cast<size_t>(-1) && val != nullptr);
+
+                svi.m_placeholderOrd = ord;
+
+                Value* dest = decoderFn->getArg(static_cast<uint32_t>(i + 1));
+                ReleaseAssert(llvm_value_has_type<void*>(dest));
+                new StoreInst(val, dest, decoderBB);
+            }
+
+            ReturnInst::Create(ctx, nullptr, decoderBB);
+
+            ReleaseAssert(!decoderFn->hasFnAttribute(Attribute::NoInline));
+            decoderFn->addFnAttr(Attribute::AlwaysInline);
+            decoderFn->setLinkage(GlobalValue::InternalLinkage); 
+        }
+    }
+
+    // Generate logic for the IC miss slow path
+    //
+    BasicBlock* icMissSlowPath = BasicBlock::Create(ctx, "", mainFn);
+
+    {
+        // Create the real m_bodyFn, which should not need the bytecodePtr
+        //
+        ReleaseAssertImp(m_shouldFuseICIntoInterpreterOpcode, m_bodyFnBytecodePtrArgOrd < m_bodyFn->arg_size());
+        ReleaseAssertImp(m_shouldFuseICIntoInterpreterOpcode, m_bodyFn->getArg(m_bodyFnBytecodePtrArgOrd)->use_empty());
+        ReleaseAssertImp(!m_shouldFuseICIntoInterpreterOpcode, m_bodyFnBytecodePtrArgOrd == static_cast<uint32_t>(-1));
+
+        std::vector<Value*> bodyFnArgs;
+        for (size_t i = 0; i < m_bodyFnArgs.size(); i++)
+        {
+            if (i != m_bodyFnBytecodePtrArgOrd)
+            {
+                bodyFnArgs.push_back(m_bodyFnArgs[i]);
+            }
+        }
+
+        std::vector<Type*> bodyFnArgTys;
+        for (Value* arg : bodyFnArgs)
+        {
+            bodyFnArgTys.push_back(arg->getType());
+        }
+
+        std::string bodyFnName = "__deegen_baseline_jit_" + ifi->GetBytecodeDef()->GetBytecodeIdName() + "_icbody_" + std::to_string(icUsageOrdInBytecode);
+        ReleaseAssert(module->getNamedValue(bodyFnName) == nullptr);
+        r.m_bodyFnName = bodyFnName;
+
+        FunctionType* bodyFnWrapperFty = FunctionType::get(m_bodyFn->getReturnType(), bodyFnArgTys, false /*isVarArg*/);
+        Function* bodyFnWrapper = Function::Create(bodyFnWrapperFty, GlobalValue::ExternalLinkage, bodyFnName, module);
+        ReleaseAssert(bodyFnWrapper->getName() == bodyFnName);
+
+        bodyFnWrapper->setDSOLocal(true);
+        bodyFnWrapper->setCallingConv(CallingConv::PreserveMost);
+        CopyFunctionAttributes(bodyFnWrapper /*dst*/, m_bodyFn);
+        bodyFnWrapper->addFnAttr(Attribute::NoInline);
+        bodyFnWrapper->addFnAttr(Attribute::NoUnwind);
+
+        BasicBlock* bodyFnWrapperBB = BasicBlock::Create(ctx, "", bodyFnWrapper);
+        std::vector<Value*> callArgs;
+        {
+            uint32_t idx = 0;
+            for (size_t i = 0; i < m_bodyFnArgs.size(); i++)
+            {
+                if (i != m_bodyFnBytecodePtrArgOrd)
+                {
+                    ReleaseAssert(idx < bodyFnWrapper->arg_size());
+                    callArgs.push_back(bodyFnWrapper->getArg(idx));
+                    idx++;
+                }
+                else
+                {
+                    callArgs.push_back(UndefValue::get(llvm_type_of<void*>(ctx)));
+                }
+            }
+            ReleaseAssert(idx == bodyFnWrapper->arg_size());
+        }
+        ReleaseAssert(callArgs.size() == m_bodyFn->arg_size());
+        CallInst* callInst = CallInst::Create(m_bodyFn, callArgs, "", bodyFnWrapperBB);
+        ReturnInst::Create(ctx, callInst, bodyFnWrapperBB);
+
+        m_bodyFn->setLinkage(GlobalValue::InternalLinkage);
+        ReleaseAssert(!m_bodyFn->hasFnAttribute(Attribute::NoInline));
+        m_bodyFn->addFnAttr(Attribute::AlwaysInline);
+
+        // Set up logic for IC miss slow path
+        //
+        CallInst* icMissSlowPathResult = CallInst::Create(bodyFnWrapper, bodyFnArgs, "", icMissSlowPath);
+        icMissSlowPathResult->setCallingConv(CallingConv::PreserveMost);
+        new StoreInst(icMissSlowPathResult, icResultAlloca, icMissSlowPath);
+        BranchInst::Create(joinBlock /*dest*/, icMissSlowPath /*insertAtEnd*/);
+    }
+
+    // Generate logic for the join block
+    //
+    Value* icResult = new LoadInst(m_origin->getType(), icResultAlloca, "", m_origin);
+    ReleaseAssert(icResult->getType() == m_origin->getType());
+    m_origin->replaceAllUsesWith(icResult);
+    m_origin->eraseFromParent();
+
+    std::vector<BasicBlock*> effectImplBBs;
+    ReleaseAssert(effectOrdToBBMap.size() == m_totalEffectKinds);
+    for (size_t i = 0; i < m_totalEffectKinds; i++)
+    {
+        ReleaseAssert(effectOrdToBBMap.count(i));
+        effectImplBBs.push_back(effectOrdToBBMap[i]);
+    }
+
+    // Generate CallBr magic for the IC entry point
+    //
+    ReleaseAssert(m_icKey->getType()->isIntOrPtrTy());
+
+    {
+        Instruction* insertBefore = icSplitBlock->getTerminator();
+        Value* normalizedIcKey;
+        if (m_icKey->getType()->isPointerTy())
+        {
+            normalizedIcKey = new PtrToIntInst(m_icKey, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+        }
+        else
+        {
+            ReleaseAssert(m_icKey->getType()->isIntegerTy());
+            size_t bitWidth = m_icKey->getType()->getIntegerBitWidth();
+            if (bitWidth < 32)
+            {
+                normalizedIcKey = new ZExtInst(m_icKey, llvm_type_of<uint32_t>(ctx), "", insertBefore);
+            }
+            else
+            {
+                normalizedIcKey = m_icKey;
+            }
+        }
+
+        ReleaseAssert(llvm_value_has_type<uint32_t>(normalizedIcKey) || llvm_value_has_type<uint64_t>(normalizedIcKey));
+
+        // The first line of the assembly conveys the IC ordinal
+        //
+        std::string asmIdentStrPrefix = "movl $$" + std::to_string(icUsageOrdInBytecode) + ", eax;";
+
+        // The second line means how many bytes of NOP padding the SMC region shall reserve.
+        // It always starts with 0. We will compile things to ASM once to figure out how much padding we need,
+        // then back-patch it at LLVM IR level, and compile it to ASM again with the right padding.
+        //
+        asmIdentStrPrefix += "movl $$0, eax;";
+
+        FunctionType* iaFty = nullptr;
+        InlineAsm* ia = nullptr;
+        if (llvm_value_has_type<uint32_t>(normalizedIcKey))
+        {
+            std::string asmStr = "cmpl $1, $0;";
+            for (size_t i = 0; i < effectImplBBs.size(); i++)
+            {
+                asmStr += "jne ${" + std::to_string(i + 2) + ":l};";
+            }
+
+            std::string constraintStr = "r,i,";
+            for (size_t i = 0; i < effectImplBBs.size(); i++)
+            {
+                constraintStr += "!i,";
+            }
+            constraintStr += "~{cc},~{dirflag},~{fpsr},~{flags}";
+
+            asmStr = asmIdentStrPrefix + asmStr;
+            asmStr = MagicAsm::WrapLLVMAsmPayload(asmStr, MagicAsmKind::GenericIcEntry);
+
+            iaFty = FunctionType::get(llvm_type_of<void>(ctx), { llvm_type_of<uint32_t>(ctx), llvm_type_of<void*>(ctx) }, false);
+            ia = InlineAsm::get(iaFty, asmStr, constraintStr, true /*hasSideEffects*/);
+        }
+        else
+        {
+            std::string asmStr = "movabsq $2, $0;cmpq $0, $1;";
+            for (size_t i = 0; i < effectImplBBs.size(); i++)
+            {
+                asmStr += "jne ${" + std::to_string(i + 3) + ":l};";
+            }
+
+            std::string constraintStr = "=&r,r,i,";
+            for (size_t i = 0; i < effectImplBBs.size(); i++)
+            {
+                constraintStr += "!i,";
+            }
+            constraintStr += "~{cc},~{dirflag},~{fpsr},~{flags}";
+
+            asmStr = asmIdentStrPrefix + asmStr;
+            asmStr = MagicAsm::WrapLLVMAsmPayload(asmStr, MagicAsmKind::GenericIcEntry);
+
+            iaFty = FunctionType::get(llvm_type_of<uint64_t>(ctx), { llvm_type_of<uint64_t>(ctx), llvm_type_of<void*>(ctx) }, false);
+            ia = InlineAsm::get(iaFty, asmStr, constraintStr, true /*hasSideEffects*/);
+        }
+        ReleaseAssert(iaFty != nullptr && ia != nullptr);
+
+        GlobalVariable* cpSym = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(module, CP_PLACEHOLDER_GENERIC_IC_KEY);
+        ReleaseAssert(llvm_value_has_type<void*>(cpSym));
+
+        CallBrInst* inst = CallBrInst::Create(iaFty,
+                                              ia,
+                                              icMissSlowPath /*fallthroughDest*/,
+                                              effectImplBBs /*gotoDests*/,
+                                              { normalizedIcKey, cpSym } /*args*/,
+                                              "",
+                                              icSplitBlock->getTerminator() /*insertBefore*/);
+        inst->addFnAttr(Attribute::NoUnwind);
+        inst->addFnAttr(Attribute::ReadNone);
+
+        icSplitBlock->getTerminator()->eraseFromParent();
+    }
+
+    AllocaInst* isCacheableAlloca = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", &m_bodyFn->getEntryBlock().front() /*insertBefore*/);
+
+    new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 1), isCacheableAlloca, FindFirstNonAllocaInstInEntryBB(m_bodyFn));
+
+    // Lower the SetUncacheable() APIs
+    //
+    for (CallInst* setUncacheableApiCall : m_setUncacheableApiCalls)
+    {
+        ReleaseAssert(llvm_value_has_type<void>(setUncacheableApiCall));
+        new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), isCacheableAlloca, setUncacheableApiCall /*insertBefore*/);
+        setUncacheableApiCall->eraseFromParent();
+    }
+
+    // Lower the body function
+    // Note that for baseline JIT, the icPtr in the body function is actually the SlowPathData
+    //
+    for (Effect& e : m_effects)
+    {
+        Value* slowPathData = e.m_icPtr;
+
+        Value* icSite = nullptr;
+        {
+            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitGenericIcSiteOffsetInSlowPathData(icUsageOrdInBytecode);
+            icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                       { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", e.m_origin);
+        }
+
+        // Check if we should create a new IC
+        // We should do it only if it is cacheable and the existing number of IC entries has not reached maximum
+        //
+        Instruction* createIcLogicInsertionPt = nullptr;
+        BasicBlock* afterIcCreationBB = nullptr;
+        {
+            Value* isCacheableU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), isCacheableAlloca, "", e.m_origin);
+            Value* isCacheable = new TruncInst(isCacheableU8, llvm_type_of<bool>(ctx), "", e.m_origin);
+            Value* numExistingIcAddr = GetElementPtrInst::CreateInBounds(
+                llvm_type_of<uint8_t>(ctx), icSite,
+                { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&JitGenericInlineCacheSite::m_numEntries>) }, "", e.m_origin);
+            Value* numExistingIc = new LoadInst(llvm_type_of<uint8_t>(ctx), numExistingIcAddr, "", e.m_origin);
+            Value* isLessThanMax = new ICmpInst(e.m_origin, ICmpInst::ICMP_ULT, numExistingIc, CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(x_maxJitGenericInlineCacheEntries)));
+            Value* shouldCreateIc = BinaryOperator::Create(BinaryOperator::And, isCacheable, isLessThanMax, "", e.m_origin);
+
+            createIcLogicInsertionPt = SplitBlockAndInsertIfThen(shouldCreateIc, e.m_origin /*splitBefore*/, false /*isUnreachable*/);
+            ReleaseAssert(isa<BranchInst>(createIcLogicInsertionPt));
+            ReleaseAssert(!cast<BranchInst>(createIcLogicInsertionPt)->isConditional());
+            ReleaseAssert(cast<BranchInst>(createIcLogicInsertionPt)->getSuccessor(0) == e.m_origin->getParent());
+            afterIcCreationBB = e.m_origin->getParent();
+        }
+
+        // Figure out the effect ordinal
+        //
+        Value* effectOrd;
+        {
+            Function* effectOrdinalGetterFn = CreateEffectOrdinalGetterFn(module, m_bodyFn /*functionToCopyAttrFrom*/, e.m_specializations, 0 /*startOrd*/);
+            std::vector<Value*> args;
+            for (auto& it : e.m_specializations)
+            {
+                args.push_back(it.m_valueInBodyFn);
+            }
+            effectOrd = CallInst::Create(effectOrdinalGetterFn, args, "", createIcLogicInsertionPt);
+            ReleaseAssert(llvm_value_has_type<uint8_t>(effectOrd));
+        }
+
+        auto castIcStateCaptureToI64 = [&](Value* captureVal, Instruction* insertBefore) WARN_UNUSED -> Value*
+        {
+            Type* ty = captureVal->getType();
+            bool isNonPrimitiveType = !ty->isIntOrPtrTy();
+            if (isNonPrimitiveType)
+            {
+                size_t tySize = dataLayout.getTypeAllocSize(ty);
+                ReleaseAssert(is_power_of_2(tySize) && tySize <= 8);
+                Type* intTyForTySize = Type::getIntNTy(ctx, static_cast<uint32_t>(tySize * 8));
+                AllocaInst* allocaInst1 = new AllocaInst(ty, 0, "", &m_bodyFn->getEntryBlock().front());
+                AllocaInst* allocaInst2 = new AllocaInst(intTyForTySize, 0, "", &m_bodyFn->getEntryBlock().front());
+                new StoreInst(captureVal, allocaInst1, insertBefore);
+                EmitLLVMIntrinsicMemcpy(module, allocaInst2 /*dst*/, allocaInst1 /*src*/, CreateLLVMConstantInt<uint64_t>(ctx, tySize), insertBefore);
+                Value* intVal = new LoadInst(intTyForTySize, allocaInst2, "", insertBefore);
+                if (tySize < 8)
+                {
+                    return new ZExtInst(intVal, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+                }
+                else
+                {
+                    ReleaseAssert(llvm_value_has_type<uint64_t>(intVal));
+                    return intVal;
+                }
+            }
+            else if (ty->isPointerTy())
+            {
+                return new PtrToIntInst(captureVal, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+            }
+            else
+            {
+                ReleaseAssert(ty->isIntegerTy());
+                uint32_t bitWidth = ty->getIntegerBitWidth();
+                ReleaseAssert(bitWidth <= 64);
+                if (bitWidth < 64)
+                {
+                    return new ZExtInst(captureVal, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+                }
+                else
+                {
+                    ReleaseAssert(llvm_value_has_type<uint64_t>(captureVal));
+                    return captureVal;
+                }
+            }
+        };
+
+        // Encode each captured value to the i64 expected by the code generation function
+        //
+        std::vector<Value*> icStateCaptureI64List;
+        for (size_t i = 0; i < e.m_icStateVals.size(); i++)
+        {
+            Effect::IcStateValueInfo& svi = e.m_icStateVals[i];
+            Value* i64Val = castIcStateCaptureToI64(svi.m_valueInBodyFn, createIcLogicInsertionPt);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(i64Val));
+            icStateCaptureI64List.push_back(i64Val);
+        }
+        ReleaseAssert(icStateCaptureI64List.size() == e.m_icStateVals.size());
+        for (size_t i = 1; i < e.m_icStateVals.size(); i++)
+        {
+            ReleaseAssert(e.m_icStateVals[i].m_placeholderOrd == e.m_icStateVals[0].m_placeholderOrd + i);
+        }
+
+        ReleaseAssert(m_bodyFnIcKeyArgOrd < m_bodyFn->arg_size());
+        Value* icKeyValI64 = castIcStateCaptureToI64(m_bodyFn->getArg(m_bodyFnIcKeyArgOrd), createIcLogicInsertionPt);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(icKeyValI64));
+
+        size_t icStateValStartOrd = (e.m_icStateVals.size() > 0) ? e.m_icStateVals[0].m_placeholderOrd : 0;
+
+        // Build up a switch which calls each code generation implementation
+        //
+        BasicBlock* unreachableBlock = BasicBlock::Create(ctx, "", m_bodyFn);
+        new UnreachableInst(ctx, unreachableBlock);
+
+        SwitchInst* si = SwitchInst::Create(effectOrd,
+                                            unreachableBlock /*default*/,
+                                            static_cast<uint32_t>(e.m_effectFnMain.size()) /*numCasesHint*/,
+                                            createIcLogicInsertionPt);
+
+        for (size_t k = 0; k < e.m_effectFnMain.size(); k++)
+        {
+            BasicBlock* cgBB = BasicBlock::Create(ctx, "", m_bodyFn);
+            Instruction* insPt = BranchInst::Create(afterIcCreationBB /*dest*/, cgBB /*insertAtEnd*/);
+            ConstantInt* caseInt = dyn_cast<ConstantInt>(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(k)));
+            ReleaseAssert(caseInt != nullptr);
+            si->addCase(caseInt, cgBB);
+
+            // Call GenericInlineCacheSite::Insert, which allocates space of the IC and do all the bookkeeping
+            //
+            size_t icEffectGlobalOrd = globalIcEffectTraitBaseOrd + e.m_effectStartOrdinal + k;
+            ReleaseAssert(icEffectGlobalOrd <= 65535);
+            Constant* icEffectGlobalOrdCst = CreateLLVMConstantInt<uint16_t>(ctx, static_cast<uint16_t>(icEffectGlobalOrd));
+            Value* jitAddr = CreateCallToDeegenCommonSnippet(module, "CreateNewJitGenericIC", { icSite, icEffectGlobalOrdCst }, insPt);
+            ReleaseAssert(llvm_value_has_type<void*>(jitAddr));
+
+            // Create the declaration for the codegen implementation function, and call it
+            // The codegen implementation has the following prototype:
+            //     void* dest: the address to populate JIT code
+            //     void* slowPathData: the SlowPathData for this bytecode
+            //     uint64_t icKey: the IC Key casted as i64
+            // followed by all the values in the IC state in i64
+            //
+            std::vector<Value*> cgFnArgs;
+            cgFnArgs.push_back(jitAddr);
+            cgFnArgs.push_back(slowPathData);
+            cgFnArgs.push_back(icKeyValI64);
+            for (Value* val : icStateCaptureI64List)
+            {
+                cgFnArgs.push_back(val);
+            }
+
+            std::vector<Type*> cgFnArgTys;
+            for (Value* val : cgFnArgs)
+            {
+                cgFnArgTys.push_back(val->getType());
+            }
+
+            std::string cgFnName = x_jit_codegen_ic_impl_placeholder_fn_prefix + std::to_string(icEffectGlobalOrd);
+            ReleaseAssert(module->getNamedValue(cgFnName) == nullptr);
+
+            FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), cgFnArgTys, false /*isVarArg*/);
+            Function* cgFn = Function::Create(fty, GlobalValue::ExternalLinkage, cgFnName, module);
+            ReleaseAssert(cgFn->getName() == cgFnName);
+            cgFn->setDSOLocal(true);
+            cgFn->addFnAttr(Attribute::NoUnwind);
+
+            CallInst::Create(cgFn, cgFnArgs, "", insPt);
+
+            r.m_effectPlaceholderDesc.push_back({
+                .m_globalOrd = icEffectGlobalOrd,
+                .m_placeholderStart = icStateValStartOrd,
+                .m_numPlaceholders = e.m_icStateVals.size()
+            });
+        }
+
+        createIcLogicInsertionPt->eraseFromParent();
+        createIcLogicInsertionPt = nullptr;
+
+        ReleaseAssert(e.m_effectFnBody->arg_size() == 1);
+        CallInst* replacement = CallInst::Create(e.m_effectFnBody, { e.m_effectFnBodyCapture }, "", e.m_origin /*insertBefore*/);
+        ReleaseAssert(replacement->getType() == e.m_origin->getType());
+        if (!llvm_value_has_type<void>(replacement))
+        {
+            e.m_origin->replaceAllUsesWith(replacement);
+        }
+        ReleaseAssert(e.m_origin->use_empty());
+        e.m_origin->eraseFromParent();
+
+        ReleaseAssert(!e.m_effectFnBody->hasFnAttribute(Attribute::NoInline));
+        e.m_effectFnBody->addFnAttr(Attribute::AlwaysInline);
+        ReleaseAssert(e.m_effectFnBody->getLinkage() == GlobalValue::InternalLinkage);
+    }
+
+    ValidateLLVMModule(module);
+
+    return r;
+}
+
+std::vector<AstInlineCache::BaselineJitAsmTransformResult> WARN_UNUSED AstInlineCache::DoAsmTransformForBaselineJit(X64AsmFile* file)
+{
+    std::unordered_map<uint64_t /*uniqOrd*/, BaselineJitAsmTransformResult> finalRes;
+
+    auto processOne = [&](X64AsmBlock* block, size_t lineOrd)
+    {
+        ReleaseAssert(lineOrd < block->m_lines.size());
+        ReleaseAssert(block->m_lines[lineOrd].IsMagicInstructionOfKind(MagicAsmKind::GenericIcEntry));
+        AsmMagicPayload* payload = block->m_lines[lineOrd].m_magicPayload;
+        // The IC magic has the following payload:
+        //     movl $uniq_id, eax
+        //     movl $padding_needed, eax
+        //     check ic hit
+        //     jne <every ic effect>...
+        //
+        // and fallthroughs to the IC miss block
+        //
+
+        // Decode a 'movl $XXX, eax' line to get XXX
+        //
+        auto getOperandValFromMagicPayloadLine = [&](X64AsmLine& line) WARN_UNUSED -> uint64_t
+        {
+            ReleaseAssert(line.NumWords() == 3 && line.GetWord(0) == "movl" && line.GetWord(2) == "eax");
+            std::string s = line.GetWord(1);
+            ReleaseAssert(s.starts_with("$") && s.ends_with(","));
+            int val = StoiOrFail(s.substr(1, s.length() - 2));
+            ReleaseAssert(val >= 0);
+            return static_cast<uint64_t>(val);
+        };
+
+        ReleaseAssert(payload->m_lines.size() > 2);
+        uint64_t icUniqueOrd = getOperandValFromMagicPayloadLine(payload->m_lines[0]);
+        uint64_t smcRegionNopPaddingLen = getOperandValFromMagicPayloadLine(payload->m_lines[1]);
+
+        size_t icEffectBeginLine = 2;
+        std::vector<X64AsmLine> checkIcHitLogic;
+        while (icEffectBeginLine < payload->m_lines.size())
+        {
+            if (payload->m_lines[icEffectBeginLine].IsConditionalJumpInst())
+            {
+                break;
+            }
+            checkIcHitLogic.push_back(payload->m_lines[icEffectBeginLine]);
+            icEffectBeginLine++;
+        }
+        ReleaseAssert(checkIcHitLogic.size() == 1 || checkIcHitLogic.size() == 2);
+
+        std::vector<std::string> effectEntryLabels;
+        for (size_t i = icEffectBeginLine; i < payload->m_lines.size(); i++)
+        {
+            X64AsmLine& line = payload->m_lines[i];
+            ReleaseAssert(line.IsConditionalJumpInst());
+            ReleaseAssert(line.NumWords() == 2 && line.GetWord(0) == "jne");
+            effectEntryLabels.push_back(line.GetWord(1));
+        }
+
+        // Figure out the slow path block
+        //
+        std::string icMissBlockLabel;
+        ReleaseAssert(lineOrd + 1 < block->m_lines.size());
+        if (lineOrd + 1 == block->m_lines.size() - 1)
+        {
+            // This means that the ASM is followed by a jump to the slow path block, no need to do anything
+            //
+            ReleaseAssert(block->m_lines.back().IsDirectUnconditionalJumpInst());
+            ReleaseAssert(block->m_endsWithJmpToLocalLabel);
+            icMissBlockLabel = block->m_terminalJmpTargetLabel;
+        }
+        else
+        {
+            // We shall split the block
+            //
+            X64AsmBlock* pred = nullptr;
+            X64AsmBlock* slowPathBlock = nullptr;
+            block->SplitAtLine(file, lineOrd + 1, pred /*out*/, slowPathBlock /*out*/);
+            ReleaseAssert(pred != nullptr && slowPathBlock != nullptr);
+            icMissBlockLabel = slowPathBlock->m_normalizedLabelName;
+
+            // Insert the splitted blocks after 'block' and remove 'block'
+            //
+            file->InsertBlocksAfter({ pred, slowPathBlock }, block);
+            file->RemoveBlock(block);
+            block = pred;
+
+            file->Validate();
+        }
+
+        ReleaseAssert(icMissBlockLabel != "");
+        ReleaseAssert(lineOrd + 2 == block->m_lines.size());
+        ReleaseAssert(block->m_lines[lineOrd].IsMagicInstructionOfKind(MagicAsmKind::GenericIcEntry));
+
+        // If the ASM is not the first line in the block, we need to split the block before the ASM
+        //
+        if (lineOrd != 0)
+        {
+            X64AsmBlock* pred = nullptr;
+            X64AsmBlock* succ = nullptr;
+            block->SplitAtLine(file, lineOrd, pred /*out*/, succ /*out*/);
+            ReleaseAssert(pred != nullptr && succ != nullptr);
+
+            file->InsertBlocksAfter({ pred, succ }, block);
+            file->RemoveBlock(block);
+            block = succ;
+
+            file->Validate();
+        }
+
+        // Now the ASM should be the only content in the block
+        //
+        ReleaseAssert(block->m_lines.size() == 2);
+        ReleaseAssert(block->m_lines[0].IsMagicInstructionOfKind(MagicAsmKind::GenericIcEntry));
+        lineOrd = 0;
+
+        // Remove the ASM magic
+        //
+        block->m_lines[1].m_prefixingText = block->m_lines[0].m_prefixingText + block->m_lines[1].m_prefixingText;
+        block->m_lines[0] = block->m_lines[1];
+        block->m_lines.pop_back();
+        ReleaseAssert(block->m_lines.size() == 1);
+
+        std::string smcBlockLabel = block->m_normalizedLabelName;
+
+        std::string uniqLabel = file->m_labelNormalizer.GetUniqueLabel();
+        ReleaseAssert(block->m_trailingLabelLine.IsCommentOrEmptyLine());
+        block->m_trailingLabelLine = X64AsmLine::Parse(uniqLabel + ":");
+        ReleaseAssert(block->m_trailingLabelLine.IsLocalLabel());
+
+        std::string smcRegionLengthMeasurementSym = file->EmitComputeLabelDistanceAsm(smcBlockLabel /*begin*/, uniqLabel /*end*/);
+
+        if (smcRegionNopPaddingLen > 0)
+        {
+            std::vector<uint8_t> buf;
+            buf.resize(smcRegionNopPaddingLen);
+            FillAddressRangeWithX64MultiByteNOPs(buf.data(), smcRegionNopPaddingLen);
+            std::string nopString = ".byte ";
+            for (size_t i = 0; i < smcRegionNopPaddingLen; i++)
+            {
+                nopString += std::to_string(buf[i]);
+                if (i + 1 < smcRegionNopPaddingLen)
+                {
+                    nopString += ",";
+                }
+            }
+            nopString += "\n";
+            ReleaseAssert(block->m_trailingLabelLine.m_prefixingText == "");
+            block->m_trailingLabelLine.m_prefixingText = nopString;
+        }
+
+        checkIcHitLogic.push_back(X64AsmLine::Parse("\tjne\t__deegen_cp_placeholder_" + std::to_string(CP_PLACEHOLDER_IC_MISS_DEST)));
+
+        // Figure out all the IC effect entry blocks
+        // Must deduplicate, as it is possible that multiple IC effects have identical code and thus gets identical label
+        //
+        std::unordered_set<X64AsmBlock*> allIcEffectEntryBlocks;
+        for (std::string& entryLabel : effectEntryLabels)
+        {
+            X64AsmBlock* b = file->FindBlockInFastPath(entryLabel);
+            ReleaseAssert(b != nullptr);
+            allIcEffectEntryBlocks.insert(b);
+        }
+
+        // For each IC effect, prepend the check IC hit logic
+        //
+        for (X64AsmBlock* b : allIcEffectEntryBlocks)
+        {
+            std::vector<X64AsmLine> newContents = checkIcHitLogic;
+            newContents.insert(newContents.end(), b->m_lines.begin(), b->m_lines.end());
+            b->m_lines = newContents;
+        }
+
+        file->Validate();
+
+        ReleaseAssert(!finalRes.count(icUniqueOrd));
+        finalRes[icUniqueOrd] = {
+            .m_labelForSMCRegion = smcBlockLabel,
+            .m_labelForEffects = effectEntryLabels,
+            .m_labelForIcMissLogic = icMissBlockLabel,
+            .m_uniqueOrd = icUniqueOrd,
+            .m_symbolNameForSMCLabelOffset = "",
+            .m_symbolNameForSMCRegionLength = smcRegionLengthMeasurementSym,
+            .m_symbolNameForIcMissLogicLabelOffset = ""
+        };
+    };
+
+    // Process one by one to avoid iterator invalidation problems
+    //
+    auto findAndProcessOne = [&]() WARN_UNUSED -> bool
+    {
+        for (X64AsmBlock* block : file->m_blocks)
+        {
+            for (size_t i = 0; i < block->m_lines.size(); i++)
+            {
+                if (block->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::GenericIcEntry))
+                {
+                    processOne(block, i);
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    while (findAndProcessOne()) { }
+
+    std::vector<BaselineJitAsmTransformResult> r;
+
+    size_t totalCnt = finalRes.size();
+    for (size_t i = 0; i < totalCnt; i++)
+    {
+        ReleaseAssert(finalRes.count(i));
+        r.push_back(finalRes[i]);
+    }
+
+    return r;
+}
+
+AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIcCodegenImplementation(BaselineJitImplCreator* ifi,
+                                                                                                      const DeegenStencil& mainStencil,
+                                                                                                      AstInlineCache::BaselineJitLLVMLoweringResult::Item icInfo,
+                                                                                                      std::string icAsm,
+                                                                                                      size_t smcRegionOffset,
+                                                                                                      size_t smcRegionSize,
+                                                                                                      size_t icMissLogicOffset)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    ReleaseAssertImp(icInfo.m_numPlaceholders > 0, icInfo.m_placeholderStart < ifi->GetNumTotalGenericIcCaptures());
+    ReleaseAssert(icInfo.m_placeholderStart + icInfo.m_numPlaceholders <= ifi->GetNumTotalGenericIcCaptures());
+
+    std::string cgFnName = x_jit_codegen_ic_impl_placeholder_fn_prefix + std::to_string(icInfo.m_globalOrd);
+    std::string objFile = CompileAssemblyFileToObjectFile(icAsm, " -fno-pic -fno-pie ");
+    DeegenStencil stencil = DeegenStencil::ParseIcLogic(ctx, objFile, mainStencil.m_sectionToPdoOffsetMap);
+
+    std::vector<size_t> extraPlaceholderOrds {
+        CP_PLACEHOLDER_IC_MISS_DEST,
+        CP_PLACEHOLDER_GENERIC_IC_KEY
+    };
+    if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+    {
+        extraPlaceholderOrds.push_back(CP_PLACEHOLDER_BYTECODE_CONDBR_DEST);
+    }
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(false /*mayAttemptToEliminateJmpToFallthrough*/,
+                                                                     ifi->GetBytecodeDef()->m_list.size(),
+                                                                     ifi->GetNumTotalGenericIcCaptures(),
+                                                                     ifi->GetStencilRcDefinitions(),
+                                                                     extraPlaceholderOrds);
+
+    // For simplicity, the IC logic currently always put its private data section right after the code section
+    //
+    size_t dataSectionOffset;
+    {
+        dataSectionOffset = cgRes.m_icPathPreFixupCode.size();
+        size_t alignment = cgRes.m_dataSecAlignment;
+        ReleaseAssert(alignment > 0);
+        ReleaseAssert(alignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+        // Our codegen allocator allocates 16-byte-aligned memory, so the data section alignment must not exceed that
+        //
+        ReleaseAssert(alignment <= 16);
+        dataSectionOffset = (dataSectionOffset + alignment - 1) / alignment * alignment;
+    }
+
+    std::vector<uint8_t> codeAndData;
+    {
+        codeAndData = cgRes.m_icPathPreFixupCode;
+        ReleaseAssert(dataSectionOffset >= codeAndData.size());
+        while (codeAndData.size() < dataSectionOffset)
+        {
+            codeAndData.push_back(0);
+        }
+        ReleaseAssert(codeAndData.size() == dataSectionOffset);
+        codeAndData.insert(codeAndData.end(), cgRes.m_dataSecPreFixupCode.begin(), cgRes.m_dataSecPreFixupCode.end());
+    }
+
+    std::unique_ptr<Module> module = cgRes.GenerateCodegenLogicLLVMModule(ifi->GetModule());
+
+    Function* cgCodeFn = module->getFunction(cgRes.x_icPathCodegenFuncName);
+    ReleaseAssert(cgCodeFn != nullptr);
+    cgCodeFn->addFnAttr(Attribute::AlwaysInline);
+    cgCodeFn->setLinkage(GlobalValue::InternalLinkage);
+
+    Function* cgDataFn = module->getFunction(cgRes.x_dataSecCodegenFuncName);
+    ReleaseAssert(cgDataFn != nullptr);
+    cgDataFn->addFnAttr(Attribute::AlwaysInline);
+    cgDataFn->setLinkage(GlobalValue::InternalLinkage);
+
+    // Set up the codegen function prototype, must agree with DoLoweringForBaselineJit
+    //
+    std::vector<Type*> cgFnArgTys;
+    cgFnArgTys.push_back(llvm_type_of<void*>(ctx));     // jitAddr
+    cgFnArgTys.push_back(llvm_type_of<void*>(ctx));     // slowPathData
+    cgFnArgTys.push_back(llvm_type_of<uint64_t>(ctx));  // icKey
+    for (size_t i = 0; i < icInfo.m_numPlaceholders; i++)
+    {
+        cgFnArgTys.push_back(llvm_type_of<uint64_t>(ctx));
+    }
+
+    FunctionType* cgFTy = FunctionType::get(llvm_type_of<void>(ctx), cgFnArgTys, false /*isVarArg*/);
+    Function* cgFn = Function::Create(cgFTy, GlobalValue::ExternalLinkage, cgFnName, module.get());
+    ReleaseAssert(cgFn->getName() == cgFnName);
+    cgFn->setDSOLocal(true);
+    cgFn->addFnAttr(Attribute::NoUnwind);
+    CopyFunctionAttributes(cgFn /*dst*/, cgCodeFn /*src*/);
+
+    cgFn->addParamAttr(0, Attribute::NoAlias);
+    cgFn->addParamAttr(1, Attribute::NoAlias);
+
+    BasicBlock* bb = BasicBlock::Create(ctx, "", cgFn);
+
+    Value* destJitAddr = cgFn->getArg(0);
+    Value* slowPathData = cgFn->getArg(1);
+    Value* icKeyI64 = cgFn->getArg(2);
+    std::vector<Value*> inputPlaceholders;
+    for (size_t i = 3; i < cgFn->arg_size(); i++)
+    {
+        inputPlaceholders.push_back(cgFn->getArg(static_cast<uint32_t>(i)));
+    }
+    ReleaseAssert(inputPlaceholders.size() == icInfo.m_numPlaceholders);
+
+    // Set up the bytecode operands argument list
+    //
+    std::vector<Value*> bytecodeValList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
+                                                                                                                 slowPathData,
+                                                                                                                 nullptr /*slowPathDataOffset, must unused*/,
+                                                                                                                 nullptr /*codeBlock32, must unused*/,
+                                                                                                                 bb /*insertAtEnd*/);
+
+    // Set up the placeholder argument list
+    // The codegen logic should only need [icInfo.m_placeholderStart, icInfo.m_placeholderStart + icInfo.m_numPlaceholders),
+    // everything else is nullptr
+    //
+    std::vector<Value*> placeholderList;
+    for (size_t i = 0; i < ifi->GetNumTotalGenericIcCaptures(); i++)
+    {
+        if (icInfo.m_placeholderStart <= i && i < icInfo.m_placeholderStart + icInfo.m_numPlaceholders)
+        {
+            placeholderList.push_back(inputPlaceholders[i - icInfo.m_placeholderStart]);
+        }
+        else
+        {
+            placeholderList.push_back(nullptr);
+        }
+    }
+
+    // Set up the common header arguments:
+    //     uint64_t fastPathAddr
+    //     uint64_t slowPathAddr
+    //     uint64_t icPathAddr
+    //     uint64_t icDataSecAddr
+    //     uint64_t dataSecAddr
+    //
+    std::vector<Value*> headerArgsList;
+    Value* mainLogicFastPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, bb);
+    headerArgsList.push_back(new PtrToIntInst(mainLogicFastPath, llvm_type_of<uint64_t>(ctx), "", bb));
+    Value* mainLogicSlowPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(slowPathData, bb);
+    headerArgsList.push_back(new PtrToIntInst(mainLogicSlowPath, llvm_type_of<uint64_t>(ctx), "", bb));
+    headerArgsList.push_back(new PtrToIntInst(destJitAddr, llvm_type_of<uint64_t>(ctx), "", bb));
+    Value* destJitDataSecAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), destJitAddr,
+                                                                  { CreateLLVMConstantInt<uint64_t>(ctx, dataSectionOffset) }, "", bb);
+    headerArgsList.push_back(new PtrToIntInst(destJitDataSecAddr, llvm_type_of<uint64_t>(ctx), "", bb));
+    Value* mainLogicDataSec = ifi->GetBytecodeDef()->GetPtrOfCurrentBytecodeDataSectionForBaselineJit(slowPathData, bb);
+    headerArgsList.push_back(new PtrToIntInst(mainLogicDataSec, llvm_type_of<uint64_t>(ctx), "", bb));
+
+    ReleaseAssert(smcRegionSize >= 5);
+    // TODO: when we support inline slab, this address will differ depending on whether the inline slab exists
+    //
+    Value* patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
+                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, smcRegionOffset + 5) }, "", bb);
+
+    Value* missDestForThisIc = X64PatchableJumpUtil::GetDest(patchableJmpEndAddr, bb);
+    Value* missDestForThisIcI64 = new PtrToIntInst(missDestForThisIc, llvm_type_of<uint64_t>(ctx), "", bb);
+
+    Value* condBrDest = nullptr;
+    if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+    {
+        condBrDest = ifi->GetBytecodeDef()->GetCondBrTargetCodePtrForBaselineJit(slowPathData, bb);
+        ReleaseAssert(condBrDest != nullptr);
+    }
+
+    // Set up the extra placeholder arguments
+    //
+    auto getValueForExtraPlacehoder = [&](size_t extraPlaceholderOrd) WARN_UNUSED -> Value*
+    {
+        switch (extraPlaceholderOrd)
+        {
+        case CP_PLACEHOLDER_IC_MISS_DEST:
+        {
+            return missDestForThisIcI64;
+        }
+        case CP_PLACEHOLDER_GENERIC_IC_KEY:
+        {
+            return icKeyI64;
+        }
+        case CP_PLACEHOLDER_BYTECODE_CONDBR_DEST:
+        {
+            ReleaseAssert(condBrDest != nullptr);
+            return condBrDest;
+        }
+        default:
+        {
+            ReleaseAssert(false);
+        }
+        }   /* switch extraPlaceholderOrd */
+    };
+
+    std::vector<Value*> extraPlaceholderArgsList;
+    for (size_t extraPlaceholderOrd : extraPlaceholderOrds)
+    {
+        extraPlaceholderArgsList.push_back(getValueForExtraPlacehoder(extraPlaceholderOrd));
+    }
+
+    // Piece together everything
+    //
+    std::vector<Value*> allArgsExceptFirst;
+    allArgsExceptFirst = headerArgsList;
+    allArgsExceptFirst.insert(allArgsExceptFirst.end(), bytecodeValList.begin(), bytecodeValList.end());
+    allArgsExceptFirst.insert(allArgsExceptFirst.end(), placeholderList.begin(), placeholderList.end());
+    allArgsExceptFirst.insert(allArgsExceptFirst.end(), extraPlaceholderArgsList.begin(), extraPlaceholderArgsList.end());
+
+    {
+        auto validateArgs = [&](Function* target)
+        {
+            ReleaseAssert(allArgsExceptFirst.size() + 1 == target->arg_size());
+            for (size_t i = 0; i < allArgsExceptFirst.size(); i++)
+            {
+                Value* arg = allArgsExceptFirst[i];
+                Argument* expectArg = target->getArg(static_cast<uint32_t>(i + 1));
+                if (arg == nullptr)
+                {
+                    ReleaseAssert(expectArg->use_empty());
+                }
+                else
+                {
+                    ReleaseAssert(arg->getType() == expectArg->getType());
+                }
+            }
+        };
+
+        validateArgs(cgCodeFn);
+        validateArgs(cgDataFn);
+
+        for (size_t i = 0; i < allArgsExceptFirst.size(); i++)
+        {
+            if (allArgsExceptFirst[i] == nullptr)
+            {
+                allArgsExceptFirst[i] = UndefValue::get(llvm_type_of<uint64_t>(ctx));
+            }
+        }
+
+        validateArgs(cgCodeFn);
+        validateArgs(cgDataFn);
+    }
+
+    // Memcpy the unrelocated code and data
+    // Since the allocated region is always 16-byte aligned, safe to up-align to 8-byte
+    //
+    // TODO: we must not over-copy for the inline slab
+    //
+    EmitCopyLogicForBaselineJitCodeGen(module.get(), codeAndData, destJitAddr, "deegen_ic_pre_fixup_code_and_data", bb);
+
+    // Create calls to patch the code section and data section
+    //
+    auto emitPatchFnCall = [&](Function* target, Value* dstAddr)
+    {
+        ReleaseAssert(llvm_value_has_type<void*>(dstAddr));
+        std::vector<Value*> args;
+        args.push_back(dstAddr);
+        args.insert(args.end(), allArgsExceptFirst.begin(), allArgsExceptFirst.end());
+        CallInst::Create(target, args, "", bb);
+    };
+
+    emitPatchFnCall(cgCodeFn, destJitAddr);
+    emitPatchFnCall(cgDataFn, destJitDataSecAddr);
+
+    // Update SMC region to jump to the newly created IC case
+    //
+    X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, destJitAddr, bb);
+
+    ReturnInst::Create(ctx, nullptr, bb);
+
+    RunLLVMOptimizePass(module.get());
+    ReleaseAssert(module->getFunction(cgFnName) != nullptr);
+
+    for (Function& fn : *module.get())
+    {
+        if (!fn.empty())
+        {
+            ReleaseAssert(fn.getName() == cgFnName);
+        }
+    }
+
+    std::string disasmForAudit;
+    {
+        disasmForAudit = DumpStencilDisassemblyForAuditPurpose(
+            stencil.m_triple, false /*isDataSection*/, cgRes.m_icPathPreFixupCode, cgRes.m_icPathRelocMarker, "# " /*linePrefix*/);
+
+        if (cgRes.m_dataSecPreFixupCode.size() > 0)
+        {
+            disasmForAudit += std::string("#\n# Data Section:\n");
+            disasmForAudit += DumpStencilDisassemblyForAuditPurpose(
+                stencil.m_triple, true /*isDataSection*/, cgRes.m_dataSecPreFixupCode, cgRes.m_dataSecRelocMarker, "# " /*linePrefix*/);
+        }
+        disasmForAudit += "\n";
+    }
+
+    std::ignore = icMissLogicOffset;
+
+    return {
+        .m_module = std::move(module),
+        .m_resultFnName = cgFnName,
+        .m_icSize = codeAndData.size(),
+        .m_disasmForAudit = disasmForAudit
+    };
 }
 
 }   // namespace dast

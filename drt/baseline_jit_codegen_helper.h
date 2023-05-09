@@ -3,6 +3,7 @@
 #include "common.h"
 #include "heap_ptr_utils.h"
 #include "jit_memory_allocator.h"
+#include "memory_ptr.h"
 
 // This struct name and member names are hardcoded as they are used by generated C++ code!
 //
@@ -198,6 +199,54 @@ extern "C" const JitCallInlineCacheTraits* const deegen_jit_call_inline_cache_tr
 // TODO: tune
 //
 constexpr size_t x_maxJitCallInlineCacheEntries = 3;
+
+// Describes a Generic IC entry
+// TODO: we need to think about the GC story
+//
+class JitGenericInlineCacheEntry
+{
+public:
+    static JitGenericInlineCacheEntry* WARN_UNUSED Create(VM* vm,
+                                                          SpdsPtr<JitGenericInlineCacheEntry> nextNode,
+                                                          uint16_t icTraitKind);
+
+    // The singly-linked list anchored at the callsite, 0 if last node
+    //
+    SpdsPtr<JitGenericInlineCacheEntry> m_nextNode;
+    uint16_t m_traitKind;
+    uint8_t m_jitRegionLengthStepping;
+    void* m_jitAddr;
+};
+static_assert(sizeof(JitGenericInlineCacheEntry) == 16);
+
+// Describes an IC site
+// Must have an alignment of 1 since it resides in the SlowPathData stream
+//
+class __attribute__((__packed__, __aligned__(1))) JitGenericInlineCacheSite
+{
+public:
+    // Try to keep this a zero initialization to avoid unnecessary work..
+    //
+    JitGenericInlineCacheSite()
+        : m_linkedListHead(SpdsPtr<JitGenericInlineCacheEntry> { 0 })
+        , m_numEntries(0)
+    { }
+
+    // The linked list of all the IC entries it owns
+    //
+    Packed<SpdsPtr<JitGenericInlineCacheEntry>> m_linkedListHead;
+
+    uint8_t m_numEntries;
+
+    // May only be called if m_numEntries < x_maxJitGenericInlineCacheEntries
+    //
+    void* WARN_UNUSED Insert(uint16_t traitKind);
+};
+static_assert(sizeof(JitGenericInlineCacheSite) == 5);
+
+// TODO: tune
+//
+constexpr size_t x_maxJitGenericInlineCacheEntries = 5;
 
 class BaselineCodeBlock;
 
