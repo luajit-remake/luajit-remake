@@ -2536,4 +2536,104 @@ TEST(LuaTestForceBaselineJit, comparison_one_side_constant)
     RunSimpleLuaTest("luatests/comparison_one_side_constant.lua", LuaTestOption::ForceBaselineJit);
 }
 
+TEST(LuaBenchmark, bounce)
+{
+    RunSimpleLuaTest("luatests/bounce.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, bounce)
+{
+    RunSimpleLuaTest("luatests/bounce.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, cd)
+{
+    RunSimpleLuaTest("luatests/cd.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, cd)
+{
+    RunSimpleLuaTest("luatests/cd.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, deltablue)
+{
+    RunSimpleLuaTest("luatests/deltablue.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, deltablue)
+{
+    RunSimpleLuaTest("luatests/deltablue.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, havlak)
+{
+    RunSimpleLuaTest("luatests/havlak.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, havlak)
+{
+    RunSimpleLuaTest("luatests/havlak.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, json)
+{
+    RunSimpleLuaTest("luatests/json.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, json)
+{
+    RunSimpleLuaTest("luatests/json.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, list)
+{
+    RunSimpleLuaTest("luatests/list.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, list)
+{
+    RunSimpleLuaTest("luatests/list.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, permute)
+{
+    RunSimpleLuaTest("luatests/permute.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, permute)
+{
+    RunSimpleLuaTest("luatests/permute.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, richard)
+{
+    RunSimpleLuaTest("luatests/richard.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, richard)
+{
+    RunSimpleLuaTest("luatests/richard.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, storage)
+{
+    RunSimpleLuaTest("luatests/storage.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, storage)
+{
+    RunSimpleLuaTest("luatests/storage.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaBenchmark, towers)
+{
+    RunSimpleLuaTest("luatests/towers.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaBenchmarkForceBaselineJit, towers)
+{
+    RunSimpleLuaTest("luatests/towers.lua", LuaTestOption::ForceBaselineJit);
+}
+
 }   // anonymous namespace

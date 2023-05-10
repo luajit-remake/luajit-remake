@@ -58,20 +58,27 @@ echo -n > benchmark.log
 run_bench array3d.lua 300 packed
 run_bench binary-trees-num.lua 16
 run_bench binary-trees-name.lua 15
+run_bench bounce.lua 3000
+run_bench cd.lua
 run_bench chameneos.lua 1e7
 run_bench coroutine-ring.lua 2e7
+run_bench deltablue.lua
 run_bench fannkuch.lua 11
 run_bench fasta.lua 5e6
 run_bench fixpoint-fact.lua 1000
+run_bench havlak.lua
 run_bench heapsort.lua 1 3000000
+run_bench json.lua
 run_bench k-nucleotide.lua 5e6
 run_bench life.lua 2000
 run_bench linear-sieve.lua 3e7
+run_bench list.lua
 run_bench mandelbrot.lua 3000
 run_bench mandel-metatable.lua 256
 run_bench nbody.lua 5e6
 run_bench nsieve.lua 12
 run_bench partialsums.lua 3e7
+run_bench permute.lua
 run_bench pidigits-nogmp.lua 5000
 run_bench qt.lua 14
 run_bench quadtree-2.lua 14
@@ -81,14 +88,17 @@ run_bench ray-prop.lua 9
 run_bench recursive-fib-uv.lua 40
 run_bench recursive-fib-gv.lua 40
 run_bench revcomp.lua 5e6
+run_bench richard.lua
 run_bench scimark-fft.lua 10
 run_bench scimark-lu.lua 5
 run_bench scimark-sor.lua 5
 run_bench scimark-sparse.lua 300
 run_bench series.lua 5000
 run_bench spectral-norm.lua 2000
+run_bench storage.lua
 run_bench table-sort.lua 5e6
 run_bench table-sort-cmp.lua 1e6
+run_bench towers.lua
 
 python3 bench_pretty_format.py
 
