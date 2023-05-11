@@ -202,11 +202,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 ReleaseAssert(arr[i].m_operand.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
                 size_t ord = arr[i].m_ord;
                 DeegenBytecodeOperandType originalOperandType = m_operandTypes[ord];
-                ReleaseAssert(originalOperandType == DeegenBytecodeOperandType::BytecodeSlot || originalOperandType == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
-                if (originalOperandType == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
-                {
-                    ReleaseAssert(m_base[ord].m_kind == DeegenSpecializationKind::BytecodeSlot);
-                }
+                ReleaseAssert(originalOperandType == DeegenBytecodeOperandType::BytecodeSlot ||
+                              originalOperandType == DeegenBytecodeOperandType::BytecodeSlotOrConstant ||
+                              originalOperandType == DeegenBytecodeOperandType::Constant);
 
                 q.value[ord] = arr[i].m_operand;
             }
@@ -228,7 +226,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         consteval SpecializedOperandRef HasType()
         {
             static_assert(IsValidTypeSpecialization<T>);
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot);
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
             return { .m_operand = { .m_kind = DeegenSpecializationKind::SpeculatedTypeForOptimizer, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
         }
 

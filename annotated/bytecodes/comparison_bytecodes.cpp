@@ -299,13 +299,15 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ComparisonOperation, bool shouldBranch, Comparat
         Op("lhs").IsConstant<tDouble>(),
         Op("rhs").IsBytecodeSlot()
     ).EnableHotColdSplitting(
+        Op("lhs").HasType<tDoubleNotNaN>(),
         Op("rhs").HasType<tDoubleNotNaN>()
     );
     Variant(
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsConstant<tDouble>()
     ).EnableHotColdSplitting(
-        Op("lhs").HasType<tDoubleNotNaN>()
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
     );
 }
 

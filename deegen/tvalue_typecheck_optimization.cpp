@@ -1137,49 +1137,52 @@ static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariant
             continue;
         }
 
+        TypeSpeculationMask baseMask;
         if (operand->GetKind() == BcOperandKind::Constant)
         {
             BcOpConstant* op = assert_cast<BcOpConstant*>(operand.get());
-            TypeSpeculationMask mask = op->m_typeMask;
-            if (addConstraintForTop || mask != x_typeSpeculationMaskFor<tTop>)
-            {
-                constraint->AddClause(std::make_unique<LeafConstraint>(op->OperandOrdinal(), mask /*allowedMask*/));
-                operandList.push_back(static_cast<uint32_t>(op->OperandOrdinal()));
-            }
+            baseMask = op->m_typeMask;
         }
         else
         {
             ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
-            TypeSpeculationMask quickeningMask;
-            bool hasQuickeningData = false;
+            baseMask = x_typeSpeculationMaskFor<tTop>;
+        }
 
-            if (forQuickeningFastPath)
+        TypeSpeculationMask quickeningMask;
+        bool hasQuickeningData = false;
+
+        if (forQuickeningFastPath)
+        {
+            for (auto& quickeningInfo : bvd->m_quickening)
             {
-                for (auto& quickeningInfo : bvd->m_quickening)
+                if (quickeningInfo.m_operandOrd == operand->OperandOrdinal())
                 {
-                    if (quickeningInfo.m_operandOrd == operand->OperandOrdinal())
-                    {
-                        ReleaseAssert(!hasQuickeningData);
-                        hasQuickeningData = true;
-                        quickeningMask = quickeningInfo.m_speculatedMask;
-                        ReleaseAssert(0 < quickeningMask && quickeningMask < x_typeSpeculationMaskFor<tTop>);
-                    }
+                    ReleaseAssert(!hasQuickeningData);
+                    hasQuickeningData = true;
+                    quickeningMask = quickeningInfo.m_speculatedMask;
+                    ReleaseAssert(0 < quickeningMask && quickeningMask < baseMask);
+                    ReleaseAssert((quickeningMask & baseMask) == quickeningMask);
                 }
             }
+        }
 
-            if (!hasQuickeningData)
+        // If we are not emitting assumption for the quickening fast path, or we are emitting for fast path but
+        // do not have a quickening for this operand, emit the base assumption
+        //
+        if (!hasQuickeningData)
+        {
+            if (addConstraintForTop || baseMask != x_typeSpeculationMaskFor<tTop>)
             {
-                if (addConstraintForTop)
-                {
-                    constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), x_typeSpeculationMaskFor<tTop> /*allowedMask*/));
-                    operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
-                }
-            }
-            else
-            {
-                constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), quickeningMask /*allowedMask*/));
+                constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), baseMask /*allowedMask*/));
                 operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
             }
+        }
+        else
+        {
+            ReleaseAssert(forQuickeningFastPath);
+            constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), quickeningMask /*allowedMask*/));
+            operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
         }
     }
 

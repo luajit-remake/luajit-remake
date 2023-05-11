@@ -672,7 +672,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                         continue;
                     }
                     ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
-                    ReleaseAssert(def->m_list[opOrd]->GetKind() == BcOperandKind::Slot);
+                    ReleaseAssert(def->m_list[opOrd]->GetKind() == BcOperandKind::Slot || def->m_list[opOrd]->GetKind() == BcOperandKind::Constant);
                     TypeSpeculationMask specMask = SafeIntegerCast<TypeSpeculationMask>(spOp.m_value);
                     def->m_quickening.push_back({ .m_operandOrd = opOrd, .m_speculatedMask = specMask });
                 }
