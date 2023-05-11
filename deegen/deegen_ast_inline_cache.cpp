@@ -2949,33 +2949,9 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
         Value* icKeyValI64 = castIcStateCaptureToI64(m_bodyFn->getArg(m_bodyFnIcKeyArgOrd), createIcLogicInsertionPt);
         ReleaseAssert(llvm_value_has_type<uint64_t>(icKeyValI64));
 
-        size_t icStateValStartOrd = (e.m_icStateVals.size() > 0) ? e.m_icStateVals[0].m_placeholderOrd : 0;
-
-        // Build up a switch which calls each code generation implementation
-        //
-        BasicBlock* unreachableBlock = BasicBlock::Create(ctx, "", m_bodyFn);
-        new UnreachableInst(ctx, unreachableBlock);
-
-        SwitchInst* si = SwitchInst::Create(effectOrd,
-                                            unreachableBlock /*default*/,
-                                            static_cast<uint32_t>(e.m_effectFnMain.size()) /*numCasesHint*/,
-                                            createIcLogicInsertionPt);
-
-        for (size_t k = 0; k < e.m_effectFnMain.size(); k++)
+        auto emitCallToCodegenFnImpl = [&](size_t icEffectGlobalOrd, bool isPopulatingInlineSlab, llvm::Value* jitDestAddr, Instruction* insertBefore)
         {
-            BasicBlock* cgBB = BasicBlock::Create(ctx, "", m_bodyFn);
-            Instruction* insPt = BranchInst::Create(afterIcCreationBB /*dest*/, cgBB /*insertAtEnd*/);
-            ConstantInt* caseInt = dyn_cast<ConstantInt>(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(k)));
-            ReleaseAssert(caseInt != nullptr);
-            si->addCase(caseInt, cgBB);
-
-            // Call GenericInlineCacheSite::Insert, which allocates space of the IC and do all the bookkeeping
-            //
-            size_t icEffectGlobalOrd = globalIcEffectTraitBaseOrd + e.m_effectStartOrdinal + k;
-            ReleaseAssert(icEffectGlobalOrd <= 65535);
-            Constant* icEffectGlobalOrdCst = CreateLLVMConstantInt<uint16_t>(ctx, static_cast<uint16_t>(icEffectGlobalOrd));
-            Value* jitAddr = CreateCallToDeegenCommonSnippet(module, "CreateNewJitGenericIC", { icSite, icEffectGlobalOrdCst }, insPt);
-            ReleaseAssert(llvm_value_has_type<void*>(jitAddr));
+            ReleaseAssertIff(isPopulatingInlineSlab, jitDestAddr == nullptr);
 
             // Create the declaration for the codegen implementation function, and call it
             // The codegen implementation has the following prototype:
@@ -2985,7 +2961,7 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
             // followed by all the values in the IC state in i64
             //
             std::vector<Value*> cgFnArgs;
-            cgFnArgs.push_back(jitAddr);
+            cgFnArgs.push_back(isPopulatingInlineSlab ? ConstantPointerNull::get(PointerType::get(ctx, 0 /*addrSpace*/)) : jitDestAddr);
             cgFnArgs.push_back(slowPathData);
             cgFnArgs.push_back(icKeyValI64);
             for (Value* val : icStateCaptureI64List)
@@ -3000,6 +2976,10 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
             }
 
             std::string cgFnName = x_jit_codegen_ic_impl_placeholder_fn_prefix + std::to_string(icEffectGlobalOrd);
+            if (isPopulatingInlineSlab)
+            {
+                cgFnName += "_inline_slab";
+            }
             ReleaseAssert(module->getNamedValue(cgFnName) == nullptr);
 
             FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), cgFnArgTys, false /*isVarArg*/);
@@ -3008,7 +2988,68 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
             cgFn->setDSOLocal(true);
             cgFn->addFnAttr(Attribute::NoUnwind);
 
-            CallInst::Create(cgFn, cgFnArgs, "", insPt);
+            CallInst::Create(cgFn, cgFnArgs, "", insertBefore);
+        };
+
+        size_t icStateValStartOrd = (e.m_icStateVals.size() > 0) ? e.m_icStateVals[0].m_placeholderOrd : 0;
+
+        // Build up a switch which calls each code generation implementation
+        //
+        BasicBlock* unreachableBlock = BasicBlock::Create(ctx, "", m_bodyFn);
+        new UnreachableInst(ctx, unreachableBlock);
+
+        SwitchInst* si = SwitchInst::Create(effectOrd,
+                                            unreachableBlock /*default*/,
+                                            static_cast<uint32_t>(e.m_effectFnMain.size()) /*numCasesHint*/,
+                                            createIcLogicInsertionPt);
+
+        for (size_t k = 0; k < e.m_effectFnMain.size(); k++)
+        {
+            BasicBlock* cgBB = BasicBlock::Create(ctx, "", m_bodyFn);            
+            ConstantInt* caseInt = dyn_cast<ConstantInt>(CreateLLVMConstantInt<uint8_t>(ctx, SafeIntegerCast<uint8_t>(k)));
+            ReleaseAssert(caseInt != nullptr);
+            si->addCase(caseInt, cgBB);
+
+            size_t icEffectGlobalOrd = globalIcEffectTraitBaseOrd + e.m_effectStartOrdinal + k;
+            ReleaseAssert(icEffectGlobalOrd <= 65535);
+
+            std::string isIcQualifyForInlineSlabFnName = x_jit_check_generic_ic_fits_in_inline_slab_placeholder_fn_prefix + std::to_string(icEffectGlobalOrd);
+            ReleaseAssert(module->getNamedValue(isIcQualifyForInlineSlabFnName) == nullptr);
+            FunctionType* isIcQualifyForInlineSlabFty = FunctionType::get(llvm_type_of<bool>(ctx), { llvm_type_of<void*>(ctx) }, false /*isVarArg*/);
+            Function* isIcQualifyForInlineSlabFn = Function::Create(isIcQualifyForInlineSlabFty, GlobalValue::ExternalLinkage, isIcQualifyForInlineSlabFnName, module);
+            ReleaseAssert(isIcQualifyForInlineSlabFn->getName() == isIcQualifyForInlineSlabFnName);
+            isIcQualifyForInlineSlabFn->setDSOLocal(true);
+            isIcQualifyForInlineSlabFn->addFnAttr(Attribute::NoUnwind);
+            isIcQualifyForInlineSlabFn->addRetAttr(Attribute::ZExt);
+
+            CallInst* shouldPopulateInlineSlab = CallInst::Create(isIcQualifyForInlineSlabFn, { icSite }, "", cgBB);
+            shouldPopulateInlineSlab->addRetAttr(Attribute::ZExt);
+
+            BasicBlock* inlineSlabBB = BasicBlock::Create(ctx, "", m_bodyFn);
+            BasicBlock* outlineStubBB = BasicBlock::Create(ctx, "", m_bodyFn);
+
+            BranchInst::Create(inlineSlabBB, outlineStubBB, shouldPopulateInlineSlab, cgBB);
+
+            // Create logic for generating an outlined IC case
+            //
+            {
+                Instruction* insPt = BranchInst::Create(afterIcCreationBB /*dest*/, outlineStubBB /*insertAtEnd*/);
+
+                // Call GenericInlineCacheSite::Insert, which allocates space of the IC and do all the bookkeeping
+                //
+                Constant* icEffectGlobalOrdCst = CreateLLVMConstantInt<uint16_t>(ctx, static_cast<uint16_t>(icEffectGlobalOrd));
+                Value* jitAddr = CreateCallToDeegenCommonSnippet(module, "CreateNewJitGenericIC", { icSite, icEffectGlobalOrdCst }, insPt);
+                ReleaseAssert(llvm_value_has_type<void*>(jitAddr));
+
+                emitCallToCodegenFnImpl(icEffectGlobalOrd, false /*isPopulatingInlineSlab*/, jitAddr, insPt);
+            }
+
+            // Create logic for generating the inline slab
+            //
+            {
+                Instruction* insPt = BranchInst::Create(afterIcCreationBB /*dest*/, inlineSlabBB /*insertAtEnd*/);
+                emitCallToCodegenFnImpl(icEffectGlobalOrd, true /*isPopulatingInlineSlab*/, nullptr /*jitAddr*/, insPt);
+            }
 
             r.m_effectPlaceholderDesc.push_back({
                 .m_globalOrd = icEffectGlobalOrd,
@@ -3257,12 +3298,11 @@ std::vector<AstInlineCache::BaselineJitAsmTransformResult> WARN_UNUSED AstInline
 }
 
 AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIcCodegenImplementation(BaselineJitImplCreator* ifi,
-                                                                                                      const DeegenStencil& mainStencil,
-                                                                                                      AstInlineCache::BaselineJitLLVMLoweringResult::Item icInfo,
-                                                                                                      std::string icAsm,
-                                                                                                      size_t smcRegionOffset,
-                                                                                                      size_t smcRegionSize,
-                                                                                                      size_t icMissLogicOffset)
+                                                                                                      BaselineJitLLVMLoweringResult::Item icInfo,
+                                                                                                      DeegenStencil& stencil,
+                                                                                                      InlineSlabInfo inlineSlabInfo,
+                                                                                                      size_t icUsageOrdInBytecode,
+                                                                                                      bool isCodegenForInlineSlab)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
@@ -3271,8 +3311,10 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     ReleaseAssert(icInfo.m_placeholderStart + icInfo.m_numPlaceholders <= ifi->GetNumTotalGenericIcCaptures());
 
     std::string cgFnName = x_jit_codegen_ic_impl_placeholder_fn_prefix + std::to_string(icInfo.m_globalOrd);
-    std::string objFile = CompileAssemblyFileToObjectFile(icAsm, " -fno-pic -fno-pie ");
-    DeegenStencil stencil = DeegenStencil::ParseIcLogic(ctx, objFile, mainStencil.m_sectionToPdoOffsetMap);
+    if (isCodegenForInlineSlab)
+    {
+        cgFnName += "_inline_slab";
+    }
 
     std::vector<size_t> extraPlaceholderOrds {
         CP_PLACEHOLDER_IC_MISS_DEST,
@@ -3287,6 +3329,9 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
                                                                      ifi->GetNumTotalGenericIcCaptures(),
                                                                      ifi->GetStencilRcDefinitions(),
                                                                      extraPlaceholderOrds);
+
+    ReleaseAssertImp(isCodegenForInlineSlab, cgRes.m_dataSecPreFixupCode.size() == 0 && cgRes.m_dataSecAlignment == 1);
+    ReleaseAssertImp(isCodegenForInlineSlab, cgRes.m_icPathPreFixupCode.size() == inlineSlabInfo.m_smcRegionLength);
 
     // For simplicity, the IC logic currently always put its private data section right after the code section
     //
@@ -3344,13 +3389,36 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     cgFn->addFnAttr(Attribute::NoUnwind);
     CopyFunctionAttributes(cgFn /*dst*/, cgCodeFn /*src*/);
 
-    cgFn->addParamAttr(0, Attribute::NoAlias);
+    // For codegen inline slab logic, the passed in 'jitAddr' is always nullptr
+    //
+    if (!isCodegenForInlineSlab)
+    {
+        cgFn->addParamAttr(0, Attribute::NoAlias);
+    }
+
     cgFn->addParamAttr(1, Attribute::NoAlias);
 
     BasicBlock* bb = BasicBlock::Create(ctx, "", cgFn);
 
-    Value* destJitAddr = cgFn->getArg(0);
     Value* slowPathData = cgFn->getArg(1);
+
+    Value* mainLogicFastPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, bb);
+
+    // For normal generation, 'destJitAddr' is passed in as first param
+    // For inline slab generation, 'destJitAddr' is implicit (always the start address of the SMC region).
+    // We still retain the same function prototype for simplicity, but the first param is not used.
+    //
+    Value* destJitAddr = nullptr;
+    if (!isCodegenForInlineSlab)
+    {
+        destJitAddr = cgFn->getArg(0);
+    }
+    else
+    {
+        destJitAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
+                                                        { CreateLLVMConstantInt<uint64_t>(ctx, inlineSlabInfo.m_smcRegionOffset) }, "", bb);
+    }
+
     Value* icKeyI64 = cgFn->getArg(2);
     std::vector<Value*> inputPlaceholders;
     for (size_t i = 3; i < cgFn->arg_size(); i++)
@@ -3392,7 +3460,6 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     //     uint64_t dataSecAddr
     //
     std::vector<Value*> headerArgsList;
-    Value* mainLogicFastPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, bb);
     headerArgsList.push_back(new PtrToIntInst(mainLogicFastPath, llvm_type_of<uint64_t>(ctx), "", bb));
     Value* mainLogicSlowPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(slowPathData, bb);
     headerArgsList.push_back(new PtrToIntInst(mainLogicSlowPath, llvm_type_of<uint64_t>(ctx), "", bb));
@@ -3403,11 +3470,60 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     Value* mainLogicDataSec = ifi->GetBytecodeDef()->GetPtrOfCurrentBytecodeDataSectionForBaselineJit(slowPathData, bb);
     headerArgsList.push_back(new PtrToIntInst(mainLogicDataSec, llvm_type_of<uint64_t>(ctx), "", bb));
 
-    ReleaseAssert(smcRegionSize >= 5);
-    // TODO: when we support inline slab, this address will differ depending on whether the inline slab exists
+    ReleaseAssert(inlineSlabInfo.m_smcRegionLength >= 5);
+    Value* patchableJmpEndAddr = nullptr;
+
+    // We must special-check for 'isCodegenForInlineSlab', because we are called after 'm_isInlineSlabUsed' has been set to true
     //
-    Value* patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
-                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, smcRegionOffset + 5) }, "", bb);
+    if (isCodegenForInlineSlab)
+    {
+        // We are generating the inline slab, so the SMC region is in the initial jmp + nop form
+        //
+        ReleaseAssert(inlineSlabInfo.m_hasInlineSlab);
+        patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, inlineSlabInfo.m_smcRegionOffset + 5) }, "", bb);
+    }
+    else if (!inlineSlabInfo.m_hasInlineSlab)
+    {
+        // No inline slab is possible for this IC, no need to check anything. The SMC region is in the initial jmp + nop form
+        //
+        patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, inlineSlabInfo.m_smcRegionOffset + 5) }, "", bb);
+    }
+    else
+    {
+        // Inline slab is possible, and we are generating an outlined IC case.
+        // We need to check if an inline slab exists
+        //
+        Value* isInlineSlabUsed = nullptr;
+        {
+            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitGenericIcSiteOffsetInSlowPathData(icUsageOrdInBytecode);
+            Value* icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                              { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", bb);
+
+            Value* isInlineSlabUsedAddr = GetElementPtrInst::CreateInBounds(
+                llvm_type_of<uint8_t>(ctx), icSite,
+                {
+                    CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&JitGenericInlineCacheSite::m_isInlineSlabUsed>)
+                }, "", bb);
+            static_assert(std::is_same_v<uint8_t, typeof_member_t<&JitGenericInlineCacheSite::m_isInlineSlabUsed>>);
+            Value* isInlineSlabUsedU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), isInlineSlabUsedAddr, "", false /*isVolatile*/, Align(1), bb);
+            isInlineSlabUsed = new ICmpInst(*bb, ICmpInst::ICMP_NE, isInlineSlabUsedU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
+        }
+
+        ReleaseAssert(llvm_value_has_type<bool>(isInlineSlabUsed));
+
+        Value* patchableJumpEndOffset = SelectInst::Create(
+            isInlineSlabUsed,
+            CreateLLVMConstantInt<uint64_t>(ctx, inlineSlabInfo.m_inlineSlabPatchableJumpEndOffsetInFastPath),
+            CreateLLVMConstantInt<uint64_t>(ctx, inlineSlabInfo.m_smcRegionOffset + 5),
+            "",
+            bb);
+
+        patchableJmpEndAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), mainLogicFastPath,
+                                                                { patchableJumpEndOffset }, "", bb);
+    }
+    ReleaseAssert(patchableJmpEndAddr != nullptr && llvm_value_has_type<void*>(patchableJmpEndAddr));
 
     Value* missDestForThisIc = X64PatchableJumpUtil::GetDest(patchableJmpEndAddr, bb);
     Value* missDestForThisIcI64 = new PtrToIntInst(missDestForThisIc, llvm_type_of<uint64_t>(ctx), "", bb);
@@ -3493,12 +3609,17 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
         validateArgs(cgDataFn);
     }
 
+    ReleaseAssertImp(isCodegenForInlineSlab, codeAndData.size() == inlineSlabInfo.m_smcRegionLength);
+
     // Memcpy the unrelocated code and data
-    // Since the allocated region is always 16-byte aligned, safe to up-align to 8-byte
     //
-    // TODO: we must not over-copy for the inline slab
-    //
-    EmitCopyLogicForBaselineJitCodeGen(module.get(), codeAndData, destJitAddr, "deegen_ic_pre_fixup_code_and_data", bb);
+    {
+        // If we are generating the inline slab, we must not clobber anything after the range since they contain valid code.
+        // If we are generating an outlined IC case, since the allocated region is always 16-byte aligned, it's safe to up-align to 8-byte
+        //
+        bool mustBeExact = isCodegenForInlineSlab;
+        EmitCopyLogicForBaselineJitCodeGen(module.get(), codeAndData, destJitAddr, "deegen_ic_pre_fixup_code_and_data", bb, mustBeExact);
+    }
 
     // Create calls to patch the code section and data section
     //
@@ -3515,8 +3636,12 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     emitPatchFnCall(cgDataFn, destJitDataSecAddr);
 
     // Update SMC region to jump to the newly created IC case
+    // We only (and must only) do this for the outlined IC case. If we are generating the inline slab, the patchable jump is already overwritten.
     //
-    X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, destJitAddr, bb);
+    if (!isCodegenForInlineSlab)
+    {
+        X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, destJitAddr, bb);
+    }
 
     ReturnInst::Create(ctx, nullptr, bb);
 
@@ -3544,8 +3669,6 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
         }
         disasmForAudit += "\n";
     }
-
-    std::ignore = icMissLogicOffset;
 
     return {
         .m_module = std::move(module),

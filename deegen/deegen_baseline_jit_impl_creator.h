@@ -13,6 +13,7 @@ namespace dast {
 
 class BytecodeVariantDefinition;
 class DeegenGlobalBytecodeTraitAccessor;
+struct BytecodeIrInfo;
 
 class BaselineJitImplCreator final : public DeegenBytecodeImplCreatorBase
 {
@@ -32,7 +33,7 @@ public:
     struct SlowPathReturnContinuationTag { };
     BaselineJitImplCreator(SlowPathReturnContinuationTag, BytecodeIrComponent& bic);
 
-    void DoLowering(const DeegenGlobalBytecodeTraitAccessor& gbta);
+    void DoLowering(BytecodeIrInfo* bii, const DeegenGlobalBytecodeTraitAccessor& gbta);
 
     virtual llvm::Module* GetModule() const override { return m_module.get(); }
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
@@ -189,7 +190,13 @@ struct DeegenPlaceholderUtils
                                                                            llvm::Type* operandTy,
                                                                            llvm::Instruction* insertBefore);
 
-    static std::string WARN_UNUSED FindFallthroughPlaceholderSymbolName(std::vector<CPRuntimeConstantNodeBase*>& rcDef);
+    // Return -1 if not found
+    //
+    static size_t WARN_UNUSED FindFallthroughPlaceholderOrd(const std::vector<CPRuntimeConstantNodeBase*>& rcDef);
+
+    // Return "" if not found
+    //
+    static std::string WARN_UNUSED FindFallthroughPlaceholderSymbolName(const std::vector<CPRuntimeConstantNodeBase*>& rcDef);
 };
 
 }   // namespace dast

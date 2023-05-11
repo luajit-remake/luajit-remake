@@ -188,13 +188,34 @@ public:
         std::string m_disasmForAudit;
     };
 
+    struct InlineSlabInfo
+    {
+        // If true, this IC has inline slab, so we need to generate different SMC patching
+        // logic depending on whether the inline slab is already used
+        //
+        bool m_hasInlineSlab;
+
+        // The offset and size of the SMC region
+        //
+        size_t m_smcRegionOffset;
+        size_t m_smcRegionLength;
+
+        // If the inline slab is already used, the patchable jump ends at fastpathAddr + m_inlineSlabPatchableJumpEndOffsetInFastPath
+        // Otherwise, the patchable jump ends at fastpathAddr + m_smcRegionOffset + 5
+        //
+        size_t m_inlineSlabPatchableJumpEndOffsetInFastPath;
+
+        // The offset of the IC miss logic in the slow path
+        //
+        size_t m_icMissLogicOffsetInSlowPath;
+    };
+
     static BaselineJitCodegenResult WARN_UNUSED CreateJitIcCodegenImplementation(BaselineJitImplCreator* ifi,
-                                                                                 const DeegenStencil& mainStencil,
                                                                                  BaselineJitLLVMLoweringResult::Item icInfo,
-                                                                                 std::string icAsm,
-                                                                                 size_t smcRegionOffset,
-                                                                                 size_t smcRegionSize,
-                                                                                 size_t icMissLogicOffset);
+                                                                                 DeegenStencil& stencil,
+                                                                                 InlineSlabInfo inlineSlabInfo,
+                                                                                 size_t icUsageOrdInBytecode,
+                                                                                 bool isCodegenForInlineSlab);
 
     // Perform trivial lowering: the execution semantics of this inline cache is preserved,
     // but no inling caching ever happens (i.e., execution simply unconditionally execute the IC body).
@@ -253,6 +274,7 @@ struct DeegenGenericIcTraitDesc
 
 constexpr const char* x_get_bytecode_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodePtrPlaceholder";
 constexpr const char* x_jit_codegen_ic_impl_placeholder_fn_prefix = "__deegen_baseline_jit_codegen_generic_ic_effect_";
+constexpr const char* x_jit_check_generic_ic_fits_in_inline_slab_placeholder_fn_prefix = "__deegen_baseline_jit_check_generic_ic_fits_in_inline_slab_";
 
 class DeegenBytecodeImplCreatorBase;
 

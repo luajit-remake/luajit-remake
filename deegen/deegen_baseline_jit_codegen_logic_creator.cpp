@@ -275,7 +275,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     DeegenBytecodeBaselineJitInfo res;
 
     BaselineJitImplCreator mainJic(*bii.m_jitMainComponent.get());
-    mainJic.DoLowering(bcTraitAccessor);
+    mainJic.DoLowering(&bii, bcTraitAccessor);
     res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*mainJic.GetModule()), mainJic.GetResultFunctionName()));
 
     BytecodeVariantDefinition* bytecodeDef = mainJic.GetBytecodeDef();
@@ -290,7 +290,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     }
     for (auto& rcJic : rcJicList)
     {
-        rcJic->DoLowering(bcTraitAccessor);
+        rcJic->DoLowering(&bii, bcTraitAccessor);
         res.m_implModulesForAudit.push_back(std::make_pair(CloneModule(*rcJic->GetModule()), rcJic->GetResultFunctionName()));
     }
 

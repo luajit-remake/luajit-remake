@@ -230,6 +230,7 @@ public:
     JitGenericInlineCacheSite()
         : m_linkedListHead(SpdsPtr<JitGenericInlineCacheEntry> { 0 })
         , m_numEntries(0)
+        , m_isInlineSlabUsed(0)
     { }
 
     // The linked list of all the IC entries it owns
@@ -238,11 +239,16 @@ public:
 
     uint8_t m_numEntries;
 
+    // Actually a bool, always 0 or 1.
+    // This field needs to be accessed from LLVM, so use uint8_t to avoid ABI issues
+    //
+    uint8_t m_isInlineSlabUsed;
+
     // May only be called if m_numEntries < x_maxJitGenericInlineCacheEntries
     //
     void* WARN_UNUSED Insert(uint16_t traitKind);
 };
-static_assert(sizeof(JitGenericInlineCacheSite) == 5);
+static_assert(sizeof(JitGenericInlineCacheSite) == 6);
 
 // TODO: tune
 //

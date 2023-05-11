@@ -27,6 +27,10 @@ static void LaunchScript(int argc, char** argv)
     assert(argc >= 2);
     VM* vm = VM::Create();
 
+    // TODO: fix after we have tiering-up logic
+    //
+    vm->SetEngineStartingTier(VM::EngineStartingTier::BaselineJIT);
+
     // According to Lua Standard:
     //     Before starting to run the script, lua collects all arguments in the command line in a global table called arg.
     //     The script name is stored at index 0, the first argument after the script name goes to index 1, and so on.
