@@ -51,26 +51,30 @@ static void NO_RETURN ForLoopInitSlowPath(TValue* base)
 
 static void NO_RETURN ForLoopInitImpl(TValue* base)
 {
-    if (unlikely(!base[0].Is<tDoubleNotNaN>() || !base[1].Is<tDoubleNotNaN>() || !base[2].Is<tDoubleNotNaN>()))
-    {
-        EnterSlowPath<ForLoopInitSlowPath>();
-    }
-
-    double vals[3];
-    vals[0] = base[0].As<tDoubleNotNaN>();
-    vals[1] = base[1].As<tDoubleNotNaN>();
-    vals[2] = base[2].As<tDoubleNotNaN>();
-
-    // Having reached here, we know 'vals[2]' is not NaN,
-    // so the 'vals[2] <= 0' term in the loop condition check
-    //     '(vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1])'
-    // can be optimized out.
+    // The Lua standard specifies that the loop condition check is the following:
+    //     '(step > 0 && start <= end) || (step <= 0 && start >= end)'
     //
-    if (likely(vals[2] > 0))
+    TValue step = base[2];
+
+    // If 'step' is double NaN or non-double value, step.ViewAsDouble() will be NaN and this check won't pass.
+    //
+    if (likely(step.ViewAsDouble() > 0))
     {
-        if (vals[0] <= vals[1])
+        // This is tricky. Do not short-curcuit, as short-curcuit behavior would prevent fusing two NaN checks into one
+        //
+        bool t1 = !base[0].Is<tDoubleNotNaN>();
+        bool t2 = !base[1].Is<tDoubleNotNaN>();
+        bool tres = t1 | t2;    // intentionally bitwise or, not logical or!
+        if (unlikely(tres))
         {
-            base[3] = TValue::Create<tDouble>(vals[0]);
+            EnterSlowPath<ForLoopInitSlowPath>();
+        }
+
+        double start = base[0].As<tDoubleNotNaN>();
+        double end = base[1].As<tDoubleNotNaN>();
+        if (start <= end)
+        {
+            base[3] = TValue::Create<tDouble>(start);
             Return();
         }
         else
@@ -80,9 +84,33 @@ static void NO_RETURN ForLoopInitImpl(TValue* base)
     }
     else
     {
-        if (vals[0] >= vals[1])
+        // If 'step' is NaN or non-double value, branch to slow path
+        //
+        if (unlikely(!step.Is<tDoubleNotNaN>()))
         {
-            base[3] = TValue::Create<tDouble>(vals[0]);
+            EnterSlowPath<ForLoopInitSlowPath>();
+        }
+
+        // Having reached here, we know 'step' is a not-NaN double value, and 'step > 0' is false.
+        // So 'step <= 0' is true
+        //
+        assert(step.As<tDouble>() <= 0);
+
+        // See comment in the mirror branch
+        //
+        bool t1 = !base[0].Is<tDoubleNotNaN>();
+        bool t2 = !base[1].Is<tDoubleNotNaN>();
+        bool tres = t1 | t2;    // intentionally bitwise or, not logical or!
+        if (unlikely(tres))
+        {
+            EnterSlowPath<ForLoopInitSlowPath>();
+        }
+
+        double start = base[0].As<tDoubleNotNaN>();
+        double end = base[1].As<tDoubleNotNaN>();
+        if (start >= end)
+        {
+            base[3] = TValue::Create<tDouble>(start);
             Return();
         }
         else
