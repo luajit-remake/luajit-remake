@@ -51,6 +51,8 @@ run_bench() {
 	run_bench_once ./luajitr $FILE_PATH $@
 	run_bench_once ./luajitr $FILE_PATH $@
 	run_bench_once ./luajitr $FILE_PATH $@
+	run_bench_once ./luajitr $FILE_PATH $@
+	run_bench_once ./luajitr $FILE_PATH $@
 }
 
 echo -n > benchmark.log
