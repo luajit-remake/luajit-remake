@@ -282,6 +282,11 @@ X64AsmLine WARN_UNUSED X64AsmLine::Parse(std::string line)
         }
     }
 
+    if (line.length() == 0)
+    {
+        return res;
+    }
+
     bool isSpace = std::isspace(line[0]);
     std::string curStr = "";
     for (size_t i = 0; i < line.size(); i++)
@@ -441,7 +446,21 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
     std::vector<X64AsmLine> asmLines;
     for (size_t i = funcStartLine; i < funcEndLine; i++)
     {
-        asmLines.push_back(X64AsmLine::Parse(lines[i]));
+        X64AsmLine line = X64AsmLine::Parse(lines[i]);
+        // Ignore .p2align directives, since our JIT'ed code cannot honor that
+        // (we can't align the start of the JIT'ed code for each bytecode to 16-bytes,
+        // so the NOPs inserted by .p2align cannot align anything)
+        //
+        if (line.IsDirective())
+        {
+            ReleaseAssert(line.NumWords() > 0);
+            if (line.GetWord(0) == ".p2align")
+            {
+                line = X64AsmLine::Parse("#" + lines[i]);
+                ReleaseAssert(line.IsCommentOrEmptyLine());
+            }
+        }
+        asmLines.push_back(line);
     }
 
     // Split the function into chunks by labels
