@@ -934,7 +934,7 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
     // The dummy ASM to prevent LLVM basic block merge is only there to trick LLVM. At ASM level they are no longer useful.
     //
-    r->RemoveAsmMagic(MagicAsmKind::DummyAsmToPreventBBMerge);
+    r->RemoveAsmMagic(MagicAsmKind::DummyAsmToPreventIcEntryBBMerge);
 
     r->Validate();
 

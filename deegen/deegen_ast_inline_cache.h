@@ -224,6 +224,21 @@ public:
     //
     void DoTrivialLowering();
 
+    // LLVM's tail duplication already works completely fine normally.
+    // However, if the IC logic itself is *too* simple, LLVM would treat the cost of tail duplication as too high
+    // (as it doesn't understand that we will extract the IC into a separate piece of code) and won't do the tail duplication.
+    //
+    // The overhead of not doing the tail duplication is only one or two extra jumps, so it's really not a big deal in performance.
+    // But if we can get slightly better code with a riskless simple pass, why not?
+    //
+    // This pass is a really crude pass that fixes this problem.
+    // It simply checks that: if an IC entry BB branches directly to a *small* terminal BB that dispatches to the next bytecode,
+    // it would manually duplicate the terminal BB into the IC BB.
+    // The strict check is intentional, as tail duplication makes the IC logic larger, thus higher memory consumption..
+    //
+    static void AttemptIrRewriteToManuallyTailDuplicateSimpleIcCases(llvm::Function* func,
+                                                                     std::string fallthroughPlaceholderName);
+
     // The CallInst that retrieves the IC pointer in the main function
     //
     llvm::CallInst* m_icPtrOrigin;

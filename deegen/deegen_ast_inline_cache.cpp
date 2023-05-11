@@ -2559,7 +2559,7 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
             {
                 size_t icEffectGlobalOrd = globalIcEffectTraitBaseOrd + e.m_effectStartOrdinal + i;
                 std::string asmString = "movl $$" + std::to_string(icEffectGlobalOrd) + ", eax;";
-                asmString = MagicAsm::WrapLLVMAsmPayload(asmString, MagicAsmKind::DummyAsmToPreventBBMerge);
+                asmString = MagicAsm::WrapLLVMAsmPayload(asmString, MagicAsmKind::DummyAsmToPreventIcEntryBBMerge);
                 FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { }, false);
                 InlineAsm* ia = InlineAsm::get(fty, asmString, "" /*constraints*/, true /*hasSideEffects*/);
                 CallInst* ci = CallInst::Create(ia, "", insertBefore);
@@ -3676,6 +3676,118 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
         .m_icSize = codeAndData.size(),
         .m_disasmForAudit = disasmForAudit
     };
+}
+
+void AstInlineCache::AttemptIrRewriteToManuallyTailDuplicateSimpleIcCases(llvm::Function* func, std::string fallthroughPlaceholderName)
+{
+    using namespace llvm;
+
+    std::vector<BasicBlock*> icEntryBBList;
+    for (BasicBlock& bb : *func)
+    {
+        for (Instruction& inst : bb)
+        {
+            if (MagicAsm::IsMagicOfKind(&inst, MagicAsmKind::DummyAsmToPreventIcEntryBBMerge))
+            {
+                icEntryBBList.push_back(&bb);
+                break;
+            }
+        }
+    }
+
+    std::vector<BasicBlock*> rewriteTargetBBList;
+    for (BasicBlock* targetBB : icEntryBBList)
+    {
+        Instruction* terminatorInst = targetBB->getTerminator();
+        if (!isa<BranchInst>(terminatorInst))
+        {
+            continue;
+        }
+
+        BranchInst* brInst = cast<BranchInst>(terminatorInst);
+        if (brInst->isConditional())
+        {
+            continue;
+        }
+
+        // Now we know 'targetBB' ends with an unconditional branch to 'bb'.
+        //
+        BasicBlock* bb = brInst->getSuccessor(0);
+
+        // Do not tail duplicate if 'bb' is too large
+        //
+        if (bb->getInstList().size() > 12)
+        {
+            continue;
+        }
+
+        // Check if its destination block is a terminal BB that dispatches to the next bytecode
+        //
+        CallInst* ci = bb->getTerminatingMustTailCall();
+        if (ci == nullptr)
+        {
+            continue;
+        }
+
+        Value* calledOp = ci->getCalledOperand();
+        if (!isa<GlobalValue>(calledOp))
+        {
+            continue;
+        }
+        GlobalValue* gv = cast<GlobalValue>(calledOp);
+        if (gv->getName() == fallthroughPlaceholderName)
+        {
+            rewriteTargetBBList.push_back(targetBB);
+        }
+    }
+
+    for (BasicBlock* targetBB : rewriteTargetBBList)
+    {
+        BranchInst* term = dyn_cast<BranchInst>(targetBB->getTerminator());
+        ReleaseAssert(!term->isConditional());
+        BasicBlock* destBB = term->getSuccessor(0);
+
+        std::unordered_map<Value*, Value*> remap;
+        for (Instruction& inst : *destBB)
+        {
+            if (isa<PHINode>(&inst))
+            {
+                PHINode* phi = cast<PHINode>(&inst);
+                int phiBlockIdx = phi->getBasicBlockIndex(targetBB);
+                ReleaseAssert(phiBlockIdx != -1);
+                Value* incomingValue = phi->getIncomingValue(static_cast<uint32_t>(phiBlockIdx));
+                // Must not delete PHI even if empty, otherwise the remapping won't work!
+                //
+                phi->removeIncomingValue(targetBB, false /*deletePhiIfEmpty*/);
+
+                ReleaseAssert(!remap.count(phi));
+                remap[phi] = incomingValue;
+            }
+            else
+            {
+                Instruction* clonedInst = inst.clone();
+                for (auto& op : clonedInst->operands())
+                {
+                    Value* opVal = op.get();
+                    if (remap.count(opVal))
+                    {
+                        op.set(remap[opVal]);
+                    }
+                }
+
+                ReleaseAssert(!remap.count(&inst));
+                remap[&inst] = clonedInst;
+                clonedInst->insertBefore(term);
+            }
+        }
+
+        term->eraseFromParent();
+    }
+
+    ValidateLLVMFunction(func);
+
+    EliminateUnreachableBlocks(*func);
+    ValidateLLVMFunction(func);
 }
 
 }   // namespace dast

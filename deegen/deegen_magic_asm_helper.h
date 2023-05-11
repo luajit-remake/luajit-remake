@@ -8,11 +8,19 @@ namespace dast {
 
 enum class MagicAsmKind
 {
+    // Help ASM CFG analysis to figure out the destinations of indirect branches
+    //
     IndirectBrMarkerForCfgRecovery,
+    // CallBr magic for Call IC
+    //
     CallIcDirectCall,
     CallIcClosureCall,
+    // CallBr magic for generic IC
+    //
     GenericIcEntry,
-    DummyAsmToPreventBBMerge,
+    // Prevent an IC entry BB from being merged with a non-IC BB by LLVM, which would confuse our IC extraction logic
+    //
+    DummyAsmToPreventIcEntryBBMerge,
     X_END_OF_ENUM
 };
 static_assert(static_cast<uint32_t>(MagicAsmKind::X_END_OF_ENUM) <= 155);     // int $XXX can only go up to 255
@@ -82,6 +90,17 @@ struct MagicAsm
         MagicAsmKind magicKind;
         std::string magicStr;
         return IsMagic(inst, magicKind /*out, unused*/, magicStr /*out, unused*/);
+    }
+
+    static bool WARN_UNUSED IsMagicOfKind(llvm::Instruction* inst, MagicAsmKind expectedKind)
+    {
+        MagicAsmKind magicKind;
+        std::string magicStr;
+        if (!IsMagic(inst, magicKind /*out*/, magicStr /*out, unused*/))
+        {
+            return false;
+        }
+        return magicKind == expectedKind;
     }
 
     static MagicAsmKind WARN_UNUSED GetKind(llvm::Instruction* inst)

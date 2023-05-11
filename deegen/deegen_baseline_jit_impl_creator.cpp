@@ -553,6 +553,17 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
 
+    if (icLLRes.size() > 0)
+    {
+        std::string fallthroughPlaceholderName = DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(GetStencilRcDefinitions());
+        if (fallthroughPlaceholderName != "")
+        {
+            AstInlineCache::AttemptIrRewriteToManuallyTailDuplicateSimpleIcCases(m_wrapper, fallthroughPlaceholderName);
+        }
+    }
+
+    ValidateLLVMModule(m_module.get());
+
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: for non-JIT slow path, our caller will fix up the linkage for us.
     // For JIT, we will extract the target function into a stencil, so the linkage doesn't matter.
