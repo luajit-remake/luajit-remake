@@ -112,14 +112,8 @@ public:
         return m_numGenericIcCaptures;
     }
 
-    struct GenericIcLoweringResult
-    {
-        std::unique_ptr<llvm::Module> m_icBodyModule;
-        std::vector<DeegenGenericIcTraitDesc> m_icTraitInfo;
-        std::string m_disasmForAudit;
-    };
 
-    GenericIcLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
+    AstInlineCache::BaselineJitFinalLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
     {
         return m_genericIcLoweringResult;
     }
@@ -157,7 +151,7 @@ private:
 
     size_t m_numGenericIcCaptures;
 
-    GenericIcLoweringResult m_genericIcLoweringResult;
+    AstInlineCache::BaselineJitFinalLoweringResult m_genericIcLoweringResult;
 
     bool m_generated;
 

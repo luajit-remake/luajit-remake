@@ -175,13 +175,15 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         // Emit C++ code that populates the allocation length stepping table of generic IC
         //
         {
-            std::vector<DeegenGenericIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allGenericIcTraitDescs;
+            using GenericIcTraitDesc = AstInlineCache::BaselineJitFinalLoweringResult::TraitDesc;
+
+            std::vector<GenericIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allGenericIcTraitDescs;
             size_t icTraitTableLength = bcTraitAccessor.GetJitGenericIcEffectTraitTableLength();
             fprintf(hdrFp, "namespace {\n\n");
             fprintf(hdrFp, "template<typename T> struct populate_baseline_jit_generic_ic_allocation_length_stepping_table_%s {\n", res.m_bytecodeDef->GetBytecodeIdName().c_str());
             fprintf(hdrFp, "static consteval void run(T* p) {\n");
             fprintf(hdrFp, "std::ignore = p;\n");
-            for (DeegenGenericIcTraitDesc& icTrait : icTraitList)
+            for (GenericIcTraitDesc& icTrait : icTraitList)
             {
                 ReleaseAssert(icTrait.m_ordInTraitTable < icTraitTableLength);
                 // If one IC has more than 8KB of code, probably something is seriously wrong...

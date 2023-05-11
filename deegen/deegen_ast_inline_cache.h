@@ -11,6 +11,8 @@ namespace dast {
 class BaselineJitImplCreator;
 struct X64AsmFile;
 struct DeegenStencil;
+class DeegenGlobalBytecodeTraitAccessor;
+struct BytecodeIrInfo;
 
 class AstInlineCache
 {
@@ -217,6 +219,27 @@ public:
                                                                                  size_t icUsageOrdInBytecode,
                                                                                  bool isCodegenForInlineSlab);
 
+    struct BaselineJitFinalLoweringResult
+    {
+        struct TraitDesc
+        {
+            size_t m_ordInTraitTable;
+            size_t m_allocationLength;
+        };
+
+        std::unique_ptr<llvm::Module> m_icBodyModule;
+        std::vector<TraitDesc> m_icTraitInfo;
+        std::string m_disasmForAudit;
+    };
+
+    static BaselineJitFinalLoweringResult WARN_UNUSED DoLoweringAfterAsmTransform(BytecodeIrInfo* bii,
+                                                                                  BaselineJitImplCreator* ifi,
+                                                                                  std::unique_ptr<llvm::Module> icBodyModule,
+                                                                                  std::vector<BaselineJitLLVMLoweringResult>& icLLRes,
+                                                                                  std::vector<BaselineJitAsmLoweringResult>& icAsmRes,
+                                                                                  DeegenStencil& mainStencil,
+                                                                                  const DeegenGlobalBytecodeTraitAccessor& gbta);
+
     // Perform trivial lowering: the execution semantics of this inline cache is preserved,
     // but no inling caching ever happens (i.e., execution simply unconditionally execute the IC body).
     //
@@ -279,12 +302,6 @@ public:
     // The IC state definition
     //
     std::unique_ptr<BytecodeMetadataStruct> m_icStruct;
-};
-
-struct DeegenGenericIcTraitDesc
-{
-    size_t m_ordInTraitTable;
-    size_t m_allocationLength;
 };
 
 constexpr const char* x_get_bytecode_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodePtrPlaceholder";
