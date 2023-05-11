@@ -103,6 +103,54 @@ inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* bas
     };
 }
 
+inline std::pair<bool, TValue> WARN_UNUSED NO_INLINE TryConcatFastPath(TValue* base, uint32_t num)
+{
+    bool success = true;
+    bool needNumberConversion = false;
+    for (uint32_t i = 0; i < num; i++)
+    {
+        TValue val = base[i];
+        if (val.Is<tString>())
+        {
+            continue;
+        }
+        if (val.Is<tDouble>() || val.Is<tInt32>())
+        {
+            needNumberConversion = true;
+            continue;
+        }
+        success = false;
+        break;
+    }
+
+    if (likely(success))
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+        if (needNumberConversion)
+        {
+            for (uint32_t i = 0; i < num; i++)
+            {
+                TValue val = base[i];
+                if (val.Is<tDouble>())
+                {
+                    base[i] = TValue::Create<tString>(StringifyDoubleToStringObject(val.As<tDouble>()));
+                }
+                else if (val.Is<tInt32>())
+                {
+                    base[i] = TValue::Create<tString>(StringifyInt32ToStringObject(val.As<tInt32>()));
+                }
+            }
+        }
+
+        TValue result = TValue::Create<tString>(vm->CreateStringObjectFromConcatenation(base, num).As());
+        return std::make_pair(true, result);
+    }
+    else
+    {
+        return std::make_pair(false, TValue());
+    }
+}
+
 }   // namespace ConcatBytecodeHelper
 
 static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_t num)
@@ -151,50 +199,9 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     MakeCall(callTarget, metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
 }
 
-static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
+static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
 {
     using namespace ConcatBytecodeHelper;
-
-    bool success = true;
-    bool needNumberConversion = false;
-    for (uint32_t i = 0; i < num; i++)
-    {
-        TValue val = base[i];
-        if (val.Is<tString>())
-        {
-            continue;
-        }
-        if (val.Is<tDouble>() || val.Is<tInt32>())
-        {
-            needNumberConversion = true;
-            continue;
-        }
-        success = false;
-        break;
-    }
-
-    if (likely(success))
-    {
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        if (needNumberConversion)
-        {
-            for (uint32_t i = 0; i < num; i++)
-            {
-                TValue val = base[i];
-                if (val.Is<tDouble>())
-                {
-                    base[i] = TValue::Create<tString>(StringifyDoubleToStringObject(val.As<tDouble>()));
-                }
-                else if (val.Is<tInt32>())
-                {
-                    base[i] = TValue::Create<tString>(StringifyInt32ToStringObject(val.As<tInt32>()));
-                }
-            }
-        }
-
-        TValue result = TValue::Create<tString>(vm->CreateStringObjectFromConcatenation(base, num).As());
-        Return(result);
-    }
 
     // Need to call metamethod
     // Note that this must be executed from right to left (this semantic is expected by Lua)
@@ -230,6 +237,19 @@ static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
     }
 
     MakeCall(callTarget, metamethod, fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+}
+
+static void NO_RETURN ConcatImpl(TValue* base, uint16_t num)
+{
+    auto [success, result] = ConcatBytecodeHelper::TryConcatFastPath(base, num);
+    if (likely(success))
+    {
+        Return(result);
+    }
+    else
+    {
+        EnterSlowPath<ConcatCallMetatableSlowPath>();
+    }
 }
 
 DEEGEN_DEFINE_BYTECODE(Concat)
