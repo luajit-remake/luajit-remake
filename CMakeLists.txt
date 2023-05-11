@@ -212,7 +212,7 @@ set(UNIT_TEST_SRC
   test_lambda_capture_parser.cpp
   test_inline_cache_api_lowering.cpp
   test_lj_optimized_math_lib.cpp
-  test_baseline_jit_gen.cpp
+  test_sanity_stencil_creator.cpp
   test_jit_call_inline_cache.cpp
   test_jit_memory_allocator.cpp
 )
