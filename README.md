@@ -10,7 +10,9 @@ Currently we have implemented:
 * A feature-complete Lua 5.1 interpreter, which is automatically generated from a [semantical description of the LuaJIT bytecodes](annotated/bytecodes). 
 * A completely re-engineered Lua runtime. For example, our implementation of the Lua table uses hidden class, instead of a naive hash table as in Lua/LuaJIT.
 
-You might want to read [this blog post](https://sillycross.github.io/2022/11/22/2022-11-22/) to understand more about our design. 
+If you would like to understand more about our design, the following blog posts are a good starting point:
+* [Building the fastest Lua interpreter automatically](https://sillycross.github.io/2022/11/22/2022-11-22/)
+* [Building a baseline JIT for Lua automatically](https://sillycross.github.io/2023/05/12/2023-05-12/)
 
 ### Interpreter performance comparison
 
