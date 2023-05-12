@@ -3742,6 +3742,8 @@ void AstInlineCache::AttemptIrRewriteToManuallyTailDuplicateSimpleIcCases(llvm::
         }
     }
 
+    size_t dummyOrd = 1000000;
+
     for (BasicBlock* targetBB : rewriteTargetBBList)
     {
         BranchInst* term = dyn_cast<BranchInst>(targetBB->getTerminator());
@@ -3783,6 +3785,21 @@ void AstInlineCache::AttemptIrRewriteToManuallyTailDuplicateSimpleIcCases(llvm::
         }
 
         term->eraseFromParent();
+
+        CallInst* ci = destBB->getTerminatingMustTailCall();
+        ReleaseAssert(ci != nullptr);
+
+        // Prevent LLVM from merging the blocks at machine codegen level again
+        //
+        {
+            std::string asmString = "movl $$" + std::to_string(dummyOrd) + ", eax;";
+            dummyOrd++;
+            asmString = MagicAsm::WrapLLVMAsmPayload(asmString, MagicAsmKind::DummyAsmToPreventIcEntryBBMerge);
+            FunctionType* fty = FunctionType::get(llvm_type_of<void>(ci->getContext()), { }, false);
+            InlineAsm* ia = InlineAsm::get(fty, asmString, "" /*constraints*/, true /*hasSideEffects*/);
+            CallInst* inst = CallInst::Create(ia, "", ci /*insertBefore*/);
+            inst->addFnAttr(Attribute::NoUnwind);
+        }
     }
 
     ValidateLLVMFunction(func);
