@@ -32,58 +32,6 @@ InjectedMagicDiLocationInfo WARN_UNUSED InjectedMagicDiLocationInfo::RunOnFuncti
     //
     std::mt19937 rng;
 
-    // Inject magic asm for us to map indirect branches (SwitchInst / IndirectBrInst / musttail call) back to LLVM IR
-    // beacuse it turns out that debug info is always broken for SwitchInst...
-    //
-    {
-        std::unordered_set<uint32_t> usedMarkerValues;
-        for (BasicBlock& bb : *func)
-        {
-            Instruction* inst = bb.getTerminator();
-            bool needMarker = isa<IndirectBrInst>(inst) || isa<SwitchInst>(inst);
-            if (!needMarker)
-            {
-                // If the terminating musttail call exists, the annotation should be inserted before the call, not the 'ret'
-                //
-                inst = bb.getTerminatingMustTailCall();
-                if (inst != nullptr)
-                {
-                    CallInst* ci = dyn_cast<CallInst>(inst);
-                    ReleaseAssert(ci != nullptr);
-                    ReleaseAssert(ci->isMustTailCall());
-                    // Do not insert annotation if the call is a global value, which means it will not be implemented by an indirect branch
-                    //
-                    if (!isa<GlobalValue>(ci->getCalledOperand()))
-                    {
-                        needMarker = true;
-                    }
-                }
-            }
-            if (needMarker)
-            {
-                ReleaseAssert(inst != nullptr);
-                uint32_t randVal = 0;
-                while (true)
-                {
-                    randVal = rng() % 10000000;
-                    if (!usedMarkerValues.count(randVal))
-                    {
-                        break;
-                    }
-                }
-                ReleaseAssert(!usedMarkerValues.count(randVal));
-                usedMarkerValues.insert(randVal);
-
-                std::string asmStr = "movl $$" + std::to_string(randVal) + ", eax;";
-                asmStr = MagicAsm::WrapLLVMAsmPayload(asmStr, MagicAsmKind::IndirectBrMarkerForCfgRecovery);
-                FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx), { }, false);
-                InlineAsm* ia = InlineAsm::get(fty, asmStr, "" /*constraints*/, true /*hasSideEffects*/);
-                CallInst* ci = CallInst::Create(ia, "", inst);
-                ci->addFnAttr(Attribute::NoUnwind);
-            }
-        }
-    }
-
     // Inject DILocation debug info for us to map general ASM instructions back to LLVM IR
     //
     module->addModuleFlag(Module::Warning, "Debug Info Version", DEBUG_METADATA_VERSION);
@@ -163,14 +111,6 @@ llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetMaybeInstructionO
     return m_mappingMaybe[line];
 }
 
-llvm::Instruction* WARN_UNUSED InjectedMagicDiLocationInfo::GetIndirectBrSourceFromMagicAsmAnnotation(uint32_t ident)
-{
-    using namespace llvm;
-    ReleaseAssert(m_hasUpdatedAfterCodegen);
-    ReleaseAssert(m_markedIndirectBrMap.count(ident));
-    return m_markedIndirectBrMap[ident];
-}
-
 void InjectedMagicDiLocationInfo::UpdateAfterCodegen()
 {
     using namespace llvm;
@@ -209,30 +149,6 @@ void InjectedMagicDiLocationInfo::UpdateAfterCodegen()
                 // Mark it as nullptr to invalidate it (important to not delete it, so that mapping.count still returns true)
                 //
                 m_mappingCertain[line] = nullptr;
-            }
-        }
-    }
-
-    for (BasicBlock& bb : *m_func)
-    {
-        for (Instruction& inst : bb)
-        {
-            if (MagicAsm::IsMagic(&inst) && MagicAsm::GetKind(&inst) == MagicAsmKind::IndirectBrMarkerForCfgRecovery)
-            {
-                std::string payload = MagicAsm::GetPayload(&inst);
-                ReleaseAssert(payload.starts_with("movl $$"));
-                payload = payload.substr(strlen("movl $$"));
-                ReleaseAssert(payload.ends_with(", eax;"));
-                payload = payload.substr(0, payload.length() - strlen(", eax;"));
-                uint32_t ord = SafeIntegerCast<uint32_t>(StoiOrFail(payload));
-                Instruction* terminator = bb.getTerminatingMustTailCall();
-                if (terminator == nullptr)
-                {
-                    terminator = bb.getTerminator();
-                }
-                ReleaseAssert(isa<IndirectBrInst>(terminator) || isa<SwitchInst>(terminator) || isa<CallInst>(terminator));
-                ReleaseAssert(!m_markedIndirectBrMap.count(ord));
-                m_markedIndirectBrMap[ord] = terminator;
             }
         }
     }
@@ -843,113 +759,6 @@ std::unique_ptr<X64AsmFile> WARN_UNUSED X64AsmFile::ParseFile(std::string fileCo
 
         block->m_lines = std::move(list);
     }
-
-    {
-        std::unordered_map<std::string, X64AsmBlock*> labelToBlockMap;
-        for (X64AsmBlock* block : r->m_blocks)
-        {
-            ReleaseAssert(!labelToBlockMap.count(block->m_normalizedLabelName));
-            labelToBlockMap[block->m_normalizedLabelName] = block;
-        }
-
-        // Process IndirectBrMarkerForCfgRecovery magic
-        //
-        for (X64AsmBlock* block : r->m_blocks)
-        {
-            for (size_t loc = 0; loc < block->m_lines.size(); loc++)
-            {
-                if (block->m_lines[loc].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
-                {
-                    ReleaseAssert(block->m_lines[loc].m_magicPayload->m_lines.size() == 1);
-                    X64AsmLine& payload = block->m_lines[loc].m_magicPayload->m_lines[0];
-                    ReleaseAssert(payload.NumWords() == 3);
-                    ReleaseAssert(payload.GetWord(0) == "movl");
-                    std::string val = payload.GetWord(1);
-                    ReleaseAssert(val.starts_with("$") && val.ends_with(","));
-                    val = val.substr(1, val.length() - 1);
-                    uint32_t ident = SafeIntegerCast<uint32_t>(StoiOrFail(val));
-                    llvm::Instruction* originInst = diInfo.GetIndirectBrSourceFromMagicAsmAnnotation(ident);
-
-                    bool invalidated = false;
-                    for (size_t i = loc + 1; i < block->m_lines.size(); i++)
-                    {
-                        if (block->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
-                        {
-                            // We encountered another magic IndirectBr annotation.
-                            // This means LLVM has chosen to not use an indirect jump to implement the current multi-target branch
-                            //
-                            invalidated = true;
-                            break;
-                        }
-                    }
-
-                    if (!invalidated)
-                    {
-                        X64AsmLine& terminator = block->m_lines.back();
-                        if (terminator.IsIndirectJumpInst())
-                        {
-                            terminator.m_originCertainList.push_back(originInst);
-                        }
-                        else if (block->m_lines.back().IsDirectUnconditionalJumpInst())
-                        {
-                            // Sometimes LLVM tail-merge indirect branches.. So if we see a branch,
-                            // try to follow it and see if it leads to an indirect-jump block.
-                            //
-                            std::string label = terminator.GetWord(1);
-                            if (labelToBlockMap.count(label))
-                            {
-                                X64AsmBlock* dstBlock = labelToBlockMap[label];
-                                for (size_t i = 0; i < dstBlock->m_lines.size(); i++)
-                                {
-                                    if (dstBlock->m_lines[i].IsMagicInstructionOfKind(MagicAsmKind::IndirectBrMarkerForCfgRecovery))
-                                    {
-                                        // We encountered another magic IndirectBr annotation.
-                                        // This means LLVM has chosen to not use an indirect jump to implement the current multi-target branch
-                                        //
-                                        invalidated = true;
-                                        break;
-                                    }
-                                }
-                                if (!invalidated && dstBlock->m_lines.back().IsIndirectJumpInst())
-                                {
-                                    dstBlock->m_lines.back().m_originCertainList.push_back(originInst);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    for (X64AsmBlock* block : r->m_blocks)
-    {
-        X64AsmLine& terminator = block->m_lines.back();
-        if (terminator.IsIndirectJumpInst())
-        {
-            ReleaseAssert(terminator.m_originCertainList.size() > 0);
-            std::unordered_set<llvm::Instruction*> removeDup;
-            for (llvm::Instruction* inst : terminator.m_originCertainList)
-            {
-                removeDup.insert(inst);
-            }
-            terminator.m_originCertainList.clear();
-            for (llvm::Instruction* inst : removeDup)
-            {
-                terminator.m_originCertainList.push_back(inst);
-            }
-            ReleaseAssert(terminator.m_originCertainList.size() > 0);
-            ReleaseAssertImp(terminator.m_originCertain != nullptr,
-                             terminator.m_originCertainList.size() == 1 && terminator.m_originCertainList[0] == terminator.m_originCertain);
-
-            if (terminator.m_originCertainList.size() == 1)
-            {
-                terminator.m_originCertain = terminator.m_originCertainList[0];
-            }
-        }
-    }
-
-    r->RemoveAsmMagic(MagicAsmKind::IndirectBrMarkerForCfgRecovery);
 
     // The dummy ASM to prevent LLVM basic block merge is only there to trick LLVM. At ASM level they are no longer useful.
     //

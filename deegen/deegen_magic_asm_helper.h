@@ -8,9 +8,6 @@ namespace dast {
 
 enum class MagicAsmKind
 {
-    // Help ASM CFG analysis to figure out the destinations of indirect branches
-    //
-    IndirectBrMarkerForCfgRecovery,
     // CallBr magic for Call IC
     //
     CallIcDirectCall,

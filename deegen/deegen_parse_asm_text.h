@@ -20,7 +20,6 @@ struct X64AsmLine
     AsmMagicPayload* m_magicPayload;    // If it is a ASM magic, carries the details of the magic
     llvm::Instruction* m_originCertain;
     llvm::Instruction* m_originMaybe;
-    std::vector<llvm::Instruction*> m_originCertainList;    // only used by indirect jump analysis
     uint32_t m_rawLocIdent;             // 0 if doesn't exist
 
     X64AsmLine()
@@ -328,7 +327,6 @@ struct InjectedMagicDiLocationInfo
     //
     llvm::Instruction* WARN_UNUSED GetCertainInstructionOriginMaybeNullFromDILoc(uint32_t line);
     llvm::Instruction* WARN_UNUSED GetMaybeInstructionOriginMaybeNullFromDILoc(uint32_t line);
-    llvm::Instruction* WARN_UNUSED GetIndirectBrSourceFromMagicAsmAnnotation(uint32_t ident);
     llvm::Function* GetFunc() { return m_func; }
 
     InjectedMagicDiLocationInfo()
@@ -347,7 +345,6 @@ private:
     llvm::Function* m_func;
     std::unordered_map<uint32_t, llvm::Instruction*> m_mappingCertain;
     std::unordered_map<uint32_t, llvm::Instruction*> m_mappingMaybe;
-    std::unordered_map<uint32_t, llvm::Instruction*> m_markedIndirectBrMap;
     // It seems like LLVM codegen pass modifies module.. so even if we add debug metadata right before codegen pass,
     // it can still get somehow corrupted (e.g., an IR instruction may be sinked or duplicated).
     // For now, workaround by automatically removing those corrupted debug info
