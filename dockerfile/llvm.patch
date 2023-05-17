@@ -1,3 +1,69 @@
+diff --git a/llvm/include/llvm/CodeGen/TargetInstrInfo.h b/llvm/include/llvm/CodeGen/TargetInstrInfo.h
+index 72f69f4c6..3d109a6d9 100644
+--- a/llvm/include/llvm/CodeGen/TargetInstrInfo.h
++++ b/llvm/include/llvm/CodeGen/TargetInstrInfo.h
+@@ -1208,6 +1208,8 @@ public:
+   /// even if it has glue.
+   virtual bool canCopyGluedNodeDuringSchedule(SDNode *N) const { return false; }
+ 
++  virtual int getJumpTableIndex(const MachineInstr &MI) const { return -1; }
++
+ protected:
+   /// Target-dependent implementation for foldMemoryOperand.
+   /// Target-independent code in foldMemoryOperand will
+diff --git a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+index 32a10ad41..32a049ef8 100644
+--- a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
++++ b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
+@@ -125,6 +125,12 @@
+ 
+ using namespace llvm;
+ 
++
++static cl::opt<bool>
++    AddIndirectBranchDestAnnotationForDeegen("add-indirect-branch-dest-annotation-for-deegen", cl::init(false), cl::Hidden,
++                                            cl::desc("Add destination annotations to indirect branches for Deegen"));
++
++
+ #define DEBUG_TYPE "asm-printer"
+ 
+ const char DWARFGroupName[] = "dwarf";
+@@ -1490,6 +1496,35 @@ void AsmPrinter::emitFunctionBody() {
+       if (isVerbose())
+         emitComments(MI, OutStreamer->getCommentOS());
+ 
++      if (AddIndirectBranchDestAnnotationForDeegen)
++      {
++          const TargetInstrInfo* TII = MF->getSubtarget().getInstrInfo();
++          if (TII->isTailCall(MI))
++          {
++              OutStreamer->AddComment("__deegen_asm_annotation_tailcall");
++          }
++          else
++          {
++              int jumpTableIndex = TII->getJumpTableIndex(MI);
++              if (jumpTableIndex != -1)
++              {
++                  const std::vector<MachineJumpTableEntry>& jumpTables = MF->getJumpTableInfo()->getJumpTables();
++                  if (jumpTableIndex < 0 || static_cast<size_t>(jumpTableIndex) >= jumpTables.size())
++                  {
++                      fprintf(stderr, "Deegen AsmPrinter hack: Bad jump table index!\n");
++                      abort();
++                  }
++                  std::string annotationText = "__deegen_asm_annotation_indirectbr{";
++                  for (MachineBasicBlock* possibleDestMBB : jumpTables[jumpTableIndex].MBBs)
++                  {
++                      annotationText += possibleDestMBB->getSymbol()->getName().str() + ",";
++                  }
++                  annotationText += "}";
++                  OutStreamer->AddComment(annotationText);
++              }
++          }
++      }
++
+       switch (MI.getOpcode()) {
+       case TargetOpcode::CFI_INSTRUCTION:
+         emitCFIInstruction(MI);
 diff --git a/llvm/lib/Target/X86/X86CallingConv.td b/llvm/lib/Target/X86/X86CallingConv.td
 index 4dd8a6cdd..5a2c1fa5d 100644
 --- a/llvm/lib/Target/X86/X86CallingConv.td
@@ -33,3 +99,89 @@ index 4dd8a6cdd..5a2c1fa5d 100644
                                                   (sequence "YMM%u", 0, 15))>;
  
  def CSR_64_MostRegs : CalleeSavedRegs<(add RBX, RCX, RDX, RSI, RDI, R8, R9, R10,
+diff --git a/llvm/lib/Target/X86/X86InstrInfo.cpp b/llvm/lib/Target/X86/X86InstrInfo.cpp
+index 74ef831e1..613faece6 100644
+--- a/llvm/lib/Target/X86/X86InstrInfo.cpp
++++ b/llvm/lib/Target/X86/X86InstrInfo.cpp
+@@ -3252,6 +3252,68 @@ bool X86InstrInfo::analyzeBranchPredicate(MachineBasicBlock &MBB,
+   return true;
+ }
+ 
++static int getJumpTableIndexFromAddr(const MachineInstr &MI) {
++    const MCInstrDesc &Desc = MI.getDesc();
++    int MemRefBegin = X86II::getMemoryOperandNo(Desc.TSFlags);
++    assert(MemRefBegin >= 0 && "instr should have memory operand");
++    MemRefBegin += X86II::getOperandBias(Desc);
++
++    const MachineOperand &MO = MI.getOperand(MemRefBegin + X86::AddrDisp);
++    if (!MO.isJTI())
++        return -1;
++
++    return MO.getIndex();
++}
++
++static int getJumpTableIndexFromReg(const MachineRegisterInfo &MRI,
++                                    Register Reg) {
++    if (!Reg.isVirtual())
++        return -1;
++    MachineInstr *MI = MRI.getUniqueVRegDef(Reg);
++    if (MI == nullptr)
++        return -1;
++    unsigned Opcode = MI->getOpcode();
++    if (Opcode != X86::LEA64r && Opcode != X86::LEA32r)
++        return -1;
++    return getJumpTableIndexFromAddr(*MI);
++}
++
++int X86InstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
++    unsigned Opcode = MI.getOpcode();
++    // Switch-jump pattern for non-PIC code looks like:
++    //   JMP64m $noreg, 8, %X, %jump-table.X, $noreg
++    if (Opcode == X86::JMP64m || Opcode == X86::JMP32m) {
++        return getJumpTableIndexFromAddr(MI);
++    }
++    // The pattern for PIC code looks like:
++    //   %0 = LEA64r $rip, 1, $noreg, %jump-table.X
++    //   %1 = MOVSX64rm32 %0, 4, XX, 0, $noreg
++    //   %2 = ADD64rr %1, %0
++    //   JMP64r %2
++    if (Opcode == X86::JMP64r || Opcode == X86::JMP32r) {
++        Register Reg = MI.getOperand(0).getReg();
++        if (!Reg.isVirtual())
++            return -1;
++
++        const MachineFunction &MF = *MI.getParent()->getParent();
++        const MachineRegisterInfo &MRI = MF.getRegInfo();
++        MachineInstr *Add = MRI.getUniqueVRegDef(Reg);
++        if (Add == nullptr)
++            return -1;
++
++        if (Add->getOpcode() != X86::ADD64rr && Add->getOpcode() != X86::ADD32rr)
++            return -1;
++
++        int JTI1 = getJumpTableIndexFromReg(MRI, Add->getOperand(1).getReg());
++        if (JTI1 >= 0)
++            return JTI1;
++        int JTI2 = getJumpTableIndexFromReg(MRI, Add->getOperand(2).getReg());
++        if (JTI2 >= 0)
++            return JTI2;
++    }
++    return -1;
++}
++
+ unsigned X86InstrInfo::removeBranch(MachineBasicBlock &MBB,
+                                     int *BytesRemoved) const {
+   assert(!BytesRemoved && "code size not handled");
+diff --git a/llvm/lib/Target/X86/X86InstrInfo.h b/llvm/lib/Target/X86/X86InstrInfo.h
+index 81729e361..abc387bcd 100644
+--- a/llvm/lib/Target/X86/X86InstrInfo.h
++++ b/llvm/lib/Target/X86/X86InstrInfo.h
+@@ -327,6 +327,8 @@ public:
+                      SmallVectorImpl<MachineOperand> &Cond,
+                      bool AllowModify) const override;
+ 
++  int getJumpTableIndex(const MachineInstr &MI) const override;
++
+   Optional<ExtAddrMode>
+   getAddrModeFromMemoryOp(const MachineInstr &MemI,
+                           const TargetRegisterInfo *TRI) const override;

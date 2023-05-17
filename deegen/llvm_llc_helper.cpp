@@ -1,5 +1,6 @@
 #include "anonymous_file.h"
 #include "misc_llvm_helper.h"
+#include "llvm_override_option.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -136,6 +137,22 @@ std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, ll
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
 {
     return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel, targetOptionsTweaker);
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+{
+    return CompileLLVMModuleToAssemblyFileForStencilGeneration(module, relocationModel, codeModel, [](llvm::TargetOptions&) { });
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
+{
+    ScopeOverrideLLVMOption<bool> overrideOption("add-indirect-branch-dest-annotation-for-deegen", true);
+    return CompileLLVMModuleToAssemblyFile(module, relocationModel, codeModel, [&](llvm::TargetOptions& targetOptions) {
+        // Required for indirect branch dest annotation
+        //
+        targetOptions.MCOptions.AsmVerbose = true;
+        targetOptionsTweaker(targetOptions);
+    });
 }
 
 std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)

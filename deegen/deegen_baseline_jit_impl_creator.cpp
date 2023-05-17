@@ -616,7 +616,7 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     // Currently we simply ignore alignments, which is fine for now since currently our none of our JIT fast path contains loops.
     // But this will break down once any loop is introduced. To fix this, we need to be aware of the aligned BBs and manually generate NOPs.
     //
-    std::string asmFile = CompileLLVMModuleToAssemblyFile(
+    std::string asmFile = CompileLLVMModuleToAssemblyFileForStencilGeneration(
         m_module.get(),
         llvm::Reloc::Static,
         llvm::CodeModel::Small,

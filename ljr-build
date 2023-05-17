@@ -15,7 +15,7 @@ script_name = os.path.basename(__file__)
 #
 docker_image_version_major = "0"
 docker_image_version_minor = "0"
-docker_image_version_build = "4"
+docker_image_version_build = "5"
 
 # The DockerHub username that hosts the image 
 #
