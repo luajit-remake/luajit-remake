@@ -9,6 +9,10 @@ namespace dast {
 
 class CpPlaceholderExprPrinter;
 
+// TODO: for best results, we should hash cons the runtime-constant expressions,
+// as not hash-consing them prevents LLVM from merging identical basic blocks,
+// and as a result, some of our JIT slow path currently contains redundant logic..
+//
 class CPRuntimeConstantNodeBase
 {
 protected:

@@ -3430,6 +3430,10 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
 
     // Set up the bytecode operands argument list
     //
+    // TODO: The logic below asserts that SlowPathDataOffset and CodeBlock are unused.
+    // However, this assert might not hold, as the IC logic might use CodeBlock32 and SlowPathDataOffset if it tail-duplicated the logic
+    // So to support all cases, we need to pass CodeBlock to IC body
+    //
     std::vector<Value*> bytecodeValList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
                                                                                                                  slowPathData,
                                                                                                                  nullptr /*slowPathDataOffset, must unused*/,
