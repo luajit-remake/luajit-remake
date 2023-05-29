@@ -58,6 +58,13 @@ struct LowerThrowErrorApiPass final : public DeegenAbstractSimpleApiLoweringPass
         ReleaseAssert(calleeName == "DeegenImpl_ThrowErrorTValue" || calleeName == "DeegenImpl_ThrowErrorCString");
 
         LLVMContext& ctx = ifi->GetModule()->getContext();
+
+        if (ifi->IsInterpreter())
+        {
+            InterpreterBytecodeImplCreator* i = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+            i->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { i->GetCodeBlock(), i->GetCurBytecode() }, origin);
+        }
+
         Function* dispatchTarget;
         Value* errorObject = origin->getArgOperand(0);
         if (calleeName == "DeegenImpl_ThrowErrorTValue")

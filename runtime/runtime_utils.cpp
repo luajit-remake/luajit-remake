@@ -1,4 +1,5 @@
 #include "runtime_utils.h"
+#include "deegen_options.h"
 #include "vm.h"
 #include "table_object.h"
 #include "deegen_enter_vm_from_c.h"
@@ -101,6 +102,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     cb->m_bytecodeLength = ucb->m_bytecodeLength;
     cb->m_bytecodeMetadataLength = ucb->m_bytecodeMetadataLength;
     cb->m_baselineCodeBlock = nullptr;
+    cb->m_interpreterTierUpCounter = x_interpreter_tier_up_threshold_bytecode_length_multiplier * ucb->m_bytecodeLength;
     cb->m_floCodeBlock = nullptr;
     cb->m_owner = ucb;
 

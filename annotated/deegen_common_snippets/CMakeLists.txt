@@ -51,6 +51,8 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   initialize_jit_call_ic_site.cpp
   initialize_jit_generic_ic_site.cpp
   create_new_jit_generic_ic.cpp
+  update_interpreter_tier_up_counter_for_return_or_throw.cpp
+  update_interpreter_tier_up_counter_for_branch.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

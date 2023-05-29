@@ -16,6 +16,13 @@ struct LowerGuestLanguageFunctionReturnPass final : public DeegenAbstractSimpleA
         using namespace llvm;
         std::string symbolName = origin->getCalledFunction()->getName().str();
         LLVMContext& ctx = ifi->GetModule()->getContext();
+
+        if (ifi->IsInterpreter())
+        {
+            InterpreterBytecodeImplCreator* i = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+            i->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { i->GetCodeBlock(), i->GetCurBytecode() }, origin);
+        }
+
         Value* retStart = nullptr;
         Value* numRet = nullptr;
         if (symbolName == x_retNoneSymbol)

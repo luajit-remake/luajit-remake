@@ -111,6 +111,8 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
         ReleaseAssert(llvm_value_has_type<int32_t>(bytecodeOffset));
         Instruction* offset64 = new SExtInst(bytecodeOffset, llvm_type_of<int64_t>(ctx), "", m_origin /*insertBefore*/);
         bytecodeTarget = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCurBytecode(), { offset64 }, "", m_origin /*insertBefore*/);
+
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForBranch", { ifi->GetCodeBlock(), ifi->GetCurBytecode(), bytecodeTarget }, m_origin /*insertBefore*/);
     }
     else
     {
