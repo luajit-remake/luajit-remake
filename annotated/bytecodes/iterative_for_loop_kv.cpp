@@ -24,6 +24,10 @@ static void NO_RETURN ValidateIsNextAndBranchImpl(TValue* base)
 
     if (validateOK)
     {
+        // Overwrite base[0] with a special object never exposed to the user
+        //
+        base[0] = VM_GetLibFunctionObject<VM::LibFn::BaseNextValidationOk>();
+
         // Overwrite base[2] with TableObjectIterator
         //
         static_assert(sizeof(TableObjectIterator) == 8);
@@ -87,7 +91,7 @@ static void NO_RETURN KVLoopIterNotNextFunctionSlowPath(TValue* /*base*/, uint8_
 
 static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
 {
-    if (likely(base[0].m_value == VM_GetLibFunctionObject<VM::LibFn::BaseNext>().m_value))
+    if (likely(base[0].m_value == VM_GetLibFunctionObject<VM::LibFn::BaseNextValidationOk>().m_value))
     {
         TableObjectIterator* iter = reinterpret_cast<TableObjectIterator*>(base + 2);
         HeapPtr<TableObject> table = base[1].As<tTable>();

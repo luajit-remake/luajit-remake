@@ -637,6 +637,16 @@ static void LuaTest_BooleanAsTableIndex_1(LuaTestOption testOption)
     ReleaseAssert(err == "");
 }
 
+TEST(LuaTest, ForPairsNextButNotNil)
+{
+    RunSimpleLuaTest("luatests/for_pairs_next_but_not_nil.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, ForPairsNextButNotNil)
+{
+    RunSimpleLuaTest("luatests/for_pairs_next_but_not_nil.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaTest, BooleanAsTableIndex_1)
 {
     LuaTest_BooleanAsTableIndex_1(LuaTestOption::ForceInterpreter);

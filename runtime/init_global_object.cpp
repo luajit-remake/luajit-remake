@@ -244,6 +244,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     vm->InitializeLibFn<VM::LibFn::BaseIPairsIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_ipairs_iterator))));
     vm->InitializeLibFn<VM::LibFn::BaseToString>(TValue::Create<tFunction>(libfn_base_tostring));
     vm->InitializeLibFn<VM::LibFn::BaseLoad>(TValue::Create<tFunction>(libfn_base_load));
+    vm->InitializeLibFn<VM::LibFn::BaseNextValidationOk>(TValue::Create<tTable>(TableObject::CreateEmptyTableObject(vm, 0U /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/)));
     vm->m_stringNameForToStringMetamethod = vm->CreateStringObjectFromRawCString("__tostring");
     vm->m_toStringString = vm->CreateStringObjectFromRawCString("tostring");
 

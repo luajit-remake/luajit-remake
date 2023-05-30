@@ -769,6 +769,9 @@ public:
         BaseToString,
         BaseLoad,
         IoLinesIter,
+        // A special object denoting that the 'is_next' validation of a key-value for-loop has passed
+        //
+        BaseNextValidationOk,
         // must be last member
         //
         X_END_OF_ENUM
@@ -786,7 +789,7 @@ public:
     void ALWAYS_INLINE InitializeLibFn(TValue val)
     {
         static_assert(fn != LibFn::X_END_OF_ENUM);
-        assert(val.Is<tFunction>());
+        assert(val.Is<tFunction>() || val.Is<tTable>());
         m_vmLibFunctionObjects[static_cast<size_t>(fn)] = val;
     }
 
