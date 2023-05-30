@@ -2256,6 +2256,16 @@ TEST(LuaLibForceBaselineJit, table_lib_concat)
     RunSimpleLuaTest("luatests/table_lib_concat.lua", LuaTestOption::ForceBaselineJit);
 }
 
+TEST(LuaLib, table_concat_overflow)
+{
+    RunSimpleLuaTest("luatests/table_concat_overflow.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaLibForceBaselineJit, table_concat_overflow)
+{
+    RunSimpleLuaTest("luatests/table_concat_overflow.lua", LuaTestOption::ForceBaselineJit);
+}
+
 TEST(LuaBenchmark, array3d)
 {
     RunSimpleLuaTest("luatests/array3d.lua", LuaTestOption::ForceInterpreter);

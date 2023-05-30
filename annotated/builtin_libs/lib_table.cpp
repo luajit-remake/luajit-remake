@@ -100,18 +100,72 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
     std::pair<const void* /*ptr*/, size_t /*len*/> internalStringBuffer[x_internalStringBufferLimit];
     std::pair<const void* /*ptr*/, size_t /*len*/>* strings = nullptr;
 
-    size_t numItems = static_cast<size_t>(end - start + 1);
-    if (!isEmptySeparator)
+    // Real computation:
+    //    numItems = (end - start + 1)
+    //    if (!isEmptySeparator):
+    //        numItems = numItems * 2 - 1
+    //
+    // However, directly doing the 'numItem' computation below may overflow size_t.
+    // It seems like PUC Lua limits the maximum array size to about 2^27. LuaJIT has a even lower limit due to global 1GB mem limit,
+    // and table.concat ignores metatable, so a too large 'numItem' is doomed to hit a non-existent key and error out.
+    //
+    // Furthermore, we pre-allocate a 'numItem'-sized array, which could directly result in an OOM and produce a different error from PUC Lua.
+    //
+    // To mimic PUC Lua behavior, we will scan for the non-existent key if 'numItem' is too large or the array allocation failed.
+    //
+    // P.S.
+    //     It seems like PUC Lua / LuaJIT has weird behavior already (e.g., casting 'start' and 'end' to int32_t ignoring overflow).
+    //     We do not attempt to mimic the behavior of that part as it seems like an unintentional bug.
+    //
+    size_t numItems = static_cast<size_t>(end) - static_cast<size_t>(start);
+    if (numItems < (1ULL << 48))
     {
-        numItems = numItems * 2 - 1;
-    }
-    if (numItems > x_internalStringBufferLimit)
-    {
-        strings = new std::pair<const void*, size_t>[numItems];
+        // Cannot do +1 outside due to overflow
+        //
+        numItems += 1;
+        if (!isEmptySeparator)
+        {
+            numItems = numItems * 2 - 1;
+        }
+
+        if (numItems > x_internalStringBufferLimit)
+        {
+            // 'strings' will be nullptr if allocation failed
+            //
+            strings = new (std::nothrow) std::pair<const void*, size_t>[numItems];
+        }
+        else
+        {
+            strings = internalStringBuffer;
+        }
     }
     else
     {
-        strings = internalStringBuffer;
+        strings = nullptr;
+    }
+
+    // Note that if strings == nullptr, 'numItems' may not be valid!
+    //
+    if (unlikely(strings == nullptr))
+    {
+        // This table.concat cannot be accomplished due to OOM.
+        // Try to produce a good error by finding a non-existent key, so we behave the same as PUC Lua.
+        //
+        GetByIntegerIndexICInfo info;
+        TableObject::PrepareGetByIntegerIndex(tab, info /*out*/);
+        for (int64_t i = start; i <= end; i++)
+        {
+            TValue val = TableObject::GetByIntegerIndex(tab, i, info);
+            if (val.Is<tString>() || val.Is<tDouble>() || val.Is<tInt32>())
+            {
+                continue;
+            }
+            ThrowError("table contains invalid value for 'concat'");
+        }
+
+        // It seems like we really have an OOM condition
+        //
+        ThrowError("not enough memory");
     }
 
     size_t numNumbers = 0;
