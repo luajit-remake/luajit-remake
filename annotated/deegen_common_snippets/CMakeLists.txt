@@ -53,6 +53,9 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   create_new_jit_generic_ic.cpp
   update_interpreter_tier_up_counter_for_return_or_throw.cpp
   update_interpreter_tier_up_counter_for_branch.cpp
+  get_interpreter_tier_up_counter.cpp
+  get_interpreter_tier_up_counter_from_cb_heap_ptr.cpp
+  tier_up_into_baseline_jit.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

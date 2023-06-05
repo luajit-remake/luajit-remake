@@ -606,6 +606,8 @@ public:
         }
     }
 
+    void* WARN_UNUSED GetInterpreterEntryPoint();
+
     // For assertion purpose only
     //
     bool m_uvFixUpCompleted;

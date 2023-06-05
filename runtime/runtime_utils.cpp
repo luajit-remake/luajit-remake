@@ -81,6 +81,11 @@ TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
     return MakeErrorMessage(msg);
 }
 
+void* WARN_UNUSED UnlinkedCodeBlock::GetInterpreterEntryPoint()
+{
+    return generated::GetGuestLanguageFunctionEntryPointForInterpreter(m_hasVariadicArguments, m_numFixedArguments);
+}
+
 CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
     assert(ucb->m_bytecodeMetadataLength % 8 == 0);
@@ -95,14 +100,23 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
     cb->m_bytecode = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset();
     memcpy(cb->m_bytecode, ucb->m_bytecode, ucb->m_bytecodeLength);
-    cb->m_bestEntryPoint = generated::GetGuestLanguageFunctionEntryPointForInterpreter(ucb->m_hasVariadicArguments, ucb->m_numFixedArguments);
+    cb->m_bestEntryPoint = ucb->GetInterpreterEntryPoint();
     cb->m_globalObject = globalObject;
     cb->m_stackFrameNumSlots = ucb->m_stackFrameNumSlots;
     cb->m_numUpvalues = ucb->m_numUpvalues;
     cb->m_bytecodeLength = ucb->m_bytecodeLength;
     cb->m_bytecodeMetadataLength = ucb->m_bytecodeMetadataLength;
     cb->m_baselineCodeBlock = nullptr;
-    cb->m_interpreterTierUpCounter = x_interpreter_tier_up_threshold_bytecode_length_multiplier * ucb->m_bytecodeLength;
+    if (vm->InterpreterCanTierUpFurther())
+    {
+        cb->m_interpreterTierUpCounter = x_interpreter_tier_up_threshold_bytecode_length_multiplier * ucb->m_bytecodeLength;
+    }
+    else
+    {
+        // We increment counter on forward edges, choose 2^62 to avoid overflow.
+        //
+        cb->m_interpreterTierUpCounter = 1LL << 62;
+    }
     cb->m_floCodeBlock = nullptr;
     cb->m_owner = ucb;
 
@@ -117,7 +131,8 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     {
         BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
         assert(cb->m_baselineCodeBlock == bcb);
-        cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
+        assert(cb->m_bestEntryPoint != ucb->GetInterpreterEntryPoint());
+        std::ignore = bcb;
     }
 
     return cb;

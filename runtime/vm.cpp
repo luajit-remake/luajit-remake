@@ -107,6 +107,7 @@ bool WARN_UNUSED VM::InitializeVMBase()
     SetUpSegmentationRegister();
 
     m_isEngineStartingTierBaselineJit = false;
+    m_engineMaxTier = EngineMaxTier::Unrestricted;
 
     m_userHeapPtrLimit = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
     m_userHeapCurPtr = -static_cast<int64_t>(x_vmBaseOffset - x_vmUserHeapSize);
@@ -130,6 +131,9 @@ bool WARN_UNUSED VM::InitializeVMBase()
     {
         m_spdsExecutionThreadFreeList[i] = SpdsPtr<void> { 0 };
     }
+
+    m_totalBaselineJitCompilations = 0;
+
     return true;
 }
 

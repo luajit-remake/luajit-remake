@@ -90,14 +90,66 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
     ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
     Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
-    Value* calleeCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "SimpleTranslateToRawPointer", { calleeCodeBlockHeapPtr }, entryBB);
+
+    // Check for tier up
+    //
+    BasicBlock* normalBB = nullptr;     // this is the basic block for normal execution (i.e., no tiering-up)
+    if (m_tier == DeegenEngineTier::Interpreter)
+    {
+        // Check if we need to tier up
+        //
+        Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCbHeapPtr", { calleeCodeBlockHeapPtr }, entryBB);
+        ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
+
+        Value* shouldTierUp = new ICmpInst(*entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
+        Function* expectIntrin = Intrinsic::getDeclaration(module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
+        shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", entryBB);
+
+        BasicBlock* tierUpBB = BasicBlock::Create(ctx, "", func);
+        normalBB = BasicBlock::Create(ctx, "", func);
+
+        BranchInst::Create(tierUpBB, normalBB, shouldTierUp, entryBB);
+
+        // Set up the tier-up BB, which should call the baseline JIT codegen function and branch to JIT'ed code
+        //
+        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, tierUpBB);
+        ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
+        StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
+        ReleaseAssert(sty->elements().size() == 2);
+        Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", tierUpBB);
+        ReleaseAssert(llvm_value_has_type<void*>(bcb));
+        Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", tierUpBB);
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        UnreachableInst* dummyInst = new UnreachableInst(ctx, tierUpBB);
+
+        InterpreterFunctionInterface::CreateDispatchToCallee(
+            codePointer,
+            coroutineCtx,
+            preFixupStackBase,
+            calleeCodeBlockHeapPtr,
+            numArgs,
+            isMustTail64,
+            dummyInst /*insertBefore*/);
+
+        dummyInst->eraseFromParent();
+    }
+    else
+    {
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+        normalBB = entryBB;
+    }
+
+    // Set up the normal execution BB, which should do the stack frame adjustments as needed and branch to the real function logic
+    //
+    Value* calleeCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "SimpleTranslateToRawPointer", { calleeCodeBlockHeapPtr }, normalBB);
     ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
     calleeCodeBlock->setName("calleeCodeBlock");
 
     Value* bytecodePtr = nullptr;
     if (m_tier == DeegenEngineTier::Interpreter)
     {
-        bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, entryBB);
+        bytecodePtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBytecodePtrFromCodeBlock", { calleeCodeBlock }, normalBB);
         bytecodePtr->setName("bytecodePtr");
     }
 
@@ -117,25 +169,25 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
                 uint64_t nilValue = TValue::Nil().m_value;
                 // We can completely get rid of the branches, by simply unconditionally writing 'numArgsCalleeAccepts' nils beginning at stackbase[numArgs]
                 //
-                GetElementPtrInst* base = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), preFixupStackBase, { numArgs }, "", entryBB);
+                GetElementPtrInst* base = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), preFixupStackBase, { numArgs }, "", normalBB);
                 for (size_t i = 0; i < numArgsCalleeAccepts; i++)
                 {
-                    GetElementPtrInst* target = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), base, { CreateLLVMConstantInt<uint64_t>(ctx, i) }, "", entryBB);
-                    std::ignore = new StoreInst(CreateLLVMConstantInt<uint64_t>(ctx, nilValue), target, entryBB);
+                    GetElementPtrInst* target = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), base, { CreateLLVMConstantInt<uint64_t>(ctx, i) }, "", normalBB);
+                    std::ignore = new StoreInst(CreateLLVMConstantInt<uint64_t>(ctx, nilValue), target, normalBB);
                 }
             }
             else
             {
                 uint64_t nilValue = TValue::Nil().m_value;
                 Constant* numFixedParams = CreateLLVMConstantInt<uint64_t>(ctx, numArgsCalleeAccepts);
-                CreateCallToDeegenCommonSnippet(module.get(), "PopulateNilToUnprovidedParams", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue) }, entryBB);
+                CreateCallToDeegenCommonSnippet(module.get(), "PopulateNilToUnprovidedParams", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue) }, normalBB);
             }
         }
         else
         {
-            Value* numFixedParams = CreateCallToDeegenCommonSnippet(module.get(), "GetNumFixedParamsFromCodeBlock", { calleeCodeBlock }, entryBB);
+            Value* numFixedParams = CreateCallToDeegenCommonSnippet(module.get(), "GetNumFixedParamsFromCodeBlock", { calleeCodeBlock }, normalBB);
             uint64_t nilValue = TValue::Nil().m_value;
-            CreateCallToDeegenCommonSnippet(module.get(), "PopulateNilToUnprovidedParams", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue) }, entryBB);
+            CreateCallToDeegenCommonSnippet(module.get(), "PopulateNilToUnprovidedParams", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue) }, normalBB);
         }
         stackBaseAfterFixUp = preFixupStackBase;
     }
@@ -150,23 +202,20 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
         }
         else
         {
-            numFixedParams = CreateCallToDeegenCommonSnippet(module.get(), "GetNumFixedParamsFromCodeBlock", { calleeCodeBlock }, entryBB);
+            numFixedParams = CreateCallToDeegenCommonSnippet(module.get(), "GetNumFixedParamsFromCodeBlock", { calleeCodeBlock }, normalBB);
         }
         uint64_t nilValue = TValue::Nil().m_value;
-        stackBaseAfterFixUp = CreateCallToDeegenCommonSnippet(module.get(), "FixupStackFrameForVariadicArgFunction", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue), isMustTail64 }, entryBB);
+        stackBaseAfterFixUp = CreateCallToDeegenCommonSnippet(module.get(), "FixupStackFrameForVariadicArgFunction", { preFixupStackBase, numArgs, numFixedParams, CreateLLVMConstantInt<uint64_t>(ctx, nilValue), isMustTail64 }, normalBB);
     }
 
     ReleaseAssert(llvm_value_has_type<void*>(stackBaseAfterFixUp));
     stackBaseAfterFixUp->setName("stackBaseAfterFixUp");
 
-    // Unfortunately a bunch of APIs only take 'insertBefore', not 'insertAtEnd'
-    // We workaround it by creating a temporary instruction and remove it in the end
-    //
-    UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
-
     if (m_tier == DeegenEngineTier::Interpreter)
     {
         ReleaseAssert(bytecodePtr != nullptr);
+
+        UnreachableInst* dummyInst = new UnreachableInst(ctx, normalBB);
 
         Value* opcode = BytecodeVariantDefinition::DecodeBytecodeOpcode(bytecodePtr, dummyInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<uint64_t>(opcode));
@@ -181,10 +230,15 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
             bytecodePtr,
             calleeCodeBlock,
             dummyInst /*insertBefore*/);
+
+        dummyInst->eraseFromParent();
     }
     else
     {
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
         ReleaseAssert(bytecodePtr == nullptr);
+
+        UnreachableInst* dummyInst = new UnreachableInst(ctx, normalBB);
 
         CallInst* target = DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(module.get(),
                                                                                        101 /*fallthroughDest*/,
@@ -199,9 +253,9 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
             UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
             calleeCodeBlock,
             dummyInst /*insertBefore*/);
-    }
 
-    dummyInst->eraseFromParent();
+        dummyInst->eraseFromParent();
+    }
 
     if (m_tier == DeegenEngineTier::Interpreter)
     {

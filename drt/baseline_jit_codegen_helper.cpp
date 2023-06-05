@@ -50,12 +50,12 @@ static BaselineJitFunctionEntryLogicTraits WARN_UNUSED ALWAYS_INLINE GetBaseline
     }
 }
 
-BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
+using BytecodeOpcodeTy = DeegenBytecodeBuilder::BytecodeBuilder::BytecodeOpcodeTy;
+
+BaselineCodeBlock* NO_INLINE deegen_baseline_jit_do_codegen(CodeBlock* cb)
 {
     uint8_t* bytecodeStream = cb->GetBytecodeStream();
     uint8_t* bytecodeStreamEnd = bytecodeStream + cb->m_bytecodeLength - DeegenBytecodeBuilder::BytecodeBuilder::x_numExtraPaddingAtEnd;
-
-    using BytecodeOpcodeTy = DeegenBytecodeBuilder::BytecodeBuilder::BytecodeOpcodeTy;
 
     // Get the function entry logic trait based on the function prototype
     //
@@ -124,7 +124,9 @@ BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
 
     // TODO: right now the data section is also marked executable because we just use one mmap for simplicity..
     //
-    JitMemoryAllocator* jitAlloc = VM::GetActiveVMForCurrentThread()->GetJITMemoryAlloc();
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    vm->IncrementNumTotalBaselineJitCompilations();
+    JitMemoryAllocator* jitAlloc = vm->GetJITMemoryAlloc();
     void* regionVoidPtr = jitAlloc->AllocateGivenSize(totalJitRegionSize);
     assert(regionVoidPtr != nullptr);
 
@@ -292,6 +294,10 @@ BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb)
         populateCodeGap(slowPathSecTrueEnd);
     }
 
+    // Update best entry point from interpreter code to baseline JIT code
+    //
+    assert(cb->m_bestEntryPoint == cb->m_owner->GetInterpreterEntryPoint());
+    cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
     return bcb;
 }
 
@@ -317,4 +323,30 @@ void* WARN_UNUSED JitGenericInlineCacheSite::Insert(uint16_t traitKind)
     TCSet(m_linkedListHead, SpdsPtr<JitGenericInlineCacheEntry> { entry });
     m_numEntries++;
     return entry->m_jitAddr;
+}
+
+BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr)
+{
+    CodeBlock* cb = TranslateToRawPointer(cbHeapPtr);
+    BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+    return {
+        .baselineCodeBlock = bcb,
+        .entryPoint = bcb->m_jitCodeEntry
+    };
+}
+
+BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_osr_entry_into_baseline_jit(CodeBlock* cb, void* curBytecode)
+{
+    BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+    size_t bytecodeIndex = bcb->GetBytecodeIndexFromBytecodePtr(curBytecode);
+    uint8_t* slowPathDataStruct = bcb->GetSlowPathDataAtBytecodeIndex(bytecodeIndex);
+
+    // Currently the slowPathData always start with the opcode, followed immediately by the jitAddr for this bytecode
+    //
+    uint32_t jitAddr = UnalignedLoad<uint32_t>(slowPathDataStruct + sizeof(BytecodeOpcodeTy));
+
+    return {
+        .baselineCodeBlock = bcb,
+        .entryPoint = reinterpret_cast<void*>(static_cast<uint64_t>(jitAddr))
+    };
 }

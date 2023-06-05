@@ -39,6 +39,7 @@ static void LuaTest_TestPrint_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/test_print.lua", testOption);
@@ -97,6 +98,7 @@ static void LuaTest_TestTableSizeHint_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/table_size_hint.lua", testOption);
@@ -249,6 +251,7 @@ static void LuaTest_TailCall_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/tail_call.lua", testOption);
@@ -281,6 +284,7 @@ static void LuaTest_VariadicTailCall_1_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_1.lua", testOption);
@@ -313,6 +317,7 @@ static void LuaTest_VariadicTailCall_2_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_2.lua", testOption);
@@ -345,6 +350,7 @@ static void LuaTest_VariadicTailCall_3_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/variadic_tail_call_3.lua", testOption);
@@ -495,6 +501,7 @@ static void LuaTest_ForPairs_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs.lua", testOption);
@@ -524,6 +531,7 @@ static void LuaTest_ForPairsPoisonNext_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_poison_next.lua", testOption);
@@ -576,6 +584,7 @@ static void LuaTest_ForPairsSlowNext_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/for_pairs_slow_next.lua", testOption);
@@ -605,6 +614,7 @@ static void LuaTest_BooleanAsTableIndex_1(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_1.lua", testOption);
@@ -662,6 +672,7 @@ static void LuaTest_BooleanAsTableIndex_2(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/boolean_as_table_index_2.lua", testOption);
@@ -769,6 +780,7 @@ static void LuaBenchmark_Ack_Impl(LuaTestOption testOption)
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail("luatests/ack.lua", testOption);
@@ -2656,4 +2668,53 @@ TEST(LuaBenchmarkForceBaselineJit, towers)
     RunSimpleLuaTest("luatests/towers.lua", LuaTestOption::ForceBaselineJit);
 }
 
+void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    vm->SetEngineStartingTier(VM::EngineStartingTier::Interpreter);
+    vm->SetEngineMaxTier(VM::EngineMaxTier::BaselineJIT);
+    VMOutputInterceptor vmoutput(vm);
+
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename, LuaTestOption::ForceInterpreter);
+
+    UnlinkedCodeBlock* targetUcb = nullptr;
+    for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    {
+        if (ucb->m_numFixedArguments == 1 && !ucb->m_hasVariadicArguments)
+        {
+            ReleaseAssert(targetUcb == nullptr);
+            targetUcb = ucb;
+        }
+    }
+    ReleaseAssert(targetUcb != nullptr);
+
+    CodeBlock* targetCb = targetUcb->GetCodeBlock(module->m_defaultGlobalObject);
+    ReleaseAssert(targetCb->m_interpreterTierUpCounter > 0);
+
+    vm->LaunchScript(module.get());
+
+    std::string out = vmoutput.GetAndResetStdOut();
+    std::string err = vmoutput.GetAndResetStdErr();
+
+    AssertIsExpectedOutput(out);
+    ReleaseAssert(err == "");
+
+    ReleaseAssert(targetCb->m_interpreterTierUpCounter < 0);
+    ReleaseAssert(-static_cast<int64_t>(targetCb->m_bytecodeLength + sizeof(CodeBlock)) <= targetCb->m_interpreterTierUpCounter);
+    ReleaseAssert(vm->GetNumTotalBaselineJitCompilations() == 1);
+}
+
+TEST(LuaTest, interp_to_baseline_tier_up_1)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_1.lua");
+}
+#if 0
+TEST(LuaTest, interp_to_baseline_tier_up_2)
+{
+    // This test tests that interpreter inline caches are also updated correctly
+    //
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_2.lua");
+}
+#endif
 }   // anonymous namespace

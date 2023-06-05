@@ -896,10 +896,34 @@ public:
         return GetEngineStartingTier() == EngineStartingTier::BaselineJIT;
     }
 
+    // Must be ordered from lower tier to higher tier
+    //
+    enum class EngineMaxTier : uint8_t
+    {
+        Interpreter,
+        BaselineJIT,
+        Unrestricted    // same effect as specifying the last tier of the above list
+    };
+
+    // Only affects CodeBlocks created or tiered-up after this call.
+    //
+    void SetEngineMaxTier(EngineMaxTier tier) { m_engineMaxTier = tier; }
+
+    // Return true if interpreter may tier up to a higher tier
+    //
+    bool WARN_UNUSED InterpreterCanTierUpFurther() { return m_engineMaxTier > EngineMaxTier::Interpreter; }
+
+    // Return true if baseline JIT may tier up to a higher tier
+    //
+    bool WARN_UNUSED BaselineJitCanTierUpFurther() { return false; }
+
     JitMemoryAllocator* GetJITMemoryAlloc()
     {
         return &m_jitMemoryAllocator;
     }
+
+    uint32_t GetNumTotalBaselineJitCompilations() { return m_totalBaselineJitCompilations; }
+    void IncrementNumTotalBaselineJitCompilations() { m_totalBaselineJitCompilations++; }
 
     static constexpr size_t x_pageSize = 4096;
 
@@ -1019,6 +1043,7 @@ private:
     uintptr_t m_self;
 
     bool m_isEngineStartingTierBaselineJit;
+    EngineMaxTier m_engineMaxTier;
 
     alignas(64) SpdsAllocImpl<VM, false /*isTempAlloc*/> m_executionThreadSpdsAlloc;
 
@@ -1043,6 +1068,8 @@ private:
     SpdsPtr<void> m_spdsExecutionThreadFreeList[x_numSpdsAllocatableClassNotUsingLfFreelist];
 
     JitMemoryAllocator m_jitMemoryAllocator;
+
+    uint32_t m_totalBaselineJitCompilations;
 
     alignas(64) std::mutex m_spdsAllocationMutex;
 

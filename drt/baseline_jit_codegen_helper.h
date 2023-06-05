@@ -256,4 +256,21 @@ constexpr size_t x_maxJitGenericInlineCacheEntries = 5;
 
 class BaselineCodeBlock;
 
-extern "C" BaselineCodeBlock* deegen_baseline_jit_do_codegen(CodeBlock* cb);
+BaselineCodeBlock* NO_INLINE deegen_baseline_jit_do_codegen(CodeBlock* cb);
+
+struct BaselineCodeBlockAndEntryPoint
+{
+    // Member order hard-coded as we directly access it as (ptr, ptr) from LLVM
+    //
+    BaselineCodeBlock* baselineCodeBlock;
+    void* entryPoint;
+};
+
+// Tier-up from interpreter to baseline JIT at a function entry
+//
+extern "C" BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr);
+
+// Tier-up from interpreter to baseline JIT at any point within a function
+// Returns the entry point corresponding to 'curBytecode'
+//
+extern "C" BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_osr_entry_into_baseline_jit(CodeBlock* cb, void* curBytecode);

@@ -24,7 +24,10 @@ enum class LuaTestOption
     // The test shall be run fully in baseline JIT mode
     // This means all Lua functions are immediately compiled to baseline JIT code, the interpreter is never invoked
     //
-    ForceBaselineJit
+    ForceBaselineJit,
+    // The test shall start in interpreter mode, can tier up to baseline JIT, but not further
+    //
+    UpToBaselineJit
 };
 
 inline VM::EngineStartingTier WARN_UNUSED GetVMEngineStartingTierFromEngineTestOption(LuaTestOption testOption)
@@ -33,6 +36,17 @@ inline VM::EngineStartingTier WARN_UNUSED GetVMEngineStartingTierFromEngineTestO
     {
     case LuaTestOption::ForceInterpreter: { return VM::EngineStartingTier::Interpreter; }
     case LuaTestOption::ForceBaselineJit: { return VM::EngineStartingTier::BaselineJIT; }
+    case LuaTestOption::UpToBaselineJit: { return VM::EngineStartingTier::Interpreter; }
+    }
+}
+
+inline VM::EngineMaxTier WARN_UNUSED GetVMEngineMaxTierFromEngineTestOption(LuaTestOption testOption)
+{
+    switch (testOption)
+    {
+    case LuaTestOption::ForceInterpreter: { return VM::EngineMaxTier::Interpreter; }
+    case LuaTestOption::ForceBaselineJit: { return VM::EngineMaxTier::BaselineJIT; }
+    case LuaTestOption::UpToBaselineJit: { return VM::EngineMaxTier::BaselineJIT; }
     }
 }
 
@@ -49,7 +63,7 @@ inline std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& fil
         abort();
     }
 
-    if (testOptionForAssertion == LuaTestOption::ForceBaselineJit)
+    if (GetVMEngineStartingTierFromEngineTestOption(testOptionForAssertion) == VM::EngineStartingTier::BaselineJIT)
     {
         // Sanity check that the entry point of the module indeed points to the baseline JIT code
         //
@@ -84,6 +98,7 @@ inline void RunSimpleLuaTest(const std::string& filename, LuaTestOption testOpti
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     vm->SetEngineStartingTier(GetVMEngineStartingTierFromEngineTestOption(testOption));
+    vm->SetEngineMaxTier(GetVMEngineMaxTierFromEngineTestOption(testOption));
     VMOutputInterceptor vmoutput(vm);
 
     std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename, testOption);
