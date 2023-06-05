@@ -7,6 +7,7 @@
 #include "deegen_parse_asm_text.h"
 #include "deegen_stencil_creator.h"
 #include "deegen_global_bytecode_trait_accessor.h"
+#include "deegen_options.h"
 
 namespace dast {
 
@@ -47,16 +48,46 @@ public:
         return m_cachedCodePointer;
     }
 
+    BytecodeMetadataElement* GetDoublyLink()
+    {
+        ReleaseAssert(IcExists());
+        ReleaseAssert(m_doublyLink != nullptr);
+        return m_doublyLink;
+    }
+
     static std::pair<std::unique_ptr<BytecodeMetadataStruct>, InterpreterCallIcMetadata> WARN_UNUSED Create()
     {
         std::unique_ptr<BytecodeMetadataStruct> s = std::make_unique<BytecodeMetadataStruct>();
         BytecodeMetadataElement* cachedFn = s->AddElement(1 /*alignment*/, sizeof(TValue) /*size*/);
-        BytecodeMetadataElement* codePtr = s->AddElement(1 /*alignment*/, sizeof(void*) /*size*/);
         cachedFn->SetInitValue(TValue::CreateImpossibleValue().m_value);
+
+        // DEVNOTE: this is fragile, but we currently rely on the layout that codePtr is right before doublyLink
+        //
+        BytecodeMetadataElement* codePtr = s->AddElement(1 /*alignment*/, sizeof(void*) /*size*/);
+
+        BytecodeMetadataElement* doublyLink = nullptr;
+        if (x_allow_interpreter_tier_up_to_baseline_jit)
+        {
+            // Ugly: we do not want to do a check when updating the doubly link,
+            // so we want to make the doubly link point to itself instead of storing nil.
+            // However, we only support initialization of constant values,
+            // so we cannot initialize the doubly link to point to itself.
+            //
+            // So here, we make the doubly link store the offset from 'self'...
+            //
+            // TODO: it is highly questionable whether interpreter call IC has any benefit in non-monomorphic
+            // mode after all of these overheads.. We should rethink if we should just disable interpreter call IC
+            // altogether when the JIT is enabled.
+            //
+            doublyLink = s->AddElement(1 /*alignment*/, 8 /*size*/);
+            doublyLink->SetInitValue<uint64_t>(0);
+        }
+
         InterpreterCallIcMetadata r;
         r.m_icStruct = s.get();
         r.m_cachedTValue = cachedFn;
         r.m_cachedCodePointer = codePtr;
+        r.m_doublyLink = doublyLink;
         return std::make_pair(std::move(s), r);
     }
 
@@ -64,6 +95,7 @@ private:
     BytecodeMetadataStruct* m_icStruct;
     BytecodeMetadataElement* m_cachedTValue;
     BytecodeMetadataElement* m_cachedCodePointer;
+    BytecodeMetadataElement* m_doublyLink;
 };
 
 struct DeegenCallIcLogicCreator

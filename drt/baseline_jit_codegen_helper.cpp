@@ -297,7 +297,8 @@ BaselineCodeBlock* NO_INLINE deegen_baseline_jit_do_codegen(CodeBlock* cb)
     // Update best entry point from interpreter code to baseline JIT code
     //
     assert(cb->m_bestEntryPoint == cb->m_owner->GetInterpreterEntryPoint());
-    cb->m_bestEntryPoint = bcb->m_jitCodeEntry;
+    cb->UpdateBestEntryPoint(bcb->m_jitCodeEntry);
+    assert(cb->m_bestEntryPoint == bcb->m_jitCodeEntry);
     return bcb;
 }
 

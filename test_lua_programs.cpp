@@ -2709,12 +2709,12 @@ TEST(LuaTest, interp_to_baseline_tier_up_1)
 {
     TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_1.lua");
 }
-#if 0
+
 TEST(LuaTest, interp_to_baseline_tier_up_2)
 {
     // This test tests that interpreter inline caches are also updated correctly
     //
     TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_2.lua");
 }
-#endif
+
 }   // anonymous namespace

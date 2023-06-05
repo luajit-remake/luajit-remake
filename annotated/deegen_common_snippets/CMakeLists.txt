@@ -56,6 +56,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_interpreter_tier_up_counter.cpp
   get_interpreter_tier_up_counter_from_cb_heap_ptr.cpp
   tier_up_into_baseline_jit.cpp
+  update_interpreter_call_ic_doubly_link.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

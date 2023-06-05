@@ -56,6 +56,14 @@ static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecode
     ReleaseAssert(ic.GetCachedCodePointer()->GetSize() == 8);
     ReleaseAssert(llvm_value_has_type<void*>(codePointer));
     new StoreInst(codePointer, cachedIcCodePtrAddr, false /*isVolatile*/, Align(ic.GetCachedCodePointer()->GetAlignment()), insertBefore);
+
+    // The doubly link is only needed for tiering up (and only exists when tiering up is enabled)
+    //
+    if (x_allow_interpreter_tier_up_to_baseline_jit)
+    {
+        Value* doublyLinkAddr = ic.GetDoublyLink()->EmitGetAddress(ifi->GetModule(), ifi->GetBytecodeMetadataPtr(), insertBefore);
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterCallIcDoublyLink", { calleeCbHeapPtr, doublyLinkAddr }, insertBefore);
+    }
 }
 
 static bool WARN_UNUSED CheckCanHoistCallIcCheck(llvm::Value* functionObject,

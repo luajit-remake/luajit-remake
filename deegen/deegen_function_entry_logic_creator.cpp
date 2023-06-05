@@ -96,43 +96,52 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     BasicBlock* normalBB = nullptr;     // this is the basic block for normal execution (i.e., no tiering-up)
     if (m_tier == DeegenEngineTier::Interpreter)
     {
-        // Check if we need to tier up
-        //
-        Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCbHeapPtr", { calleeCodeBlockHeapPtr }, entryBB);
-        ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
+        if (x_allow_interpreter_tier_up_to_baseline_jit)
+        {
+            // Check if we need to tier up
+            //
+            Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCbHeapPtr", { calleeCodeBlockHeapPtr }, entryBB);
+            ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
 
-        Value* shouldTierUp = new ICmpInst(*entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
-        Function* expectIntrin = Intrinsic::getDeclaration(module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
-        shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", entryBB);
+            Value* shouldTierUp = new ICmpInst(*entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
+            Function* expectIntrin = Intrinsic::getDeclaration(module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
+            shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", entryBB);
 
-        BasicBlock* tierUpBB = BasicBlock::Create(ctx, "", func);
-        normalBB = BasicBlock::Create(ctx, "", func);
+            BasicBlock* tierUpBB = BasicBlock::Create(ctx, "", func);
+            normalBB = BasicBlock::Create(ctx, "", func);
 
-        BranchInst::Create(tierUpBB, normalBB, shouldTierUp, entryBB);
+            BranchInst::Create(tierUpBB, normalBB, shouldTierUp, entryBB);
 
-        // Set up the tier-up BB, which should call the baseline JIT codegen function and branch to JIT'ed code
-        //
-        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, tierUpBB);
-        ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
-        StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
-        ReleaseAssert(sty->elements().size() == 2);
-        Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", tierUpBB);
-        ReleaseAssert(llvm_value_has_type<void*>(bcb));
-        Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", tierUpBB);
-        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+            // Set up the tier-up BB, which should call the baseline JIT codegen function and branch to JIT'ed code
+            //
+            Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, tierUpBB);
+            ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
+            StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
+            ReleaseAssert(sty->elements().size() == 2);
+            Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", tierUpBB);
+            ReleaseAssert(llvm_value_has_type<void*>(bcb));
+            Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", tierUpBB);
+            ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        UnreachableInst* dummyInst = new UnreachableInst(ctx, tierUpBB);
+            UnreachableInst* dummyInst = new UnreachableInst(ctx, tierUpBB);
 
-        InterpreterFunctionInterface::CreateDispatchToCallee(
-            codePointer,
-            coroutineCtx,
-            preFixupStackBase,
-            calleeCodeBlockHeapPtr,
-            numArgs,
-            isMustTail64,
-            dummyInst /*insertBefore*/);
+            InterpreterFunctionInterface::CreateDispatchToCallee(
+                codePointer,
+                coroutineCtx,
+                preFixupStackBase,
+                calleeCodeBlockHeapPtr,
+                numArgs,
+                isMustTail64,
+                dummyInst /*insertBefore*/);
 
-        dummyInst->eraseFromParent();
+            dummyInst->eraseFromParent();
+        }
+        else
+        {
+            // Tier-up logic is hard fused-off.
+            //
+            normalBB = entryBB;
+        }
     }
     else
     {

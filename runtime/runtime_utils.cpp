@@ -96,6 +96,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     CodeBlock* cb = reinterpret_cast<CodeBlock*>(addressBegin + sizeof(TValue) * ucb->m_cstTableLength);
     ConstructInPlace(cb);
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
+    cb->m_executableCodeKind = Kind::BytecodeFunction;
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
     cb->m_bytecode = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset();
@@ -132,6 +133,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
         BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
         assert(cb->m_baselineCodeBlock == bcb);
         assert(cb->m_bestEntryPoint != ucb->GetInterpreterEntryPoint());
+        assert(cb->m_bestEntryPoint == bcb->m_jitCodeEntry);
         std::ignore = bcb;
     }
 
@@ -141,11 +143,38 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
 void CodeBlock::UpdateBestEntryPoint(void* newEntryPoint)
 {
     void* oldBestEntryPoint = m_bestEntryPoint;
-    uint64_t diff = reinterpret_cast<uint64_t>(newEntryPoint) - reinterpret_cast<uint64_t>(oldBestEntryPoint);
-    for (JitCallInlineCacheEntry* icEntry : m_jitCallIcList.elements())
+
+    // Update all interpreter call IC to use the new entry point
+    //
     {
-        icEntry->UpdateTargetFunctionCodePtr(diff);
+        uint8_t* endAnchor = reinterpret_cast<uint8_t*>(&m_interpreterCallIcList);
+        uint8_t* curAnchor = endAnchor;
+        while (true)
+        {
+            curAnchor -= UnalignedLoad<int32_t>(curAnchor + 4);
+            if (curAnchor == endAnchor)
+            {
+                break;
+            }
+            // We rely on the ABI layout that the codePtr resides right before the doubly link
+            //
+            assert(UnalignedLoad<void*>(curAnchor - 8) == oldBestEntryPoint);
+            UnalignedStore<void*>(curAnchor - 8, newEntryPoint);
+        }
     }
+
+    // Update all JIT call IC to use the new entry point
+    //
+    {
+        uint64_t diff = reinterpret_cast<uint64_t>(newEntryPoint) - reinterpret_cast<uint64_t>(oldBestEntryPoint);
+        for (JitCallInlineCacheEntry* icEntry : m_jitCallIcList.elements())
+        {
+            icEntry->UpdateTargetFunctionCodePtr(diff);
+        }
+    }
+
+    // Update m_bestEntryPoint so uncached calls also use the new entry point
+    //
     m_bestEntryPoint = newEntryPoint;
 }
 

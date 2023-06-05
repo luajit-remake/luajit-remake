@@ -235,32 +235,27 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm);
 class ExecutableCode : public SystemHeapGcObjectHeader
 {
 public:
-    bool IsIntrinsic() const { return m_bytecode == nullptr; }
-    bool IsUserCFunction() const { return reinterpret_cast<intptr_t>(m_bytecode) < 0; }
-    bool IsBytecodeFunction() const { return reinterpret_cast<intptr_t>(m_bytecode) > 0; }
-
-    // TODO: make it the real prototype
-    //
-    using UserCFunctionPrototype = int(*)(void*);
-
-    UserCFunctionPrototype GetCFunctionPtr() const
+    enum class Kind : uint8_t
     {
-        assert(IsUserCFunction());
-        return reinterpret_cast<UserCFunctionPrototype>(~reinterpret_cast<uintptr_t>(m_bytecode));
-    }
+        BytecodeFunction,
+        CFunction
+    };
+
+    bool IsUserCFunction() const { return m_executableCodeKind == Kind::CFunction; }
+    bool IsBytecodeFunction() const { return m_executableCodeKind == Kind::BytecodeFunction; }
 
     static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction(VM* vm, void* fn)
     {
         HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
         SystemHeapGcObjectHeader::Populate(e);
+        e->m_executableCodeKind = Kind::CFunction;
         e->m_hasVariadicArguments = true;
         e->m_numFixedArguments = 0;
-        e->m_bytecode = reinterpret_cast<uint8_t*>(~reinterpret_cast<uintptr_t>(fn));
         e->m_bestEntryPoint = fn;
         return e;
     }
 
-    uint8_t m_reserved;
+    Kind m_executableCodeKind;
 
     // The # of fixed arguments and whether it accepts variadic arguments
     // User C function always have m_numFixedArguments == 0 and m_hasVariadicArguments == true
@@ -268,10 +263,19 @@ public:
     bool m_hasVariadicArguments;
     uint32_t m_numFixedArguments;
 
-    // This is nullptr iff it is an intrinsic, and negative iff it is a user-provided C function
-    // TODO: I don't think this field is needed any more..
-    //
-    uint8_t* m_bytecode;
+    struct InterpreterCallIcAnchor
+    {
+        InterpreterCallIcAnchor()
+            : m_prevOffset(0)
+            , m_nextOffset(0)
+        { }
+
+        // The prev node in the doubly linked list is 'this + m_prevOffset'
+        // The next node in the doubly linked list is 'this - m_nextOffset'
+        //
+        int32_t m_prevOffset;
+        int32_t m_nextOffset;
+    };
 
     // For intrinsic, this is the entrypoint of the intrinsic function
     // For bytecode function, this is the most optimized implementation (interpreter or some JIT tier)
@@ -279,6 +283,13 @@ public:
     // The 'codeBlock' parameter and 'curBytecode' parameter is not needed for intrinsic or JIT but we have them anyway for a unified interface
     //
     void* m_bestEntryPoint;
+
+    // All interpreter call inline caches that cache on this CodeBlock, chained into a circular doubly linked list
+    // Note that this is only needed for CodeBlock, as only CodeBlock needs to tier-up.
+    // But we store this field unconditionally in all ExecutableCode so the interpreter does not need to check whether
+    // the ExecutableCode is a CodeBlock before updating this field.
+    //
+    InterpreterCallIcAnchor m_interpreterCallIcList;
 };
 static_assert(sizeof(ExecutableCode) == 24);
 
@@ -520,6 +531,8 @@ public:
 
     void UpdateBestEntryPoint(void* newEntryPoint);
 
+    uint8_t* m_bytecode;
+
     UserHeapPointer<TableObject> m_globalObject;
 
     uint32_t m_stackFrameNumSlots;
@@ -537,7 +550,7 @@ public:
 
     UnlinkedCodeBlock* m_owner;
 
-    // All JIT call inline caches that cache on this CodeBlock
+    // All JIT call inline caches that cache on this CodeBlock, chained into a circular doubly linked list
     //
     SpdsDoublyLinkedList<JitCallInlineCacheEntry> m_jitCallIcList;
 

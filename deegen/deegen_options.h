@@ -5,7 +5,18 @@
 // This file should hold the global option knobs of Deegen
 //
 
-// The interpreter maintains how many bytes of bytecodes in each function it has executed
+// When this option is false, the interpreter won't tier up to the baseline JIT,
+// so the VM runs in interpreter-only mode.
+//
+// One can also soft-disable tiering up at runtime to make the VM run in interpreter-only mode,
+// but with this option, the tier-up-related logic in the interpreter are removed altogether,
+// so the performance should be better.
+//
+// TODO: currently the JIT logic is still generated, just unused. We should make this option skip the generation of the JIT tiers altogether.
+//
+constexpr bool x_allow_interpreter_tier_up_to_baseline_jit = true;
+
+// The interpreter maintains how many bytes of bytecodes in each function it has executed to decide when to tier-up.
 // (Note that the metric above is #bytes of bytecodes, not #bytecodes, because it's easier to maintain for the interpreter).
 //
 // After more than 'multipler * bytecodeLen' bytes of bytecodes have been executed, the function will tier up to baseline JIT.
