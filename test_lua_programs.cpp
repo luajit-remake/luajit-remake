@@ -2668,7 +2668,7 @@ TEST(LuaBenchmarkForceBaselineJit, towers)
     RunSimpleLuaTest("luatests/towers.lua", LuaTestOption::ForceBaselineJit);
 }
 
-void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename)
+void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename, size_t numExpectedCompilations)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
@@ -2676,7 +2676,7 @@ void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename)
     vm->SetEngineMaxTier(VM::EngineMaxTier::BaselineJIT);
     VMOutputInterceptor vmoutput(vm);
 
-    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename, LuaTestOption::ForceInterpreter);
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(filename, LuaTestOption::UpToBaselineJit);
 
     UnlinkedCodeBlock* targetUcb = nullptr;
     for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
@@ -2702,19 +2702,34 @@ void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename)
 
     ReleaseAssert(targetCb->m_interpreterTierUpCounter < 0);
     ReleaseAssert(-static_cast<int64_t>(targetCb->m_bytecodeLength + sizeof(CodeBlock)) <= targetCb->m_interpreterTierUpCounter);
-    ReleaseAssert(vm->GetNumTotalBaselineJitCompilations() == 1);
+    ReleaseAssert(vm->GetNumTotalBaselineJitCompilations() == numExpectedCompilations);
 }
 
 TEST(LuaTest, interp_to_baseline_tier_up_1)
 {
-    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_1.lua");
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_1.lua", 1 /*numExpectedCompilations*/);
 }
 
 TEST(LuaTest, interp_to_baseline_tier_up_2)
 {
-    // This test tests that interpreter inline caches are also updated correctly
+    // This test tests that interpreter call inline caches are updated correctly:
+    // 1. Function A runs in interpreter mode, having an IC on function B
+    // 2. Function B tiers up to baseline JIT
+    // 3. Function A's IC on B should be updated to point to the JIT code
     //
-    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_2.lua");
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_2.lua", 1 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTest, interp_to_baseline_tier_up_3)
+{
+    // This test tests that JIT call inline caches are updated correctly:
+    // 1. Function A tiers up to baseline JIT mode first
+    // 2. Function B is still in interpreter mode
+    // 3. Function A holds a JIT call IC on function B
+    // 4. Function B tiers up to baseline JIT
+    // 5. Function A's IC on B should be updated to point to the JIT code
+    //
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_3.lua", 2 /*numExpectedCompilations*/);
 }
 
 }   // anonymous namespace
