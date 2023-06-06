@@ -62,6 +62,8 @@ public:
     bool IsNumFixedParamSpecialized() { return m_numSpecializedFixedParams != static_cast<size_t>(-1); }
     size_t GetSpecializedNumFixedParam() { ReleaseAssert(IsNumFixedParamSpecialized()); return m_numSpecializedFixedParams; }
 
+    static std::unique_ptr<llvm::Module> WARN_UNUSED GenerateInterpreterTierUpOrOsrEntryImplementation(llvm::LLVMContext& ctx, bool isTierUp);
+
 private:
     // Automatically invoked by constructor
     //

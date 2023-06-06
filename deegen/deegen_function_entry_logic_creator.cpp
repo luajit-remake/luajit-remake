@@ -45,6 +45,68 @@ std::string DeegenFunctionEntryLogicCreator::GetFunctionName()
     return name;
 }
 
+std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::GenerateInterpreterTierUpOrOsrEntryImplementation(llvm::LLVMContext& ctx, bool isTierUp)
+{
+    using namespace llvm;
+    std::unique_ptr<Module> module = std::make_unique<Module>("generated_function_entry_logic", ctx);
+
+    std::string funcName = (isTierUp ? "__deegen_interpreter_tier_up_into_baseline_jit" : "__deegen_interpreter_osr_entry_into_baseline_jit");
+    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), funcName);
+
+    {
+        // Just pull in some C++ function so we can set up the attributes..
+        //
+        Function* tmp = LinkInDeegenCommonSnippet(module.get(), "SimpleLeftToRightCopyMayOvercopy");
+        func->addFnAttr(Attribute::AttrKind::NoUnwind);
+        CopyFunctionAttributes(func /*dst*/, tmp /*src*/);
+    }
+
+    ReleaseAssert(func->arg_size() == 16);
+    Value* coroutineCtx = func->getArg(0);
+    coroutineCtx->setName("coroCtx");
+    Value* preFixupStackBase = func->getArg(1);
+    preFixupStackBase->setName("preFixupStackBase");
+    Value* numArgsAsPtr = func->getArg(2);
+    Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
+    Value* isMustTail64 = func->getArg(6);
+
+    BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
+
+    ReleaseAssert(llvm_value_has_type<void*>(numArgsAsPtr));
+    Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+    numArgs->setName("numProvidedArgs");
+
+    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
+    Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
+
+    // Set up the function implementation, which should call the baseline JIT codegen function and branch to JIT'ed code
+    //
+    Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, entryBB);
+    ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
+    StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
+    ReleaseAssert(sty->elements().size() == 2);
+    Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(bcb));
+    Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+    UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
+
+    InterpreterFunctionInterface::CreateDispatchToCallee(
+        codePointer,
+        coroutineCtx,
+        preFixupStackBase,
+        calleeCodeBlockHeapPtr,
+        numArgs,
+        isMustTail64,
+        dummyInst /*insertBefore*/);
+
+    dummyInst->eraseFromParent();
+
+    RunLLVMOptimizePass(module.get());
+    return module;
+}
+
 void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 {
     ReleaseAssert(!m_generated);
@@ -112,21 +174,12 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
             BranchInst::Create(tierUpBB, normalBB, shouldTierUp, entryBB);
 
-            // Set up the tier-up BB, which should call the baseline JIT codegen function and branch to JIT'ed code
-            //
-            Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, tierUpBB);
-            ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
-            StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
-            ReleaseAssert(sty->elements().size() == 2);
-            Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", tierUpBB);
-            ReleaseAssert(llvm_value_has_type<void*>(bcb));
-            Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", tierUpBB);
-            ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+            Function* tierUpImpl = InterpreterFunctionInterface::CreateFunction(module.get(), "__deegen_interpreter_tier_up_into_baseline_jit");
 
             UnreachableInst* dummyInst = new UnreachableInst(ctx, tierUpBB);
 
             InterpreterFunctionInterface::CreateDispatchToCallee(
-                codePointer,
+                tierUpImpl,
                 coroutineCtx,
                 preFixupStackBase,
                 calleeCodeBlockHeapPtr,

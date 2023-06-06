@@ -326,7 +326,7 @@ void* WARN_UNUSED JitGenericInlineCacheSite::Insert(uint16_t traitKind)
     return entry->m_jitAddr;
 }
 
-BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr)
+BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr)
 {
     CodeBlock* cb = TranslateToRawPointer(cbHeapPtr);
     BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
@@ -336,7 +336,7 @@ BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN
     };
 }
 
-BaselineCodeBlockAndEntryPoint __attribute__((__preserve_most__)) NO_INLINE WARN_UNUSED deegen_prepare_osr_entry_into_baseline_jit(CodeBlock* cb, void* curBytecode)
+BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_osr_entry_into_baseline_jit(CodeBlock* cb, void* curBytecode)
 {
     BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
     size_t bytecodeIndex = bcb->GetBytecodeIndexFromBytecodePtr(curBytecode);

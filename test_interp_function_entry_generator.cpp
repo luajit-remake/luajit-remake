@@ -205,7 +205,8 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
             {
                 if (callInst->getCallingConv() == CallingConv::GHC)
                 {
-                    ReleaseAssert(callInst->getCalledFunction() == nullptr);
+                    ReleaseAssert(callInst->getCalledFunction() == nullptr ||
+                                  callInst->getCalledFunction()->getName() == "__deegen_interpreter_tier_up_into_baseline_jit");
                     ReleaseAssert(callInst->isMustTailCall());
                     ReleaseAssert(callInst->arg_size() == 16);
                     callInst->setCallingConv(CallingConv::C);
@@ -236,7 +237,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
     jit.AllowAccessWhitelistedHostSymbolsOnly();
     jit.AddAllowedHostSymbol("memcpy");
     jit.AddAllowedHostSymbol("memmove");
-    jit.AddAllowedHostSymbol("deegen_prepare_tier_up_into_baseline_jit");
+    jit.AddAllowedHostSymbol("__deegen_interpreter_tier_up_into_baseline_jit");
     void* testFnAddr = jit.GetFunction(ifi.GetFunctionName());
 
     size_t numTests = 0;

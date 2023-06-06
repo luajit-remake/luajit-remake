@@ -64,6 +64,11 @@ struct GeneratorContext
             generalVaName = ifi.GetFunctionName();
             LinkInModule(ifi.GetInterpreterModule());
         }
+
+        {
+            std::unique_ptr<llvm::Module> tierUpImpl = DeegenFunctionEntryLogicCreator::GenerateInterpreterTierUpOrOsrEntryImplementation(*context.get(), true /*isTierUp*/);
+            LinkInModule(std::move(tierUpImpl));
+        }
     }
 
     std::string WARN_UNUSED GenerateHeaderFile()
