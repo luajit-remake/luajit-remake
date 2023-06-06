@@ -1,0 +1,6806 @@
+-- test 1 --
+101	nil
+nil	nil
+201	nil
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	nil
+nil	nil
+202	nil
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	nil
+nil	nil
+203	nil
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	nil
+nil	nil
+204	nil
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	nil
+nil	nil
+205	nil
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	nil
+nil	nil
+206	nil
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	nil
+nil	nil
+207	nil
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	nil
+nil	nil
+208	nil
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	nil
+nil	nil
+209	nil
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	nil
+nil	nil
+210	nil
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	nil
+nil	nil
+211	nil
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	nil
+nil	nil
+212	nil
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	nil
+nil	nil
+213	nil
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	nil
+nil	nil
+214	nil
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	nil
+nil	nil
+215	nil
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	nil
+nil	nil
+216	nil
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	nil
+nil	nil
+217	nil
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	nil
+nil	nil
+218	nil
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	nil
+nil	nil
+219	nil
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	nil
+nil	nil
+220	nil
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	nil
+nil	nil
+221	nil
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	nil
+nil	nil
+222	nil
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	nil
+nil	nil
+223	nil
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	nil
+nil	nil
+224	nil
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	nil
+nil	nil
+225	nil
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	nil
+nil	nil
+226	nil
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	nil
+nil	nil
+227	nil
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	nil
+nil	nil
+228	nil
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	nil
+nil	nil
+229	nil
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	nil
+nil	nil
+230	nil
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	nil
+nil	nil
+231	nil
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	nil
+nil	nil
+232	nil
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	nil
+nil	nil
+233	nil
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	nil
+nil	nil
+234	nil
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	nil
+nil	nil
+235	nil
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	nil
+nil	nil
+236	nil
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	nil
+nil	nil
+237	nil
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	nil
+nil	nil
+238	nil
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	nil
+nil	nil
+239	nil
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	nil
+nil	nil
+240	nil
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	nil
+nil	nil
+241	nil
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	nil
+nil	nil
+242	nil
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	nil
+nil	nil
+243	nil
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	nil
+nil	nil
+244	nil
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	nil
+nil	nil
+245	nil
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	nil
+nil	nil
+246	nil
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	nil
+nil	nil
+247	nil
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	nil
+nil	nil
+248	nil
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	nil
+nil	nil
+249	nil
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	nil
+nil	nil
+250	nil
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+101	501
+nil	501
+201	501
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	502
+nil	502
+202	502
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	503
+nil	503
+203	503
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	504
+nil	504
+204	504
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	505
+nil	505
+205	505
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	506
+nil	506
+206	506
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	507
+nil	507
+207	507
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	508
+nil	508
+208	508
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	509
+nil	509
+209	509
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	510
+nil	510
+210	510
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	511
+nil	511
+211	511
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	512
+nil	512
+212	512
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	513
+nil	513
+213	513
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	514
+nil	514
+214	514
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	515
+nil	515
+215	515
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	516
+nil	516
+216	516
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	517
+nil	517
+217	517
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	518
+nil	518
+218	518
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	519
+nil	519
+219	519
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	520
+nil	520
+220	520
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	521
+nil	521
+221	521
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	522
+nil	522
+222	522
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	523
+nil	523
+223	523
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	524
+nil	524
+224	524
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	525
+nil	525
+225	525
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	526
+nil	526
+226	526
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	527
+nil	527
+227	527
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	528
+nil	528
+228	528
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	529
+nil	529
+229	529
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	530
+nil	530
+230	530
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	531
+nil	531
+231	531
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	532
+nil	532
+232	532
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	533
+nil	533
+233	533
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	534
+nil	534
+234	534
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	535
+nil	535
+235	535
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	536
+nil	536
+236	536
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	537
+nil	537
+237	537
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	538
+nil	538
+238	538
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	539
+nil	539
+239	539
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	540
+nil	540
+240	540
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	541
+nil	541
+241	541
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	542
+nil	542
+242	542
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	543
+nil	543
+243	543
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	544
+nil	544
+244	544
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	545
+nil	545
+245	545
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	546
+nil	546
+246	546
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	547
+nil	547
+247	547
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	548
+nil	548
+248	548
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	549
+nil	549
+249	549
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	550
+nil	550
+250	550
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+-- test 2 --
+101	nil
+nil	nil
+201	nil
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	nil
+nil	nil
+202	nil
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	nil
+nil	nil
+203	nil
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	nil
+nil	nil
+204	nil
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	nil
+nil	nil
+205	nil
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	nil
+nil	nil
+206	nil
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	nil
+nil	nil
+207	nil
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	nil
+nil	nil
+208	nil
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	nil
+nil	nil
+209	nil
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	nil
+nil	nil
+210	nil
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	nil
+nil	nil
+211	nil
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	nil
+nil	nil
+212	nil
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	nil
+nil	nil
+213	nil
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	nil
+nil	nil
+214	nil
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	nil
+nil	nil
+215	nil
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	nil
+nil	nil
+216	nil
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	nil
+nil	nil
+217	nil
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	nil
+nil	nil
+218	nil
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	nil
+nil	nil
+219	nil
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	nil
+nil	nil
+220	nil
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	nil
+nil	nil
+221	nil
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	nil
+nil	nil
+222	nil
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	nil
+nil	nil
+223	nil
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	nil
+nil	nil
+224	nil
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	nil
+nil	nil
+225	nil
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	nil
+nil	nil
+226	nil
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	nil
+nil	nil
+227	nil
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	nil
+nil	nil
+228	nil
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	nil
+nil	nil
+229	nil
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	nil
+nil	nil
+230	nil
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	nil
+nil	nil
+231	nil
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	nil
+nil	nil
+232	nil
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	nil
+nil	nil
+233	nil
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	nil
+nil	nil
+234	nil
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	nil
+nil	nil
+235	nil
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	nil
+nil	nil
+236	nil
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	nil
+nil	nil
+237	nil
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	nil
+nil	nil
+238	nil
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	nil
+nil	nil
+239	nil
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	nil
+nil	nil
+240	nil
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	nil
+nil	nil
+241	nil
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	nil
+nil	nil
+242	nil
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	nil
+nil	nil
+243	nil
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	nil
+nil	nil
+244	nil
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	nil
+nil	nil
+245	nil
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	nil
+nil	nil
+246	nil
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	nil
+nil	nil
+247	nil
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	nil
+nil	nil
+248	nil
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	nil
+nil	nil
+249	nil
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	nil
+nil	nil
+250	nil
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+101	501
+nil	501
+201	501
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	502
+nil	502
+202	502
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	503
+nil	503
+203	503
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	504
+nil	504
+204	504
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	505
+nil	505
+205	505
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	506
+nil	506
+206	506
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	507
+nil	507
+207	507
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	508
+nil	508
+208	508
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	509
+nil	509
+209	509
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	510
+nil	510
+210	510
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	511
+nil	511
+211	511
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	512
+nil	512
+212	512
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	513
+nil	513
+213	513
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	514
+nil	514
+214	514
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	515
+nil	515
+215	515
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	516
+nil	516
+216	516
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	517
+nil	517
+217	517
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	518
+nil	518
+218	518
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	519
+nil	519
+219	519
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	520
+nil	520
+220	520
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	521
+nil	521
+221	521
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	522
+nil	522
+222	522
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	523
+nil	523
+223	523
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	524
+nil	524
+224	524
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	525
+nil	525
+225	525
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	526
+nil	526
+226	526
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	527
+nil	527
+227	527
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	528
+nil	528
+228	528
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	529
+nil	529
+229	529
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	530
+nil	530
+230	530
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	531
+nil	531
+231	531
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	532
+nil	532
+232	532
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	533
+nil	533
+233	533
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	534
+nil	534
+234	534
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	535
+nil	535
+235	535
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	536
+nil	536
+236	536
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	537
+nil	537
+237	537
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	538
+nil	538
+238	538
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	539
+nil	539
+239	539
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	540
+nil	540
+240	540
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	541
+nil	541
+241	541
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	542
+nil	542
+242	542
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	543
+nil	543
+243	543
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	544
+nil	544
+244	544
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	545
+nil	545
+245	545
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	546
+nil	546
+246	546
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	547
+nil	547
+247	547
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	548
+nil	548
+248	548
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	549
+nil	549
+249	549
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	550
+nil	550
+250	550
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+-- test 3 --
+in metamethod	a1	101
+101	nil
+nil	nil
+in metamethod	a1	201
+201	nil
+in metamethod	a1	301
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+in metamethod	a2	102
+102	nil
+nil	nil
+in metamethod	a2	202
+202	nil
+in metamethod	a2	302
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+in metamethod	a3	103
+103	nil
+nil	nil
+in metamethod	a3	203
+203	nil
+in metamethod	a3	303
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+in metamethod	a4	104
+104	nil
+nil	nil
+in metamethod	a4	204
+204	nil
+in metamethod	a4	304
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+in metamethod	a5	105
+105	nil
+nil	nil
+in metamethod	a5	205
+205	nil
+in metamethod	a5	305
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+in metamethod	a6	106
+106	nil
+nil	nil
+in metamethod	a6	206
+206	nil
+in metamethod	a6	306
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+in metamethod	a7	107
+107	nil
+nil	nil
+in metamethod	a7	207
+207	nil
+in metamethod	a7	307
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+in metamethod	a8	108
+108	nil
+nil	nil
+in metamethod	a8	208
+208	nil
+in metamethod	a8	308
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+in metamethod	a9	109
+109	nil
+nil	nil
+in metamethod	a9	209
+209	nil
+in metamethod	a9	309
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+in metamethod	a10	110
+110	nil
+nil	nil
+in metamethod	a10	210
+210	nil
+in metamethod	a10	310
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+in metamethod	a11	111
+111	nil
+nil	nil
+in metamethod	a11	211
+211	nil
+in metamethod	a11	311
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+in metamethod	a12	112
+112	nil
+nil	nil
+in metamethod	a12	212
+212	nil
+in metamethod	a12	312
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+in metamethod	a13	113
+113	nil
+nil	nil
+in metamethod	a13	213
+213	nil
+in metamethod	a13	313
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+in metamethod	a14	114
+114	nil
+nil	nil
+in metamethod	a14	214
+214	nil
+in metamethod	a14	314
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+in metamethod	a15	115
+115	nil
+nil	nil
+in metamethod	a15	215
+215	nil
+in metamethod	a15	315
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+in metamethod	a16	116
+116	nil
+nil	nil
+in metamethod	a16	216
+216	nil
+in metamethod	a16	316
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+in metamethod	a17	117
+117	nil
+nil	nil
+in metamethod	a17	217
+217	nil
+in metamethod	a17	317
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+in metamethod	a18	118
+118	nil
+nil	nil
+in metamethod	a18	218
+218	nil
+in metamethod	a18	318
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+in metamethod	a19	119
+119	nil
+nil	nil
+in metamethod	a19	219
+219	nil
+in metamethod	a19	319
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+in metamethod	a20	120
+120	nil
+nil	nil
+in metamethod	a20	220
+220	nil
+in metamethod	a20	320
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+in metamethod	a21	121
+121	nil
+nil	nil
+in metamethod	a21	221
+221	nil
+in metamethod	a21	321
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+in metamethod	a22	122
+122	nil
+nil	nil
+in metamethod	a22	222
+222	nil
+in metamethod	a22	322
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+in metamethod	a23	123
+123	nil
+nil	nil
+in metamethod	a23	223
+223	nil
+in metamethod	a23	323
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+in metamethod	a24	124
+124	nil
+nil	nil
+in metamethod	a24	224
+224	nil
+in metamethod	a24	324
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+in metamethod	a25	125
+125	nil
+nil	nil
+in metamethod	a25	225
+225	nil
+in metamethod	a25	325
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+in metamethod	a26	126
+126	nil
+nil	nil
+in metamethod	a26	226
+226	nil
+in metamethod	a26	326
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+in metamethod	a27	127
+127	nil
+nil	nil
+in metamethod	a27	227
+227	nil
+in metamethod	a27	327
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+in metamethod	a28	128
+128	nil
+nil	nil
+in metamethod	a28	228
+228	nil
+in metamethod	a28	328
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+in metamethod	a29	129
+129	nil
+nil	nil
+in metamethod	a29	229
+229	nil
+in metamethod	a29	329
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+in metamethod	a30	130
+130	nil
+nil	nil
+in metamethod	a30	230
+230	nil
+in metamethod	a30	330
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+in metamethod	a31	131
+131	nil
+nil	nil
+in metamethod	a31	231
+231	nil
+in metamethod	a31	331
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+in metamethod	a32	132
+132	nil
+nil	nil
+in metamethod	a32	232
+232	nil
+in metamethod	a32	332
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+in metamethod	a33	133
+133	nil
+nil	nil
+in metamethod	a33	233
+233	nil
+in metamethod	a33	333
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+in metamethod	a34	134
+134	nil
+nil	nil
+in metamethod	a34	234
+234	nil
+in metamethod	a34	334
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+in metamethod	a35	135
+135	nil
+nil	nil
+in metamethod	a35	235
+235	nil
+in metamethod	a35	335
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+in metamethod	a36	136
+136	nil
+nil	nil
+in metamethod	a36	236
+236	nil
+in metamethod	a36	336
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+in metamethod	a37	137
+137	nil
+nil	nil
+in metamethod	a37	237
+237	nil
+in metamethod	a37	337
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+in metamethod	a38	138
+138	nil
+nil	nil
+in metamethod	a38	238
+238	nil
+in metamethod	a38	338
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+in metamethod	a39	139
+139	nil
+nil	nil
+in metamethod	a39	239
+239	nil
+in metamethod	a39	339
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+in metamethod	a40	140
+140	nil
+nil	nil
+in metamethod	a40	240
+240	nil
+in metamethod	a40	340
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+in metamethod	a41	141
+141	nil
+nil	nil
+in metamethod	a41	241
+241	nil
+in metamethod	a41	341
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+in metamethod	a42	142
+142	nil
+nil	nil
+in metamethod	a42	242
+242	nil
+in metamethod	a42	342
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+in metamethod	a43	143
+143	nil
+nil	nil
+in metamethod	a43	243
+243	nil
+in metamethod	a43	343
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+in metamethod	a44	144
+144	nil
+nil	nil
+in metamethod	a44	244
+244	nil
+in metamethod	a44	344
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+in metamethod	a45	145
+145	nil
+nil	nil
+in metamethod	a45	245
+245	nil
+in metamethod	a45	345
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+in metamethod	a46	146
+146	nil
+nil	nil
+in metamethod	a46	246
+246	nil
+in metamethod	a46	346
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+in metamethod	a47	147
+147	nil
+nil	nil
+in metamethod	a47	247
+247	nil
+in metamethod	a47	347
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+in metamethod	a48	148
+148	nil
+nil	nil
+in metamethod	a48	248
+248	nil
+in metamethod	a48	348
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+in metamethod	a49	149
+149	nil
+nil	nil
+in metamethod	a49	249
+249	nil
+in metamethod	a49	349
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+in metamethod	a50	150
+150	nil
+nil	nil
+in metamethod	a50	250
+250	nil
+in metamethod	a50	350
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550
+101	501
+nil	501
+in metamethod	a1	201
+201	501
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+102	502
+nil	502
+in metamethod	a2	202
+202	502
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+103	503
+nil	503
+in metamethod	a3	203
+203	503
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+104	504
+nil	504
+in metamethod	a4	204
+204	504
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+105	505
+nil	505
+in metamethod	a5	205
+205	505
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+106	506
+nil	506
+in metamethod	a6	206
+206	506
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+107	507
+nil	507
+in metamethod	a7	207
+207	507
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+108	508
+nil	508
+in metamethod	a8	208
+208	508
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+109	509
+nil	509
+in metamethod	a9	209
+209	509
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+110	510
+nil	510
+in metamethod	a10	210
+210	510
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+111	511
+nil	511
+in metamethod	a11	211
+211	511
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+112	512
+nil	512
+in metamethod	a12	212
+212	512
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+113	513
+nil	513
+in metamethod	a13	213
+213	513
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+114	514
+nil	514
+in metamethod	a14	214
+214	514
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+115	515
+nil	515
+in metamethod	a15	215
+215	515
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+116	516
+nil	516
+in metamethod	a16	216
+216	516
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+117	517
+nil	517
+in metamethod	a17	217
+217	517
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+118	518
+nil	518
+in metamethod	a18	218
+218	518
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+119	519
+nil	519
+in metamethod	a19	219
+219	519
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+120	520
+nil	520
+in metamethod	a20	220
+220	520
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+121	521
+nil	521
+in metamethod	a21	221
+221	521
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+122	522
+nil	522
+in metamethod	a22	222
+222	522
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+123	523
+nil	523
+in metamethod	a23	223
+223	523
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+124	524
+nil	524
+in metamethod	a24	224
+224	524
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+125	525
+nil	525
+in metamethod	a25	225
+225	525
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+126	526
+nil	526
+in metamethod	a26	226
+226	526
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+127	527
+nil	527
+in metamethod	a27	227
+227	527
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+128	528
+nil	528
+in metamethod	a28	228
+228	528
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+129	529
+nil	529
+in metamethod	a29	229
+229	529
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+130	530
+nil	530
+in metamethod	a30	230
+230	530
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+131	531
+nil	531
+in metamethod	a31	231
+231	531
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+132	532
+nil	532
+in metamethod	a32	232
+232	532
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+133	533
+nil	533
+in metamethod	a33	233
+233	533
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+134	534
+nil	534
+in metamethod	a34	234
+234	534
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+135	535
+nil	535
+in metamethod	a35	235
+235	535
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+136	536
+nil	536
+in metamethod	a36	236
+236	536
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+137	537
+nil	537
+in metamethod	a37	237
+237	537
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+138	538
+nil	538
+in metamethod	a38	238
+238	538
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+139	539
+nil	539
+in metamethod	a39	239
+239	539
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+140	540
+nil	540
+in metamethod	a40	240
+240	540
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+141	541
+nil	541
+in metamethod	a41	241
+241	541
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+142	542
+nil	542
+in metamethod	a42	242
+242	542
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+143	543
+nil	543
+in metamethod	a43	243
+243	543
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+144	544
+nil	544
+in metamethod	a44	244
+244	544
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+145	545
+nil	545
+in metamethod	a45	245
+245	545
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+146	546
+nil	546
+in metamethod	a46	246
+246	546
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+147	547
+nil	547
+in metamethod	a47	247
+247	547
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+148	548
+nil	548
+in metamethod	a48	248
+248	548
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+149	549
+nil	549
+in metamethod	a49	249
+249	549
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+150	550
+nil	550
+in metamethod	a50	250
+250	550
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550
+-- test 4 --
+in metamethod	a1	101
+101	nil
+nil	nil
+in metamethod	a1	201
+201	nil
+in metamethod	a1	301
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+in metamethod	a2	102
+102	nil
+nil	nil
+in metamethod	a2	202
+202	nil
+in metamethod	a2	302
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+in metamethod	a3	103
+103	nil
+nil	nil
+in metamethod	a3	203
+203	nil
+in metamethod	a3	303
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+in metamethod	a4	104
+104	nil
+nil	nil
+in metamethod	a4	204
+204	nil
+in metamethod	a4	304
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+in metamethod	a5	105
+105	nil
+nil	nil
+in metamethod	a5	205
+205	nil
+in metamethod	a5	305
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+in metamethod	a6	106
+106	nil
+nil	nil
+in metamethod	a6	206
+206	nil
+in metamethod	a6	306
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+in metamethod	a7	107
+107	nil
+nil	nil
+in metamethod	a7	207
+207	nil
+in metamethod	a7	307
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+in metamethod	a8	108
+108	nil
+nil	nil
+in metamethod	a8	208
+208	nil
+in metamethod	a8	308
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+in metamethod	a9	109
+109	nil
+nil	nil
+in metamethod	a9	209
+209	nil
+in metamethod	a9	309
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+in metamethod	a10	110
+110	nil
+nil	nil
+in metamethod	a10	210
+210	nil
+in metamethod	a10	310
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+in metamethod	a11	111
+111	nil
+nil	nil
+in metamethod	a11	211
+211	nil
+in metamethod	a11	311
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+in metamethod	a12	112
+112	nil
+nil	nil
+in metamethod	a12	212
+212	nil
+in metamethod	a12	312
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+in metamethod	a13	113
+113	nil
+nil	nil
+in metamethod	a13	213
+213	nil
+in metamethod	a13	313
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+in metamethod	a14	114
+114	nil
+nil	nil
+in metamethod	a14	214
+214	nil
+in metamethod	a14	314
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+in metamethod	a15	115
+115	nil
+nil	nil
+in metamethod	a15	215
+215	nil
+in metamethod	a15	315
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+in metamethod	a16	116
+116	nil
+nil	nil
+in metamethod	a16	216
+216	nil
+in metamethod	a16	316
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+in metamethod	a17	117
+117	nil
+nil	nil
+in metamethod	a17	217
+217	nil
+in metamethod	a17	317
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+in metamethod	a18	118
+118	nil
+nil	nil
+in metamethod	a18	218
+218	nil
+in metamethod	a18	318
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+in metamethod	a19	119
+119	nil
+nil	nil
+in metamethod	a19	219
+219	nil
+in metamethod	a19	319
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+in metamethod	a20	120
+120	nil
+nil	nil
+in metamethod	a20	220
+220	nil
+in metamethod	a20	320
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+in metamethod	a21	121
+121	nil
+nil	nil
+in metamethod	a21	221
+221	nil
+in metamethod	a21	321
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+in metamethod	a22	122
+122	nil
+nil	nil
+in metamethod	a22	222
+222	nil
+in metamethod	a22	322
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+in metamethod	a23	123
+123	nil
+nil	nil
+in metamethod	a23	223
+223	nil
+in metamethod	a23	323
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+in metamethod	a24	124
+124	nil
+nil	nil
+in metamethod	a24	224
+224	nil
+in metamethod	a24	324
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+in metamethod	a25	125
+125	nil
+nil	nil
+in metamethod	a25	225
+225	nil
+in metamethod	a25	325
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+in metamethod	a26	126
+126	nil
+nil	nil
+in metamethod	a26	226
+226	nil
+in metamethod	a26	326
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+in metamethod	a27	127
+127	nil
+nil	nil
+in metamethod	a27	227
+227	nil
+in metamethod	a27	327
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+in metamethod	a28	128
+128	nil
+nil	nil
+in metamethod	a28	228
+228	nil
+in metamethod	a28	328
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+in metamethod	a29	129
+129	nil
+nil	nil
+in metamethod	a29	229
+229	nil
+in metamethod	a29	329
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+in metamethod	a30	130
+130	nil
+nil	nil
+in metamethod	a30	230
+230	nil
+in metamethod	a30	330
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+in metamethod	a31	131
+131	nil
+nil	nil
+in metamethod	a31	231
+231	nil
+in metamethod	a31	331
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+in metamethod	a32	132
+132	nil
+nil	nil
+in metamethod	a32	232
+232	nil
+in metamethod	a32	332
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+in metamethod	a33	133
+133	nil
+nil	nil
+in metamethod	a33	233
+233	nil
+in metamethod	a33	333
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+in metamethod	a34	134
+134	nil
+nil	nil
+in metamethod	a34	234
+234	nil
+in metamethod	a34	334
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+in metamethod	a35	135
+135	nil
+nil	nil
+in metamethod	a35	235
+235	nil
+in metamethod	a35	335
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+in metamethod	a36	136
+136	nil
+nil	nil
+in metamethod	a36	236
+236	nil
+in metamethod	a36	336
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+in metamethod	a37	137
+137	nil
+nil	nil
+in metamethod	a37	237
+237	nil
+in metamethod	a37	337
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+in metamethod	a38	138
+138	nil
+nil	nil
+in metamethod	a38	238
+238	nil
+in metamethod	a38	338
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+in metamethod	a39	139
+139	nil
+nil	nil
+in metamethod	a39	239
+239	nil
+in metamethod	a39	339
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+in metamethod	a40	140
+140	nil
+nil	nil
+in metamethod	a40	240
+240	nil
+in metamethod	a40	340
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+in metamethod	a41	141
+141	nil
+nil	nil
+in metamethod	a41	241
+241	nil
+in metamethod	a41	341
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+in metamethod	a42	142
+142	nil
+nil	nil
+in metamethod	a42	242
+242	nil
+in metamethod	a42	342
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+in metamethod	a43	143
+143	nil
+nil	nil
+in metamethod	a43	243
+243	nil
+in metamethod	a43	343
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+in metamethod	a44	144
+144	nil
+nil	nil
+in metamethod	a44	244
+244	nil
+in metamethod	a44	344
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+in metamethod	a45	145
+145	nil
+nil	nil
+in metamethod	a45	245
+245	nil
+in metamethod	a45	345
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+in metamethod	a46	146
+146	nil
+nil	nil
+in metamethod	a46	246
+246	nil
+in metamethod	a46	346
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+in metamethod	a47	147
+147	nil
+nil	nil
+in metamethod	a47	247
+247	nil
+in metamethod	a47	347
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+in metamethod	a48	148
+148	nil
+nil	nil
+in metamethod	a48	248
+248	nil
+in metamethod	a48	348
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+in metamethod	a49	149
+149	nil
+nil	nil
+in metamethod	a49	249
+249	nil
+in metamethod	a49	349
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+in metamethod	a50	150
+150	nil
+nil	nil
+in metamethod	a50	250
+250	nil
+in metamethod	a50	350
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550
+101	501
+nil	501
+in metamethod	a1	201
+201	501
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+102	502
+nil	502
+in metamethod	a2	202
+202	502
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+103	503
+nil	503
+in metamethod	a3	203
+203	503
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+104	504
+nil	504
+in metamethod	a4	204
+204	504
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+105	505
+nil	505
+in metamethod	a5	205
+205	505
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+106	506
+nil	506
+in metamethod	a6	206
+206	506
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+107	507
+nil	507
+in metamethod	a7	207
+207	507
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+108	508
+nil	508
+in metamethod	a8	208
+208	508
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+109	509
+nil	509
+in metamethod	a9	209
+209	509
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+110	510
+nil	510
+in metamethod	a10	210
+210	510
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+111	511
+nil	511
+in metamethod	a11	211
+211	511
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+112	512
+nil	512
+in metamethod	a12	212
+212	512
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+113	513
+nil	513
+in metamethod	a13	213
+213	513
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+114	514
+nil	514
+in metamethod	a14	214
+214	514
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+115	515
+nil	515
+in metamethod	a15	215
+215	515
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+116	516
+nil	516
+in metamethod	a16	216
+216	516
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+117	517
+nil	517
+in metamethod	a17	217
+217	517
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+118	518
+nil	518
+in metamethod	a18	218
+218	518
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+119	519
+nil	519
+in metamethod	a19	219
+219	519
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+120	520
+nil	520
+in metamethod	a20	220
+220	520
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+121	521
+nil	521
+in metamethod	a21	221
+221	521
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+122	522
+nil	522
+in metamethod	a22	222
+222	522
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+123	523
+nil	523
+in metamethod	a23	223
+223	523
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+124	524
+nil	524
+in metamethod	a24	224
+224	524
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+125	525
+nil	525
+in metamethod	a25	225
+225	525
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+126	526
+nil	526
+in metamethod	a26	226
+226	526
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+127	527
+nil	527
+in metamethod	a27	227
+227	527
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+128	528
+nil	528
+in metamethod	a28	228
+228	528
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+129	529
+nil	529
+in metamethod	a29	229
+229	529
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+130	530
+nil	530
+in metamethod	a30	230
+230	530
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+131	531
+nil	531
+in metamethod	a31	231
+231	531
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+132	532
+nil	532
+in metamethod	a32	232
+232	532
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+133	533
+nil	533
+in metamethod	a33	233
+233	533
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+134	534
+nil	534
+in metamethod	a34	234
+234	534
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+135	535
+nil	535
+in metamethod	a35	235
+235	535
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+136	536
+nil	536
+in metamethod	a36	236
+236	536
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+137	537
+nil	537
+in metamethod	a37	237
+237	537
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+138	538
+nil	538
+in metamethod	a38	238
+238	538
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+139	539
+nil	539
+in metamethod	a39	239
+239	539
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+140	540
+nil	540
+in metamethod	a40	240
+240	540
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+141	541
+nil	541
+in metamethod	a41	241
+241	541
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+142	542
+nil	542
+in metamethod	a42	242
+242	542
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+143	543
+nil	543
+in metamethod	a43	243
+243	543
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+144	544
+nil	544
+in metamethod	a44	244
+244	544
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+145	545
+nil	545
+in metamethod	a45	245
+245	545
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+146	546
+nil	546
+in metamethod	a46	246
+246	546
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+147	547
+nil	547
+in metamethod	a47	247
+247	547
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+148	548
+nil	548
+in metamethod	a48	248
+248	548
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+149	549
+nil	549
+in metamethod	a49	249
+249	549
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+150	550
+nil	550
+in metamethod	a50	250
+250	550
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550
+-- test 5 --
+101	nil
+nil	nil
+201	nil
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	nil
+nil	nil
+202	nil
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	nil
+nil	nil
+203	nil
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	nil
+nil	nil
+204	nil
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	nil
+nil	nil
+205	nil
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	nil
+nil	nil
+206	nil
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	nil
+nil	nil
+207	nil
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	nil
+nil	nil
+208	nil
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	nil
+nil	nil
+209	nil
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	nil
+nil	nil
+210	nil
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	nil
+nil	nil
+211	nil
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	nil
+nil	nil
+212	nil
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	nil
+nil	nil
+213	nil
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	nil
+nil	nil
+214	nil
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	nil
+nil	nil
+215	nil
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	nil
+nil	nil
+216	nil
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	nil
+nil	nil
+217	nil
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	nil
+nil	nil
+218	nil
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	nil
+nil	nil
+219	nil
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	nil
+nil	nil
+220	nil
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	nil
+nil	nil
+221	nil
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	nil
+nil	nil
+222	nil
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	nil
+nil	nil
+223	nil
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	nil
+nil	nil
+224	nil
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	nil
+nil	nil
+225	nil
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	nil
+nil	nil
+226	nil
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	nil
+nil	nil
+227	nil
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	nil
+nil	nil
+228	nil
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	nil
+nil	nil
+229	nil
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	nil
+nil	nil
+230	nil
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	nil
+nil	nil
+231	nil
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	nil
+nil	nil
+232	nil
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	nil
+nil	nil
+233	nil
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	nil
+nil	nil
+234	nil
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	nil
+nil	nil
+235	nil
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	nil
+nil	nil
+236	nil
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	nil
+nil	nil
+237	nil
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	nil
+nil	nil
+238	nil
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	nil
+nil	nil
+239	nil
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	nil
+nil	nil
+240	nil
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	nil
+nil	nil
+241	nil
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	nil
+nil	nil
+242	nil
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	nil
+nil	nil
+243	nil
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	nil
+nil	nil
+244	nil
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	nil
+nil	nil
+245	nil
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	nil
+nil	nil
+246	nil
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	nil
+nil	nil
+247	nil
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	nil
+nil	nil
+248	nil
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	nil
+nil	nil
+249	nil
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	nil
+nil	nil
+250	nil
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+101	501
+nil	501
+in metamethod	a1	201
+201	501
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+102	502
+nil	502
+in metamethod	a2	202
+202	502
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+103	503
+nil	503
+in metamethod	a3	203
+203	503
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+104	504
+nil	504
+in metamethod	a4	204
+204	504
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+105	505
+nil	505
+in metamethod	a5	205
+205	505
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+106	506
+nil	506
+in metamethod	a6	206
+206	506
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+107	507
+nil	507
+in metamethod	a7	207
+207	507
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+108	508
+nil	508
+in metamethod	a8	208
+208	508
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+109	509
+nil	509
+in metamethod	a9	209
+209	509
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+110	510
+nil	510
+in metamethod	a10	210
+210	510
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+111	511
+nil	511
+in metamethod	a11	211
+211	511
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+112	512
+nil	512
+in metamethod	a12	212
+212	512
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+113	513
+nil	513
+in metamethod	a13	213
+213	513
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+114	514
+nil	514
+in metamethod	a14	214
+214	514
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+115	515
+nil	515
+in metamethod	a15	215
+215	515
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+116	516
+nil	516
+in metamethod	a16	216
+216	516
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+117	517
+nil	517
+in metamethod	a17	217
+217	517
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+118	518
+nil	518
+in metamethod	a18	218
+218	518
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+119	519
+nil	519
+in metamethod	a19	219
+219	519
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+120	520
+nil	520
+in metamethod	a20	220
+220	520
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+121	521
+nil	521
+in metamethod	a21	221
+221	521
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+122	522
+nil	522
+in metamethod	a22	222
+222	522
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+123	523
+nil	523
+in metamethod	a23	223
+223	523
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+124	524
+nil	524
+in metamethod	a24	224
+224	524
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+125	525
+nil	525
+in metamethod	a25	225
+225	525
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+126	526
+nil	526
+in metamethod	a26	226
+226	526
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+127	527
+nil	527
+in metamethod	a27	227
+227	527
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+128	528
+nil	528
+in metamethod	a28	228
+228	528
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+129	529
+nil	529
+in metamethod	a29	229
+229	529
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+130	530
+nil	530
+in metamethod	a30	230
+230	530
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+131	531
+nil	531
+in metamethod	a31	231
+231	531
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+132	532
+nil	532
+in metamethod	a32	232
+232	532
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+133	533
+nil	533
+in metamethod	a33	233
+233	533
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+134	534
+nil	534
+in metamethod	a34	234
+234	534
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+135	535
+nil	535
+in metamethod	a35	235
+235	535
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+136	536
+nil	536
+in metamethod	a36	236
+236	536
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+137	537
+nil	537
+in metamethod	a37	237
+237	537
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+138	538
+nil	538
+in metamethod	a38	238
+238	538
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+139	539
+nil	539
+in metamethod	a39	239
+239	539
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+140	540
+nil	540
+in metamethod	a40	240
+240	540
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+141	541
+nil	541
+in metamethod	a41	241
+241	541
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+142	542
+nil	542
+in metamethod	a42	242
+242	542
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+143	543
+nil	543
+in metamethod	a43	243
+243	543
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+144	544
+nil	544
+in metamethod	a44	244
+244	544
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+145	545
+nil	545
+in metamethod	a45	245
+245	545
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+146	546
+nil	546
+in metamethod	a46	246
+246	546
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+147	547
+nil	547
+in metamethod	a47	247
+247	547
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+148	548
+nil	548
+in metamethod	a48	248
+248	548
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+149	549
+nil	549
+in metamethod	a49	249
+249	549
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+150	550
+nil	550
+in metamethod	a50	250
+250	550
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550
+-- test 6 --
+101	nil
+nil	nil
+201	nil
+201	301
+nil	301
+nil	301
+nil	nil
+401	nil
+401	501
+102	nil
+nil	nil
+202	nil
+202	302
+nil	302
+nil	302
+nil	nil
+402	nil
+402	502
+103	nil
+nil	nil
+203	nil
+203	303
+nil	303
+nil	303
+nil	nil
+403	nil
+403	503
+104	nil
+nil	nil
+204	nil
+204	304
+nil	304
+nil	304
+nil	nil
+404	nil
+404	504
+105	nil
+nil	nil
+205	nil
+205	305
+nil	305
+nil	305
+nil	nil
+405	nil
+405	505
+106	nil
+nil	nil
+206	nil
+206	306
+nil	306
+nil	306
+nil	nil
+406	nil
+406	506
+107	nil
+nil	nil
+207	nil
+207	307
+nil	307
+nil	307
+nil	nil
+407	nil
+407	507
+108	nil
+nil	nil
+208	nil
+208	308
+nil	308
+nil	308
+nil	nil
+408	nil
+408	508
+109	nil
+nil	nil
+209	nil
+209	309
+nil	309
+nil	309
+nil	nil
+409	nil
+409	509
+110	nil
+nil	nil
+210	nil
+210	310
+nil	310
+nil	310
+nil	nil
+410	nil
+410	510
+111	nil
+nil	nil
+211	nil
+211	311
+nil	311
+nil	311
+nil	nil
+411	nil
+411	511
+112	nil
+nil	nil
+212	nil
+212	312
+nil	312
+nil	312
+nil	nil
+412	nil
+412	512
+113	nil
+nil	nil
+213	nil
+213	313
+nil	313
+nil	313
+nil	nil
+413	nil
+413	513
+114	nil
+nil	nil
+214	nil
+214	314
+nil	314
+nil	314
+nil	nil
+414	nil
+414	514
+115	nil
+nil	nil
+215	nil
+215	315
+nil	315
+nil	315
+nil	nil
+415	nil
+415	515
+116	nil
+nil	nil
+216	nil
+216	316
+nil	316
+nil	316
+nil	nil
+416	nil
+416	516
+117	nil
+nil	nil
+217	nil
+217	317
+nil	317
+nil	317
+nil	nil
+417	nil
+417	517
+118	nil
+nil	nil
+218	nil
+218	318
+nil	318
+nil	318
+nil	nil
+418	nil
+418	518
+119	nil
+nil	nil
+219	nil
+219	319
+nil	319
+nil	319
+nil	nil
+419	nil
+419	519
+120	nil
+nil	nil
+220	nil
+220	320
+nil	320
+nil	320
+nil	nil
+420	nil
+420	520
+121	nil
+nil	nil
+221	nil
+221	321
+nil	321
+nil	321
+nil	nil
+421	nil
+421	521
+122	nil
+nil	nil
+222	nil
+222	322
+nil	322
+nil	322
+nil	nil
+422	nil
+422	522
+123	nil
+nil	nil
+223	nil
+223	323
+nil	323
+nil	323
+nil	nil
+423	nil
+423	523
+124	nil
+nil	nil
+224	nil
+224	324
+nil	324
+nil	324
+nil	nil
+424	nil
+424	524
+125	nil
+nil	nil
+225	nil
+225	325
+nil	325
+nil	325
+nil	nil
+425	nil
+425	525
+126	nil
+nil	nil
+226	nil
+226	326
+nil	326
+nil	326
+nil	nil
+426	nil
+426	526
+127	nil
+nil	nil
+227	nil
+227	327
+nil	327
+nil	327
+nil	nil
+427	nil
+427	527
+128	nil
+nil	nil
+228	nil
+228	328
+nil	328
+nil	328
+nil	nil
+428	nil
+428	528
+129	nil
+nil	nil
+229	nil
+229	329
+nil	329
+nil	329
+nil	nil
+429	nil
+429	529
+130	nil
+nil	nil
+230	nil
+230	330
+nil	330
+nil	330
+nil	nil
+430	nil
+430	530
+131	nil
+nil	nil
+231	nil
+231	331
+nil	331
+nil	331
+nil	nil
+431	nil
+431	531
+132	nil
+nil	nil
+232	nil
+232	332
+nil	332
+nil	332
+nil	nil
+432	nil
+432	532
+133	nil
+nil	nil
+233	nil
+233	333
+nil	333
+nil	333
+nil	nil
+433	nil
+433	533
+134	nil
+nil	nil
+234	nil
+234	334
+nil	334
+nil	334
+nil	nil
+434	nil
+434	534
+135	nil
+nil	nil
+235	nil
+235	335
+nil	335
+nil	335
+nil	nil
+435	nil
+435	535
+136	nil
+nil	nil
+236	nil
+236	336
+nil	336
+nil	336
+nil	nil
+436	nil
+436	536
+137	nil
+nil	nil
+237	nil
+237	337
+nil	337
+nil	337
+nil	nil
+437	nil
+437	537
+138	nil
+nil	nil
+238	nil
+238	338
+nil	338
+nil	338
+nil	nil
+438	nil
+438	538
+139	nil
+nil	nil
+239	nil
+239	339
+nil	339
+nil	339
+nil	nil
+439	nil
+439	539
+140	nil
+nil	nil
+240	nil
+240	340
+nil	340
+nil	340
+nil	nil
+440	nil
+440	540
+141	nil
+nil	nil
+241	nil
+241	341
+nil	341
+nil	341
+nil	nil
+441	nil
+441	541
+142	nil
+nil	nil
+242	nil
+242	342
+nil	342
+nil	342
+nil	nil
+442	nil
+442	542
+143	nil
+nil	nil
+243	nil
+243	343
+nil	343
+nil	343
+nil	nil
+443	nil
+443	543
+144	nil
+nil	nil
+244	nil
+244	344
+nil	344
+nil	344
+nil	nil
+444	nil
+444	544
+145	nil
+nil	nil
+245	nil
+245	345
+nil	345
+nil	345
+nil	nil
+445	nil
+445	545
+146	nil
+nil	nil
+246	nil
+246	346
+nil	346
+nil	346
+nil	nil
+446	nil
+446	546
+147	nil
+nil	nil
+247	nil
+247	347
+nil	347
+nil	347
+nil	nil
+447	nil
+447	547
+148	nil
+nil	nil
+248	nil
+248	348
+nil	348
+nil	348
+nil	nil
+448	nil
+448	548
+149	nil
+nil	nil
+249	nil
+249	349
+nil	349
+nil	349
+nil	nil
+449	nil
+449	549
+150	nil
+nil	nil
+250	nil
+250	350
+nil	350
+nil	350
+nil	nil
+450	nil
+450	550
+101	501
+nil	501
+in metamethod	a1	201
+201	501
+201	301
+nil	301
+in metamethod	a1	nil
+nil	301
+nil	nil
+in metamethod	a1	401
+401	nil
+in metamethod	a1	501
+401	501
+102	502
+nil	502
+in metamethod	a2	202
+202	502
+202	302
+nil	302
+in metamethod	a2	nil
+nil	302
+nil	nil
+in metamethod	a2	402
+402	nil
+in metamethod	a2	502
+402	502
+103	503
+nil	503
+in metamethod	a3	203
+203	503
+203	303
+nil	303
+in metamethod	a3	nil
+nil	303
+nil	nil
+in metamethod	a3	403
+403	nil
+in metamethod	a3	503
+403	503
+104	504
+nil	504
+in metamethod	a4	204
+204	504
+204	304
+nil	304
+in metamethod	a4	nil
+nil	304
+nil	nil
+in metamethod	a4	404
+404	nil
+in metamethod	a4	504
+404	504
+105	505
+nil	505
+in metamethod	a5	205
+205	505
+205	305
+nil	305
+in metamethod	a5	nil
+nil	305
+nil	nil
+in metamethod	a5	405
+405	nil
+in metamethod	a5	505
+405	505
+106	506
+nil	506
+in metamethod	a6	206
+206	506
+206	306
+nil	306
+in metamethod	a6	nil
+nil	306
+nil	nil
+in metamethod	a6	406
+406	nil
+in metamethod	a6	506
+406	506
+107	507
+nil	507
+in metamethod	a7	207
+207	507
+207	307
+nil	307
+in metamethod	a7	nil
+nil	307
+nil	nil
+in metamethod	a7	407
+407	nil
+in metamethod	a7	507
+407	507
+108	508
+nil	508
+in metamethod	a8	208
+208	508
+208	308
+nil	308
+in metamethod	a8	nil
+nil	308
+nil	nil
+in metamethod	a8	408
+408	nil
+in metamethod	a8	508
+408	508
+109	509
+nil	509
+in metamethod	a9	209
+209	509
+209	309
+nil	309
+in metamethod	a9	nil
+nil	309
+nil	nil
+in metamethod	a9	409
+409	nil
+in metamethod	a9	509
+409	509
+110	510
+nil	510
+in metamethod	a10	210
+210	510
+210	310
+nil	310
+in metamethod	a10	nil
+nil	310
+nil	nil
+in metamethod	a10	410
+410	nil
+in metamethod	a10	510
+410	510
+111	511
+nil	511
+in metamethod	a11	211
+211	511
+211	311
+nil	311
+in metamethod	a11	nil
+nil	311
+nil	nil
+in metamethod	a11	411
+411	nil
+in metamethod	a11	511
+411	511
+112	512
+nil	512
+in metamethod	a12	212
+212	512
+212	312
+nil	312
+in metamethod	a12	nil
+nil	312
+nil	nil
+in metamethod	a12	412
+412	nil
+in metamethod	a12	512
+412	512
+113	513
+nil	513
+in metamethod	a13	213
+213	513
+213	313
+nil	313
+in metamethod	a13	nil
+nil	313
+nil	nil
+in metamethod	a13	413
+413	nil
+in metamethod	a13	513
+413	513
+114	514
+nil	514
+in metamethod	a14	214
+214	514
+214	314
+nil	314
+in metamethod	a14	nil
+nil	314
+nil	nil
+in metamethod	a14	414
+414	nil
+in metamethod	a14	514
+414	514
+115	515
+nil	515
+in metamethod	a15	215
+215	515
+215	315
+nil	315
+in metamethod	a15	nil
+nil	315
+nil	nil
+in metamethod	a15	415
+415	nil
+in metamethod	a15	515
+415	515
+116	516
+nil	516
+in metamethod	a16	216
+216	516
+216	316
+nil	316
+in metamethod	a16	nil
+nil	316
+nil	nil
+in metamethod	a16	416
+416	nil
+in metamethod	a16	516
+416	516
+117	517
+nil	517
+in metamethod	a17	217
+217	517
+217	317
+nil	317
+in metamethod	a17	nil
+nil	317
+nil	nil
+in metamethod	a17	417
+417	nil
+in metamethod	a17	517
+417	517
+118	518
+nil	518
+in metamethod	a18	218
+218	518
+218	318
+nil	318
+in metamethod	a18	nil
+nil	318
+nil	nil
+in metamethod	a18	418
+418	nil
+in metamethod	a18	518
+418	518
+119	519
+nil	519
+in metamethod	a19	219
+219	519
+219	319
+nil	319
+in metamethod	a19	nil
+nil	319
+nil	nil
+in metamethod	a19	419
+419	nil
+in metamethod	a19	519
+419	519
+120	520
+nil	520
+in metamethod	a20	220
+220	520
+220	320
+nil	320
+in metamethod	a20	nil
+nil	320
+nil	nil
+in metamethod	a20	420
+420	nil
+in metamethod	a20	520
+420	520
+121	521
+nil	521
+in metamethod	a21	221
+221	521
+221	321
+nil	321
+in metamethod	a21	nil
+nil	321
+nil	nil
+in metamethod	a21	421
+421	nil
+in metamethod	a21	521
+421	521
+122	522
+nil	522
+in metamethod	a22	222
+222	522
+222	322
+nil	322
+in metamethod	a22	nil
+nil	322
+nil	nil
+in metamethod	a22	422
+422	nil
+in metamethod	a22	522
+422	522
+123	523
+nil	523
+in metamethod	a23	223
+223	523
+223	323
+nil	323
+in metamethod	a23	nil
+nil	323
+nil	nil
+in metamethod	a23	423
+423	nil
+in metamethod	a23	523
+423	523
+124	524
+nil	524
+in metamethod	a24	224
+224	524
+224	324
+nil	324
+in metamethod	a24	nil
+nil	324
+nil	nil
+in metamethod	a24	424
+424	nil
+in metamethod	a24	524
+424	524
+125	525
+nil	525
+in metamethod	a25	225
+225	525
+225	325
+nil	325
+in metamethod	a25	nil
+nil	325
+nil	nil
+in metamethod	a25	425
+425	nil
+in metamethod	a25	525
+425	525
+126	526
+nil	526
+in metamethod	a26	226
+226	526
+226	326
+nil	326
+in metamethod	a26	nil
+nil	326
+nil	nil
+in metamethod	a26	426
+426	nil
+in metamethod	a26	526
+426	526
+127	527
+nil	527
+in metamethod	a27	227
+227	527
+227	327
+nil	327
+in metamethod	a27	nil
+nil	327
+nil	nil
+in metamethod	a27	427
+427	nil
+in metamethod	a27	527
+427	527
+128	528
+nil	528
+in metamethod	a28	228
+228	528
+228	328
+nil	328
+in metamethod	a28	nil
+nil	328
+nil	nil
+in metamethod	a28	428
+428	nil
+in metamethod	a28	528
+428	528
+129	529
+nil	529
+in metamethod	a29	229
+229	529
+229	329
+nil	329
+in metamethod	a29	nil
+nil	329
+nil	nil
+in metamethod	a29	429
+429	nil
+in metamethod	a29	529
+429	529
+130	530
+nil	530
+in metamethod	a30	230
+230	530
+230	330
+nil	330
+in metamethod	a30	nil
+nil	330
+nil	nil
+in metamethod	a30	430
+430	nil
+in metamethod	a30	530
+430	530
+131	531
+nil	531
+in metamethod	a31	231
+231	531
+231	331
+nil	331
+in metamethod	a31	nil
+nil	331
+nil	nil
+in metamethod	a31	431
+431	nil
+in metamethod	a31	531
+431	531
+132	532
+nil	532
+in metamethod	a32	232
+232	532
+232	332
+nil	332
+in metamethod	a32	nil
+nil	332
+nil	nil
+in metamethod	a32	432
+432	nil
+in metamethod	a32	532
+432	532
+133	533
+nil	533
+in metamethod	a33	233
+233	533
+233	333
+nil	333
+in metamethod	a33	nil
+nil	333
+nil	nil
+in metamethod	a33	433
+433	nil
+in metamethod	a33	533
+433	533
+134	534
+nil	534
+in metamethod	a34	234
+234	534
+234	334
+nil	334
+in metamethod	a34	nil
+nil	334
+nil	nil
+in metamethod	a34	434
+434	nil
+in metamethod	a34	534
+434	534
+135	535
+nil	535
+in metamethod	a35	235
+235	535
+235	335
+nil	335
+in metamethod	a35	nil
+nil	335
+nil	nil
+in metamethod	a35	435
+435	nil
+in metamethod	a35	535
+435	535
+136	536
+nil	536
+in metamethod	a36	236
+236	536
+236	336
+nil	336
+in metamethod	a36	nil
+nil	336
+nil	nil
+in metamethod	a36	436
+436	nil
+in metamethod	a36	536
+436	536
+137	537
+nil	537
+in metamethod	a37	237
+237	537
+237	337
+nil	337
+in metamethod	a37	nil
+nil	337
+nil	nil
+in metamethod	a37	437
+437	nil
+in metamethod	a37	537
+437	537
+138	538
+nil	538
+in metamethod	a38	238
+238	538
+238	338
+nil	338
+in metamethod	a38	nil
+nil	338
+nil	nil
+in metamethod	a38	438
+438	nil
+in metamethod	a38	538
+438	538
+139	539
+nil	539
+in metamethod	a39	239
+239	539
+239	339
+nil	339
+in metamethod	a39	nil
+nil	339
+nil	nil
+in metamethod	a39	439
+439	nil
+in metamethod	a39	539
+439	539
+140	540
+nil	540
+in metamethod	a40	240
+240	540
+240	340
+nil	340
+in metamethod	a40	nil
+nil	340
+nil	nil
+in metamethod	a40	440
+440	nil
+in metamethod	a40	540
+440	540
+141	541
+nil	541
+in metamethod	a41	241
+241	541
+241	341
+nil	341
+in metamethod	a41	nil
+nil	341
+nil	nil
+in metamethod	a41	441
+441	nil
+in metamethod	a41	541
+441	541
+142	542
+nil	542
+in metamethod	a42	242
+242	542
+242	342
+nil	342
+in metamethod	a42	nil
+nil	342
+nil	nil
+in metamethod	a42	442
+442	nil
+in metamethod	a42	542
+442	542
+143	543
+nil	543
+in metamethod	a43	243
+243	543
+243	343
+nil	343
+in metamethod	a43	nil
+nil	343
+nil	nil
+in metamethod	a43	443
+443	nil
+in metamethod	a43	543
+443	543
+144	544
+nil	544
+in metamethod	a44	244
+244	544
+244	344
+nil	344
+in metamethod	a44	nil
+nil	344
+nil	nil
+in metamethod	a44	444
+444	nil
+in metamethod	a44	544
+444	544
+145	545
+nil	545
+in metamethod	a45	245
+245	545
+245	345
+nil	345
+in metamethod	a45	nil
+nil	345
+nil	nil
+in metamethod	a45	445
+445	nil
+in metamethod	a45	545
+445	545
+146	546
+nil	546
+in metamethod	a46	246
+246	546
+246	346
+nil	346
+in metamethod	a46	nil
+nil	346
+nil	nil
+in metamethod	a46	446
+446	nil
+in metamethod	a46	546
+446	546
+147	547
+nil	547
+in metamethod	a47	247
+247	547
+247	347
+nil	347
+in metamethod	a47	nil
+nil	347
+nil	nil
+in metamethod	a47	447
+447	nil
+in metamethod	a47	547
+447	547
+148	548
+nil	548
+in metamethod	a48	248
+248	548
+248	348
+nil	348
+in metamethod	a48	nil
+nil	348
+nil	nil
+in metamethod	a48	448
+448	nil
+in metamethod	a48	548
+448	548
+149	549
+nil	549
+in metamethod	a49	249
+249	549
+249	349
+nil	349
+in metamethod	a49	nil
+nil	349
+nil	nil
+in metamethod	a49	449
+449	nil
+in metamethod	a49	549
+449	549
+150	550
+nil	550
+in metamethod	a50	250
+250	550
+250	350
+nil	350
+in metamethod	a50	nil
+nil	350
+nil	nil
+in metamethod	a50	450
+450	nil
+in metamethod	a50	550
+450	550

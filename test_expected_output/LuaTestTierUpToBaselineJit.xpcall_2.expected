@@ -1,0 +1,21 @@
+enter f	nil	nil
+enter g	true	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+false	1

@@ -1,0 +1,1728 @@
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = le2, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt, b.le = nil, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt, b.le = nil, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = le2, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = a<b
+in lt metamethod, lhs = a, rhs = b
+a<b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = a<=b
+in lt metamethod, lhs = b, rhs = a
+a<=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = a>b
+in lt metamethod, lhs = b, rhs = a
+a>b	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = a>=b
+in lt metamethod, lhs = a, rhs = b
+a>=b	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = not(a<b)
+in lt metamethod, lhs = a, rhs = b
+not(a<b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = not(a<=b)
+in lt metamethod, lhs = b, rhs = a
+not(a<=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = not(a>b)
+in lt metamethod, lhs = b, rhs = a
+not(a>b)	false
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt, b.le = nil, op = not(a>=b)
+in lt metamethod, lhs = a, rhs = b
+not(a>=b)	true
+true
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = lt2, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = le2, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = nil, a.le = nil, b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = lt2, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = le2, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = nil, b.le = nil, op = not(a>=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = a<b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = a<=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = a>b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = a>=b
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = not(a<b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = not(a<=b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = not(a>b)
+false
+Executing test: a.lt = (no mt), a.le = (no mt), b.lt = (no mt), b.le = (no mt), op = not(a>=b)
+false

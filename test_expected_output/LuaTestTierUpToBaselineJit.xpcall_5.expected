@@ -1,0 +1,20 @@
+enter g	attempt to call a nil value	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+throwing error
+enter g	false	nil
+throwing error
+enter g	true	nil
+false	1

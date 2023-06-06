@@ -1,0 +1,312 @@
+-- test 1 --
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+123
+123
+nil
+nil
+nil
+nil
+123
+123
+a
+a
+b
+b
+123
+123
+a
+a
+b
+b
+nil
+nil
+a
+a
+b
+b
+in metatable (test 1), idx = 	1
+2333
+in metatable (test 1), idx = 	1
+2333
+a
+a
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	1
+2333
+in metatable (test 1), idx = 	1
+2333
+a
+a
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 1), idx = 	0
+2333
+in metatable (test 1), idx = 	0
+2333
+123
+123
+a
+a
+c
+c
+123
+123
+a
+a
+c
+c
+d
+d
+a
+a
+-- test 2 --
+nil
+nil
+56
+56
+78
+78
+nil
+nil
+123
+123
+78
+78
+nil
+nil
+123
+123
+a
+a
+b
+b
+123
+123
+a
+a
+b
+b
+nil
+nil
+a
+a
+b
+b
+in metatable (test 2), idx = 	1
+2333
+in metatable (test 2), idx = 	1
+2333
+a
+a
+in metatable (test 2), idx = 	0
+2333
+in metatable (test 2), idx = 	0
+2333
+in metatable (test 2), idx = 	1
+2333
+in metatable (test 2), idx = 	1
+2333
+a
+a
+in metatable (test 2), idx = 	0
+2333
+in metatable (test 2), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 2), idx = 	0
+2333
+in metatable (test 2), idx = 	0
+2333
+123
+123
+a
+a
+c
+c
+123
+123
+a
+a
+c
+c
+d
+d
+a
+a
+-- test 3 --
+456
+456
+nil
+nil
+nil
+nil
+456
+456
+123
+123
+nil
+nil
+456
+456
+123
+123
+a
+a
+b
+b
+123
+123
+a
+a
+b
+b
+nil
+nil
+a
+a
+b
+b
+in metatable (test 3), idx = 	1
+2333
+in metatable (test 3), idx = 	1
+2333
+a
+a
+in metatable (test 3), idx = 	0
+2333
+in metatable (test 3), idx = 	0
+2333
+in metatable (test 3), idx = 	1
+2333
+in metatable (test 3), idx = 	1
+2333
+a
+a
+in metatable (test 3), idx = 	0
+2333
+in metatable (test 3), idx = 	0
+2333
+123
+123
+a
+a
+in metatable (test 3), idx = 	0
+2333
+in metatable (test 3), idx = 	0
+2333
+123
+123
+a
+a
+c
+c
+123
+123
+a
+a
+c
+c
+d
+d
+a
+a
+-- test 4 --
+in metatable (test 4, init mt), idx = 	0
+2333
+in metatable (test 4, init mt), idx = 	0
+2333
+in metatable (test 4, init mt), idx = 	1
+2333
+in metatable (test 4, init mt), idx = 	1
+2333
+in metatable (test 4, init mt), idx = 	2
+2333
+in metatable (test 4, init mt), idx = 	2
+2333
+in metatable (test 4, init mt), idx = 	0
+2333
+in metatable (test 4, init mt), idx = 	0
+2333
+123
+123
+in metatable (test 4, init mt), idx = 	2
+2333
+in metatable (test 4, init mt), idx = 	2
+2333
+in metatable (test 4, init mt), idx = 	0
+2333
+in metatable (test 4, init mt), idx = 	0
+2333
+123
+123
+a
+a
+b
+b
+123
+123
+a
+a
+b
+b
+in metatable (test 4, init mt), idx = 	1
+2333
+in metatable (test 4, init mt), idx = 	1
+2333
+a
+a
+b
+b
+nil
+nil
+a
+a
+nil
+nil
+nil
+nil
+a
+a
+nil
+nil
+123
+123
+a
+a
+nil
+nil
+123
+123
+a
+a
+c
+c
+123
+123
+a
+a
+c
+c
+d
+d
+a
+a

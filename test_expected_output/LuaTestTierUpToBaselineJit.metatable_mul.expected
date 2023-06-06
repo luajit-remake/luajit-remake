@@ -1,0 +1,57 @@
+a	2333	nil
+12
+a	2333	nil
+12
+321	a	nil
+43
+cba	a	nil
+43
+f2	a	b	nil
+67
+f3	b	a	nil
+98
+f2	a	b	nil
+67
+f2	b	a	nil
+67
+false	a	233	nil
+123
+false	a	abb	nil
+123
+false	233	a	nil
+124
+false	233	a	nil
+124
+c	a	234	nil
+98
+c	a	xyz	nil
+98
+c	432	a	nil
+87
+c	zwx	a	nil
+87
+false
+false
+69372
+1845
+1968
+536364
+89676
+0
+2
+enter f	a	1	nil
+nil
+enter f	1	a	nil
+nil
+18
+enter f	1.2	0xG	nil
+nil
+18
+enter f	0xG	1.2	nil
+nil
+45
+enter f	    0xG        	3	nil
+nil
+225
+enter f	0xG	 0xG 	nil
+nil

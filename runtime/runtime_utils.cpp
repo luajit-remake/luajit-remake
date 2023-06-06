@@ -271,7 +271,7 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
     res->m_jitRegionStart = jitRegionStart;
     res->m_jitRegionSize = jitRegionSize;
 
-    assert(cb->m_baselineCodeBlock == nullptr);
+    TestAssert(cb->m_baselineCodeBlock == nullptr);
     cb->m_baselineCodeBlock = res;
 
     return res;

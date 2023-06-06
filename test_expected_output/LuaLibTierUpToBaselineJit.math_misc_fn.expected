@@ -1,0 +1,217 @@
+-- atan2 --
+0	0	0
+-0	0	-0
+0	-0	3.1415926535898
+-0	-0	-3.1415926535898
+1.23	0	1.5707963267949
+0	1.23	0
+2.34	1.23	1.0868469389349
+-1.23	2.34	-0.48394938786002
+nan	0	nan
+0	nan	nan
+nan	nan	nan
+0	inf	0
+0	-inf	3.1415926535898
+inf	0	1.5707963267949
+inf	nan	nan
+0xAB	12	1.5007357441564
+34	0xAB	0.19627070093174
+  0xFE 	  5.43    	1.5494216298412
+1	2	3	0.46364760900081
+false
+false
+false
+false
+-- pow --
+0	0	1
+-0	0	1
+0	-0	1
+-0	-0	1
+1.23	0	1
+0	1.23	0
+2.34	1.23	2.8453487488029
+-1.23	2.34	nan
+nan	0	1
+0	nan	nan
+nan	nan	nan
+0	inf	0
+0	-inf	inf
+inf	0	1
+inf	nan	nan
+0xAB	12	6.2510550667834e+26
+34	0xAB	7.6365080556665e+261
+  0xFE 	  5.43    	11435287325221
+1	2	3	1
+false
+false
+false
+false
+-- fmod --
+0	0	nan
+-0	0	nan
+0	-0	nan
+-0	-0	nan
+1.23	0	nan
+0	1.23	0
+2.34	1.23	1.11
+-1.23	2.34	-1.23
+nan	0	nan
+0	nan	nan
+nan	nan	nan
+0	inf	0
+0	-inf	0
+inf	0	nan
+inf	nan	nan
+0xAB	12	3
+34	0xAB	34
+  0xFE 	  5.43    	4.22
+1	2	3	1
+false
+false
+false
+false
+-- ldexp --
+0	-3	0
+-0	-3	-0
+1.23	-3	0.15375
+-1.23	-3	-0.15375
+nan	-3	nan
+inf	-3	inf
+-inf	-3	-inf
+1e+200	-3	1.25e+199
+0	-2	0
+-0	-2	-0
+1.23	-2	0.3075
+-1.23	-2	-0.3075
+nan	-2	nan
+inf	-2	inf
+-inf	-2	-inf
+1e+200	-2	2.5e+199
+0	-1	0
+-0	-1	-0
+1.23	-1	0.615
+-1.23	-1	-0.615
+nan	-1	nan
+inf	-1	inf
+-inf	-1	-inf
+1e+200	-1	5e+199
+0	0	0
+-0	0	-0
+1.23	0	1.23
+-1.23	0	-1.23
+nan	0	nan
+inf	0	inf
+-inf	0	-inf
+1e+200	0	1e+200
+0	1	0
+-0	1	-0
+1.23	1	2.46
+-1.23	1	-2.46
+nan	1	nan
+inf	1	inf
+-inf	1	-inf
+1e+200	1	2e+200
+0	2	0
+-0	2	-0
+1.23	2	4.92
+-1.23	2	-4.92
+nan	2	nan
+inf	2	inf
+-inf	2	-inf
+1e+200	2	4e+200
+0	3	0
+-0	3	-0
+1.23	3	9.84
+-1.23	3	-9.84
+nan	3	nan
+inf	3	inf
+-inf	3	-inf
+1e+200	3	8e+200
+1.23	1000	1.3179555868391e+301
+1.23	3000	inf
+1.23	-1000	1.147914250759e-301
+1.23	-3000	0
+-1.23	1000	-1.3179555868391e+301
+-1.23	3000	-inf
+-1.23	-1000	-1.147914250759e-301
+-1.23	-3000	-0
+ -1.23 	23	-10317987.84
+1.23	 0xBA 	1.2063804897696e+56
+233	 0xBA 	2.2852573505392e+58
+-- random / randomseed -- 
+executing randseed
+executing rand	0.89057440496981
+executing rand	0.74767177412286
+executing rand	3
+executing rand	6
+executing rand	13
+executing rand	17
+executing rand	-10
+executing rand	-11
+executing rand	0.89580932725221
+executing rand	0.8032930069603
+executing rand	10
+executing rand	8
+executing rand	11
+executing rand	13
+executing rand	103
+executing randseed
+executing rand	0.54480991559103
+executing rand	0.00060777645558119
+executing rand	4
+executing rand	1
+executing rand	10
+executing rand	17
+executing rand	-15
+executing rand	-15
+executing rand	0.041562707629055
+executing rand	0.46536736935377
+executing rand	10
+executing rand	8
+executing rand	11
+executing rand	12
+executing rand	127
+executing randseed
+executing rand	0.89057440496981
+executing rand	0.74767177412286
+executing rand	3
+executing rand	6
+executing rand	13
+executing rand	17
+executing rand	-10
+executing rand	-11
+executing rand	0.89580932725221
+executing rand	0.8032930069603
+executing rand	10
+executing rand	8
+executing rand	11
+executing rand	13
+executing rand	103
+executing randseed
+executing rand	0.54480991559103
+executing rand	0.00060777645558119
+executing rand	4
+executing rand	1
+executing rand	10
+executing rand	17
+executing rand	-15
+executing rand	-15
+executing rand	0.041562707629055
+executing rand	0.46536736935377
+executing rand	10
+executing rand	8
+executing rand	11
+executing rand	12
+executing rand	127
+testing range
+testing range ok
+testing error cases
+false
+false
+false
+false
+false
+false
+false
+false
+done

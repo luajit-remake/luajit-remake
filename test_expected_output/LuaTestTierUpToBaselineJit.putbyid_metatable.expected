@@ -1,0 +1,60 @@
+-- test 1 --
+nil	123
+nil	234
+-- test 2 --
+before	1	nil
+t	a	123	nil
+after	1	nil
+before	2	nil
+t	a	123	nil
+after	2	nil
+before	3	nil
+t	a	123	nil
+after	3	246
+before	4	246
+after	4	123
+before	5	123
+after	5	123
+before	6	123
+after	6	123
+-- test 2 --
+f1	t	xx	20	nil
+f2	t	xx	40	nil
+120
+30
+-- test 3 --
+false
+f3	233	zz	12	nil	nil
+nil
+f3	233	zz	23	nil	nil
+nil
+-- test 4 --
+f6	t6	a7	28	nil
+t1	22	nil	nil	nil	nil	nil	nil
+t2	2	23	nil	nil	nil	nil	nil
+t3	4	5	24	nil	nil	nil	nil
+t4	7	8	9	25	nil	nil	nil
+t5	11	12	13	14	26	nil	nil
+t6	16	17	18	19	20	27	2800
+f6	t6	a8	36	nil
+t1	29	nil	nil	nil	nil	nil	nil	nil
+t2	2	30	nil	nil	nil	nil	nil	nil
+t3	4	5	31	nil	nil	nil	nil	nil
+t4	7	8	9	32	nil	nil	nil	nil
+t5	11	12	13	14	33	nil	nil	nil
+t6	16	17	18	19	20	34	35	3600
+-- test 5 --
+f7	t6	a7	28	nil
+t1	22	nil	nil	nil	nil	nil	nil
+t2	2	23	nil	nil	nil	nil	nil
+t3	4	5	24	nil	nil	nil	nil
+t4	7	8	9	25	nil	nil	nil
+t5	11	12	13	14	26	nil	nil
+t6	16	17	18	19	20	27	2800
+f7	t6	a8	36	nil
+t1	29	nil	nil	nil	nil	nil	nil	nil
+t2	2	30	nil	nil	nil	nil	nil	nil
+t3	4	5	31	nil	nil	nil	nil	nil
+t4	7	8	9	32	nil	nil	nil	nil
+t5	11	12	13	14	33	nil	nil	nil
+t6	16	17	18	19	20	34	35	3600

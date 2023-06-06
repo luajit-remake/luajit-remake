@@ -1,0 +1,73 @@
+--- part 1 ---
+false
+false
+false
+false
+false
+false
+false
+--- part 2 ---
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+nil
+--- part 3 ---
+nil
+nil
+t
+mt_t
+mt_t
+abcdefg
+mt_t
+false
+true
+overwritten
+overwritten
+--- part 4 ---
+false
+false
+false
+false
+false
+false
+--- part 5 ---
+true
+true
+true
+nil_mt
+nil_mt
+bool_mt
+bool_mt
+bool_mt
+bool_mt
+number_mt
+number_mt
+func_mt
+func_mt
+string_mt
+string_mt
+--- part 6 ---
+protect!
+nil_mt
+true
+nil_mt_2
+--- part 7 ---
+true
+nil
+false
+true
+nil
+nil
+t
+mt_t_2
+t
+nil
+nil

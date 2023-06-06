@@ -1,0 +1,79 @@
+-- test 1 --
+nil
+nil
+-- test 2 --
+x
+f1	t	b	nil
+233
+-- test 3 --
+f1	t	a	nil
+233
+y
+-- test 4 --
+false
+1.2
+-- test 5 --
+false
+1.2
+-- test 6 --
+false
+0
+-- test 7 --
+f3	123	a	nil	nil
+433
+0
+-- test 8 --
+false
+0
+-- test 9 --
+false
+false
+-- test 10 --
+f3	false	a	nil
+455
+f3	false	b	nil
+455
+-- test 11 --
+false
+false
+-- test 12 --
+false
+false
+-- test 13 --
+f5	566	a	nil	nil
+899
+f5	566	b	nil	nil
+899
+-- test 14 --
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+f6	t10	a11	nil
+900
+f6	t10	a1	nil
+900
+2
+3
+f6	t10	a11	nil
+900
+-- test 15 --
+10
+f5	456	a11	nil	nil
+899
+3
+f5	456	a11	nil	nil
+899
+-- test 16 --
+10
+11
+nil
+3
+11
+nil

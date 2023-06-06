@@ -55,6 +55,11 @@ TEST(BaselineJitCallIc, Sanity_1_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_1.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Sanity_1_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_1.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Sanity_2)
 {
     VM* vm = VM::Create();
@@ -105,6 +110,11 @@ TEST(BaselineJitCallIc, Sanity_2)
 TEST(BaselineJitCallIc, Sanity_2_NoJit)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_2.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(BaselineJitCallIc, Sanity_2_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_2.lua", LuaTestOption::UpToBaselineJit);
 }
 
 TEST(BaselineJitCallIc, Sanity_3)
@@ -159,6 +169,11 @@ TEST(BaselineJitCallIc, Sanity_3_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_3.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Sanity_3_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_sanity_3.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Stress_1)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_1.lua", LuaTestOption::ForceBaselineJit);
@@ -167,6 +182,11 @@ TEST(BaselineJitCallIc, Stress_1)
 TEST(BaselineJitCallIc, Stress_1_NoJit)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_1.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(BaselineJitCallIc, Stress_1_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_1.lua", LuaTestOption::UpToBaselineJit);
 }
 
 TEST(BaselineJitCallIc, Stress_2)
@@ -179,6 +199,11 @@ TEST(BaselineJitCallIc, Stress_2_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_2.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Stress_2_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_2.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Stress_3)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_3.lua", LuaTestOption::ForceBaselineJit);
@@ -187,6 +212,11 @@ TEST(BaselineJitCallIc, Stress_3)
 TEST(BaselineJitCallIc, Stress_3_NoJit)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_3.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(BaselineJitCallIc, Stress_3_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_3.lua", LuaTestOption::UpToBaselineJit);
 }
 
 TEST(BaselineJitCallIc, Stress_4)
@@ -199,6 +229,11 @@ TEST(BaselineJitCallIc, Stress_4_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_4.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Stress_4_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_direct_call_4.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Stress_5)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_1.lua", LuaTestOption::ForceBaselineJit);
@@ -207,6 +242,11 @@ TEST(BaselineJitCallIc, Stress_5)
 TEST(BaselineJitCallIc, Stress_5_NoJit)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_1.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(BaselineJitCallIc, Stress_5_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_1.lua", LuaTestOption::UpToBaselineJit);
 }
 
 TEST(BaselineJitCallIc, Stress_6)
@@ -219,6 +259,11 @@ TEST(BaselineJitCallIc, Stress_6_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_2.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Stress_6_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_2.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Stress_7)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_3.lua", LuaTestOption::ForceBaselineJit);
@@ -229,6 +274,11 @@ TEST(BaselineJitCallIc, Stress_7_NoJit)
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_3.lua", LuaTestOption::ForceInterpreter);
 }
 
+TEST(BaselineJitCallIc, Stress_7_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_3.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(BaselineJitCallIc, Stress_8)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_4.lua", LuaTestOption::ForceBaselineJit);
@@ -237,4 +287,9 @@ TEST(BaselineJitCallIc, Stress_8)
 TEST(BaselineJitCallIc, Stress_8_NoJit)
 {
     RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_4.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(BaselineJitCallIc, Stress_8_TierUp)
+{
+    RunSimpleLuaTest("luatests/baseline_jit_call_ic_stress_closure_call_4.lua", LuaTestOption::UpToBaselineJit);
 }
