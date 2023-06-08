@@ -3,7 +3,7 @@ source_filename = "/home/u/project/annotated/unit_test/throw_error_api_lowering.
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-%0 = type { %1, ptr, %4, i32, i32, i32, i32, ptr, i64, ptr, ptr, %5, [0 x i64] }
+%0 = type { %1, ptr, %4, i32, i32, i32, i32, i64, ptr, ptr, ptr, %5, [0 x i64] }
 %1 = type { %2, i8, i8, i32, ptr, %3 }
 %2 = type { i8, i8 }
 %3 = type { i32, i32 }
@@ -22,7 +22,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test2_0(ptr %coroutineCtx, 
   %17 = getelementptr inbounds i8, ptr %codeBlock, i64 96
   %18 = ptrtoint ptr %curBytecode to i64
   %19 = ptrtoint ptr %17 to i64
-  %20 = getelementptr inbounds %0, ptr %codeBlock, i64 0, i32 8
+  %20 = getelementptr inbounds %0, ptr %codeBlock, i64 0, i32 7
   %21 = load i64, ptr %20, align 8, !tbaa !2
   %.neg.i = sub i64 -96, %18
   %.neg4.i = add i64 %.neg.i, %19
@@ -44,8 +44,8 @@ attributes #1 = { nounwind }
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
-!2 = !{!3, !16, i64 64}
-!3 = !{!"_ZTS9CodeBlock", !4, i64 0, !13, i64 24, !15, i64 32, !12, i64 40, !12, i64 44, !12, i64 48, !12, i64 52, !13, i64 56, !16, i64 64, !13, i64 72, !13, i64 80, !17, i64 88, !7, i64 96}
+!2 = !{!3, !16, i64 56}
+!3 = !{!"_ZTS9CodeBlock", !4, i64 0, !13, i64 24, !15, i64 32, !12, i64 40, !12, i64 44, !12, i64 48, !12, i64 52, !16, i64 56, !13, i64 64, !13, i64 72, !13, i64 80, !17, i64 88, !7, i64 96}
 !4 = !{!"_ZTS14ExecutableCode", !5, i64 0, !10, i64 2, !11, i64 3, !12, i64 4, !13, i64 8, !14, i64 16}
 !5 = !{!"_ZTS24SystemHeapGcObjectHeader", !6, i64 0, !9, i64 1}
 !6 = !{!"_ZTS14HeapEntityType", !7, i64 0}

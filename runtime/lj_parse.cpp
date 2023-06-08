@@ -82,6 +82,8 @@
 #include "vm.h"
 #include "bytecode_builder.h"
 
+#include "deegen/deegen_options.h"
+
 /* Bytecode instruction definition. Order matters, see below.
 **
 ** (name, filler, Amode, Bmode, Cmode or Dmode, metamethod)
@@ -4151,7 +4153,7 @@ static void parse_repeat(LexState *ls, BCLine line)
     fscope_begin(fs, &bl1, FSCOPE_LOOP);  /* Breakable loop scope. */
     fscope_begin(fs, &bl2, 0);  /* Inner scope. */
     lj_lex_next(ls);  /* Skip 'repeat'. */
-    std::ignore = bcemit_AD(fs, BC_REP_LH, fs->nactvar, 0);
+    std::ignore = bcemit_AD(fs, x_allow_interpreter_tier_up_to_baseline_jit ? BC_REP_LH : BC_LOOP, fs->nactvar, 0);
     parse_chunk(ls);
     lex_match(ls, TK_until, TK_repeat, line);
     condexit = expr_cond(ls);  /* Parse condition (still inside inner scope). */

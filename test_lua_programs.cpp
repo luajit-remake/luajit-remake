@@ -3857,4 +3857,54 @@ TEST(LuaTestTierUp, interp_to_baseline_tier_up_3)
     TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_tier_up_3.lua", 2 /*numExpectedCompilations*/);
 }
 
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_while_loop_1)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_while_loop_1.lua", 1 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_while_loop_2)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_while_loop_2.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_repeat_loop_1)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_repeat_loop_1.lua", 1 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_repeat_loop_2)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_repeat_loop_2.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_numeric_for_loop)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_numeric_for_loop.lua", 1 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_iterative_for_loop)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_iterative_for_loop.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_kv_loop_1)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_kv_loop_1.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_kv_loop_2)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_kv_loop_2.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_kv_loop_3)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_kv_loop_3.lua", 2 /*numExpectedCompilations*/);
+}
+
+TEST(LuaTestTierUp, interp_to_baseline_osr_entry_kv_loop_4)
+{
+    TestInterpToBaselineTierUpSanity_1_Impl("luatests/interp_to_baseline_osr_entry_kv_loop_4.lua", 2 /*numExpectedCompilations*/);
+}
+
 }   // anonymous namespace

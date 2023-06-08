@@ -474,6 +474,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         ReleaseAssert(operandListReader.GetNumElements<Desc::Operand>() == Desc::x_maxOperands);
         bool hasTValueOutput = curDefReader.GetValue<&Desc::m_hasTValueOutput>();
         bool canPerformBranch = curDefReader.GetValue<&Desc::m_canPerformBranch>();
+        bool isInterpreterToBaselineJitOsrEntryPoint = curDefReader.GetValue<&Desc::m_isInterpreterTierUpPoint>();
 
         std::vector<std::string> operandNames;
         std::vector<DeegenBytecodeOperandType> operandTypes;
@@ -524,6 +525,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_hasOutputValue = hasTValueOutput;
             def->m_hasConditionalBranchTarget = canPerformBranch;
             def->m_baselineJitSlowPathDataLength = static_cast<size_t>(-1);
+            def->m_isInterpreterToBaselineJitOsrEntryPoint = isInterpreterToBaselineJitOsrEntryPoint;
             if (hasTValueOutput)
             {
                 def->m_outputOperand = std::make_unique<BcOpSlot>("output");
@@ -787,6 +789,8 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     JSONCheckedGet(j, "num_jit_generic_ic", m_numJitGenericICs);
     JSONCheckedGet(j, "num_total_generic_ic_effect_kinds", m_totalGenericIcEffectKinds);
 
+    JSONCheckedGet(j, "is_interpreter_to_baseline_jit_osr_entry_point", m_isInterpreterToBaselineJitOsrEntryPoint);
+
     {
         int quickeningKindInt = JSONCheckedGet<int>(j, "quickening_kind");
         m_quickeningKind = static_cast<BytecodeQuickeningKind>(quickeningKindInt);
@@ -854,6 +858,8 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
     j["num_jit_call_ic"] = GetNumCallICsInJitTier();
     j["num_jit_generic_ic"] = GetNumGenericICsInJitTier();
     j["num_total_generic_ic_effect_kinds"] = GetTotalGenericIcEffectKinds();
+
+    j["is_interpreter_to_baseline_jit_osr_entry_point"] = m_isInterpreterToBaselineJitOsrEntryPoint;
 
     j["quickening_kind"] = static_cast<int>(m_quickeningKind);
 

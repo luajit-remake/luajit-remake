@@ -54,6 +54,11 @@ using BytecodeOpcodeTy = DeegenBytecodeBuilder::BytecodeBuilder::BytecodeOpcodeT
 
 BaselineCodeBlock* NO_INLINE deegen_baseline_jit_do_codegen(CodeBlock* cb)
 {
+    // Each CodeBlock should be codegen'ed only once.
+    // Be extra careful to catch such bugs, as these will not show up as correctness issues but cause silent performance regressions.
+    //
+    ReleaseAssert(cb->m_baselineCodeBlock == nullptr);
+
     uint8_t* bytecodeStream = cb->GetBytecodeStream();
     uint8_t* bytecodeStreamEnd = bytecodeStream + cb->m_bytecodeLength - DeegenBytecodeBuilder::BytecodeBuilder::x_numExtraPaddingAtEnd;
 
@@ -338,7 +343,22 @@ BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into
 
 BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_osr_entry_into_baseline_jit(CodeBlock* cb, void* curBytecode)
 {
-    BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
+    BaselineCodeBlock* bcb;
+    if (cb->m_baselineCodeBlock != nullptr)
+    {
+        // It is possible that at this moment the baseline JIT code has already been generated,
+        // e.g., function F calls itself, the call triggers the codegen, so the callee F executed in baseline JIT,
+        // but the caller F is still in interpreter mode after the call returns. The caller F will trigger
+        // an OSR entry and reach here the next time it executes a bytecode that qualifies for OSR entry,
+        // at which time F is already compiled.
+        //
+        bcb = cb->m_baselineCodeBlock;
+    }
+    else
+    {
+        bcb = deegen_baseline_jit_do_codegen(cb);
+    }
+
     size_t bytecodeIndex = bcb->GetBytecodeIndexFromBytecodePtr(curBytecode);
     uint8_t* slowPathDataStruct = bcb->GetSlowPathDataAtBytecodeIndex(bytecodeIndex);
 

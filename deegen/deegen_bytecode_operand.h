@@ -1030,6 +1030,7 @@ public:
     //
     std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
 
+    bool m_isInterpreterToBaselineJitOsrEntryPoint;
 
 private:
     void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)

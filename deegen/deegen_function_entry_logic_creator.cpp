@@ -62,46 +62,87 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
     }
 
     ReleaseAssert(func->arg_size() == 16);
-    Value* coroutineCtx = func->getArg(0);
-    coroutineCtx->setName("coroCtx");
-    Value* preFixupStackBase = func->getArg(1);
-    preFixupStackBase->setName("preFixupStackBase");
-    Value* numArgsAsPtr = func->getArg(2);
-    Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
-    Value* isMustTail64 = func->getArg(6);
 
-    BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
+    if (isTierUp)
+    {
+        Value* coroutineCtx = func->getArg(0);
+        coroutineCtx->setName("coroCtx");
+        Value* preFixupStackBase = func->getArg(1);
+        preFixupStackBase->setName("preFixupStackBase");
+        Value* numArgsAsPtr = func->getArg(2);
+        Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
+        Value* isMustTail64 = func->getArg(6);
 
-    ReleaseAssert(llvm_value_has_type<void*>(numArgsAsPtr));
-    Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
-    numArgs->setName("numProvidedArgs");
+        BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
 
-    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
-    Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(numArgsAsPtr));
+        Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
+        numArgs->setName("numProvidedArgs");
 
-    // Set up the function implementation, which should call the baseline JIT codegen function and branch to JIT'ed code
-    //
-    Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, entryBB);
-    ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
-    StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
-    ReleaseAssert(sty->elements().size() == 2);
-    Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", entryBB);
-    ReleaseAssert(llvm_value_has_type<void*>(bcb));
-    Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
-    ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
+        Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
 
-    UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
+        // Set up the function implementation, which should call the baseline JIT codegen function and branch to JIT'ed code
+        //
+        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, entryBB);
+        ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
+        StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
+        ReleaseAssert(sty->elements().size() == 2);
+        Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(bcb));
+        Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-    InterpreterFunctionInterface::CreateDispatchToCallee(
-        codePointer,
-        coroutineCtx,
-        preFixupStackBase,
-        calleeCodeBlockHeapPtr,
-        numArgs,
-        isMustTail64,
-        dummyInst /*insertBefore*/);
+        UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
 
-    dummyInst->eraseFromParent();
+        InterpreterFunctionInterface::CreateDispatchToCallee(
+            codePointer,
+            coroutineCtx,
+            preFixupStackBase,
+            calleeCodeBlockHeapPtr,
+            numArgs,
+            isMustTail64,
+            dummyInst /*insertBefore*/);
+
+        dummyInst->eraseFromParent();
+    }
+    else
+    {
+        Value* coroCtx = func->getArg(0);
+        coroCtx->setName("coroCtx");
+
+        Value* stackBase = func->getArg(1);
+        stackBase->setName("stackBase");
+
+        Value* curBytecode = func->getArg(2);
+        curBytecode->setName("curBytecode");
+
+        Value* codeBlock = func->getArg(3);
+        codeBlock->setName("codeBlock");
+
+        BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
+
+        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "OsrEntryIntoBaselineJit", { codeBlock, curBytecode }, entryBB);
+        ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
+        StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
+        ReleaseAssert(sty->elements().size() == 2);
+        Value* bcb = ExtractValueInst::Create(bcbAndCodePointer, { 0 /*idx*/ }, "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(bcb));
+        Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(codePointer));
+
+        UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
+
+        InterpreterFunctionInterface::CreateDispatchToBytecode(
+            codePointer,
+            coroCtx,
+            stackBase,
+            UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
+            codeBlock,
+            dummyInst);
+
+        dummyInst->eraseFromParent();
+    }
 
     RunLLVMOptimizePass(module.get());
     return module;

@@ -807,6 +807,13 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
+    if (m_isMustTailCall && x_allow_interpreter_tier_up_to_baseline_jit)
+    {
+        // A tail call is implicitly a return, must update tier-up counter
+        //
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { ifi->GetCodeBlock(), ifi->GetCurBytecode() }, m_origin);
+    }
+
     // Get the code pointer and the callee CodeBlock
     //
     Value* calleeCbHeapPtr = nullptr;

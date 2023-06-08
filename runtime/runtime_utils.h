@@ -540,12 +540,11 @@ public:
     uint32_t m_bytecodeLength;
     uint32_t m_bytecodeMetadataLength;
 
-    BaselineCodeBlock* m_baselineCodeBlock;
-
     // When this counter becomes negative, the function will tier up to baseline JIT
     //
     int64_t m_interpreterTierUpCounter;
 
+    BaselineCodeBlock* m_baselineCodeBlock;
     FLOCodeBlock* m_floCodeBlock;
 
     UnlinkedCodeBlock* m_owner;

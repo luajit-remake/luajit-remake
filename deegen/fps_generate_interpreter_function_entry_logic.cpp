@@ -69,6 +69,11 @@ struct GeneratorContext
             std::unique_ptr<llvm::Module> tierUpImpl = DeegenFunctionEntryLogicCreator::GenerateInterpreterTierUpOrOsrEntryImplementation(*context.get(), true /*isTierUp*/);
             LinkInModule(std::move(tierUpImpl));
         }
+
+        {
+            std::unique_ptr<llvm::Module> tierUpImpl = DeegenFunctionEntryLogicCreator::GenerateInterpreterTierUpOrOsrEntryImplementation(*context.get(), false /*isTierUp*/);
+            LinkInModule(std::move(tierUpImpl));
+        }
     }
 
     std::string WARN_UNUSED GenerateHeaderFile()

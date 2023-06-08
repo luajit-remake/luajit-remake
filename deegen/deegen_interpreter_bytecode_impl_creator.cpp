@@ -100,6 +100,39 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         m_valuePreserver.Preserve(x_curBytecode, bytecodePtr);
     }
 
+    if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->m_isInterpreterToBaselineJitOsrEntryPoint && x_allow_interpreter_tier_up_to_baseline_jit)
+    {
+        BasicBlock* tierUpBB = BasicBlock::Create(ctx, "", m_wrapper);
+        {
+            // Set up the tier up BB implementation
+            //
+            Function* tierUpFn = InterpreterFunctionInterface::CreateFunction(m_module.get(), "__deegen_interpreter_osr_entry_into_baseline_jit");
+            tierUpFn->addFnAttr(Attribute::NoUnwind);
+            Instruction* dummyInst = new UnreachableInst(ctx, tierUpBB);
+            InterpreterFunctionInterface::CreateDispatchToBytecode(
+                tierUpFn,
+                GetCoroutineCtx(),
+                GetStackBase(),
+                GetCurBytecode(),
+                GetCodeBlock(),
+                dummyInst /*insertBefore*/);
+            dummyInst->eraseFromParent();
+        }
+
+        // Check for osr entry
+        //
+        Value* tierUpCounter = CreateCallToDeegenCommonSnippet(m_module.get(), "GetInterpreterTierUpCounter", { GetCodeBlock() }, currentBlock);
+        ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
+
+        Value* shouldTierUp = new ICmpInst(*currentBlock, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
+        Function* expectIntrin = Intrinsic::getDeclaration(m_module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
+        shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", currentBlock);
+
+        BasicBlock* normalExecutionBB = BasicBlock::Create(ctx, "", m_wrapper);
+        BranchInst::Create(tierUpBB, normalExecutionBB, shouldTierUp, currentBlock);
+        currentBlock = normalExecutionBB;
+    }
+
     std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> alreadyDecodedArgs;
     if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
     {
