@@ -482,6 +482,15 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         ValidateImplementationPrototype<0, T>();
     }
 
+    // If this API is called with 'value' = true, interpreter may tier up to baseline JIT at this bytecode.
+    // This works for any bytecode, but the tier-up check has overhead,
+    // so normally one should only add this property for bytecodes used to implement loop back-edges.
+    //
+    consteval void CheckForInterpreterTierUp(bool value)
+    {
+        m_isInterpreterTierUpPoint = value;
+    }
+
     consteval OperandRef Op(std::string_view name)
     {
         ReleaseAssert(m_operandTypeListInitialized);
@@ -502,6 +511,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         , m_hasTValueOutput(false)
         , m_hasVariadicResOutput(false)
         , m_canPerformBranch(false)
+        , m_isInterpreterTierUpPoint(false)
         , m_implementationFn(nullptr)
         , m_numOperands(0)
         , m_numVariants(0)
@@ -515,6 +525,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     bool m_hasTValueOutput;
     bool m_hasVariadicResOutput;
     bool m_canPerformBranch;
+    bool m_isInterpreterTierUpPoint;
     void* m_implementationFn;
     size_t m_numOperands;
     size_t m_numVariants;

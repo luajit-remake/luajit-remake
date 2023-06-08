@@ -6,11 +6,33 @@ static void NO_RETURN UnconditionalBranchImpl()
     ReturnAndBranch();
 }
 
-DEEGEN_DEFINE_BYTECODE(Branch)
+// 'isLoopHint' hints that whether this jump is a loop back edge
+//
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(BranchOperation, bool isLoopHint)
 {
     Operands();
     Result(ConditionalBranch);
     Implementation(UnconditionalBranchImpl);
+    CheckForInterpreterTierUp(isLoopHint);
+    Variant();
+}
+
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Branch, BranchOperation, false /*isLoopHint*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchLoopHint, BranchOperation, true /*isLoopHint*/);
+
+// This is a NO-OP, just a hint that this is a loop header so one should tier-up from here
+//
+static void NO_RETURN LoopHeaderHintImpl()
+{
+    Return();
+}
+
+DEEGEN_DEFINE_BYTECODE(LoopHeaderHint)
+{
+    Operands();
+    Result(NoOutput);
+    Implementation(LoopHeaderHintImpl);
+    CheckForInterpreterTierUp(true);
     Variant();
 }
 

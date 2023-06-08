@@ -172,6 +172,7 @@
     _(USETN,	uv,	___,	num,	___) \
     _(USETP,	uv,	___,	pri,	___) \
     _(UCLO,	rbase,	___,	jump,	___) \
+    _(UCLO_LH,	rbase,	___,	jump,	___) \
     _(FNEW,	dst,	___,	func,	gc) \
   \
     /* Table ops. */ \
@@ -221,7 +222,10 @@
     _(ILOOP,	rbase,	___,	jump,	___) \
     _(JLOOP,	rbase,	___,	lit,	___) \
   \
+    /* REP_LH: the repeat loop header */     \
+    _(REP_LH,	rbase,	___,	jump,	___) \
     _(JMP,	rbase,	___,	jump,	___) \
+    _(JMP_LH,	rbase,	___,	jump,	___) \
   \
     /* Function headers. I/J = interp/JIT, F/V/C = fixarg/vararg/C func. */ \
     _(FUNCF,	rbase,	___,	___,	___) \
@@ -1190,20 +1194,31 @@ static void bcemit_method(FuncState *fs, ExpDesc *e, ExpDesc *key)
 /* -- Bytecode emitter for branches --------------------------------------- */
 
 /* Emit unconditional branch. */
-static BCPos bcemit_jmp(FuncState *fs)
+static BCPos ALWAYS_INLINE bcemit_jmp_impl(FuncState *fs, bool isLoopHint)
 {
     BCPos jpc = fs->jpc;
     BCPos j = fs->pc - 1;
     BCIns *ip = &fs->bcbase[j].inst;
     fs->jpc = NO_JMP;
-    if ((int32_t)j >= (int32_t)fs->lasttarget && bc_op(*ip) == BC_UCLO) {
+    if ((int32_t)j >= (int32_t)fs->lasttarget && (bc_op(*ip) == BC_UCLO || bc_op(*ip) == BC_UCLO_LH)) {
+        if (isLoopHint) { setbc_op(*ip, BC_UCLO_LH); }
         setbc_j(*ip, NO_JMP);
         fs->lasttarget = j+1;
     } else {
-        j = bcemit_AJ(fs, BC_JMP, fs->freereg, NO_JMP);
+        j = bcemit_AJ(fs, isLoopHint ? BC_JMP_LH : BC_JMP, fs->freereg, NO_JMP);
     }
     jmp_append(fs, &j, jpc);
     return j;
+}
+
+static BCPos bcemit_jmp(FuncState *fs)
+{
+    return bcemit_jmp_impl(fs, false /*isLoopHint*/);
+}
+
+static BCPos bcemit_jmp_loophint(FuncState *fs)
+{
+    return bcemit_jmp_impl(fs, true /*isLoopHint*/);
 }
 
 /* Invert branch condition of bytecode instruction. */
@@ -1794,12 +1809,12 @@ static void gola_close(LexState *ls, VarInfo *vg)
     BCPos pc = vg->startpc;
     BCIns *ip = &fs->bcbase[pc].inst;
     assert(gola_isgoto(vg) && "expected goto");
-    assert((bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_UCLO) && "bad bytecode op");
+    assert((bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_JMP_LH || bc_op(*ip) == BC_UCLO || bc_op(*ip) == BC_UCLO_LH) && "bad bytecode op");
     setbc_a(*ip, vg->slot);
-    if (bc_op(*ip) == BC_JMP) {
+    if (bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_JMP_LH) {
         BCPos next = jmp_next(fs, pc);
         if (next != NO_JMP) jmp_patch(fs, next, pc);  /* Jump to UCLO. */
-        setbc_op(*ip, BC_UCLO);  /* Turn into UCLO. */
+        setbc_op(*ip, bc_op(*ip) == BC_JMP ? BC_UCLO : BC_UCLO_LH);  /* Turn into UCLO. */
         setbc_j(*ip, NO_JMP);
     }
 }
@@ -2810,6 +2825,15 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             });
             break;
         }
+        case BC_UCLO_LH:
+        {
+            size_t jumpTarget = getBytecodeOrdinalOfJump(bc_j(ins));
+            jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+            bw.CreateUpvalueCloseLoopHint({
+                .base = Local { bc_a(ins) }
+            });
+            break;
+        }
         case BC_FORI:
         {
             // Loop init
@@ -2846,12 +2870,25 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             //
             break;
         }
+        case BC_REP_LH:
+        {
+            bw.CreateLoopHeaderHint();
+            break;
+        }
         case BC_JMP:
         {
             size_t jumpTarget = getBytecodeOrdinalOfJump(bc_j(ins));
             jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
             // bc_a is unused for now (indicates stack frame size after jump)
             bw.CreateBranch();
+            break;
+        }
+        case BC_JMP_LH:
+        {
+            size_t jumpTarget = getBytecodeOrdinalOfJump(bc_j(ins));
+            jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
+            // bc_a is unused for now (indicates stack frame size after jump)
+            bw.CreateBranchLoopHint();
             break;
         }
         case BC_VARG:
@@ -4097,7 +4134,7 @@ static void parse_while(LexState *ls, BCLine line)
     lex_check(ls, TK_do);
     loop = bcemit_AD(fs, BC_LOOP, fs->nactvar, 0);
     parse_block(ls);
-    jmp_patch(fs, bcemit_jmp(fs), start);
+    jmp_patch(fs, bcemit_jmp_loophint(fs), start);
     lex_match(ls, TK_end, TK_while, line);
     fscope_end(fs);
     jmp_tohere(fs, condexit);
@@ -4114,7 +4151,7 @@ static void parse_repeat(LexState *ls, BCLine line)
     fscope_begin(fs, &bl1, FSCOPE_LOOP);  /* Breakable loop scope. */
     fscope_begin(fs, &bl2, 0);  /* Inner scope. */
     lj_lex_next(ls);  /* Skip 'repeat'. */
-    std::ignore = bcemit_AD(fs, BC_LOOP, fs->nactvar, 0);
+    std::ignore = bcemit_AD(fs, BC_REP_LH, fs->nactvar, 0);
     parse_chunk(ls);
     lex_match(ls, TK_until, TK_repeat, line);
     condexit = expr_cond(ls);  /* Parse condition (still inside inner scope). */

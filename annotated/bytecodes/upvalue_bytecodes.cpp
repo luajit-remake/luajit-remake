@@ -59,14 +59,20 @@ static void NO_RETURN UpvalueCloseImpl(const TValue* base)
     ReturnAndBranch();
 }
 
-DEEGEN_DEFINE_BYTECODE(UpvalueClose)
+// UpvalueClose performs a jump. 'isLoopHint' hints whether this jump is a loop back edge.
+//
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(UpvalueCloseOperation, bool isLoopHint)
 {
     Operands(
         BytecodeRangeBaseRO("base")
     );
     Result(ConditionalBranch);
     Implementation(UpvalueCloseImpl);
+    CheckForInterpreterTierUp(isLoopHint);
     Variant();
 }
+
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(UpvalueClose, UpvalueCloseOperation, false /*isLoopHint*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(UpvalueCloseLoopHint, UpvalueCloseOperation, true /*isLoopHint*/);
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -188,6 +188,7 @@ DEEGEN_DEFINE_BYTECODE(ForLoopStep)
     );
     Result(ConditionalBranch);
     Implementation(ForLoopStepImpl);
+    CheckForInterpreterTierUp(true);
     Variant();
 }
 
