@@ -50,6 +50,10 @@ add_library(deegen_utils
   deegen_stencil_inline_cache_extraction_pass.cpp
   deegen_stencil_fixup_cross_reference_helper.cpp
   deegen_global_bytecode_trait_accessor.cpp
+  deegen_dfg_jit_process_call_inlining.cpp
+  llvm_check_function_effectful.cpp
+  deegen_simple_operand_expression.cpp
+  deegen_analyze_read_locations.cpp
 ) 
 
 # Build the main Futamura projection stage binary
@@ -62,6 +66,7 @@ add_executable(fps
   fps_process_bytecode_definition_for_interpreter.cpp
   fps_process_bytecode_definition_for_baseline_jit.cpp
   fps_generate_baseline_jit_function_entry_logic.cpp
+  fps_process_bytecode_definition_for_dfg_jit.cpp
 )
 
 target_link_libraries(fps PUBLIC

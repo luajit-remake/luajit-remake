@@ -128,6 +128,8 @@ DEEGEN_DEFINE_BYTECODE(ForLoopInit)
     Result(ConditionalBranch);
     Implementation(ForLoopInitImpl);
     Variant();
+    DeclareReads(Range(Op("base"), 3));
+    DeclareWrites(Range(Op("base"), 4));
 }
 
 static void NO_RETURN ForLoopStepImpl(TValue* base)
@@ -190,6 +192,8 @@ DEEGEN_DEFINE_BYTECODE(ForLoopStep)
     Implementation(ForLoopStepImpl);
     CheckForInterpreterTierUp(true);
     Variant();
+    DeclareReads(Range(Op("base"), 3));
+    DeclareWrites(Range(Op("base"), 1), Range(Op("base") + 3, 1));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

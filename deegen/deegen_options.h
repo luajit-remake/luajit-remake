@@ -16,6 +16,11 @@
 //
 constexpr bool x_allow_interpreter_tier_up_to_baseline_jit = true;
 
+// When this option is false, the baseline JIT won't tier up to the optimizing JIT,
+// so the VM will run in interpreter & baseline JIT mode.
+//
+constexpr bool x_allow_baseline_jit_tier_up_to_optimizing_jit = true;
+
 // The interpreter maintains how many bytes of bytecodes in each function it has executed to decide when to tier-up.
 // (Note that the metric above is #bytes of bytecodes, not #bytecodes, because it's easier to maintain for the interpreter).
 //
@@ -34,3 +39,10 @@ constexpr bool x_allow_interpreter_tier_up_to_baseline_jit = true;
 // For now we simply choose C = 1, yielding a multiplier of 20.
 //
 constexpr size_t x_interpreter_tier_up_threshold_bytecode_length_multiplier = 20;
+
+// Do not tier up to DFG if a function contains more than this many bytecodes.
+//
+constexpr size_t x_forbid_tier_up_to_dfg_num_bytecodes_threshold = 200000;
+
+static_assert(!(!x_allow_interpreter_tier_up_to_baseline_jit && x_allow_baseline_jit_tier_up_to_optimizing_jit),
+              "Enabling optimizing JIT requires enabling baseline JIT as well!");

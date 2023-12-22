@@ -60,6 +60,16 @@ int main(int argc, char** argv)
         FPS_GenerateBytecodeOpcodeTraitTable();
         break;
     }
+    case FpsCommand_GenerateDfgJitSpecializedBytecodeInfo:
+    {
+        FPS_GenerateDfgSpecializedBytecodeInfo();
+        break;
+    }
+    case FpsCommand_GenerateDfgJitBytecodeInfoApiHeader:
+    {
+        FPS_GenerateDfgBytecodeInfoApiHeader();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

@@ -1,5 +1,6 @@
 #include "deegen_ast_simple_lowering_utils.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
 
 namespace dast {
 
@@ -10,11 +11,21 @@ struct LowerGetGlobalObjectApiPass final : public DeegenAbstractSimpleApiLowerin
         return symbolName == "DeegenImpl_GetFEnvGlobalObject";
     }
 
-    virtual void DoLowering(DeegenBytecodeImplCreatorBase* ifi, llvm::CallInst* origin) override
+    virtual void DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         ReleaseAssert(origin->arg_size() == 0);
-        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromCodeBlock", { ifi->GetCodeBlock() }, origin /*insertBefore*/);
+        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromCodeBlock", { ifi->GetInterpreterCodeBlock() }, origin /*insertBefore*/);
+        ReleaseAssert(origin->getType() == replacement->getType());
+        origin->replaceAllUsesWith(replacement);
+        origin->eraseFromParent();
+    }
+
+    virtual void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::CallInst* origin) override
+    {
+        using namespace llvm;
+        ReleaseAssert(origin->arg_size() == 0);
+        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromBaselineCodeBlock", { ifi->GetBaselineCodeBlock() }, origin /*insertBefore*/);
         ReleaseAssert(origin->getType() == replacement->getType());
         origin->replaceAllUsesWith(replacement);
         origin->eraseFromParent();

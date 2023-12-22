@@ -15,7 +15,9 @@ enum FpsCommand
     FpsCommand_ProcessBytecodeDefinitionForBaselineJit,
     FpsCommand_GenerateBaselineJitDispatchAndBytecodeTraitTable,
     FpsCommand_GenerateBaselineJitFunctionEntryLogic,
-    FpsCommand_GenerateBytecodeOpcodeTraitTable
+    FpsCommand_GenerateBytecodeOpcodeTraitTable,
+    FpsCommand_GenerateDfgJitSpecializedBytecodeInfo,
+    FpsCommand_GenerateDfgJitBytecodeInfoApiHeader
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -47,6 +49,12 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_GenerateBytecodeOpcodeTraitTable,
                    "generate-bytecode-opcode-trait-table",
                    "Generate the bytecode opcode trait table.")
+      , clEnumValN(FpsCommand_GenerateDfgJitSpecializedBytecodeInfo,
+                   "generate-dfg-jit-specialized-bytecode-info",
+                   "Generate information about the specialized bytecodes (call IC, generic IC, etc) for DFG.")
+      , clEnumValN(FpsCommand_GenerateDfgJitBytecodeInfoApiHeader,
+                   "generate-dfg-jit-bytecode-info-api-header",
+                   "Generate the header file for accessing all the DFG JIT bytecode info.")
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
@@ -107,8 +115,16 @@ void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
 void FPS_GenerateBaselineJitFunctionEntryLogic();
 
 // Generate the bytecode opcode trait table
-///
+//
 void FPS_GenerateBytecodeOpcodeTraitTable();
+
+// Generate information about the specialized bytecodes for DFG
+//
+void FPS_GenerateDfgSpecializedBytecodeInfo();
+
+// Generate the header file that allows accessing all the generated DFG info
+//
+void FPS_GenerateDfgBytecodeInfoApiHeader();
 
 // Given the desired file name in the audit directory, returns the full file path.
 // This also creates the audit directory if it doesn't exist yet.

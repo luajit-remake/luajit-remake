@@ -15,6 +15,9 @@ DEEGEN_DEFINE_BYTECODE(StoreVarArgsAsVariadicResults)
     Result(NoOutput);
     Implementation(StoreVarArgsAsVariadicResultsOpcodeImpl);
     Variant();
+    DeclareReads(VariadicArguments());
+    DeclareWrites(VariadicResults());
+    DeclareAsIntrinsic<Intrinsic::GetAllVarArgsAsVarRet>({});
 }
 
 static void ALWAYS_INLINE NaiveMemcpyTValue(TValue* dst, TValue* src, size_t numTValues)
@@ -71,6 +74,12 @@ DEEGEN_DEFINE_BYTECODE(GetVarArgsPrefix)
     Implementation(GetVarArgsPrefixImpl);
     Variant(Op("numToPut").HasValue(1));
     Variant();
+    DeclareReads(VariadicArguments());
+    DeclareWrites(Range(Op("base"), Op("numToPut")));
+    DeclareAsIntrinsic<Intrinsic::GetVarArgPrefix>({
+        .num = Op("numToPut"),
+        .dst = Op("base")
+    });
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

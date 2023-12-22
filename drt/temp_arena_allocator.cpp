@@ -1,0 +1,3 @@
+#include "temp_arena_allocator.h"
+
+GlobalTempArenaAllocatorMemoryPool g_globalTempArenaAllocMemPool;

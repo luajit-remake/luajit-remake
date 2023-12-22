@@ -3,6 +3,18 @@ add_library(deegen_rt
 	deegen_internal_enter_exit_vm.s
 	baseline_jit_codegen_helper.cpp
 	jit_memory_allocator.cpp
+	mmap_utils.cpp
+	dfg_arena.cpp
+	dfg_node.cpp
+	dfg_control_flow_and_upvalue_analysis.cpp
+	temp_arena_allocator.cpp
+	dfg_basic_block_builder.cpp
+	dfg_frontend.cpp
+	dfg_ir_validator.cpp
+	dfg_ir_dump.cpp
+	dfg_speculative_inliner.cpp
+	dfg_bytecode_liveness.cpp
+	dfg_construct_block_local_ssa.cpp
 )
 
 add_dependencies(deegen_rt 

@@ -2506,8 +2506,8 @@ void AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(BaselineJitImplCreat
     {
         ReleaseAssert(llvm_value_has_type<void*>(origin));
         ReleaseAssert(!ifi->IsBaselineJitSlowPath());
-        Value* offset = ifi->GetSlowPathDataOffsetFromJitFastPath(origin);
-        Value* baselineJitCodeBlock = ifi->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { ifi->GetCodeBlock() }, origin);
+        Value* offset = ifi->GetSlowPathDataOffsetFromJitFastPath(origin, true /*useAliasOrdinal*/);
+        Value* baselineJitCodeBlock = ifi->GetBaselineCodeBlock();
         ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
         Value* replacement = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", origin);
         origin->replaceAllUsesWith(replacement);
@@ -3430,14 +3430,14 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
 
     // Set up the bytecode operands argument list
     //
-    // TODO: The logic below asserts that SlowPathDataOffset and CodeBlock are unused.
-    // However, this assert might not hold, as the IC logic might use CodeBlock32 and SlowPathDataOffset if it tail-duplicated the logic
-    // So to support all cases, we need to pass CodeBlock to IC body
+    // TODO: The logic below asserts that SlowPathDataOffset and BaselineCodeBlock are unused.
+    // However, this assert might not hold, as the IC logic might use BaseineCodeBlock32 and SlowPathDataOffset if it tail-duplicated the logic
+    // So to support all cases, we need to pass BaselineCodeBlock to IC body
     //
     std::vector<Value*> bytecodeValList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
                                                                                                                  slowPathData,
                                                                                                                  nullptr /*slowPathDataOffset, must unused*/,
-                                                                                                                 nullptr /*codeBlock32, must unused*/,
+                                                                                                                 nullptr /*baselineCodeBlock32, must unused*/,
                                                                                                                  bb /*insertAtEnd*/);
 
     // Set up the placeholder argument list

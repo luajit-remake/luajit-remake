@@ -2516,35 +2516,59 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
         case BC_CALLM:
         {
-            // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
-            // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
-            //
-            int32_t numResults = static_cast<int32_t>(bc_b(ins)) - 1;
             // For CALLM, C holds # of fixed params
             //
             uint32_t numFixedParams = SafeIntegerCast<uint32_t>(bc_c(ins));
-            bw.CreateCallM({
-                .base = Local { bc_a(ins) },
-                .numArgs = numFixedParams,
-                .numRets = numResults
-            });
+
+            // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
+            //
+            uint32_t opB = bc_b(ins);
+            if (opB == 0)
+            {
+                bw.CreateCallMR({
+                    .base = Local { bc_a(ins) },
+                    .numArgs = numFixedParams,
+                    .numRets = 0 /*dummy*/
+                });
+            }
+            else
+            {
+                uint32_t numResults = opB - 1;
+                bw.CreateCallM({
+                    .base = Local { bc_a(ins) },
+                    .numArgs = numFixedParams,
+                    .numRets = numResults
+                });
+            }
             break;
         }
         case BC_CALL:
         {
-            // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
-            // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
-            //
-            int32_t numResults = static_cast<int32_t>(bc_b(ins)) - 1;
             // For CALL, C holds 1 + # of fixed params
             //
             assert(bc_c(ins) >= 1);
             uint32_t numFixedParams = SafeIntegerCast<uint32_t>(bc_c(ins) - 1);
-            bw.CreateCall({
-                .base = Local { bc_a(ins) },
-                .numArgs = numFixedParams,
-                .numRets = numResults
-            });
+
+            // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
+            //
+            uint32_t opB = bc_b(ins);
+            if (opB == 0)
+            {
+                bw.CreateCallR({
+                    .base = Local { bc_a(ins) },
+                    .numArgs = numFixedParams,
+                    .numRets = 0 /*dummy*/
+                });
+            }
+            else
+            {
+                uint32_t numResults = opB - 1;
+                bw.CreateCall({
+                    .base = Local { bc_a(ins) },
+                    .numArgs = numFixedParams,
+                    .numRets = numResults
+                });
+            }
             break;
         }
         case BC_CALLMT:
@@ -4538,7 +4562,7 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
         u->m_cstTable = constantTableData.first;
 
         u->m_bytecode = bytecodeData.first;
-        u->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
+        u->m_bytecodeLengthIncludingTailPadding = static_cast<uint32_t>(bytecodeData.second);
         u->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
         const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
         assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);

@@ -4,7 +4,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   copy_variadic_results_to_arguments_forward.cpp
   copy_variadic_results_to_arguments.cpp
   get_num_variadic_results.cpp
-  get_end_of_call_frame.cpp
+  get_end_of_call_frame_from_interpreter_codeblock.cpp
   populate_new_call_frame_header.cpp
   get_callee_entry_point.cpp
   move_call_frame_header_for_tail_call.cpp
@@ -58,6 +58,10 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   tier_up_into_baseline_jit.cpp
   update_interpreter_call_ic_doubly_link.cpp
   osr_entry_into_baseline_jit.cpp
+  get_baseline_codeblock_from_stack_base.cpp
+  get_end_of_call_frame_from_baseline_codeblock.cpp
+  get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
+  get_global_object_from_baseline_code_block.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

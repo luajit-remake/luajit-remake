@@ -9,68 +9,7 @@
 #include "table_object.h"
 #include "spds_doubly_linked_list.h"
 #include "baseline_jit_codegen_helper.h"
-
-class IRNode
-{
-public:
-    virtual ~IRNode() { }
-
-};
-
-class IRLogicalVariable
-{
-public:
-
-};
-
-class IRBasicBlock
-{
-public:
-    std::vector<IRNode*> m_nodes;
-    std::vector<IRNode*> m_varAtHead;
-    std::vector<IRNode*> m_varAvailableAtTail;
-};
-
-class IRConstant : public IRNode
-{
-public:
-
-};
-
-class IRGetLocal : public IRNode
-{
-public:
-    int m_slot;
-    IRLogicalVariable* m_vinfo;
-};
-
-class IRSetLocal : public IRNode
-{
-public:
-    IRNode* m_value;
-    int m_slot;
-    IRLogicalVariable* m_vinfo;
-};
-
-class IRAdd : public IRNode
-{
-public:
-    IRNode* m_lhs;
-    IRNode* m_rhs;
-};
-
-class IRReturn : public IRNode
-{
-public:
-    IRNode* m_value;
-};
-
-class IRCheckIsConstant : public IRNode
-{
-public:
-    IRNode* m_value;
-    TValue m_constant;
-};
+#include "bytecode_builder_utils.h"
 
 class StackFrameHeader;
 class CodeBlock;
@@ -491,25 +430,17 @@ static_assert(sizeof(JitCallInlineCacheSite) == 8);
 static_assert(alignof(JitCallInlineCacheSite) == 1);
 
 class UnlinkedCodeBlock;
-
-// The constant table stores all constants in one bytecode function.
-// However, we cannot know if an entry is a TValue or a UnlinkedCodeBlock pointer!
-// (this is due to how LuaJIT parser is designed. It can be changed, but we don't want to bother making it more complex)
-// This is fine for the mutator as the bytecode will never misuse the type.
-// For the GC, we rely on the crazy fact that a user-space raw pointer always falls in [0, 2^47) (high 17 bits = 0, not 1) under practically every OS kernel,
-// which mean when a pointer is interpreted as a TValue, it will always be interpreted into a double, so the GC marking
-// algorithm will correctly ignore it for the marking.
-//
-// TODO: what is the above comment? Is it still up to date? figure out later..
+class BaselineCodeBlock;
+class DfgCodeBlock;
 
 // This uniquely corresponds to each pair of <UnlinkedCodeBlock, GlobalObject>
 // It owns the bytecode and the corresponding metadata (the bytecode is copied from the UnlinkedCodeBlock,
 // we need our own copy because we do quickening, aka., dynamic bytecode opcode specialization optimization)
 //
 // Layout:
-// [ upvalue table and constant table ] [ CodeBlock ] [ bytecode ] [ byetecode metadata ]
+// [ constant table ] [ CodeBlock ] [ bytecode ] [ byetecode metadata ]
 //
-class alignas(8) CodeBlock final : public ExecutableCode
+class CodeBlock final : public ExecutableCode
 {
 public:
     static CodeBlock* WARN_UNUSED Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject);
@@ -526,26 +457,35 @@ public:
 
     uintptr_t GetBytecodeMetadataStart()
     {
-        return reinterpret_cast<uintptr_t>(this) + GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(m_bytecodeLength);
+        return reinterpret_cast<uintptr_t>(this) + GetTrailingArrayOffset() + RoundUpToMultipleOf<8>(m_bytecodeLengthIncludingTailPadding);
+    }
+
+    TValue* GetConstantTableEnd()
+    {
+        return reinterpret_cast<TValue*>(this);
+    }
+
+    size_t GetBytecodeLength()
+    {
+        return m_bytecodeLengthIncludingTailPadding - x_numExtraPaddingAtBytecodeStreamEnd;
     }
 
     void UpdateBestEntryPoint(void* newEntryPoint);
-
-    uint8_t* m_bytecode;
 
     UserHeapPointer<TableObject> m_globalObject;
 
     uint32_t m_stackFrameNumSlots;
     uint32_t m_numUpvalues;
-    uint32_t m_bytecodeLength;
-    uint32_t m_bytecodeMetadataLength;
 
     // When this counter becomes negative, the function will tier up to baseline JIT
     //
     int64_t m_interpreterTierUpCounter;
 
+    uint32_t m_bytecodeLengthIncludingTailPadding;
+    uint32_t m_bytecodeMetadataLength;
+
     BaselineCodeBlock* m_baselineCodeBlock;
-    FLOCodeBlock* m_floCodeBlock;
+    DfgCodeBlock* m_dfgCodeBlock;
 
     UnlinkedCodeBlock* m_owner;
 
@@ -633,10 +573,12 @@ public:
 
     uint8_t* m_bytecode;
     UpvalueMetadata* m_upvalueInfo;
+    // An entry in the constant table is usually a TValue, but may also be a UnlinkedCodeBlock pointer disguised as a TValue
+    //
     uint64_t* m_cstTable;
     UnlinkedCodeBlock* m_parent;
 
-    uint32_t m_bytecodeLength;
+    uint32_t m_bytecodeLengthIncludingTailPadding;
     uint32_t m_cstTableLength;
     uint32_t m_numUpvalues;
     uint32_t m_bytecodeMetadataLength;
@@ -654,7 +596,7 @@ public:
 };
 
 // Layout:
-// [ BaselineCodeBlock ] [ slowPathDataIndex ] [ slowPathData ]
+// [ constant table ] [ BaselineCodeBlock ] [ slowPathDataIndex ] [ slowPathData ]
 //
 // slowPathDataIndex:
 //     SlowPathDataAndBytecodeOffset[N] where N is the # of bytecodes in this function.
@@ -717,13 +659,15 @@ public:
     {
         uint32_t base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(m_owner));
         uint32_t targetOffset = bytecodePtr32 - base;
-        assert(m_owner->GetTrailingArrayOffset() <= targetOffset && targetOffset < m_owner->m_bytecodeLength + m_owner->GetTrailingArrayOffset());
+        assert(m_owner->GetTrailingArrayOffset() <= targetOffset && targetOffset < m_owner->GetBytecodeLength() + m_owner->GetTrailingArrayOffset());
         assert(m_numBytecodes > 0);
         size_t left = 0, right = m_numBytecodes - 1;
         while (left < right)
         {
             size_t mid = (left + right) / 2;
             uint32_t value = m_sbIndex[mid].m_bytecodePtr32 - base;
+            // TODO: use cmov instead of branch
+            //
             if (targetOffset == value)
             {
                 assert(m_sbIndex[mid].m_bytecodePtr32 == bytecodePtr32);
@@ -748,9 +692,27 @@ public:
     //
     size_t WARN_UNUSED GetBytecodeIndexFromBytecodePtr(void* bytecodePtr)
     {
-        assert(m_owner->GetBytecodeStream() <= bytecodePtr && bytecodePtr < m_owner->GetBytecodeStream() + m_owner->m_bytecodeLength);
+        assert(m_owner->GetBytecodeStream() <= bytecodePtr && bytecodePtr < m_owner->GetBytecodeStream() + m_owner->GetBytecodeLength());
         return GetBytecodeIndexFromBytecodePtrLower32Bits(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(bytecodePtr)));
     }
+
+    size_t WARN_UNUSED GetBytecodeOffsetFromBytecodeIndex(size_t bytecodeIndex)
+    {
+        assert(bytecodeIndex < m_numBytecodes);
+        uint32_t ptr32 = m_sbIndex[bytecodeIndex].m_bytecodePtr32;
+        uint32_t basePtr32 = static_cast<uint32_t>(reinterpret_cast<uint64_t>(m_owner->GetBytecodeStream()));
+        uint32_t diff = ptr32 - basePtr32;
+        assert(diff < m_owner->m_bytecodeLengthIncludingTailPadding);
+        return diff;
+    }
+
+    UserHeapPointer<TableObject> m_globalObject;
+
+    uint32_t m_stackFrameNumSlots;
+    uint32_t m_numBytecodes;
+    // Updated by profiling logic
+    //
+    uint32_t m_maxObservedNumVariadicArgs;
 
     // Currently the JIT code is layouted as follow:
     //     [ Data Section ] [ FastPath Code ] [ SlowPath Code ]
@@ -758,13 +720,12 @@ public:
     void* m_jitCodeEntry;
 
     CodeBlock* m_owner;
-    uint32_t m_numBytecodes;
-    uint32_t m_slowPathDataStreamLength;
 
     // The JIT region is [m_jitRegionStart, m_jitRegionStart + m_jitRegionSize)
     //
     void* m_jitRegionStart;
     uint32_t m_jitRegionSize;
+    uint32_t m_slowPathDataStreamLength;
 
     SlowPathDataAndBytecodeOffset m_sbIndex[0];
 };

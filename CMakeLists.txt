@@ -116,7 +116,7 @@ add_subdirectory(gtest)
 
 # Append extra cxx warning flags
 #
-SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Werror ")
+SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Wno-gnu-anonymous-struct -Werror ")
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${EXTRA_WARNING_FLAGS} ")
 
 # llvm-specific flags
@@ -215,6 +215,9 @@ set(UNIT_TEST_SRC
   test_sanity_stencil_creator.cpp
   test_jit_call_inline_cache.cpp
   test_jit_memory_allocator.cpp
+  test_dfg_frontend.cpp
+  test_temp_arena_allocator.cpp
+  test_llvm_effectful_function_checker.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES
@@ -241,6 +244,11 @@ set(UNIT_TEST_LINK_OPTIONS
 add_library(unit_test_main_src OBJECT
   ${UNIT_TEST_SRC}
 )
+
+add_dependencies(unit_test_main_src 
+  deegen_fps_lib
+)
+set_target_properties(unit_test_main_src PROPERTIES COMPILE_FLAGS " -DDEEGEN_POST_FUTAMURA_PROJECTION ")
 
 add_executable(main $<TARGET_OBJECTS:unit_test_main_src> )
 target_link_options(main PUBLIC ${UNIT_TEST_LINK_OPTIONS})

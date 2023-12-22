@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tvalue.h"
+#include "deegen_for_each_bytecode_intrinsic.h"
 
 enum class DeegenBytecodeOperandType
 {
@@ -128,6 +129,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
     struct SpecializedOperand
     {
+        constexpr SpecializedOperand() : m_kind(DeegenSpecializationKind::NotSpecialized), m_value(0) { }
+        constexpr SpecializedOperand(DeegenSpecializationKind kind, uint64_t value) : m_kind(kind), m_value(value) { }
+
         DeegenSpecializationKind m_kind;
         // The interpretation of 'm_value' depends on 'm_kind'
         // m_kind == Literal: m_value is the value of the literal casted to uint64_t
@@ -144,8 +148,342 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         size_t m_ord;
     };
 
+    struct OperandRef
+    {
+        template<typename T>
+        consteval SpecializedOperandRef HasValue(T val)
+        {
+            static_assert(std::is_integral_v<T>);
+            ReleaseAssert(detail::DeegenBytecodeOperandIsLiteralType(m_operand.m_type));
+            uint64_t spVal64 = static_cast<uint64_t>(static_cast<std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>>(val));
+            return { .m_operand = { DeegenSpecializationKind::Literal, spVal64 }, .m_ord = m_ord };
+        }
+
+        template<typename T>
+        consteval SpecializedOperandRef HasType()
+        {
+            static_assert(IsValidTypeSpecialization<T>);
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
+            return { .m_operand = { DeegenSpecializationKind::SpeculatedTypeForOptimizer, x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+        }
+
+        consteval SpecializedOperandRef IsBytecodeSlot()
+        {
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+            return { .m_operand = { DeegenSpecializationKind::BytecodeSlot, 0 }, .m_ord = m_ord };
+        }
+
+        template<typename T = tTop>
+        consteval SpecializedOperandRef IsConstant()
+        {
+            static_assert(IsValidTypeSpecialization<T>);
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::Constant);
+            return { .m_operand = { DeegenSpecializationKind::BytecodeConstantWithType, x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+        }
+
+        size_t m_ord;
+        Operand m_operand;
+    };
+
+    struct OperandExprNode
+    {
+        enum Kind
+        {
+            Number,
+            Operand,
+            Infinity,
+            Add,
+            Sub,
+            BadKind
+        };
+
+        consteval OperandExprNode() : m_kind(Kind::BadKind), m_left(0), m_right(0), m_operandName(nullptr), m_number(0) { }
+
+        consteval bool HasLeftChild()
+        {
+            return m_kind == Kind::Add || m_kind == Kind::Sub;
+        }
+
+        consteval bool HasRightChild()
+        {
+            return m_kind == Kind::Add || m_kind == Kind::Sub;
+        }
+
+        std::string WARN_UNUSED PrintCppExpression(const std::string& operandStructName, OperandExprNode* holder)
+        {
+            switch (m_kind)
+            {
+            case Kind::Number:
+            {
+                return "(" + std::to_string(m_number) + ")";
+            }
+            case Kind::Operand:
+            {
+                return "(" + operandStructName + "." + std::string(m_operandName) + ".AsRawValue())";
+            }
+            case Kind::Infinity:
+            {
+                ReleaseAssert(this == holder && "Infinity must be an expression by itself, it cannot be used in computation!");
+                return "(-1)";
+            }
+            case Kind::Add:
+            {
+                return "(" + holder[m_left].PrintCppExpression(operandStructName, holder) + "+"
+                    + holder[m_right].PrintCppExpression(operandStructName, holder) + ")";
+            }
+            case Kind::Sub:
+            {
+                return "(" + holder[m_left].PrintCppExpression(operandStructName, holder) + "-"
+                    + holder[m_right].PrintCppExpression(operandStructName, holder) + ")";
+            }
+            case Kind::BadKind:
+            {
+                ReleaseAssert(false);
+            }
+            }   /*switch*/
+        }
+
+        Kind m_kind;
+        size_t m_left;
+        size_t m_right;
+        const char* m_operandName;
+        int64_t m_number;
+    };
+
+    struct OperandExpr
+    {
+        constexpr OperandExpr()
+            : m_numNodes(0)
+        { }
+
+        consteval void Put(OperandExpr other, size_t start)
+        {
+            ReleaseAssert(start + other.m_numNodes <= x_maxNodes);
+            for (size_t i = 0; i < other.m_numNodes; i++)
+            {
+                m_nodes[start + i] = other.m_nodes[i];
+                if (m_nodes[start + i].HasLeftChild())
+                {
+                    ReleaseAssert(0 <= m_nodes[start + i].m_left && m_nodes[start + i].m_left < other.m_numNodes);
+                    m_nodes[start + i].m_left += start;
+                }
+                if (m_nodes[start + i].HasRightChild())
+                {
+                    ReleaseAssert(0 <= m_nodes[start + i].m_right && m_nodes[start + i].m_right < other.m_numNodes);
+                    m_nodes[start + i].m_right += start;
+                }
+            }
+        }
+
+        static consteval OperandExpr WARN_UNUSED ConstructBinaryExpr(OperandExprNode::Kind kind, OperandExpr lhs, OperandExpr rhs)
+        {
+            ReleaseAssert(lhs.m_numNodes > 0 && rhs.m_numNodes > 0);
+            OperandExpr res;
+            res.m_numNodes = lhs.m_numNodes + rhs.m_numNodes + 1;
+            ReleaseAssert(res.m_numNodes <= x_maxNodes);
+            res.m_nodes[0].m_kind = kind;
+            res.m_nodes[0].m_left = 1;
+            res.m_nodes[0].m_right = 1 + lhs.m_numNodes;
+            res.Put(lhs, 1);
+            res.Put(rhs, 1 + lhs.m_numNodes);
+            return res;
+        }
+
+        static consteval OperandExpr WARN_UNUSED ConstructNumber(int64_t value)
+        {
+            OperandExpr res;
+            res.m_numNodes = 1;
+            res.m_nodes[0].m_kind = OperandExprNode::Number;
+            res.m_nodes[0].m_number = value;
+            return res;
+        }
+
+        static consteval OperandExpr WARN_UNUSED ConstructOperandRef(const char* name)
+        {
+            OperandExpr res;
+            res.m_numNodes = 1;
+            res.m_nodes[0].m_kind = OperandExprNode::Operand;
+            res.m_nodes[0].m_operandName = name;
+            return res;
+        }
+
+        static consteval OperandExpr WARN_UNUSED ConstructInfinity()
+        {
+            OperandExpr res;
+            res.m_numNodes = 1;
+            res.m_nodes[0].m_kind = OperandExprNode::Infinity;
+            return res;
+        }
+
+        std::string WARN_UNUSED PrintCppExpression(const std::string& operandStructName)
+        {
+            ReleaseAssert(m_numNodes > 0);
+            return m_nodes[0].PrintCppExpression(operandStructName, m_nodes);
+        }
+
+        bool IsInfinity()
+        {
+            ReleaseAssert(m_numNodes > 0);
+            ReleaseAssertImp(m_nodes[0].m_kind == OperandExprNode::Infinity, m_numNodes == 1);
+            return m_nodes[0].m_kind == OperandExprNode::Infinity;
+        }
+
+        static constexpr size_t x_maxNodes = 10;
+        size_t m_numNodes;
+        OperandExprNode m_nodes[x_maxNodes];
+    };
+
+    struct Infinity { };
+
+    struct Range
+    {
+        consteval Range() = default;
+
+        consteval Range(OperandExpr start, OperandExpr len)
+            : m_start(start)
+            , m_len(len)
+        { }
+
+        consteval Range(OperandExpr start, OperandRef len)
+            : Range(start,
+                    OperandExpr::ConstructOperandRef(len.m_operand.m_name))
+        { }
+
+        consteval Range(OperandExpr start, int64_t len)
+            : Range(start,
+                    OperandExpr::ConstructNumber(len))
+        { }
+
+        consteval Range(OperandExpr start, Infinity /*unused*/)
+            : Range(start,
+                    OperandExpr::ConstructInfinity())
+        { }
+
+        consteval Range(OperandRef start, OperandExpr len)
+            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
+                    len)
+        { }
+
+        consteval Range(OperandRef start, OperandRef len)
+            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
+                    OperandExpr::ConstructOperandRef(len.m_operand.m_name))
+        { }
+
+        consteval Range(OperandRef start, int64_t len)
+            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
+                    OperandExpr::ConstructNumber(len))
+        { }
+
+        consteval Range(OperandRef start, Infinity /*unused*/)
+            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
+                    OperandExpr::ConstructInfinity())
+        { }
+
+        consteval Range(int64_t start, OperandExpr len)
+            : Range(OperandExpr::ConstructNumber(start),
+                    len)
+        { }
+
+        consteval Range(int64_t start, OperandRef len)
+            : Range(OperandExpr::ConstructNumber(start),
+                    OperandExpr::ConstructOperandRef(len.m_operand.m_name))
+        { }
+
+        consteval Range(int64_t start, int64_t len)
+            : Range(OperandExpr::ConstructNumber(start),
+                    OperandExpr::ConstructNumber(len))
+        { }
+
+        consteval Range(int64_t start, Infinity /*unused*/)
+            : Range(OperandExpr::ConstructNumber(start),
+                    OperandExpr::ConstructInfinity())
+        { }
+
+        OperandExpr m_start;
+        OperandExpr m_len;
+    };
+
+    struct VariadicArguments
+    {
+        consteval VariadicArguments() : m_value(true) { }
+        consteval VariadicArguments(bool value) : m_value(value) { }
+        bool m_value;
+    };
+
+    struct VariadicResults
+    {
+        consteval VariadicResults() : m_value(true) { }
+        consteval VariadicResults(bool value) : m_value(value) { }
+        bool m_value;
+    };
+
+    struct DeclareRWCInfo
+    {
+        constexpr DeclareRWCInfo()
+            : m_apiCalled(false)
+            , m_accessesVariadicArgs(false)
+            , m_accessesVariadicResults(false)
+            , m_numRanges(0)
+        { }
+
+        template<typename... Args>
+        consteval void Process(VariadicArguments va, Args... args)
+        {
+            m_apiCalled = true;
+            if (va.m_value)
+            {
+                ReleaseAssert(!m_accessesVariadicArgs);
+                m_accessesVariadicArgs = true;
+            }
+            Process(args...);
+        }
+
+        template<typename... Args>
+        consteval void Process(VariadicResults vr, Args... args)
+        {
+            m_apiCalled = true;
+            if (vr.m_value)
+            {
+                ReleaseAssert(!m_accessesVariadicResults);
+                m_accessesVariadicResults = true;
+            }
+            Process(args...);
+        }
+
+        template<typename... Args>
+        consteval void Process(Range range, Args... args)
+        {
+            m_apiCalled = true;
+            ReleaseAssert(m_numRanges < x_maxRangeAnnotations && "too many read ranges, please raise x_maxRangeAnnotations");
+            m_ranges[m_numRanges] = range;
+            m_numRanges++;
+            Process(args...);
+        }
+
+        consteval void Process() { m_apiCalled = true; }
+
+        static constexpr size_t x_maxRangeAnnotations = 4;      // Raise as necessary
+
+        bool m_apiCalled;
+        bool m_accessesVariadicArgs;
+        bool m_accessesVariadicResults;
+        size_t m_numRanges;
+        Range m_ranges[x_maxRangeAnnotations];
+    };
+
     struct SpecializedVariant
     {
+        constexpr SpecializedVariant()
+            : m_enableHCS(false)
+            , m_numQuickenings(0)
+            , m_numOperands(0)
+        {
+            for (size_t i = 0; i < x_maxOperands; i++)
+            {
+                m_operandTypes[i] = DeegenBytecodeOperandType::INVALID_TYPE;
+            }
+        }
+
         struct Quickening
         {
             SpecializedOperand value[x_maxOperands];
@@ -170,12 +508,39 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             return *this;
         }
 
+        // Declare all the locals that may be read by this bytecode
+        // All reads must be declared here (except the operands that are already locals, which are obviously read)
+        //
+        template<typename... Args>
+        consteval SpecializedVariant& DeclareReads(Args... args)
+        {
+            m_variantDeclareReadsInfo.Process(args...);
+            return *this;
+        }
+
+        template<typename... Args>
+        consteval SpecializedVariant& DeclareWrites(Args... args)
+        {
+            m_variantDeclareWritesInfo.Process(args...);
+            return *this;
+        }
+
+        template<typename... Args>
+        consteval SpecializedVariant& DeclareClobbers(Args... args)
+        {
+            m_variantDeclareClobbersInfo.Process(args...);
+            return *this;
+        }
+
         bool m_enableHCS;
         size_t m_numQuickenings;
         size_t m_numOperands;
         DeegenBytecodeOperandType m_operandTypes[x_maxOperands];
         SpecializedOperand m_base[x_maxOperands];
         Quickening m_quickenings[x_maxQuickenings];
+        DeclareRWCInfo m_variantDeclareReadsInfo;
+        DeclareRWCInfo m_variantDeclareWritesInfo;
+        DeclareRWCInfo m_variantDeclareClobbersInfo;
 
     private:
         template<typename... Args>
@@ -209,43 +574,6 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 q.value[ord] = arr[i].m_operand;
             }
         }
-    };
-
-    struct OperandRef
-    {
-        template<typename T>
-        consteval SpecializedOperandRef HasValue(T val)
-        {
-            static_assert(std::is_integral_v<T>);
-            ReleaseAssert(detail::DeegenBytecodeOperandIsLiteralType(m_operand.m_type));
-            uint64_t spVal64 = static_cast<uint64_t>(static_cast<std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>>(val));
-            return { .m_operand = { .m_kind = DeegenSpecializationKind::Literal, .m_value = spVal64 }, .m_ord = m_ord };
-        }
-
-        template<typename T>
-        consteval SpecializedOperandRef HasType()
-        {
-            static_assert(IsValidTypeSpecialization<T>);
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
-            return { .m_operand = { .m_kind = DeegenSpecializationKind::SpeculatedTypeForOptimizer, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
-        }
-
-        consteval SpecializedOperandRef IsBytecodeSlot()
-        {
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
-            return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeSlot, .m_value = 0 }, .m_ord = m_ord };
-        }
-
-        template<typename T = tTop>
-        consteval SpecializedOperandRef IsConstant()
-        {
-            static_assert(IsValidTypeSpecialization<T>);
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::Constant);
-            return { .m_operand = { .m_kind = DeegenSpecializationKind::BytecodeConstantWithType, .m_value = x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
-        }
-
-        size_t m_ord;
-        Operand m_operand;
     };
 
     template<typename... Args>
@@ -359,9 +687,6 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         // Returns exactly one TValue
         //
         BytecodeValue,
-        // Generates variadic results, which must be consumed by the immediate next bytecode
-        //
-        VariadicResults,
         // This bytecode may use the 'ReturnAndBranch' API to perform a branch
         //
         ConditionalBranch
@@ -372,7 +697,6 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         ReleaseAssert(!m_resultKindInitialized);
         m_resultKindInitialized = true;
         m_hasTValueOutput = (resKind == BytecodeResultKind::BytecodeValue);
-        m_hasVariadicResOutput = (resKind == BytecodeResultKind::VariadicResults);
         m_canPerformBranch = (resKind == BytecodeResultKind::ConditionalBranch);
     }
 
@@ -396,11 +720,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         }
 
         ReleaseAssert(resKind != BytecodeResultKind::ConditionalBranch && "bad result kind combination");
-        ReleaseAssert(resKind != BytecodeResultKind::VariadicResults && "VariadicResults + ConditionalBranch is unsupported yet");
 
         m_canPerformBranch = true;
         m_hasTValueOutput = (resKind == BytecodeResultKind::BytecodeValue);
-        m_hasVariadicResOutput = (resKind == BytecodeResultKind::VariadicResults);
     }
 
     template<size_t ord, typename T>
@@ -504,6 +826,70 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         ReleaseAssert(false);
     }
 
+    // Declare all the locals that may be read by this bytecode
+    // All reads must be declared here (except the operands that are already locals, which are obviously read)
+    //
+    template<typename... Args>
+    consteval void DeclareReads(Args... args)
+    {
+        m_bcDeclareReadsInfo.Process(args...);
+    }
+
+    template<typename... Args>
+    consteval void DeclareWrites(Args... args)
+    {
+        m_bcDeclareWritesInfo.Process(args...);
+    }
+
+    template<typename... Args>
+    consteval void DeclareClobbers(Args... args)
+    {
+        m_bcDeclareClobbersInfo.Process(args...);
+    }
+
+    struct Intrinsic
+    {
+#define macro2(intrinsicName, ...) struct intrinsicName { __VA_OPT__(OperandRef __VA_ARGS__;) constexpr auto AsArray() { return make_array<OperandRef>(__VA_ARGS__); } };
+#define macro(item) macro2 item
+        PP_FOR_EACH(macro, DEEGEN_BYTECODE_INTRINSIC_LIST)
+#undef macro
+#undef macro2
+
+        template<typename T>
+        static constexpr size_t GetIntrinsicOrd()
+        {
+            size_t res = 0;
+#define macro2(intrinsicName, ...) if constexpr(std::is_same_v<Intrinsic::intrinsicName, T>) { } else { res += 1;
+#define macro(item) macro2 item
+            PP_FOR_EACH(macro, DEEGEN_BYTECODE_INTRINSIC_LIST)
+#undef macro
+#undef macro2
+            static_assert(type_dependent_false<T>::value, "T is not an intrinsic type!");
+#define macro(item) }
+            PP_FOR_EACH(macro, DEEGEN_BYTECODE_INTRINSIC_LIST)
+#undef macro
+            return res;
+        }
+    };
+
+    static constexpr size_t x_maxIntrinsicArgCount = 5;
+
+    template<typename T>
+    consteval void DeclareAsIntrinsic(T info)
+    {
+        constexpr size_t intrinsicOrd = Intrinsic::GetIntrinsicOrd<T>();
+        auto data = info.AsArray();
+        ReleaseAssert(data.size() <= x_maxIntrinsicArgCount);
+
+        ReleaseAssert(m_intrinsicOrd == static_cast<size_t>(-1));
+        m_intrinsicOrd = intrinsicOrd;
+        m_numIntrinsicArgs = data.size();
+        for (size_t i = 0; i < data.size(); i++)
+        {
+            m_intrinsicArgOperandOrd[i] = data[i].m_ord;
+        }
+    }
+
     consteval DeegenFrontendBytecodeDefinitionDescriptor()
         : m_operandTypeListInitialized(false)
         , m_implementationInitialized(false)
@@ -513,10 +899,17 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         , m_canPerformBranch(false)
         , m_isInterpreterTierUpPoint(false)
         , m_implementationFn(nullptr)
+        , m_bcLevelDeclareReadsCalled(false)
         , m_numOperands(0)
         , m_numVariants(0)
         , m_operandTypes()
         , m_variants()
+        , m_bcDeclareReadsInfo()
+        , m_bcDeclareWritesInfo()
+        , m_bcDeclareClobbersInfo()
+        , m_intrinsicOrd(static_cast<size_t>(-1))
+        , m_numIntrinsicArgs(0)
+        , m_intrinsicArgOperandOrd()
     { }
 
     bool m_operandTypeListInitialized;
@@ -527,11 +920,111 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     bool m_canPerformBranch;
     bool m_isInterpreterTierUpPoint;
     void* m_implementationFn;
+    bool m_bcLevelDeclareReadsCalled;
     size_t m_numOperands;
     size_t m_numVariants;
     Operand m_operandTypes[x_maxOperands];
     SpecializedVariant m_variants[x_maxVariants];
+    DeclareRWCInfo m_bcDeclareReadsInfo;
+    DeclareRWCInfo m_bcDeclareWritesInfo;
+    DeclareRWCInfo m_bcDeclareClobbersInfo;
+    size_t m_intrinsicOrd;
+    size_t m_numIntrinsicArgs;
+    size_t m_intrinsicArgOperandOrd[x_maxIntrinsicArgCount];
 };
+
+using DFBDD = DeegenFrontendBytecodeDefinitionDescriptor;
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandExpr lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add, lhs, rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandExpr lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add, lhs, DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
+
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandExpr lhs, int64_t rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add, lhs, DFBDD::OperandExpr::ConstructNumber(rhs));
+}
+
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandRef lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add, DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name), rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandRef lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add,
+                                                   DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name),
+                                                   DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
+
+inline consteval DFBDD::OperandExpr operator+(DFBDD::OperandRef lhs, int64_t rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add,
+                                                   DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name),
+                                                   DFBDD::OperandExpr::ConstructNumber(rhs));
+}
+
+inline consteval DFBDD::OperandExpr operator+(int64_t lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add, DFBDD::OperandExpr::ConstructNumber(lhs), rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator+(int64_t lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Add,
+                                                   DFBDD::OperandExpr::ConstructNumber(lhs),
+                                                   DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandExpr lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub, lhs, rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandExpr lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub, lhs, DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandExpr lhs, int64_t rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub, lhs, DFBDD::OperandExpr::ConstructNumber(rhs));
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandRef lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub, DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name), rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandRef lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub,
+                                                   DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name),
+                                                   DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
+
+inline consteval DFBDD::OperandExpr operator-(DFBDD::OperandRef lhs, int64_t rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub,
+                                                   DFBDD::OperandExpr::ConstructOperandRef(lhs.m_operand.m_name),
+                                                   DFBDD::OperandExpr::ConstructNumber(rhs));
+}
+
+inline consteval DFBDD::OperandExpr operator-(int64_t lhs, DFBDD::OperandExpr rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub, DFBDD::OperandExpr::ConstructNumber(lhs), rhs);
+}
+
+inline consteval DFBDD::OperandExpr operator-(int64_t lhs, DFBDD::OperandRef rhs)
+{
+    return DFBDD::OperandExpr::ConstructBinaryExpr(DFBDD::OperandExprNode::Sub,
+                                                   DFBDD::OperandExpr::ConstructNumber(lhs),
+                                                   DFBDD::OperandExpr::ConstructOperandRef(rhs.m_operand.m_name));
+}
 
 namespace detail
 {

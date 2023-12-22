@@ -45,6 +45,8 @@ DEEGEN_DEFINE_BYTECODE(ValidateIsNextAndBranch)
     Result(ConditionalBranch);
     Implementation(ValidateIsNextAndBranchImpl);
     Variant();
+    DeclareReads(Range(Op("base"), 3));
+    DeclareWrites(Range(Op("base"), 1), Range(Op("base") + 2, 1));
 }
 
 static void NO_RETURN KVLoopIterCallReturnContinuation(TValue* base, uint8_t numRets)
@@ -130,6 +132,9 @@ DEEGEN_DEFINE_BYTECODE(KVLoopIter)
     //
     Variant(Op("numRets").HasValue(1));
     Variant(Op("numRets").HasValue(2));
+    DeclareReads(Range(Op("base"), 3));
+    DeclareWrites(Range(Op("base") + 2, Op("numRets") + 1));
+    DeclareClobbers(Range(Op("base") + Op("numRets") + 3, Infinity()));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

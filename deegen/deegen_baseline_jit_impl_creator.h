@@ -39,6 +39,7 @@ public:
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetJitSlowPathData() const { return m_valuePreserver.Get(x_jitSlowPathData); }
+    llvm::Value* GetBaselineCodeBlock() const { return m_valuePreserver.Get(x_baselineCodeBlock); }
 
     // The code pointer for the next bytecode
     //
@@ -96,8 +97,8 @@ public:
     // Get the SlowPathData offset (uint64_t) for the current bytecode
     // Only available for use in JIT'ed code
     //
-    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd);
-    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd, bool useAliasStencilOrd = false);
+    llvm::Value* WARN_UNUSED GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore, bool useAliasStencilOrd = false);
 
     std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
     std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
@@ -175,6 +176,7 @@ private:
 
     static constexpr const char* x_condBrDest = "condBrDest";
     static constexpr const char* x_fallthroughDest = "fallthroughDest";
+    static constexpr const char* x_baselineCodeBlock = "baselineCodeBlock";
 };
 
 struct DeegenPlaceholderUtils

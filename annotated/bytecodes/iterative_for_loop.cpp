@@ -36,12 +36,9 @@ static void NO_RETURN ForLoopIterCheckMetamethodSlowPath(TValue* /*base*/, uint1
 static void NO_RETURN ForLoopIterImpl(TValue* base, uint16_t /*numRets*/)
 {
     TValue callee = base[0];
-    TValue* callBase = base + 3;
     if (likely(callee.Is<tFunction>()))
     {
-        callBase[x_numSlotsForStackFrameHeader] = base[1];
-        callBase[x_numSlotsForStackFrameHeader + 1] = base[2];
-        MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, ForLoopIterCallReturnContinuation);
+        MakeCall(callee.As<tFunction>(), base[1], base[2], ForLoopIterCallReturnContinuation);
     }
     else
     {
@@ -62,6 +59,9 @@ DEEGEN_DEFINE_BYTECODE(ForLoopIter)
     Variant(Op("numRets").HasValue(2));
     Variant(Op("numRets").HasValue(3));
     Variant();
+    DeclareReads(Range(Op("base"), 3));
+    DeclareWrites(Range(Op("base") + 2, Op("numRets") + 1));
+    DeclareClobbers(Range(Op("base") + Op("numRets") + 3, Infinity()));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

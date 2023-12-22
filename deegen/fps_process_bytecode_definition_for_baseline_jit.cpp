@@ -116,15 +116,30 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             fprintf(hdrFp, "    .m_slowPathCodeLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathCodeLen));
             ReleaseAssert(res.m_baselineJitInfo.m_dataSectionCodeLen <= 65535);
             fprintf(hdrFp, "    .m_dataSectionCodeLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_dataSectionCodeLen));
+            ReleaseAssert(res.m_baselineJitInfo.m_slowPathDataLen <= 65535);
+            fprintf(hdrFp, "    .m_slowPathDataLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathDataLen));
             ReleaseAssert(res.m_baselineJitInfo.m_dataSectionAlignment <= x_baselineJitMaxPossibleDataSectionAlignment);
             ReleaseAssert(is_power_of_2(res.m_baselineJitInfo.m_dataSectionAlignment));
             fprintf(hdrFp, "    .m_dataSectionAlignment = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_dataSectionAlignment));
             ReleaseAssert(res.m_baselineJitInfo.m_numCondBrLatePatches <= 65535);
+            ReleaseAssert(bytecodeStructLength <= 255);
+            fprintf(hdrFp, "    .m_bytecodeLength = %llu,\n", static_cast<unsigned long long>(bytecodeStructLength));
+            ReleaseAssert(res.m_baselineJitInfo.m_numCondBrLatePatches <= 255);
             fprintf(hdrFp, "    .m_numCondBrLatePatches = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_numCondBrLatePatches));
-            ReleaseAssert(res.m_baselineJitInfo.m_slowPathDataLen <= 65535);
-            fprintf(hdrFp, "    .m_slowPathDataLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathDataLen));
-            ReleaseAssert(bytecodeStructLength <= 65535);
-            fprintf(hdrFp, "    .m_bytecodeLength = %llu\n", static_cast<unsigned long long>(bytecodeStructLength));
+            size_t numCallIcSites = res.m_bytecodeDef->GetNumCallICsInJitTier();
+            ReleaseAssert(numCallIcSites <= 255);
+            fprintf(hdrFp, "    .m_numCallIcSites = %llu,\n", static_cast<unsigned long long>(numCallIcSites));
+            size_t callIcSiteOffsetInSlowPathData;
+            if (numCallIcSites > 0)
+            {
+                callIcSiteOffsetInSlowPathData = res.m_bytecodeDef->GetBaselineJitCallIcSiteOffsetInSlowPathData(0);
+            }
+            else
+            {
+                callIcSiteOffsetInSlowPathData = 0;
+            }
+            ReleaseAssert(callIcSiteOffsetInSlowPathData <= 65535);
+            fprintf(hdrFp, "    .m_callIcSiteOffsetInSlowPathData = %llu\n", static_cast<unsigned long long>(callIcSiteOffsetInSlowPathData));
             fprintf(hdrFp, "};\n");
 
             for (size_t k = start; k < end; k++)

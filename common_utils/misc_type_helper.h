@@ -470,3 +470,10 @@ struct deduplicate_tuple
     template<size_t ord>
     static constexpr size_t remapOrdinal = typeOrdinal<std::tuple_element_t<ord, T>>;
 };
+
+template<typename V, typename... T>
+constexpr auto make_array(T&&... t) -> std::array<V, sizeof...(T)>
+{
+    return {{ std::forward<T>(t)... }};
+}
+

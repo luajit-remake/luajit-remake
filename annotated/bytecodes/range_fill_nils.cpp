@@ -30,6 +30,8 @@ DEEGEN_DEFINE_BYTECODE(RangeFillNils)
     Variant(Op("numToPut").HasValue(5));
     Variant(Op("numToPut").HasValue(6));
     Variant();
+    DeclareReads();
+    DeclareWrites(Range(Op("base"), Op("numToPut")));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

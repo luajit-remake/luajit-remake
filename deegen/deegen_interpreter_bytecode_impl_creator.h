@@ -27,6 +27,7 @@ public:
     virtual llvm::Module* GetModule() const override { return m_module.get(); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetBytecodeMetadataPtr() const { return m_valuePreserver.Get(x_metadataPtr); }
+    llvm::Value* GetInterpreterCodeBlock() const { return m_valuePreserver.Get(x_interpreterCodeBlock); }
 
     std::string WARN_UNUSED GetResultFunctionName() { return m_resultFuncName; }
 
@@ -47,8 +48,17 @@ private:
 
     bool m_generated;
 
+    // True if this component may fallthrough to the next bytecode
+    //
+    bool m_mayFallthroughToNextBytecode;
+
+    // True if this component may make a tail call
+    //
+    bool m_mayMakeTailCall;
+
     static constexpr const char* x_condBrDest = "condBrDest";
     static constexpr const char* x_metadataPtr = "metadataPtr";
+    static constexpr const char* x_interpreterCodeBlock = "codeBlock";
 };
 
 }   // namespace dast

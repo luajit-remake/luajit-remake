@@ -33,7 +33,15 @@ enum : size_t
     CP_PLACEHOLDER_BYTECODE_CONDBR_DEST = 10006,
     // Used by Generic IC, the IC key
     //
-    CP_PLACEHOLDER_GENERIC_IC_KEY = 10007
+    CP_PLACEHOLDER_GENERIC_IC_KEY = 10007,
+    // An alias for SlowPathDataOffset, this placeholder is automatically desugared by the stencil parser frontend
+    // This is an ugly hack to avoid an unwanted LLVM hoisting "optimization":
+    // If there are two slow paths both computing the same expression "baselineCb + slowPathData", and control can flow from one of the
+    // slow path to the other, LLVM would act stupid and hoist this operation to the fast path.. (yes, it indeed eliminates one redundant
+    // computation in one of the slow paths, but it's in the slow path!) It's only a LEA instruction so it shouldn't matter too much
+    // (if at all), but since we can avoid this behavior with an easy hack, let's do it..
+    //
+    CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET = 10008
 };
 
 }   // namespace dast

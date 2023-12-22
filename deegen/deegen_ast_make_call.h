@@ -81,6 +81,11 @@ public:
     //
     static std::vector<AstMakeCall> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
+    // Used for baseline JIT and optimizing JIT lowering, since they need to agree on the same deterministic order
+    // on which call site corresponds to which call IC
+    //
+    static std::vector<AstMakeCall> WARN_UNUSED GetAllUseInFunctionInDeterministicOrder(llvm::Function* func);
+
     // Emit generic logic that set up the new call frame
     // 'callSiteInfo' should be nullptr for tail call, or the tier-specific CallSiteInfo (a uint32_t value, e.g., curBytecode for interpreter, etc) for normal calls
     // The logic is emitted before 'm_origin'.
@@ -105,16 +110,7 @@ public:
 
     void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t uniqueOrd);
 
-    static void LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
-    {
-        std::vector<AstMakeCall> res = GetAllUseInFunction(func);
-        for (size_t i = 0; i < res.size(); i++)
-        {
-            res[i].DoLoweringForBaselineJIT(ifi, i /*uniqueOrd*/);
-        }
-
-        ValidateLLVMFunction(func);
-    }
+    static void LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func);
 
 private:
     static llvm::Function* WARN_UNUSED CreatePlaceholderFunction(llvm::Module* module, const std::vector<bool /*isArgRange*/>& argDesc);

@@ -15,6 +15,7 @@ SET(DEEGEN_UNIT_TEST_IR_SOURCES
   throw_error_api_lowering.cpp
   ic_api_sanity.cpp
   lambda_capture_parser_sanity.cpp
+  llvm_effectful_function_tests.cpp
 )
 
 add_library(deegen_unit_test_ir_sources OBJECT

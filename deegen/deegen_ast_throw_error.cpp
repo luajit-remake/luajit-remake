@@ -62,7 +62,7 @@ struct LowerThrowErrorApiPass final : public DeegenAbstractSimpleApiLoweringPass
         if (ifi->IsInterpreter())
         {
             InterpreterBytecodeImplCreator* i = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
-            i->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { i->GetCodeBlock(), i->GetCurBytecode() }, origin);
+            i->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { i->GetInterpreterCodeBlock(), i->GetCurBytecode() }, origin);
         }
 
         Function* dispatchTarget;

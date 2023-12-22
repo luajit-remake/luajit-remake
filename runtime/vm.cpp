@@ -1,8 +1,16 @@
 #include "vm.h"
 #include "runtime_utils.h"
+#include "deegen_options.h"
+
+void InitializeDfgAllocationArenaIfNeeded();
 
 VM* WARN_UNUSED VM::Create()
 {
+    if (x_allow_baseline_jit_tier_up_to_optimizing_jit)
+    {
+        InitializeDfgAllocationArenaIfNeeded();
+    }
+
     constexpr size_t x_mmapLength = x_vmLayoutLength + x_vmLayoutAlignment * 2;
     void* ptrVoid = mmap(nullptr, x_mmapLength, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     CHECK_LOG_ERROR_WITH_ERRNO(ptrVoid != MAP_FAILED, "Failed to reserve VM address range, please make sure overcommit is allowed");

@@ -1401,9 +1401,15 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         for (size_t ord : extraPlaceholderOrds)
         {
             ReleaseAssert(ord >= 10000);
+            ReleaseAssert(ord != CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET);
             fprintf(fp, "    , [[maybe_unused]] uint64_t deegen_stencil_patch_value_%llu\n", static_cast<unsigned long long>(ord));
         }
         fprintf(fp, ") {\n");
+
+        // Desugar alias ordinals here:
+        // Stencil ordinal CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET is an alias for ordinal 103
+        //
+        fprintf(fp, "[[maybe_unused]] int64_t deegen_rc_input_%d = deegen_rc_input_103;\n", static_cast<int>(CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET));
     };
 
     size_t fallthroughPlaceholderOrd = static_cast<size_t>(-1);
@@ -1741,14 +1747,14 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
 std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(BytecodeVariantDefinition* bytecodeDef,
                                                                                                              llvm::Value* slowPathData,
                                                                                                              llvm::Value* slowPathDataOffset,
-                                                                                                             llvm::Value* codeBlock32,
+                                                                                                             llvm::Value* baselineCodeBlock32,
                                                                                                              llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
 
     ReleaseAssert(llvm_value_has_type<void*>(slowPathData));
     ReleaseAssertImp(slowPathDataOffset != nullptr, llvm_value_has_type<uint64_t>(slowPathDataOffset));
-    ReleaseAssertImp(codeBlock32 != nullptr, llvm_value_has_type<uint64_t>(codeBlock32));
+    ReleaseAssertImp(baselineCodeBlock32 != nullptr, llvm_value_has_type<uint64_t>(baselineCodeBlock32));
     ReleaseAssert(insertAtEnd != nullptr);
 
     LLVMContext& ctx = insertAtEnd->getContext();
@@ -1817,10 +1823,10 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
         bytecodeValList.push_back(nextBytecodePtrI64);
     }
 
-    // ordinal 103 (slowPathDataOffset) and ordinal 104 (CodeBlock32)
+    // ordinal 103 (slowPathDataOffset) and ordinal 104 (BaselineCodeBlock32)
     //
     bytecodeValList.push_back(slowPathDataOffset);
-    bytecodeValList.push_back(codeBlock32);
+    bytecodeValList.push_back(baselineCodeBlock32);
 
     for (size_t i = 0; i < bytecodeDef->m_list.size(); i++)
     {

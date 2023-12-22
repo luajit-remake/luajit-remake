@@ -705,7 +705,34 @@ struct BytecodeOperandQuickeningDescriptor
 class BytecodeVariantDefinition
 {
 public:
-    BytecodeVariantDefinition() = default;
+    BytecodeVariantDefinition()
+        : m_bytecodeOrdInTU(static_cast<size_t>(-1))
+        , m_variantOrd(static_cast<size_t>(-1))
+        , m_hasDecidedOperandWidth(false)
+        , m_bytecodeStructLengthTentativelyFinalized(false)
+        , m_bytecodeStructLengthFinalized(false)
+        , m_hasOutputValue(false)
+        , m_hasConditionalBranchTarget(false)
+        , m_metadataStructInfoAssigned(false)
+        , m_isInterpreterCallIcExplicitlyDisabled(false)
+        , m_isInterpreterCallIcEverUsed(false)
+        , m_numJitCallICs(static_cast<size_t>(-1))
+        , m_numJitGenericICs(static_cast<size_t>(-1))
+        , m_totalGenericIcEffectKinds(static_cast<size_t>(-1))
+        , m_quickeningKind(BytecodeQuickeningKind::NoQuickening)
+        , m_bcIntrinsicOrd(static_cast<size_t>(-1))
+        , m_bytecodeMayFallthroughToNextBytecodeDetermined(false)
+        , m_bytecodeMayFallthroughToNextBytecode(false)
+        , m_bytecodeMayMakeTailCallDetermined(false)
+        , m_bytecodeMayMakeTailCall(false)
+        , m_isInterpreterToBaselineJitOsrEntryPoint(false)
+        , m_bytecodeStructLength(static_cast<size_t>(-1))
+        , m_baselineJitSlowPathDataLength(static_cast<size_t>(-1))
+        , m_baselineJitCallIcBaseOffset(static_cast<size_t>(-1))
+        , m_baselineJitSlowPathAndDataSecInfoOffset(static_cast<size_t>(-1))
+        , m_baselineJitGenericIcBaseOffset(static_cast<size_t>(-1))
+    { }
+
     BytecodeVariantDefinition(json& j);
 
     void SetMaxOperandWidthBytes(size_t maxWidthBytesInput)
@@ -970,6 +997,18 @@ public:
         return m_baselineJitGenericIcBaseOffset + sizeof(JitGenericInlineCacheSite) * ord;
     }
 
+    bool BytecodeMayFallthroughToNextBytecode()
+    {
+        ReleaseAssert(m_bytecodeMayFallthroughToNextBytecodeDetermined);
+        return m_bytecodeMayFallthroughToNextBytecode;
+    }
+
+    bool BytecodeMayMakeTailCall()
+    {
+        ReleaseAssert(m_bytecodeMayMakeTailCallDetermined);
+        return m_bytecodeMayMakeTailCall;
+    }
+
     json WARN_UNUSED SaveToJSON();
 
     // For now we have a fixed 2-byte opcode header for simplicity
@@ -1029,6 +1068,17 @@ public:
     // The length of this bytecode is enforced to be the maximum length of all bytecode variants in this list
     //
     std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
+
+    std::string m_rcwInfoFuncs;
+    size_t m_bcIntrinsicOrd;      // -1 if none
+    std::string m_bcIntrinsicName;
+    std::string m_bcIntrinsicInfoGetterFunc;
+
+    bool m_bytecodeMayFallthroughToNextBytecodeDetermined;
+    bool m_bytecodeMayFallthroughToNextBytecode;
+
+    bool m_bytecodeMayMakeTailCallDetermined;
+    bool m_bytecodeMayMakeTailCall;
 
     bool m_isInterpreterToBaselineJitOsrEntryPoint;
 

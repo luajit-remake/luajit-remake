@@ -219,6 +219,7 @@ struct FalseOrNullptr
 template<typename T, typename U>
 T assert_cast(U u)
 {
+    static_assert(std::is_pointer_v<T> && std::is_pointer_v<U>);
     T t = dynamic_cast<T>(u);
     assert(t != nullptr);
     return t;

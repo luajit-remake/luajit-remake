@@ -42,6 +42,7 @@ DEEGEN_DEFINE_BYTECODE(TableVariadicPutBySeq)
     Variant(
         Op("index").IsConstant<tInt32>()
     );
+    DeclareReads(VariadicResults());
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

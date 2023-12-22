@@ -14,6 +14,9 @@ DEEGEN_DEFINE_BYTECODE(UpvalueGetMutable)
     Result(BytecodeValue);
     Implementation(MutableUpvalueGetImpl);
     Variant();
+    DeclareAsIntrinsic<Intrinsic::UpvalueGetMutable>({
+        .ord = Op("ord")
+    });
 }
 
 static void NO_RETURN ImmutableUpvalueGetImpl(uint16_t ord)
@@ -29,6 +32,9 @@ DEEGEN_DEFINE_BYTECODE(UpvalueGetImmutable)
     Result(BytecodeValue);
     Implementation(ImmutableUpvalueGetImpl);
     Variant();
+    DeclareAsIntrinsic<Intrinsic::UpvalueGetImmutable>({
+        .ord = Op("ord")
+    });
 }
 
 // Parser needs to late-replace between the two bytecodes
@@ -51,6 +57,10 @@ DEEGEN_DEFINE_BYTECODE(UpvaluePut)
     Implementation(UpvalueSetImpl);
     Variant(Op("value").IsBytecodeSlot());
     Variant(Op("value").IsConstant());
+    DeclareAsIntrinsic<Intrinsic::UpvaluePut>({
+        .ord = Op("ord"),
+        .value = Op("value")
+    });
 }
 
 static void NO_RETURN UpvalueCloseImpl(const TValue* base)
@@ -70,6 +80,10 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(UpvalueCloseOperation, bool isLoopHint)
     Implementation(UpvalueCloseImpl);
     CheckForInterpreterTierUp(isLoopHint);
     Variant();
+    DeclareReads();
+    DeclareAsIntrinsic<Intrinsic::UpvalueClose>({
+        .start = Op("base")
+    });
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(UpvalueClose, UpvalueCloseOperation, false /*isLoopHint*/);

@@ -59,6 +59,13 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TailCallOperation, bool passVariadicRes)
         Variant(Op("numArgs").HasValue(numArgs));
     }
     Variant();
+    DeclareReads(
+        Range(Op("base"), 1),
+        Range(Op("base") + x_numSlotsForStackFrameHeader, Op("numArgs")),
+        VariadicResults(passVariadicRes)
+    );
+    DeclareWrites();
+    DeclareClobbers(VariadicArguments(), Range(0, Infinity()));
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CallT, TailCallOperation, false /*passVariadicRes*/);

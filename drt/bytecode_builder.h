@@ -5,6 +5,8 @@
 
 #include "generated/all_bytecode_builder_apis.h"
 
+class CodeBlock;
+
 namespace DeegenBytecodeBuilder {
 
 #define macro(e) , DeegenGenerated_BytecodeBuilder_ ## e ## _BytecodeMetadataInfo
@@ -18,6 +20,20 @@ enum class BCKind : uint8_t
     X_END_OF_ENUM
 };
 #undef macro
+
+inline const char* GetBytecodeHumanReadableNameFromBCKind(BCKind k)
+{
+    switch (k)
+    {
+#define macro(e) case BCKind::e: { return PP_STRINGIFY(e); }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+    default:
+    {
+        return "(invalid bytecode)";
+    }
+    }   /* switch */
+}
 
 namespace detail {
 
@@ -33,31 +49,39 @@ using BytecodeBuilderImplClassNameForBcKind = typename BytecodeBuilderImplClassN
 
 }   // namespace detail
 
-#define macro(e) , public DeegenGenerated_BytecodeBuilder_ ## e<BytecodeBuilderImpl>
-class BytecodeBuilderImpl : public BytecodeBuilderBase<BytecodeMetadataTypeListInfo> PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES) {
+#define macro(e) , public DeegenGenerated_BytecodeBuilder_ ## e<BytecodeAccessor<isDecodingMode>>
+template<bool isDecodingMode>
+class BytecodeAccessor : public BytecodeBuilderBase<isDecodingMode, BytecodeMetadataTypeListInfo> PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES) {
 #undef macro
 
-protected:
+public:
+    BytecodeAccessor() = default;
 
-#define macro(e) friend class DeegenGenerated_BytecodeBuilder_ ## e<BytecodeBuilderImpl>;
+    BytecodeAccessor(uint8_t* bytecodeStream, size_t bytecodeStreamLength, TValue* constantTableEnd)
+        : BytecodeBuilderBase<isDecodingMode, BytecodeMetadataTypeListInfo>(bytecodeStream, bytecodeStreamLength, constantTableEnd)
+    { }
+
+private:
+
+#define macro(e) friend class DeegenGenerated_BytecodeBuilder_ ## e<BytecodeAccessor<isDecodingMode>>;
 PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
 
-    template<typename T>
+    template<template<typename> class T>
     static constexpr size_t GetBytecodeOpcodeBase()
     {
         size_t res = 0;
-#define macro(e)                                                                                    \
-    if constexpr(std::is_same_v<T, DeegenGenerated_BytecodeBuilder_ ## e<BytecodeBuilderImpl>>) {   \
-        return res;                                                                                 \
-    } else {                                                                                        \
-        res += GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();
+#define macro(e)                                                                                                                                       \
+        if constexpr(std::is_same_v<T<BytecodeAccessor<isDecodingMode>>, DeegenGenerated_BytecodeBuilder_ ## e<BytecodeAccessor<isDecodingMode>>>) {   \
+            return res;                                                                                                                                \
+        } else {                                                                                                                                       \
+            res += GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();
 
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
 
         std::ignore = res;
-        static_assert(type_dependent_false<T>::value, "bad type T!");
+        static_assert(type_dependent_false<T<BytecodeAccessor<isDecodingMode>>>::value, "bad type T!");
         return static_cast<size_t>(-1);
 
 #define macro(e) }
@@ -68,24 +92,57 @@ PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
     template<template<typename> class T>
     static constexpr size_t GetNumVariantsOfBytecode()
     {
-        static_assert(std::is_base_of_v<T<BytecodeBuilderImpl>, BytecodeBuilderImpl>);
-        return T<BytecodeBuilderImpl>::GetNumVariants();
+        // static_assert(std::is_base_of_v<T<BytecodeAccessor<isDecodingMode>>, BytecodeAccessor<isDecodingMode>>);
+        return T<BytecodeAccessor<isDecodingMode>>::GetNumVariants();
     }
-};
-
-class BytecodeBuilder final : public BytecodeBuilderImpl
-{
-    MAKE_NONCOPYABLE(BytecodeBuilder);
-    MAKE_NONMOVABLE(BytecodeBuilder);
 
     friend class DeegenInterpreterDispatchTableBuilder;
     friend class DeegenInterpreterOpcodeNameTableBuilder;
 
     template<BCKind bytecodeKind>
-    using OperandsTypeForBytecodeKind = typename detail::BytecodeBuilderImplClassNameForBcKind<bytecodeKind, BytecodeBuilderImpl>::Operands;
+    using OperandsTypeForBytecodeKind = typename detail::BytecodeBuilderImplClassNameForBcKind<bytecodeKind, BytecodeAccessor<isDecodingMode>>::Operands;
+
+    using base = BytecodeBuilderBase<isDecodingMode, BytecodeMetadataTypeListInfo>;
 
 public:
-    BytecodeBuilder() = default;
+    using base::GetBytecodeStart;
+    using base::GetCurLength;
+    using base::m_bufferBegin;
+    using base::m_bufferCur;
+    using base::GetBuiltBytecodeSequenceImpl;
+    using base::GetConstantFromConstantTable;
+
+    // We should refactor this definition to a unified place..
+    //
+    using BytecodeOpcodeTy = uint16_t;
+
+    BytecodeOpcodeTy GetCanonicalizedOpcodeAtPosition(size_t bcPos)
+    {
+        BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
+        assert(opcode < x_numTotalVariants);
+        if constexpr(!isDecodingMode)
+        {
+            // If we are building the bytecode stream, we know BytecodeBuilder can only emit non-quickening bytecodes,
+            // so the bytecode opcode must have been canonicalized. Assert this.
+            //
+            assert(x_isPrimitiveBcArray[opcode]);
+            assert(x_canonicalizedBcArray[opcode] == opcode);
+            return opcode;
+        }
+        else
+        {
+            // However, if we are decoding a bytecode stream, the runtime execution may have quickened the bytecodes,
+            // so we must canonicalize the bytecode before returning.
+            //
+            return x_canonicalizedBcArray[opcode];
+        }
+    }
+
+    BytecodeOpcodeTy GetCanonicalizedOpcodeFromOpcode(BytecodeOpcodeTy opcode)
+    {
+        assert(opcode < x_numTotalVariants);
+        return x_canonicalizedBcArray[opcode];
+    }
 
     // Returns whether the bytecode at offset 'bcPos' is a non-quickening bytecode.
     // 'bcPos' must be a valid offset that points at the beginning of a bytecode.
@@ -94,7 +151,8 @@ public:
     //
     bool WARN_UNUSED IsPrimitiveBytecode(size_t bcPos)
     {
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
+        assert(opcode < x_numTotalVariants);
         return x_isPrimitiveBcArray[opcode];
     }
 
@@ -103,17 +161,32 @@ public:
     //
     BCKind WARN_UNUSED GetBytecodeKind(size_t bcPos)
     {
-        assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         return x_bcKindArray[opcode];
+    }
+
+    const char* WARN_UNUSED GetBytecodeKindName(size_t bcPos)
+    {
+        return GetBytecodeHumanReadableNameFromBCKind(GetBytecodeKind(bcPos));
+    }
+
+    size_t GetOutputOperand(size_t bcPos)
+    {
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        uint8_t offset = x_bcOutputOperandOffsetArray[opcode];
+        assert(offset != 255);
+        // The output operand slot is always a BcSlot and is currently hardcoded to 2 bytes
+        //
+        return UnalignedLoad<uint16_t>(GetBytecodeStart() + bcPos + offset);
     }
 
     // Set the output operand of the bytecode at 'bcPos', overwriting the old value.
     //
     void SetOutputOperand(size_t bcPos, size_t value)
     {
+        assert(!isDecodingMode);
         assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t offset = x_bcOutputOperandOffsetArray[opcode];
         assert(offset != 255);
         // Currently the output operand slot is hardcoded to 2 bytes
@@ -128,8 +201,9 @@ public:
     //
     void SetBranchTargetOffset(size_t bcPos, int16_t destBcOffset)
     {
+        assert(!isDecodingMode);
         assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t branchOperandOffsetInBc = x_bcBranchOperandOffsetArray[opcode];
         assert(branchOperandOffsetInBc != 255);
         UnalignedStore<int16_t>(GetBytecodeStart() + bcPos + branchOperandOffsetInBc, destBcOffset);
@@ -140,6 +214,7 @@ public:
     //
     bool WARN_UNUSED SetBranchTarget(size_t bcPos, size_t destBcPos)
     {
+        assert(!isDecodingMode);
         int64_t diff = static_cast<int64_t>(destBcPos - bcPos);
         // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
         //
@@ -154,24 +229,26 @@ public:
 
     bool WARN_UNUSED BytecodeHasOutputOperand(size_t bcPos)
     {
-        assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         return x_bcOutputOperandOffsetArray[opcode] != 255;
     }
 
     bool WARN_UNUSED BytecodeHasBranchOperand(size_t bcPos)
     {
-        assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         return x_bcBranchOperandOffsetArray[opcode] != 255;
+    }
+
+    size_t WARN_UNUSED GetNextBytecodePosition(size_t bcPos)
+    {
+        return bcPos + GetLengthOfSpecifiedBytecode(bcPos);
     }
 
     // The bytecode target to jump to is bcPos + offset
     //
     ssize_t WARN_UNUSED GetBranchTargetOffset(size_t bcPos)
     {
-        assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t branchOperandOffsetInBc = x_bcBranchOperandOffsetArray[opcode];
         assert(branchOperandOffsetInBc != 255);
 
@@ -194,6 +271,7 @@ public:
     template<BCKind bytecodeKind>
     void ALWAYS_INLINE ReplaceBytecode(size_t bcPos, const OperandsTypeForBytecodeKind<bytecodeKind>& operands)
     {
+        assert(!isDecodingMode);
         static_assert(x_isBcKindPotentiallyReplaceable[static_cast<size_t>(bytecodeKind)],
                       "To replace a bytecode by another, you must use SameLengthConstraint in bytecode definition to ensure that they have equal length");
 
@@ -210,7 +288,7 @@ public:
 
         // Call the corresponding 'create' function to create the bytecode
         //
-#define macro(e) if constexpr(bytecodeKind == BCKind::e) { Create ## e(operands); } else
+#define macro(e) if constexpr(bytecodeKind == BCKind::e) { this->Create ## e(operands); } else
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES) { static_assert(type_dependent_false<decltype(bytecodeKind)>::value, "unexpected BCKind"); }
 #undef macro
 
@@ -232,6 +310,7 @@ public:
     //
     bool WARN_UNUSED CheckWellFormedness()
     {
+        assert(!isDecodingMode);
         std::unordered_set<size_t> bytecodeBoundarySet;
         uint8_t* cur = m_bufferBegin;
         while (cur < m_bufferCur)
@@ -276,12 +355,13 @@ public:
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
     {
-        static_assert(sizeof(BytecodeOpcodeTy) <= x_numExtraPaddingAtEnd);
+        assert(!isDecodingMode);
+        static_assert(sizeof(BytecodeOpcodeTy) <= x_numExtraPaddingAtBytecodeStreamEnd);
         std::pair<uint8_t*, size_t> res = GetBuiltBytecodeSequenceImpl();
         // Append the "stopper" bytecode opcode right after the end of the bytecode sequence
         //
-        assert(res.second >= x_numExtraPaddingAtEnd);
-        uint8_t* loc = res.first + res.second - x_numExtraPaddingAtEnd;
+        assert(res.second >= x_numExtraPaddingAtBytecodeStreamEnd);
+        uint8_t* loc = res.first + res.second - x_numExtraPaddingAtBytecodeStreamEnd;
         UnalignedStore<BytecodeOpcodeTy>(loc, SafeIntegerCast<BytecodeOpcodeTy>(x_numTotalVariants));
         return res;
     }
@@ -291,12 +371,123 @@ public:
         return x_numTotalVariants;
     }
 
-    // We should refactor this definition to a unified place..
+    BytecodeRWCInfo WARN_UNUSED GetDataFlowReadInfo(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        TestAssert(x_rwcReadInfoFns[opcode] != nullptr);
+        return (this->*(x_rwcReadInfoFns[opcode]))(bcPos);
+    }
+
+    BytecodeRWCInfo WARN_UNUSED GetDataFlowWriteInfo(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        TestAssert(x_rwcWriteInfoFns[opcode] != nullptr);
+        return (this->*(x_rwcWriteInfoFns[opcode]))(bcPos);
+    }
+
+    BytecodeRWCInfo WARN_UNUSED GetDataFlowClobberInfo(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        TestAssert(x_rwcClobberInfoFns[opcode] != nullptr);
+        return (this->*(x_rwcClobberInfoFns[opcode]))(bcPos);
+    }
+
+    template<typename T>
+    bool WARN_UNUSED IsBytecodeIntrinsic(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
+        return (x_bcIntrinsicOrdinalArray[opcode] == ::detail::bytecode_intrinsic_ordinal_from_ty<T>);
+    }
+
+    template<typename T>
+    T WARN_UNUSED GetBytecodeIntrinsicInfo(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        static_assert(!std::is_same_v<T, void>);
+        TestAssert(IsBytecodeIntrinsic<T>(bcPos));
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+
+#define macro(e)                                                                                                                                            \
+        if constexpr(std::is_same_v<typename DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::BytecodeIntrinsicDefTy, T>) {         \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                               \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                               \
+            if (variantOrdBase <= opcode && opcode < variantOrdBase + numVariants) {                                                                        \
+                auto fn = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeIntrinsicInfoGetters[opcode - variantOrdBase]; \
+                TestAssert(fn != nullptr);                                                                                                                  \
+                return (this->*fn)(bcPos);                                                                                                                  \
+            }                                                                                                                                               \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        TestAssert(false);
+        __builtin_unreachable();
+    }
+
+    // Return true if this bytecode is a barrier instruction, i.e. control flow will never fallthrough to the next bytecode
     //
-    using BytecodeOpcodeTy = uint16_t;
+    bool IsBytecodeBarrier(size_t bcPos)
+    {
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        TestAssert(x_bcIsBarrierArray[opcode] == 0 || x_bcIsBarrierArray[opcode] == 1);
+        return x_bcIsBarrierArray[opcode];
+    }
+
+    static bool WARN_UNUSED BCKindMayBranch(BCKind bcKind)
+    {
+        TestAssert(bcKind != BCKind::X_END_OF_ENUM);
+        size_t idx = static_cast<size_t>(bcKind);
+        TestAssert(idx < static_cast<size_t>(BCKind::X_END_OF_ENUM));
+        TestAssert(x_bcKindHasBranchOperandArray[idx] == 0 || x_bcKindHasBranchOperandArray[idx] == 1);
+        return x_bcKindHasBranchOperandArray[idx];
+    }
+
+    static bool WARN_UNUSED BCKindIsBarrier(BCKind bcKind)
+    {
+        TestAssert(bcKind != BCKind::X_END_OF_ENUM);
+        size_t idx = static_cast<size_t>(bcKind);
+        TestAssert(idx < static_cast<size_t>(BCKind::X_END_OF_ENUM));
+        TestAssert(x_bcKindIsBarrierArray[idx] == 0 || x_bcKindIsBarrierArray[idx] == 1);
+        return x_bcKindIsBarrierArray[idx];
+    }
+
+    static bool WARN_UNUSED BCKindMayMakeTailCall(BCKind bcKind)
+    {
+        TestAssert(bcKind != BCKind::X_END_OF_ENUM);
+        size_t idx = static_cast<size_t>(bcKind);
+        TestAssert(idx < static_cast<size_t>(BCKind::X_END_OF_ENUM));
+        return x_bcKindMayMakeTailCallArray[idx];
+    }
+
+    size_t WARN_UNUSED GetDfgNodeSpecificDataLength(size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BCKind bcKind = GetBytecodeKind(bcPos);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        return x_bcKindDfgNsdLengthArray[static_cast<size_t>(bcKind)];
+    }
+
+    void PopulateDfgNodeSpecificData(void* nsdPtr, size_t bcPos)
+    {
+        assert(isDecodingMode);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
+        TestAssert(x_dfgNsdInfoWriterFnArray[opcode] != nullptr);
+        return (this->*(x_dfgNsdInfoWriterFnArray[opcode]))(reinterpret_cast<uint8_t*>(nsdPtr), bcPos);
+    }
+
+    static void DumpDfgNodeSpecificData(BCKind bcKind, FILE* file, void* nsdPtr, bool& shouldPrefixCommaOnFirstItem)
+    {
+        assert(isDecodingMode);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        (x_bcKindDumpDfgNsdInfoFnArray[static_cast<size_t>(bcKind)])(file, reinterpret_cast<uint8_t*>(nsdPtr), shouldPrefixCommaOnFirstItem);
+    }
 
 private:
-    BytecodeOpcodeTy GetOpcodeAtPosition(size_t bcPos)
+
+    BytecodeOpcodeTy GetRawOpcodeAtPosition(size_t bcPos)
     {
         assert(bcPos < GetCurLength());
         assert(bcPos + sizeof(BytecodeOpcodeTy) <= GetCurLength());
@@ -307,8 +498,7 @@ private:
 
     size_t WARN_UNUSED GetLengthOfSpecifiedBytecode(size_t bcPos)
     {
-        assert(IsPrimitiveBytecode(bcPos));
-        BytecodeOpcodeTy opcode = GetOpcodeAtPosition(bcPos);
+        BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t res = x_bcLengthArray[opcode];
         assert(res != 255 && res > 0);
         assert(bcPos + res <= GetCurLength());
@@ -325,28 +515,49 @@ private:
 
     static constexpr std::array<bool, x_numTotalVariants> x_isPrimitiveBcArray = []() {
         std::array<bool, x_numTotalVariants> res;
-#define macro(e)                                                                                                                \
-        {                                                                                                                       \
-            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                   \
-            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                   \
-            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                            \
-                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeBuilderImpl>::x_isVariantEmittable[i - variantOrdBase];  \
-            }                                                                                                                   \
+#define macro(e)                                                                                                                             \
+        {                                                                                                                                    \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                         \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_isVariantEmittable[i - variantOrdBase];  \
+            }                                                                                                                                \
         }
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
         return res;
     }();
 
+    static constexpr std::array<uint16_t, x_numTotalVariants> x_canonicalizedBcArray = []() {
+        std::array<uint16_t, x_numTotalVariants> res;
+        for (size_t i = 0; i < x_numTotalVariants; i++)
+        {
+            if (x_isPrimitiveBcArray[i])
+            {
+                res[i] = SafeIntegerCast<uint16_t>(i);
+            }
+            else
+            {
+                ReleaseAssert(i > 0);
+                res[i] = res[i - 1];
+            }
+        }
+        for (size_t i = 0; i < x_numTotalVariants; i++)
+        {
+            ReleaseAssert(res[res[i]] == res[i]);
+        }
+        return res;
+    }();
+
     static constexpr std::array<uint8_t, x_numTotalVariants> x_bcLengthArray = []() {
         std::array<uint8_t, x_numTotalVariants> res;
-#define macro(e)                                                                                                                \
-        {                                                                                                                       \
-            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                   \
-            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                   \
-            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                            \
-                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeBuilderImpl>::x_bytecodeLength[i - variantOrdBase];      \
-            }                                                                                                                   \
+#define macro(e)                                                                                                                             \
+        {                                                                                                                                    \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                         \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeLength[i - variantOrdBase];      \
+            }                                                                                                                                \
         }
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
@@ -355,13 +566,13 @@ private:
 
     static constexpr std::array<uint8_t, x_numTotalVariants> x_bcOutputOperandOffsetArray = []() {
         std::array<uint8_t, x_numTotalVariants> res;
-#define macro(e)                                                                                                                        \
-        {                                                                                                                               \
-            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                           \
-            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                           \
-            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                    \
-                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeBuilderImpl>::x_bytecodeOutputOperandOffset[i - variantOrdBase]; \
-            }                                                                                                                           \
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeOutputOperandOffset[i - variantOrdBase]; \
+            }                                                                                                                                        \
         }
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
@@ -370,13 +581,152 @@ private:
 
     static constexpr std::array<uint8_t, x_numTotalVariants> x_bcBranchOperandOffsetArray = []() {
         std::array<uint8_t, x_numTotalVariants> res;
-#define macro(e)                                                                                                                        \
-        {                                                                                                                               \
-            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                           \
-            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                           \
-            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                    \
-                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeBuilderImpl>::x_bytecodeBranchOperandOffset[i - variantOrdBase]; \
-            }                                                                                                                           \
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeBranchOperandOffset[i - variantOrdBase]; \
+            }                                                                                                                                        \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<bool, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindHasBranchOperandArray = []() {
+        constexpr size_t totalKinds = static_cast<size_t>(BCKind::X_END_OF_ENUM);
+        std::array<bool, totalKinds> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                ReleaseAssert((x_bcBranchOperandOffsetArray[i] == 255) == (x_bcBranchOperandOffsetArray[variantOrdBase] == 255));                    \
+            }                                                                                                                                        \
+            res[static_cast<size_t>(BCKind::e)] = (x_bcBranchOperandOffsetArray[variantOrdBase] != 255);                                             \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<uint8_t, x_numTotalVariants> x_bcIsBarrierArray = []() {
+        std::array<uint8_t, x_numTotalVariants> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_isBytecodeBarrier[i - variantOrdBase];           \
+            }                                                                                                                                        \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    // For now, for simplicity, we require that all the variants of a certain bytecode kind must have the same IsBarrier property
+    //
+    static constexpr std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindIsBarrierArray = []() {
+        constexpr size_t totalKinds = static_cast<size_t>(BCKind::X_END_OF_ENUM);
+        std::array<uint8_t, totalKinds> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                if (x_isPrimitiveBcArray[i])                                                                                                         \
+                    ReleaseAssert(x_bcIsBarrierArray[variantOrdBase] == x_bcIsBarrierArray[i]);                                                      \
+            }                                                                                                                                        \
+            res[static_cast<size_t>(BCKind::e)] = x_bcIsBarrierArray[variantOrdBase];                                                                \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<bool, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindMayMakeTailCallArray = []() {
+        constexpr size_t totalKinds = static_cast<size_t>(BCKind::X_END_OF_ENUM);
+        std::array<bool, totalKinds> resArr;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            uint8_t res = 255;                                                                                                                       \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                uint8_t val = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeMayMakeTailCall[i - variantOrdBase];\
+                if (x_isPrimitiveBcArray[i]) {                                                                                                       \
+                    ReleaseAssert(val != 255 && (res == 255 || res == val));                                                                         \
+                    res = val;                                                                                                                       \
+                } else {                                                                                                                             \
+                    ReleaseAssert(val == 255);                                                                                                       \
+                }                                                                                                                                    \
+            }                                                                                                                                        \
+            ReleaseAssert(res == 0 || res == 1);                                                                                                     \
+            resArr[static_cast<size_t>(BCKind::e)] = res;                                                                                            \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return resArr;
+    }();
+
+    using RWCInfoGetterFn = BytecodeRWCInfo(BytecodeAccessor<isDecodingMode>::*)(size_t);
+
+    static constexpr std::array<RWCInfoGetterFn, x_numTotalVariants> x_rwcReadInfoFns = []() {
+        std::array<RWCInfoGetterFn, x_numTotalVariants> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeReadDeclGetters[i - variantOrdBase];     \
+            }                                                                                                                                        \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<RWCInfoGetterFn, x_numTotalVariants> x_rwcWriteInfoFns = []() {
+        std::array<RWCInfoGetterFn, x_numTotalVariants> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeWriteDeclGetters[i - variantOrdBase];    \
+            }                                                                                                                                        \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<RWCInfoGetterFn, x_numTotalVariants> x_rwcClobberInfoFns = []() {
+        std::array<RWCInfoGetterFn, x_numTotalVariants> res;
+#define macro(e)                                                                                                                                     \
+        {                                                                                                                                            \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                        \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                                 \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeClobberDeclGetters[i - variantOrdBase];  \
+            }                                                                                                                                        \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    static constexpr std::array<uint8_t, x_numTotalVariants> x_bcIntrinsicOrdinalArray = []() {
+        std::array<uint8_t, x_numTotalVariants> res;
+#define macro(e)                                                                                                                    \
+        {                                                                                                                           \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                       \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                       \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_bytecodeIntrinsicOrdinal;       \
+            }                                                                                                                       \
         }
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
@@ -398,11 +748,65 @@ private:
 
     static constexpr std::array<bool, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_isBcKindPotentiallyReplaceable = []() {
         std::array<bool, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
-#define macro(e) res[static_cast<size_t>(BCKind::e)] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeBuilderImpl>::x_isPotentiallyReplaceable;
+#define macro(e) res[static_cast<size_t>(BCKind::e)] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_isPotentiallyReplaceable;
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
         return res;
     }();
+
+    static constexpr std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindDfgNsdLengthArray = []() {
+        std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e)                                                                                                                        \
+        {                                                                                                                               \
+            size_t nsdLength = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_dfgNodeSpecificDataLength;    \
+            ReleaseAssert(nsdLength <= 255);                                                                                            \
+            res[static_cast<size_t>(BCKind::e)] = static_cast<uint8_t>(nsdLength);                                                      \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    using DfgNsdInfoWriterFn = void(BytecodeAccessor<isDecodingMode>::*)(uint8_t*, size_t);
+
+    static constexpr std::array<DfgNsdInfoWriterFn, x_numTotalVariants> x_dfgNsdInfoWriterFnArray = []() {
+        std::array<DfgNsdInfoWriterFn, x_numTotalVariants> res;
+#define macro(e)                                                                                                                                \
+        {                                                                                                                                       \
+            constexpr size_t variantOrdBase = GetBytecodeOpcodeBase<DeegenGenerated_BytecodeBuilder_ ## e>();                                   \
+            constexpr size_t numVariants = GetNumVariantsOfBytecode<DeegenGenerated_BytecodeBuilder_ ## e>();                                   \
+            for (size_t i = variantOrdBase; i < variantOrdBase + numVariants; i++) {                                                            \
+                res[i] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_dfgNsdInfoWriterFns[i - variantOrdBase];    \
+            }                                                                                                                                   \
+        }
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    using DfgDumpNsdInfoFn = void(*)(FILE*, uint8_t*, bool&);
+
+    static constexpr std::array<DfgDumpNsdInfoFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindDumpDfgNsdInfoFnArray = []() {
+        std::array<DfgDumpNsdInfoFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e)   \
+        res[static_cast<size_t>(BCKind::e)] = &DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::DumpDfgNodeSpecificDataImpl;                                                      \
+
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+};
+
+class BytecodeBuilder final : public BytecodeAccessor<false /*isDecodingMode*/>
+{
+public:
+    BytecodeBuilder() = default;
+};
+
+class BytecodeDecoder final : public BytecodeAccessor<true /*isDecodingMode*/>
+{
+public:
+    BytecodeDecoder(CodeBlock* cb);
 };
 
 }   // namespace DeegenBytecodeBuilder

@@ -262,6 +262,9 @@ DEEGEN_DEFINE_BYTECODE(Concat)
     Implementation(ConcatImpl);
     Variant(Op("num").HasValue(2));
     Variant();
+    DeclareReads(Range(Op("base"), Op("num")));
+    DeclareWrites();
+    DeclareClobbers(Range(Op("base") + Op("num") - 1, 1));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

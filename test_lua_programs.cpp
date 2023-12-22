@@ -3826,7 +3826,7 @@ void TestInterpToBaselineTierUpSanity_1_Impl(std::string filename, size_t numExp
     ReleaseAssert(err == "");
 
     ReleaseAssert(targetCb->m_interpreterTierUpCounter < 0);
-    ReleaseAssert(-static_cast<int64_t>(targetCb->m_bytecodeLength + sizeof(CodeBlock)) <= targetCb->m_interpreterTierUpCounter);
+    ReleaseAssert(-static_cast<int64_t>(targetCb->m_bytecodeLengthIncludingTailPadding + sizeof(CodeBlock)) <= targetCb->m_interpreterTierUpCounter);
     ReleaseAssert(vm->GetNumTotalBaselineJitCompilations() == numExpectedCompilations);
 }
 

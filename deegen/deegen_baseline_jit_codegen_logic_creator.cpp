@@ -76,7 +76,7 @@ struct BaselineJitCodegenFnProto
                 /*R12*/ llvm_type_of<void*>(ctx),       // JitDataSec Ptr
                 /*RBX*/ llvm_type_of<uint64_t>(ctx),    // SlowPathDataOffset
                 /*R14*/ llvm_type_of<void*>(ctx),       // SlowPathDataIndex Ptr
-                /*RSI*/ llvm_type_of<uint64_t>(ctx),    // CodeBlock lower-32bits
+                /*RSI*/ llvm_type_of<uint64_t>(ctx),    // BaselineCodeBlock lower-32bits
                 /*RDI*/ llvm_type_of<void*>(ctx),       // Control Struct Ptr (used in debug only, undefined in non-debug build to save a precious register)
                 /*R8*/  llvm_type_of<void*>(ctx),       // JitFastPath Ptr
                 /*R9*/  llvm_type_of<void*>(ctx),       // JitSlowPath Ptr
@@ -109,7 +109,7 @@ struct BaselineJitCodegenFnProto
         r.GetJitSlowPathPtr()->setName("jitSlowPathPtr");
         r.GetSlowPathDataPtr()->setName("slowPathDataPtr");
         r.GetSlowPathDataOffset()->setName("slowPathDataOffset");
-        r.GetCodeBlock32()->setName("codeBlock32");
+        r.GetBaselineCodeBlock32()->setName("baselineCodeBlock32");
 
         // By design, all the pointers are known to operate on non-overlapping ranges
         // and exclusively owning the respective ranges, so add noalias to help optimization
@@ -139,7 +139,7 @@ struct BaselineJitCodegenFnProto
                                                       llvm::Value* condBrPatchRecPtr,
                                                       llvm::Value* ctlStructPtr,
                                                       llvm::Value* slowPathDataOffset,
-                                                      llvm::Value* codeBlock32)
+                                                      llvm::Value* baselineCodeBlock32)
     {
         using namespace llvm;
         ReleaseAssert(callee != nullptr);
@@ -152,7 +152,7 @@ struct BaselineJitCodegenFnProto
         ReleaseAssert(condBrPatchRecPtr != nullptr);
         ReleaseAssert(ctlStructPtr != nullptr);
         ReleaseAssert(slowPathDataOffset != nullptr);
-        ReleaseAssert(codeBlock32 != nullptr);
+        ReleaseAssert(baselineCodeBlock32 != nullptr);
 
         LLVMContext& ctx = callee->getContext();
         // In non-debug build, ctlStructPtr should be undefined
@@ -166,7 +166,7 @@ struct BaselineJitCodegenFnProto
                 jitDataSecPtr,
                 slowPathDataOffset,
                 slowPathDataIndexPtr,
-                codeBlock32,
+                baselineCodeBlock32,
                 ctlStructPtr,
                 jitFastPathPtr,
                 jitSlowPathPtr,
@@ -193,7 +193,7 @@ struct BaselineJitCodegenFnProto
     llvm::Value* WARN_UNUSED GetJitSlowPathPtr() { return m_func->getArg(x_jitSlowPathPtr); }
     llvm::Value* WARN_UNUSED GetSlowPathDataPtr() { return m_func->getArg(x_slowPathDataPtr); }
     llvm::Value* WARN_UNUSED GetSlowPathDataOffset() { return m_func->getArg(x_slowPathDataOffset); }
-    llvm::Value* WARN_UNUSED GetCodeBlock32() { return m_func->getArg(x_codeBlock32); }
+    llvm::Value* WARN_UNUSED GetBaselineCodeBlock32() { return m_func->getArg(x_baselineCodeBlock32); }
 
     llvm::Function* m_func;
 
@@ -202,7 +202,7 @@ struct BaselineJitCodegenFnProto
     static constexpr uint32_t x_jitUnalignedDataSecPtr = 2;
     static constexpr uint32_t x_slowPathDataOffset = 3;
     static constexpr uint32_t x_slowPathDataIndexPtr = 4;
-    static constexpr uint32_t x_codeBlock32 = 5;
+    static constexpr uint32_t x_baselineCodeBlock32 = 5;
     static constexpr uint32_t x_controlStructPtr = 6;
     static constexpr uint32_t x_jitFastPathPtr = 7;
     static constexpr uint32_t x_jitSlowPathPtr = 8;
@@ -629,7 +629,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         }
     };
 
-    // The codegen impl function expects outputSlot (slot 100), slowPathDataOffset (slot 103) and CodeBlock32 (slot 104) come first,
+    // The codegen impl function expects outputSlot (slot 100), slowPathDataOffset (slot 103) and BaselineCodeBlock32 (slot 104) come first,
     // followed by the list of all the bytecode operand values, even if they cannot be decoded or does not exist (in which case
     // undefined shall be passed)
     //
@@ -655,10 +655,10 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         bytecodeValList.push_back(fastPathEndI64);
     }
 
-    // Then slot 103 (slowPathDataOffset) and slot 104 (CodeBlock32)
+    // Then slot 103 (slowPathDataOffset) and slot 104 (BaselineCodeBlock32)
     //
     bytecodeValList.push_back(cg.GetSlowPathDataOffset());
-    bytecodeValList.push_back(cg.GetCodeBlock32());
+    bytecodeValList.push_back(cg.GetBaselineCodeBlock32());
 
     ReleaseAssert(opcodeRawValues.size() == bytecodeDef->m_list.size());
     for (size_t i = 0; i < bytecodeDef->m_list.size(); i++)
@@ -1069,7 +1069,7 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
                                                              advancedCondBrPatchRecPtr,
                                                              x_isDebugBuild ? cg.GetControlStructPtr() : UndefValue::get(llvm_type_of<void*>(ctx)),
                                                              advancedSlowPathDataOffset,
-                                                             cg.GetCodeBlock32());
+                                                             cg.GetBaselineCodeBlock32());
     entryBB->getInstList().push_back(ci);
     ReturnInst::Create(ctx, nullptr, entryBB);
 
@@ -1279,8 +1279,8 @@ void DeegenGenerateBaselineJitCompilerCppEntryFunction(llvm::Module* module)
     ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
     Value* slowPathDataIndexArray = GetMemberFromCppStruct<&CtlStruct::m_slowPathDataIndexArray>(ctlStruct, entryBB);
     ReleaseAssert(llvm_value_has_type<void*>(slowPathDataIndexArray));
-    Value* codeBlock32 = GetMemberFromCppStruct<&CtlStruct::m_codeBlock32>(ctlStruct, entryBB);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(codeBlock32));
+    Value* baselineCodeBlock32 = GetMemberFromCppStruct<&CtlStruct::m_baselineCodeBlock32>(ctlStruct, entryBB);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(baselineCodeBlock32));
     Value* initialSlowPathDataOffset = GetMemberFromCppStruct<&CtlStruct::m_initialSlowPathDataOffset>(ctlStruct, entryBB);
     ReleaseAssert(llvm_value_has_type<uint64_t>(initialSlowPathDataOffset));
     Value* bytecodeStream = GetMemberFromCppStruct<&CtlStruct::m_bytecodeStream>(ctlStruct, entryBB);
@@ -1300,7 +1300,7 @@ void DeegenGenerateBaselineJitCompilerCppEntryFunction(llvm::Module* module)
                                                              condBrPatchesArray,
                                                              x_isDebugBuild ? ctlStruct : UndefValue::get(llvm_type_of<void*>(ctx)),
                                                              initialSlowPathDataOffset,
-                                                             codeBlock32);
+                                                             baselineCodeBlock32);
     // This call is not (and cannot be) musttail because this is a C -> GHC call, but tail is still OK
     //
     ci->setTailCallKind(CallInst::TailCallKind::TCK_Tail);
@@ -1342,7 +1342,7 @@ void DeegenGenerateBaselineJitCodegenFinishFunction(llvm::Module* module)
         WriteCppStructMember<&CtlStruct::m_actualCondBrPatchesArrayEnd>(ctlStruct, cg.GetCondBrPatchRecPtr(), bb);
         WriteCppStructMember<&CtlStruct::m_actualSlowPathDataEnd>(ctlStruct, cg.GetSlowPathDataPtr(), bb);
         WriteCppStructMember<&CtlStruct::m_actualSlowPathDataIndexArrayEnd>(ctlStruct, cg.GetSlowPathDataIndexPtr(), bb);
-        WriteCppStructMember<&CtlStruct::m_actualCodeBlock32End>(ctlStruct, cg.GetCodeBlock32(), bb);
+        WriteCppStructMember<&CtlStruct::m_actualBaselineCodeBlock32End>(ctlStruct, cg.GetBaselineCodeBlock32(), bb);
         WriteCppStructMember<&CtlStruct::m_actualSlowPathDataOffsetEnd>(ctlStruct, cg.GetSlowPathDataOffset(), bb);
         WriteCppStructMember<&CtlStruct::m_actualBytecodeStreamEnd>(ctlStruct, cg.GetBytecodePtr(), bb);
     }

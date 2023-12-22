@@ -98,22 +98,23 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlacehold
     return res;
 }
 
-llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore)
+llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore, bool useAliasStencilOrd)
 {
     using namespace llvm;
     ReleaseAssert(!IsBaselineJitSlowPath());
-    return CreateOrGetConstantPlaceholderForOperand(103 /*ordinal*/,
+    size_t ordinalToUse = useAliasStencilOrd ? CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET : 103 /*ordinal*/;
+    return CreateOrGetConstantPlaceholderForOperand(ordinalToUse,
                                                     llvm_type_of<uint64_t>(insertBefore->getContext()),
                                                     1 /*lowerBound*/,
                                                     StencilRuntimeConstantInserter::GetLowAddrRangeUB(),
                                                     insertBefore);
 }
 
-llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd)
+llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd, bool useAliasStencilOrd)
 {
     using namespace llvm;
     UnreachableInst* dummy = new UnreachableInst(insertAtEnd->getContext(), insertAtEnd);
-    Value* res = GetSlowPathDataOffsetFromJitFastPath(dummy);
+    Value* res = GetSlowPathDataOffsetFromJitFastPath(dummy, useAliasStencilOrd);
     dummy->eraseFromParent();
     return res;
 }
@@ -212,9 +213,9 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         stackBase->setName(x_stackBase);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
-        Value* codeBlock = m_wrapper->getArg(3);
-        codeBlock->setName(x_codeBlock);
-        m_valuePreserver.Preserve(x_codeBlock, codeBlock);
+        Value* baselineCodeBlock = m_wrapper->getArg(3);
+        baselineCodeBlock->setName(x_baselineCodeBlock);
+        m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
 
         // The BaselineJitSlowPathData is only useful (and valid) for slow path
         //
@@ -247,26 +248,26 @@ void BaselineJitImplCreator::CreateWrapperFunction()
 
         if (IsBaselineJitSlowPath())
         {
-            // Decode the CodeBlock from the stack frame header
+            // Decode the BaselineCodeBlock from the stack frame header
             //
-            Instruction* codeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
-            ReleaseAssert(llvm_value_has_type<void*>(codeBlock));
+            Instruction* baselineCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
+            ReleaseAssert(llvm_value_has_type<void*>(baselineCodeBlock));
 
-            m_valuePreserver.Preserve(x_codeBlock, codeBlock);
+            m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
 
             // Decode BaselineJitSlowPathData, which is only useful (and valid) for slow path
             // Furthermore, since this is the return continuation, we must decode this value from the stack frame header
             //
             // Note that the 'm_callerBytecodePtr' is stored in the callee's stack frame header, so we should pass 'calleeStackBase' here
             //
-            Instruction* slowPathDataPtr = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineJitSlowpathDataAfterSlowCall", { calleeStackBase, codeBlock }, currentBlock);
+            Instruction* slowPathDataPtr = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineJitSlowpathDataAfterSlowCall", { calleeStackBase, baselineCodeBlock }, currentBlock);
             ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
             isNonJitSlowPath = true;
             m_valuePreserver.Preserve(x_jitSlowPathData, slowPathDataPtr);
         }
         else
         {
-            // For the JIT fast path, we only need to set up the CodeBlock, which is hardcoded as a stencil hole
+            // For the JIT fast path, we only need to set up the BaselineCodeBlock, which is hardcoded as a stencil hole
             // For now since we don't support encoding 64-bit constant, just translate from HeapPtr..
             //
             Value* val = CreateConstantPlaceholderForOperand(104 /*ordinal*/,
@@ -274,10 +275,10 @@ void BaselineJitImplCreator::CreateWrapperFunction()
                                                              1,
                                                              m_stencilRcInserter.GetLowAddrRangeUB(),
                                                              currentBlock);
-            Value* codeBlockHeapPtr = new IntToPtrInst(val, llvm_type_of<HeapPtr<void>>(ctx), "", currentBlock);
-            Value* codeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "SimpleTranslateToRawPointer", { codeBlockHeapPtr }, currentBlock);
-            ReleaseAssert(llvm_value_has_type<void*>(codeBlock));
-            m_valuePreserver.Preserve(x_codeBlock, codeBlock);
+            Value* baselineCodeBlockHeapPtr = new IntToPtrInst(val, llvm_type_of<HeapPtr<void>>(ctx), "", currentBlock);
+            Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "SimpleTranslateToRawPointer", { baselineCodeBlockHeapPtr }, currentBlock);
+            ReleaseAssert(llvm_value_has_type<void*>(baselineCodeBlock));
+            m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
         }
     }
 

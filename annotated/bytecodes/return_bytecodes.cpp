@@ -14,9 +14,10 @@ DEEGEN_DEFINE_BYTECODE(Ret0)
     Result(NoOutput);
     Implementation(ReturnNoneImpl);
     Variant();
+    DeclareAsIntrinsic<Intrinsic::FunctionReturn0>({});
 }
 
-static void NO_RETURN ReturnImpl(TValue* retStart, uint16_t numRet)
+static void NO_RETURN ReturnImpl(const TValue* retStart, uint16_t numRet)
 {
     GuestLanguageFunctionReturn(retStart, numRet);
 }
@@ -24,7 +25,7 @@ static void NO_RETURN ReturnImpl(TValue* retStart, uint16_t numRet)
 DEEGEN_DEFINE_BYTECODE(Ret)
 {
     Operands(
-        BytecodeRangeBaseRW("retStart"),
+        BytecodeRangeBaseRO("retStart"),
         Literal<uint16_t>("numRet")
     );
     Result(NoOutput);
@@ -36,9 +37,14 @@ DEEGEN_DEFINE_BYTECODE(Ret)
     Variant(Op("numRet").HasValue(4));
     Variant(Op("numRet").HasValue(5));
     Variant();
+    DeclareReads(Range(Op("retStart"), Op("numRet")));
+    DeclareAsIntrinsic<Intrinsic::FunctionReturn>({
+        .start = Op("retStart"),
+        .length = Op("numRet")
+    });
 }
 
-static void NO_RETURN ReturnAppendingVariadicResultsImpl(TValue* retStart, uint16_t numRet)
+static void NO_RETURN ReturnAppendingVariadicResultsImpl(const TValue* retStart, uint16_t numRet)
 {
     GuestLanguageFunctionReturnAppendingVariadicResults(retStart, numRet);
 }
@@ -46,7 +52,7 @@ static void NO_RETURN ReturnAppendingVariadicResultsImpl(TValue* retStart, uint1
 DEEGEN_DEFINE_BYTECODE(RetM)
 {
     Operands(
-        BytecodeRangeBaseRW("retStart"),
+        BytecodeRangeBaseRO("retStart"),
         Literal<uint16_t>("numRet")
     );
     Result(NoOutput);
@@ -57,6 +63,14 @@ DEEGEN_DEFINE_BYTECODE(RetM)
     Variant(Op("numRet").HasValue(3));
     Variant(Op("numRet").HasValue(4));
     Variant();
+    DeclareReads(
+        Range(Op("retStart"), Op("numRet")),
+        VariadicResults()
+    );
+    DeclareAsIntrinsic<Intrinsic::FunctionReturnAppendingVarRet>({
+        .start = Op("retStart"),
+        .length = Op("numRet")
+    });
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

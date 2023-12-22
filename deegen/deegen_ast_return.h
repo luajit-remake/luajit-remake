@@ -41,6 +41,21 @@ public:
         }
     }
 
+    // Return true if the given function contains a call to the 'Return()' API, so it may transfer control to the next bytecode
+    //
+    static bool WARN_UNUSED CheckMayFallthroughToNextBytecode(llvm::Function* func)
+    {
+        std::vector<AstBytecodeReturn> res = GetAllUseInFunction(func);
+        for (AstBytecodeReturn& item : res)
+        {
+            if (!item.DoesBranch())
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     llvm::CallInst* m_origin;
     // Whether this is a ReturnAndBranch API call
     //

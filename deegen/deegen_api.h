@@ -35,8 +35,8 @@ extern "C" void NO_RETURN DeegenImpl_ThrowErrorTValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorCString(const char* value);
 extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
-extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(TValue* retStart, size_t numRets);
-extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets);
+extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(const TValue* retStart, size_t numRets);
+extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(const TValue* retStart, size_t numRets);
 extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
 extern "C" size_t WARN_UNUSED ALWAYS_INLINE DeegenImpl_GetOutputBytecodeSlotOrdinal();
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetMutable(size_t ord);
@@ -97,12 +97,12 @@ inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn()
     DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 }
 
-inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn(TValue* retStart, size_t numRets)
+inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturn(const TValue* retStart, size_t numRets)
 {
     DeegenImpl_GuestLanguageFunctionReturn(retStart, numRets);
 }
 
-inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadicResults(TValue* retStart, size_t numRets)
+inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadicResults(const TValue* retStart, size_t numRets)
 {
     DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(retStart, numRets);
 }
@@ -339,6 +339,9 @@ void NO_RETURN ALWAYS_INLINE MakeCallPassingVariadicRes(Args... args)
 }
 
 // The tail call versions
+// Note that we require TailCall to be never mixed with other types of terminal API (except throw).
+// That is, you cannot write a bytecode that performs a tail call in one path but a Return() in another path.
+// If a bytecode may perform a TailCall, it must end with a TailCall (or Throw) in every possible control flow path.
 //
 template<typename... Args>
 void NO_RETURN ALWAYS_INLINE MakeTailCall(Args... args)

@@ -12,10 +12,12 @@ struct BytecodeBaselineJitTraits
     uint16_t m_fastPathCodeLen;
     uint16_t m_slowPathCodeLen;
     uint16_t m_dataSectionCodeLen;
-    uint16_t m_dataSectionAlignment;
-    uint16_t m_numCondBrLatePatches;
     uint16_t m_slowPathDataLen;
-    uint16_t m_bytecodeLength;
+    uint8_t m_dataSectionAlignment;
+    uint8_t m_bytecodeLength;
+    uint8_t m_numCondBrLatePatches;
+    uint8_t m_numCallIcSites;
+    uint16_t m_callIcSiteOffsetInSlowPathData;
     uint16_t m_unused;
 };
 // Make sure the size of this struct is a power of 2 to make addressing cheap
@@ -92,9 +94,9 @@ struct DeegenBaselineJitCodegenControlStruct
     void* m_slowPathDataIndexArray;
 
     // Inputs:
-    // The lower 32 bits of the input CodeBlock pointer
+    // The lower 32 bits of the input BaselineCodeBlock pointer
     //
-    uint64_t m_codeBlock32;
+    uint64_t m_baselineCodeBlock32;
     // The slowPathDataOffset for the first SlowPathData in BaselineCodeBlock
     //
     uint64_t m_initialSlowPathDataOffset;
@@ -113,7 +115,7 @@ struct DeegenBaselineJitCodegenControlStruct
     BaselineJitCondBrLatePatchRecord* m_actualCondBrPatchesArrayEnd;
     uint8_t* m_actualSlowPathDataEnd;
     void* m_actualSlowPathDataIndexArrayEnd;
-    uint64_t m_actualCodeBlock32End;
+    uint64_t m_actualBaselineCodeBlock32End;
     uint64_t m_actualSlowPathDataOffsetEnd;
     uint8_t* m_actualBytecodeStreamEnd;
 #endif

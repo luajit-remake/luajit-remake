@@ -384,11 +384,14 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
     ReleaseAssert(dispatchFn->getFunctionType() == fty);
 
     Value* callSiteInfo;
+    Value* cbOrBcb;
     if (ifi->IsInterpreter())
     {
         // For interpreter, we need to pass the bytecode pointer to the slow path
         //
-        callSiteInfo = ifi->GetCurBytecode();
+        InterpreterBytecodeImplCreator* ibc = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+        callSiteInfo = ibc->GetCurBytecode();
+        cbOrBcb = ibc->GetInterpreterCodeBlock();
     }
     else
     {
@@ -397,6 +400,7 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         // If we are already in baseline JIT slow path, we already have our BaselineJitSlowPathData pointer and just need to pass it around.
         //
         BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
+        cbOrBcb = j->GetBaselineCodeBlock();
         if (j->IsBaselineJitSlowPath())
         {
             callSiteInfo = j->GetJitSlowPathData();
@@ -404,14 +408,16 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         else
         {
             Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(m_origin);
-            Value* baselineJitCodeBlock = j->CallDeegenCommonSnippet("GetBaselineJitCodeBlockFromCodeBlock", { j->GetCodeBlock() }, m_origin);
+            Value* baselineJitCodeBlock = j->GetBaselineCodeBlock();
             ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
             callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", m_origin);
         }
     }
     ReleaseAssert(llvm_value_has_type<void*>(callSiteInfo));
 
-    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, ifi->GetCodeBlock(), m_origin /*insertBefore*/);
+    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(
+        dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, cbOrBcb, m_origin /*insertBefore*/);
+
     for (size_t i = 0; i < argOrdList.size(); i++)
     {
         uint32_t argOrd = static_cast<uint32_t>(argOrdList[i]);

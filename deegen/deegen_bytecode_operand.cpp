@@ -160,7 +160,6 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(DeegenByt
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
-    Value* codeBlock = ifi->GetCodeBlock();
     if (m_typeMask == x_typeSpeculationMaskFor<tNil>)
     {
         ReleaseAssert(bytecodeValue == nullptr);
@@ -172,11 +171,32 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(DeegenByt
     {
         ReleaseAssert(bytecodeValue != nullptr);
         ReleaseAssert(bytecodeValue->getType() == GetSourceValueFullRepresentationType(ctx));
-        Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), codeBlock, { bytecodeValue }, "", targetBB);
-        LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
-        bv->setAlignment(Align(8));
-        ReleaseAssert(bv->getType() == GetUsageType(ctx));
-        return bv;
+        if (ifi->IsInterpreter() || ifi->IsBaselineJIT())
+        {
+            // CodeBlock and BaselineCodeBlock share the same layout for constant table: the constant table
+            // just sits right before the CodeBlock struct. So we don't need to distinguish them here
+            //
+            Value* cbOrBcb;
+            if (ifi->IsInterpreter())
+            {
+                InterpreterBytecodeImplCreator* ibc = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+                cbOrBcb = ibc->GetInterpreterCodeBlock();
+            }
+            else
+            {
+                BaselineJitImplCreator* jbc = assert_cast<BaselineJitImplCreator*>(ifi);
+                cbOrBcb = jbc->GetBaselineCodeBlock();
+            }
+            Value* bvPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), cbOrBcb, { bytecodeValue }, "", targetBB);
+            LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", targetBB);
+            bv->setAlignment(Align(8));
+            ReleaseAssert(bv->getType() == GetUsageType(ctx));
+            return bv;
+        }
+        else
+        {
+            ReleaseAssert(false);
+        }
     }
 }
 
@@ -458,6 +478,92 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         return SpecializedOperand { kind, value };
     };
 
+    // Returns the C++ code that constructs the BytecodeRWCInfo as a string
+    //
+    struct ReadRCWExprResult
+    {
+        bool isApiCalled;
+        std::vector<std::string> preheaderLines;
+        std::vector<std::string> ctorItems;
+    };
+
+    auto readRCWExprList = [&](Constant* cst) -> ReadRCWExprResult {
+        using RCWDesc = Desc::DeclareRWCInfo;
+        using RangeDesc = Desc::Range;
+        using OperandExpr = Desc::OperandExpr;
+        using OperandExprNode = Desc::OperandExprNode;
+
+        std::vector<std::unique_ptr<std::string>> nameHolders;
+        auto readOperandExpr = [&](Constant* expr) -> OperandExpr
+        {
+            OperandExpr ex;
+            LLVMConstantStructReader r(module, expr);
+            size_t numNodes = r.GetValue<&OperandExpr::m_numNodes>();
+            ex.m_numNodes = numNodes;
+            ReleaseAssert(numNodes <= OperandExpr::x_maxNodes);
+            LLVMConstantArrayReader rd(module, r.Get<&OperandExpr::m_nodes>());
+            ReleaseAssert(rd.GetNumElements<OperandExprNode>() == OperandExpr::x_maxNodes);
+            for (size_t i = 0; i < numNodes; i++)
+            {
+                LLVMConstantStructReader rds(module, rd.Get<OperandExprNode>(i));
+                ex.m_nodes[i].m_kind = rds.GetValue<&OperandExprNode::m_kind>();
+                ex.m_nodes[i].m_left = rds.GetValue<&OperandExprNode::m_left>();
+                ex.m_nodes[i].m_right = rds.GetValue<&OperandExprNode::m_right>();
+                if (ex.m_nodes[i].m_kind == OperandExprNode::Kind::Operand)
+                {
+                    std::string operandName = GetValueFromLLVMConstantCString(rds.Get<&OperandExprNode::m_operandName>());
+                    nameHolders.push_back(std::make_unique<std::string>(operandName));
+                    ex.m_nodes[i].m_operandName = nameHolders.back().get()->c_str();
+                }
+                ex.m_nodes[i].m_number = rds.GetValue<&OperandExprNode::m_number>();
+            }
+            return ex;
+        };
+
+        LLVMConstantStructReader reader(module, cst);
+        if (!reader.GetValue<&RCWDesc::m_apiCalled>())
+        {
+            return ReadRCWExprResult { .isApiCalled = false };
+        }
+
+        std::vector<std::string> ctorItems, preheaderItems;
+        if (reader.GetValue<&RCWDesc::m_accessesVariadicArgs>())
+        {
+            ctorItems.push_back("BytecodeRWCDesc::CreateVarArgs()");
+        }
+        if (reader.GetValue<&RCWDesc::m_accessesVariadicResults>())
+        {
+            ctorItems.push_back("BytecodeRWCDesc::CreateVarRets()");
+        }
+
+        size_t numRanges = reader.GetValue<&RCWDesc::m_numRanges>();
+
+        LLVMConstantArrayReader exprArrayReader(module, reader.Get<&RCWDesc::m_ranges>());
+        ReleaseAssert(exprArrayReader.GetNumElements<RangeDesc>() == RCWDesc::x_maxRangeAnnotations);
+        ReleaseAssert(numRanges <= RCWDesc::x_maxRangeAnnotations);
+        for (size_t i = 0; i < numRanges; i++)
+        {
+            LLVMConstantStructReader rangeDescReader(module, exprArrayReader.Get<RangeDesc>(i));
+            OperandExpr start = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_start>());
+            OperandExpr len = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_len>());
+            ReleaseAssert(!start.IsInfinity());
+            preheaderItems.push_back("int64_t range_start_" + std::to_string(i) + " = " + start.PrintCppExpression("ops") + ";");
+            preheaderItems.push_back("TestAssert(range_start_" + std::to_string(i) + " >= 0);");
+            preheaderItems.push_back("int64_t range_len_" + std::to_string(i) + " = " + len.PrintCppExpression("ops") + ";");
+            if (!len.IsInfinity())
+            {
+                preheaderItems.push_back("TestAssert(range_len_" + std::to_string(i) + " >= 0);");
+            }
+            ctorItems.push_back("BytecodeRWCDesc::CreateRange(SafeIntegerCast<size_t>(range_start_" + std::to_string(i) + "), range_len_" + std::to_string(i) + ")");
+        }
+
+        return ReadRCWExprResult {
+            .isApiCalled = true,
+            .preheaderLines = preheaderItems,
+            .ctorItems = ctorItems
+        };
+    };
+
     std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> result;
     for (size_t curBytecodeOrd = 0; curBytecodeOrd < numBytecodesInThisTU; curBytecodeOrd++)
     {
@@ -475,6 +581,8 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         bool hasTValueOutput = curDefReader.GetValue<&Desc::m_hasTValueOutput>();
         bool canPerformBranch = curDefReader.GetValue<&Desc::m_canPerformBranch>();
         bool isInterpreterToBaselineJitOsrEntryPoint = curDefReader.GetValue<&Desc::m_isInterpreterTierUpPoint>();
+
+        size_t intrinsicOrd = curDefReader.GetValue<&Desc::m_intrinsicOrd>();
 
         std::vector<std::string> operandNames;
         std::vector<DeegenBytecodeOperandType> operandTypes;
@@ -503,6 +611,10 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             }
         }
 
+        ReadRCWExprResult bcwiseRCWReadInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareReadsInfo>());
+        ReadRCWExprResult bcwiseRCWWriteInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareWritesInfo>());
+        ReadRCWExprResult bcwiseRCWClobberInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareClobbersInfo>());
+
         LLVMConstantArrayReader variantListReader(module, curDefReader.Get<&Desc::m_variants>());
         for (size_t variantOrd = 0; variantOrd < numVariants; variantOrd++)
         {
@@ -525,6 +637,8 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_hasOutputValue = hasTValueOutput;
             def->m_hasConditionalBranchTarget = canPerformBranch;
             def->m_baselineJitSlowPathDataLength = static_cast<size_t>(-1);
+            def->m_bytecodeMayFallthroughToNextBytecodeDetermined = false;
+            def->m_bytecodeMayMakeTailCallDetermined = false;
             def->m_isInterpreterToBaselineJitOsrEntryPoint = isInterpreterToBaselineJitOsrEntryPoint;
             if (hasTValueOutput)
             {
@@ -681,6 +795,206 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 ReleaseAssert(def->m_quickening.size() > 0);
             }
 
+            ReadRCWExprResult variantRCWReadInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareReadsInfo>());
+            ReadRCWExprResult variantRCWWriteInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareWritesInfo>());
+            ReadRCWExprResult variantRCWClobberInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareClobbersInfo>());
+
+            enum class GenerateRCWKind
+            {
+                Read,
+                Write,
+                Clobber
+            };
+
+            auto generateRCWGetterFuncImpl = [&](ReadRCWExprResult& rcwInfo, GenerateRCWKind rcwKind) -> std::string
+            {
+                std::vector<std::string> ctorItems;
+                if (rcwKind == GenerateRCWKind::Write)
+                {
+                    // The explicit output must come first, if it exists
+                    //
+                    if (hasTValueOutput)
+                    {
+                        ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops.output.AsRawValue()))");
+                    }
+                }
+                if (rcwKind == GenerateRCWKind::Read)
+                {
+                    // Append all the direct inputs and constants to the read list
+                    //
+                    for (size_t i = 0; i < def->m_list.size(); i++)
+                    {
+                        bool isSpecialized = (operandTypes[i] == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+                        BcOperand* operand = def->m_list[i].get();
+                        if (operand->GetKind() == BcOperandKind::Slot)
+                        {
+                            ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops." + operand->OperandName() + (isSpecialized ? ".AsLocal()" : "") + ".AsRawValue()))");
+                        }
+                        else if (operand->GetKind() == BcOperandKind::Constant)
+                        {
+                            ctorItems.push_back("BytecodeRWCDesc::CreateConstant(ops." + operand->OperandName() + (isSpecialized ? ".AsConstant()" : ".m_value") + ")");
+                        }
+                    }
+                }
+                ctorItems.insert(ctorItems.end(), rcwInfo.ctorItems.begin(), rcwInfo.ctorItems.end());
+
+                std::string res = std::string("    BytecodeRWCInfo DeegenGetBytecode")
+                    + (rcwKind == GenerateRCWKind::Read ? "Read" : (rcwKind == GenerateRCWKind::Write ? "Write" : "Clobber"))
+                    + "DeclarationsImpl" + std::to_string(variantOrd) + "(size_t bcPos)\n";
+
+                res += "    {\n";
+                res += "        [[maybe_unused]] Operands ops = DeegenDecodeImpl" + std::to_string(variantOrd) + "(bcPos);\n";
+                for (const std::string& s : rcwInfo.preheaderLines)
+                {
+                    res += "        " + s + "\n";
+                }
+
+                res += "        return BytecodeRWCInfo (\n";
+                bool isFirstItem = true;
+                for (const std::string& s : ctorItems)
+                {
+                    if (!isFirstItem)
+                    {
+                        res += ",\n";
+                    }
+                    isFirstItem = false;
+                    res += "            " + s;
+                }
+                res += "\n        );\n";
+                res += "    }\n\n";
+
+                return res;
+            };
+
+            auto generateRCWGetterFunc = [&](ReadRCWExprResult& bcwiseInfo, ReadRCWExprResult& variantInfo, GenerateRCWKind rcwKind) -> std::string
+            {
+                if (bcwiseInfo.isApiCalled && variantInfo.isApiCalled)
+                {
+                    fprintf(stderr, "You should declare %s at either variant level or bytecode level, not both!\n",
+                            (rcwKind == GenerateRCWKind::Read ? "read" : (rcwKind == GenerateRCWKind::Write ? "write" : "clobber")));
+                    abort();
+                }
+                if (!bcwiseInfo.isApiCalled && !variantInfo.isApiCalled)
+                {
+                    for (size_t i = 0; i < def->m_list.size(); i++)
+                    {
+                        if (def->m_list[i]->GetKind() == BcOperandKind::BytecodeRangeBase)
+                        {
+                            if (rcwKind == GenerateRCWKind::Read)
+                            {
+                                fprintf(stderr, "You should declare reads if you used a BytecodeRange!\n");
+                                abort();
+                            }
+                            if (rcwKind == GenerateRCWKind::Write && !assert_cast<BcOpBytecodeRangeBase*>(def->m_list[i].get())->m_isReadOnly)
+                            {
+                                fprintf(stderr, "You should declare writes if you used a writable BytecodeRange!\n");
+                                abort();
+                            }
+                        }
+                    }
+                }
+
+                if (bcwiseInfo.isApiCalled)
+                {
+                    return generateRCWGetterFuncImpl(bcwiseInfo, rcwKind);
+                }
+                else
+                {
+                    return generateRCWGetterFuncImpl(variantInfo, rcwKind);
+                }
+            };
+
+            def->m_rcwInfoFuncs =
+                generateRCWGetterFunc(bcwiseRCWReadInfo, variantRCWReadInfo, GenerateRCWKind::Read)
+                + generateRCWGetterFunc(bcwiseRCWWriteInfo, variantRCWWriteInfo, GenerateRCWKind::Write)
+                + generateRCWGetterFunc(bcwiseRCWClobberInfo, variantRCWClobberInfo, GenerateRCWKind::Clobber);
+
+            def->m_bcIntrinsicOrd = intrinsicOrd;
+
+#define macro2(intrinsicName, ...) PP_STRINGIFY(intrinsicName),
+#define macro(item) macro2 item
+            constexpr const char* bcIntrinsicNames[] = { PP_FOR_EACH(macro, DEEGEN_BYTECODE_INTRINSIC_LIST) nullptr };
+#undef macro
+#undef macro2
+            constexpr size_t numBcIntrinsics = std::extent_v<decltype(bcIntrinsicNames)> - 1;
+
+            if (intrinsicOrd != static_cast<size_t>(-1))
+            {
+                ReleaseAssert(intrinsicOrd < numBcIntrinsics);
+                def->m_bcIntrinsicName = bcIntrinsicNames[intrinsicOrd];
+
+                auto generateIntrinsicInfoGetter = [&]() -> std::string
+                {
+                    size_t numIntrinsicArgs = curDefReader.GetValue<&Desc::m_numIntrinsicArgs>();
+                    ReleaseAssert(numIntrinsicArgs <= Desc::x_maxIntrinsicArgCount);
+                    std::vector<size_t> intrinsicArgOrd;
+                    LLVMConstantArrayReader rds(module, curDefReader.Get<&Desc::m_intrinsicArgOperandOrd>());
+                    ReleaseAssert(rds.GetNumElements<size_t>() == Desc::x_maxIntrinsicArgCount);
+                    for (size_t i = 0; i < numIntrinsicArgs; i++)
+                    {
+                        size_t argOrd = rds.GetValue<size_t>(i);
+                        ReleaseAssert(argOrd < def->m_list.size());
+                        intrinsicArgOrd.push_back(argOrd);
+                    }
+
+                    std::string res = "    BytecodeIntrinsicInfo::" + std::string(bcIntrinsicNames[intrinsicOrd])
+                        + " GetIntrinsicInfoImpl" + std::to_string(variantOrd) + "(size_t bcPos)\n";
+
+                    res += "    {\n";
+                    res += "        [[maybe_unused]] Operands ops = DeegenDecodeImpl" + std::to_string(variantOrd) + "(bcPos);\n";
+                    res += "        return BytecodeIntrinsicInfo::" + std::string(bcIntrinsicNames[intrinsicOrd]) + " {\n";
+                    bool isFirst = true;
+                    for (size_t argOrd : intrinsicArgOrd)
+                    {
+                        if (!isFirst)
+                        {
+                            res += ",\n";
+                        }
+                        isFirst = false;
+                        BcOperand* op = def->m_list[argOrd].get();
+                        bool isSpecialized = (operandTypes[argOrd] == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
+                        switch (op->GetKind())
+                        {
+                        case BcOperandKind::Slot:
+                        {
+                            res += "            LocalOrConstantOrNumber::CreateLocal(SafeIntegerCast<size_t>(ops."
+                                + op->OperandName() + (isSpecialized ? ".AsLocal()" : "") + ".AsRawValue()))";
+                            break;
+                        }
+                        case BcOperandKind::Constant:
+                        {
+                            res += "            LocalOrConstantOrNumber::CreateConstant(ops."
+                                + op->OperandName() + (isSpecialized ? ".AsConstant()" : ".m_value") + ")";
+                            break;
+                        }
+                        case BcOperandKind::Literal: [[fallthrough]];
+                        case BcOperandKind::SpecializedLiteral:
+                        {
+                            res += "            LocalOrConstantOrNumber::CreateNumber(ops."
+                                + op->OperandName() + ".AsRawValue())";
+                            break;
+                        }
+                        case BcOperandKind::BytecodeRangeBase:
+                        {
+                            res += "            LocalOrConstantOrNumber::CreateLocal(SafeIntegerCast<size_t>(ops."
+                                + op->OperandName() + ".AsRawValue()))";
+                            break;
+                        }
+                        case BcOperandKind::InlinedMetadata:
+                        {
+                            ReleaseAssert(false);
+                        }
+                        }
+                    }
+                    res += "\n        };\n";
+                    res += "    }\n\n";
+                    return res;
+                };
+
+                def->m_bcIntrinsicInfoGetterFunc = generateIntrinsicInfoGetter();
+            }
+
+
             listForCurrentBytecode.push_back(std::move(def));
         }
     }
@@ -733,6 +1047,7 @@ void BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemov
 }
 
 BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
+    : BytecodeVariantDefinition()
 {
     JSONCheckedGet(j, "bytecode_ord_in_tu", m_bytecodeOrdInTU);
     JSONCheckedGet(j, "bytecode_variant_ord", m_variantOrd);
@@ -790,6 +1105,14 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     JSONCheckedGet(j, "num_total_generic_ic_effect_kinds", m_totalGenericIcEffectKinds);
 
     JSONCheckedGet(j, "is_interpreter_to_baseline_jit_osr_entry_point", m_isInterpreterToBaselineJitOsrEntryPoint);
+    JSONCheckedGet(j, "rcw_info_funcs", m_rcwInfoFuncs);
+
+    JSONCheckedGet(j, "bc_intrinsic_ord", m_bcIntrinsicOrd);
+    JSONCheckedGet(j, "bc_intrinsic_info_getter", m_bcIntrinsicInfoGetterFunc);
+    JSONCheckedGet(j, "bc_intrinsic_name", m_bcIntrinsicName);
+
+    m_bytecodeMayFallthroughToNextBytecodeDetermined = false;
+    m_bytecodeMayMakeTailCallDetermined = false;
 
     {
         int quickeningKindInt = JSONCheckedGet<int>(j, "quickening_kind");
@@ -860,6 +1183,11 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
     j["num_total_generic_ic_effect_kinds"] = GetTotalGenericIcEffectKinds();
 
     j["is_interpreter_to_baseline_jit_osr_entry_point"] = m_isInterpreterToBaselineJitOsrEntryPoint;
+    j["rcw_info_funcs"] = m_rcwInfoFuncs;
+
+    j["bc_intrinsic_ord"] = m_bcIntrinsicOrd;
+    j["bc_intrinsic_info_getter"] = m_bcIntrinsicInfoGetterFunc;
+    j["bc_intrinsic_name"] = m_bcIntrinsicName;
 
     j["quickening_kind"] = static_cast<int>(m_quickeningKind);
 

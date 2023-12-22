@@ -4,6 +4,13 @@
 #include "heap_ptr_utils.h"
 #include "tvalue.h"
 #include "deegen_metadata_accessor.h"
+#include "bytecode_rwc_info.h"
+#include "bytecode_intrinsic_info.h"
+
+// We need two extra bytes to store the "stopper" bytecode opcode at the end for baseline JIT codegen,
+// but for legacy reason this value is 4 and I don't want to change it anymore
+//
+static constexpr size_t x_numExtraPaddingAtBytecodeStreamEnd = 4;
 
 namespace DeegenBytecodeBuilder
 {
@@ -14,6 +21,7 @@ struct Local
 {
     explicit Local(uint64_t ord) : m_localOrd(ord) { }
     bool operator==(const Local& other) const { return m_localOrd == other.m_localOrd; }
+    int64_t AsRawValue() { return static_cast<int64_t>(m_localOrd); }
 
     uint64_t m_localOrd;
 };
@@ -145,6 +153,10 @@ struct ForbidUninitialized
     ForbidUninitialized(T v) : m_value(v) { }
     bool operator==(const T& other) const { return m_value == other; }
 
+    int64_t AsRawValue() { return SafeIntegerCast<int64_t>(m_value); }
+
+    static_assert(std::is_integral_v<T>);
+
     T m_value;
 };
 
@@ -159,7 +171,7 @@ struct MetadataFieldPatchRecord
 //
 uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeStart, size_t bytecodeLen, const uint16_t* numOfEachMetadataKind, const std::vector<MetadataFieldPatchRecord>& patchList);
 
-template<typename MetadataTypeListInfo>
+template<bool isDecodingMode, typename MetadataTypeListInfo>
 class BytecodeBuilderBase
 {
     MAKE_NONCOPYABLE(BytecodeBuilderBase);
@@ -168,15 +180,12 @@ class BytecodeBuilderBase
     static constexpr size_t x_numBytecodeMetadataKinds = MetadataTypeListInfo::numElements;
 
 public:
-    friend class BytecodeBuilder;
-
-    // We only need two extra bytes to store the "stopper" bytecode opcode at the end for baseline JIT codegen,
-    // but giving it 4 bytes doesn't hurt anything either..
-    //
-    static constexpr size_t x_numExtraPaddingAtEnd = 4;
+    template<bool>
+    friend class BytecodeAccessor;
 
     std::pair<uint64_t*, size_t> GetBuiltConstantTable()
     {
+        assert(!isDecodingMode);
         // Internally, to better fit our implementation, we store the constant table reversed, and index it with negative indices.
         // So now it's time to reverse the constant table before returning to user.
         //
@@ -188,6 +197,7 @@ public:
 
     uint32_t GetBytecodeMetadataTotalLength()
     {
+        assert(!isDecodingMode);
         if (!m_metadataFieldPatched)
         {
             m_metadataFieldPatched = true;
@@ -199,6 +209,7 @@ public:
 
     const std::array<uint16_t, x_numBytecodeMetadataKinds>& GetBytecodeMetadataUseCountArray()
     {
+        assert(!isDecodingMode);
         return m_bytecodeMetadataCnt;
     }
 
@@ -207,9 +218,15 @@ public:
         return static_cast<size_t>(m_bufferCur - m_bufferBegin);
     }
 
+    constexpr bool IsDecodingMode()
+    {
+        return isDecodingMode;
+    }
+
 protected:
     BytecodeBuilderBase()
     {
+        TestAssert(!isDecodingMode);
         constexpr size_t initialSize = 128;
         m_bufferBegin = new uint8_t[initialSize];
         m_bufferCur = m_bufferBegin;
@@ -218,9 +235,18 @@ protected:
         m_metadataFieldPatched = false;
     }
 
+    BytecodeBuilderBase(uint8_t* bytecodeStream, size_t bytecodeStreamLength, TValue* constantTableEndInDecodingMode)
+    {
+        TestAssert(isDecodingMode);
+        m_bufferBegin = bytecodeStream;
+        m_bufferCur = bytecodeStream + bytecodeStreamLength;
+        m_bufferEnd = m_bufferCur;
+        m_constantTableEndInDecodingMode = constantTableEndInDecodingMode;
+    }
+
     ~BytecodeBuilderBase()
     {
-        if (m_bufferBegin != nullptr)
+        if (!isDecodingMode && m_bufferBegin != nullptr)
         {
             delete [] m_bufferBegin;
             m_bufferBegin = nullptr;
@@ -229,6 +255,7 @@ protected:
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequenceImpl()
     {
+        assert(!isDecodingMode);
         if (!m_metadataFieldPatched)
         {
             m_metadataFieldPatched = true;
@@ -236,14 +263,15 @@ protected:
         }
 
         size_t len = GetCurLength();
-        uint8_t* res = new uint8_t[len + x_numExtraPaddingAtEnd];
+        uint8_t* res = new uint8_t[len + x_numExtraPaddingAtBytecodeStreamEnd];
         memcpy(res, GetBytecodeStart(), len);
-        memset(res + len, 0, x_numExtraPaddingAtEnd);
-        return std::make_pair(res, len + x_numExtraPaddingAtEnd);
+        memset(res + len, 0, x_numExtraPaddingAtBytecodeStreamEnd);
+        return std::make_pair(res, len + x_numExtraPaddingAtBytecodeStreamEnd);
     }
 
     uint8_t* Reserve(size_t size)
     {
+        assert(!isDecodingMode);
         if (likely(m_bufferEnd - m_bufferCur >= static_cast<ssize_t>(size)))
         {
             return m_bufferCur;
@@ -263,6 +291,7 @@ protected:
 
     void MarkWritten(size_t size)
     {
+        assert(!isDecodingMode);
         m_bufferCur += size;
         assert(m_bufferCur <= m_bufferEnd);
     }
@@ -274,6 +303,7 @@ protected:
 
     int64_t InsertConstantIntoTable(TValue cst)
     {
+        assert(!isDecodingMode);
         uint64_t v = cst.m_value;
         auto res = m_constantTableLocationMap.emplace(std::make_pair(v, m_constantTable.size()));
         auto it = res.first;
@@ -296,18 +326,28 @@ protected:
         return -static_cast<int64_t>(constantTableOrd) - 1;
     }
 
-    TValue GetConstantFromConstantTable(int64_t ord)
+public:
+    TValue ALWAYS_INLINE GetConstantFromConstantTable(int64_t ord)
     {
         assert(ord < 0);
-        ord = -(ord + 1);
-        assert(static_cast<size_t>(ord) < m_constantTable.size());
-        TValue res; res.m_value = m_constantTable[static_cast<size_t>(ord)];
-        return res;
+        if constexpr(isDecodingMode)
+        {
+            return m_constantTableEndInDecodingMode[ord];
+        }
+        else
+        {
+            ord = -(ord + 1);
+            assert(static_cast<size_t>(ord) < m_constantTable.size());
+            TValue res; res.m_value = m_constantTable[static_cast<size_t>(ord)];
+            return res;
+        }
     }
 
+protected:
     template<typename MetadataType>
     void RegisterMetadataField(uint8_t* ptr)
     {
+        assert(!isDecodingMode);
         constexpr size_t typeOrd = MetadataTypeListInfo::template typeOrdinal<MetadataType>;
         static_assert(typeOrd < x_numBytecodeMetadataKinds);
         uint16_t index = m_bytecodeMetadataCnt[typeOrd];
@@ -321,7 +361,7 @@ protected:
     }
 
 private:
-    void CopyAndReverseConstantTable(RestrictPtr<uint64_t> dst /*out*/, RestrictPtr<uint64_t> src, size_t len)
+    static void CopyAndReverseConstantTable(RestrictPtr<uint64_t> dst /*out*/, RestrictPtr<uint64_t> src, size_t len)
     {
         for (size_t i = 0; i < len; i++)
         {
@@ -331,6 +371,7 @@ private:
 
     void PatchMetadataFields()
     {
+        assert(!isDecodingMode);
         // This is lame: due to header file dependency issues, this implementation has to sit in a CPP file..
         // So we are assuming that our template parameter 'MetadataTypeListInfo' is just the BytecodeMetadataTypeListInfo
         // define in bytecode_builder.h, but we cannot assert it. Honestly this is fragile, but let's go with it for now.
@@ -339,7 +380,7 @@ private:
         //
         m_bytecodeMetadataLength = PatchBytecodeMetadataFields(
             m_bufferBegin /*bytecodeStart*/,
-            GetCurLength() + x_numExtraPaddingAtEnd /*bytecodeLen*/,
+            GetCurLength() + x_numExtraPaddingAtBytecodeStreamEnd /*bytecodeLen*/,
             m_bytecodeMetadataCnt.data(),
             m_metadataFieldPatchRecords);
     }
@@ -347,6 +388,8 @@ private:
     uint8_t* m_bufferBegin;
     uint8_t* m_bufferCur;
     uint8_t* m_bufferEnd;
+
+    TValue* m_constantTableEndInDecodingMode;
 
     std::vector<uint64_t> m_constantTable;
     // TODO: We probably don't want to use std::unordered_map since it's so poorly implemented.. but let's stay simple for now

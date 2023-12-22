@@ -111,7 +111,6 @@ void TestModuleOneCase(llvm::Module* moduleIn,
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    calleeCb->m_bytecode = reinterpret_cast<uint8_t*>(calleeCb) + CodeBlock::GetTrailingArrayOffset();
     HeapPtr<FunctionObject> calleefo = FunctionObject::Create(vm, calleeCb).As();
 
     CodeBlock* callerCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
@@ -119,8 +118,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     callerCb->m_bestEntryPoint = nullptr;
     callerCb->m_numUpvalues = 0;
     callerCb->m_stackFrameNumSlots = static_cast<uint32_t>(numLocals);
-    callerCb->m_bytecode =reinterpret_cast<uint8_t*>(callerCb) + CodeBlock::GetTrailingArrayOffset();
-    uint8_t* curBytecode = callerCb->m_bytecode + 50;
+    uint8_t* curBytecode = callerCb->GetBytecodeStream() + 50;
     HeapPtr<FunctionObject> callerfo = FunctionObject::Create(vm, callerCb).As();
 
     std::unordered_map<Instruction*, Value*> replaceInstByValueMap;

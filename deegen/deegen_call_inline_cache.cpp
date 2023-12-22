@@ -630,7 +630,7 @@ static llvm::FunctionType* WARN_UNUSED GetBaselineJitCallIcSlowPathFnPrototype(l
     FunctionType* fty = FunctionType::get(
         retTy,
         {
-            llvm_type_of<void*>(ctx),           // CodeBlock
+            llvm_type_of<void*>(ctx),           // BaselineCodeBlock
             llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
             llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
             llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
@@ -749,7 +749,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         CallInst* codeBlockAndEntryPoint = CallInst::Create(
             icCreatorFn,
             {
-                ifi->GetCodeBlock(),
+                ifi->GetBaselineCodeBlock(),
                 slowPathDataOffset,
                 slowPathAddrOfThisStencil,
                 dataSecAddrOfThisStencil,
@@ -2218,7 +2218,10 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     FunctionType* fty = FunctionType::get(
         retTy,
         {
-            llvm_type_of<void*>(ctx),           // CodeBlock
+            // This is lame: in new design we no longer need CodeBlock, but I just don't want to change this code now..
+            // It will go away after inlining anyway, so don't bother.
+            //
+            llvm_type_of<void*>(ctx),           // CodeBlock, unused
             llvm_type_of<void*>(ctx),           // BaselineCodeBlock
             llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
             llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
@@ -2234,7 +2237,6 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     CopyFunctionAttributes(fn, dcCgFn);
     fn->setDSOLocal(true);
 
-    fn->addParamAttr(0, Attribute::NoAlias);
     fn->addParamAttr(1, Attribute::NoAlias);
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", fn);
@@ -2243,7 +2245,6 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), transitedToCCModeAlloca, entryBB);
 
-    Value* codeBlock = fn->getArg(0);
     Value* baselineCodeBlock = fn->getArg(1);
     Value* slowPathDataOffset = fn->getArg(2);
     Value* slowPathData = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineCodeBlock, { slowPathDataOffset }, "", entryBB);
@@ -2260,11 +2261,13 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddrOfOwningStencil, llvm_type_of<uint64_t>(ctx), "", entryBB);
     Value* dataSecAddrI64 = new PtrToIntInst(dataSecAddrOfOwningStencil, llvm_type_of<uint64_t>(ctx), "", entryBB);
 
-    Value* codeBlock32;
+    Value* baselineCodeBlock32;
     {
-        Value* tmp = new PtrToIntInst(codeBlock, llvm_type_of<uint64_t>(ctx), "", entryBB);
+        // Ugly: this relies on the fact that BaselineCodeBlock lives in the system heap, so we can truncate to 32 bit and get a 2GB pointer
+        //
+        Value* tmp = new PtrToIntInst(baselineCodeBlock, llvm_type_of<uint64_t>(ctx), "", entryBB);
         tmp = new TruncInst(tmp, llvm_type_of<uint32_t>(ctx), "", entryBB);
-        codeBlock32 = new ZExtInst(tmp, llvm_type_of<uint64_t>(ctx), "", entryBB);
+        baselineCodeBlock32 = new ZExtInst(tmp, llvm_type_of<uint64_t>(ctx), "", entryBB);
     }
 
     size_t icSiteOffsetInSlowPathData = ifi->GetBytecodeDef()->GetBaselineJitCallIcSiteOffsetInSlowPathData(icInfo.m_uniqueOrd);
@@ -2365,7 +2368,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         std::vector<Value*> args;
         args.push_back(outputAddr);
         args.push_back(slowPathDataOffset);
-        args.push_back(codeBlock32);
+        args.push_back(baselineCodeBlock32);
         args.push_back(fastPathAddrI64);
         args.push_back(slowPathAddrI64);
         args.push_back(dataSecAddrI64);
@@ -2442,7 +2445,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
                                                                                                                          slowPathData,
                                                                                                                          slowPathDataOffset,
-                                                                                                                         codeBlock32,
+                                                                                                                         baselineCodeBlock32,
                                                                                                                          insertIcDcModeBB /*insertAtEnd*/);
         Value* condBrDest = getCondBrDestU64(insertIcDcModeBB);
         emitCallToIcCodegenFn(dcCgFn,
@@ -2460,7 +2463,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
                                                                                                                      slowPathData,
                                                                                                                      slowPathDataOffset,
-                                                                                                                     codeBlock32,
+                                                                                                                     baselineCodeBlock32,
                                                                                                                      ccBB /*insertAtEnd*/);
     Value* condBrDest = getCondBrDestU64(ccBB);
 
@@ -2581,8 +2584,17 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     {
         BasicBlock* finalFnBB = BasicBlock::Create(ctx, "", finalFn);
-        CallInst* bcbPtr = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlock", { finalFn->getArg(0) }, finalFnBB);
-        CallInst* finalFnRes = CallInst::Create(fn, { finalFn->getArg(0), bcbPtr, finalFn->getArg(1), finalFn->getArg(2), finalFn->getArg(3), finalFn->getArg(4) }, "", finalFnBB);
+        CallInst* finalFnRes = CallInst::Create(
+            fn,
+            {
+                UndefValue::get(llvm_type_of<void*>(ctx)),      // the unused "CodeBlock" parameter
+                finalFn->getArg(0),
+                finalFn->getArg(1),
+                finalFn->getArg(2),
+                finalFn->getArg(3),
+                finalFn->getArg(4)
+            },
+            "", finalFnBB);
         ReturnInst::Create(ctx, finalFnRes, finalFnBB);
     }
 

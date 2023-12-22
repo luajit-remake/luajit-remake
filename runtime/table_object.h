@@ -3178,6 +3178,11 @@ get_next_from_sparse_map:
         uint32_t m_vectorStorageOrd;
         uint32_t m_sparseMapOrd;
     };
+    // Ugly: m_state must come after the union, so it occupies the higher bytes (due to little endianness).
+    // And since its highest bit is 0, this will make the TableObjectIterator look like a double due to
+    // our TValue boxing scheme, which is safe (it would be unsafe if it looks like a pointer, as DFG JIT
+    // logic may try to dereference it).
+    //
     IteratorState m_state;
 };
 // This struct must fit in 8 bytes as that's all we have on the stack to store it.

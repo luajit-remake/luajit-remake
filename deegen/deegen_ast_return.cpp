@@ -112,7 +112,7 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
         Instruction* offset64 = new SExtInst(bytecodeOffset, llvm_type_of<int64_t>(ctx), "", m_origin /*insertBefore*/);
         bytecodeTarget = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCurBytecode(), { offset64 }, "", m_origin /*insertBefore*/);
 
-        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForBranch", { ifi->GetCodeBlock(), ifi->GetCurBytecode(), bytecodeTarget }, m_origin /*insertBefore*/);
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForBranch", { ifi->GetInterpreterCodeBlock(), ifi->GetCurBytecode(), bytecodeTarget }, m_origin /*insertBefore*/);
     }
     else
     {
@@ -132,7 +132,7 @@ void AstBytecodeReturn::DoLoweringForInterpreter(InterpreterBytecodeImplCreator*
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
         bytecodeTarget,
-        ifi->GetCodeBlock(),
+        ifi->GetInterpreterCodeBlock(),
         m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
@@ -178,7 +178,7 @@ void AstBytecodeReturn::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
         UndefValue::get(llvm_type_of<void*>(ctx)),
-        ifi->GetCodeBlock(),
+        ifi->GetBaselineCodeBlock(),
         m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);

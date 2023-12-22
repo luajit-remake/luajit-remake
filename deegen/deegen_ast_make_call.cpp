@@ -465,7 +465,20 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
 
             // Figure out the base of the new stack frame
             //
-            Value* endOfStackFrame = ifi->CallDeegenCommonSnippet("GetEndOfCallFrame", { ifi->GetStackBase(), ifi->GetCodeBlock() }, m_origin /*insertBefore*/);
+            Value* endOfStackFrame;
+            if (ifi->IsInterpreter())
+            {
+                InterpreterBytecodeImplCreator* ibc = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+                endOfStackFrame = ibc->CallDeegenCommonSnippet(
+                    "GetEndOfCallFrameFromInterpreterCodeBlock", { ibc->GetStackBase(), ibc->GetInterpreterCodeBlock() }, m_origin /*insertBefore*/);
+            }
+            else
+            {
+                ReleaseAssert(ifi->IsBaselineJIT());
+                BaselineJitImplCreator* jbc = assert_cast<BaselineJitImplCreator*>(ifi);
+                endOfStackFrame = jbc->CallDeegenCommonSnippet(
+                    "GetEndOfCallFrameFromBaselineCodeBlock", { jbc->GetStackBase(), jbc->GetBaselineCodeBlock() }, m_origin /*insertBefore*/);
+            }
             ReleaseAssert(llvm_value_has_type<void*>(endOfStackFrame));
 
             newSfBase = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, endOfStackFrame, { CreateLLVMConstantInt<uint64_t>(ctx, x_numSlotsForStackFrameHeader) }, "", m_origin);
@@ -811,7 +824,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     {
         // A tail call is implicitly a return, must update tier-up counter
         //
-        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { ifi->GetCodeBlock(), ifi->GetCurBytecode() }, m_origin);
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { ifi->GetInterpreterCodeBlock(), ifi->GetCurBytecode() }, m_origin);
     }
 
     // Get the code pointer and the callee CodeBlock
@@ -940,6 +953,56 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
         Instruction* unreachableInst = origin->getNextNode();
         origin->eraseFromParent();
         unreachableInst->eraseFromParent();
+    }
+
+    ValidateLLVMFunction(func);
+}
+
+
+std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunctionInDeterministicOrder(llvm::Function* func)
+{
+    using namespace llvm;
+    std::vector<AstMakeCall> res = GetAllUseInFunction(func);
+
+    // We must determine a deterministic order of matching calls to call IC ordinals,
+    // as the optimizing JIT needs to inspect the call IC to figure out exactly which call is executed.
+    //
+    // Here, we simply use the placeholder function name to deterministically order all the calls.
+    //
+    std::map<std::string, AstMakeCall> sortedCalls;
+    for (AstMakeCall& amc : res)
+    {
+        Function* placeholderFn = amc.m_origin->getCalledFunction();
+        ReleaseAssert(placeholderFn != nullptr);
+        std::string placeholderFnName = placeholderFn->getName().str();
+        ReleaseAssert(!sortedCalls.count(placeholderFnName));
+        sortedCalls[placeholderFnName] = amc;
+    }
+
+    ReleaseAssert(sortedCalls.size() == res.size());
+    res.clear();
+    for (auto& it : sortedCalls)
+    {
+        res.push_back(it.second);
+    }
+
+    return res;
+}
+
+void AstMakeCall::LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
+{
+    std::vector<AstMakeCall> res = GetAllUseInFunctionInDeterministicOrder(func);
+
+    if (ifi->IsMainComponent())
+    {
+        // The # of calls must equal the # of JIT call ICs, assert this
+        //
+        ReleaseAssert(res.size() == ifi->GetBytecodeDef()->GetNumCallICsInJitTier());
+    }
+
+    for (size_t i = 0; i < res.size(); i++)
+    {
+        res[i].DoLoweringForBaselineJIT(ifi, i /*uniqueOrd*/);
     }
 
     ValidateLLVMFunction(func);

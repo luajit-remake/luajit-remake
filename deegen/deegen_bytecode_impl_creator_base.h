@@ -38,7 +38,6 @@ public:
     llvm::Value* GetCoroutineCtx() const { return m_valuePreserver.Get(x_coroutineCtx); }
     llvm::Value* GetStackBase() const { return m_valuePreserver.Get(x_stackBase); }
     llvm::Value* GetCurBytecode() const { return m_valuePreserver.Get(x_curBytecode); }
-    llvm::Value* GetCodeBlock() const { return m_valuePreserver.Get(x_codeBlock); }
 
     // The two functions below are only valid for return continuations
     //
@@ -70,7 +69,6 @@ protected:
     static constexpr const char* x_coroutineCtx = "coroutineCtx";
     static constexpr const char* x_stackBase = "stackBase";
     static constexpr const char* x_curBytecode = "curBytecode";
-    static constexpr const char* x_codeBlock = "codeBlock";
     static constexpr const char* x_retStart = "retStart";
     static constexpr const char* x_numRet = "numRet";
     static constexpr const char* x_outputSlot = "outputSlot";

@@ -1212,47 +1212,81 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
             case LJOpcode::CALLM:
             {
                 TestAssert(opdata.size() == 3);
-                // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
-                // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
-                //
-                int16_t numResults = SafeIntegerCast<int16_t>(opdata[1] - 1);
                 // For CALLM, C holds # of fixed params
                 //
                 uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[2]);
-                bw.CreateCallM({
-                    .base = local(opdata[0]),
-                    .numArgs = numFixedParams,
-                    .numRets = numResults
-                });
+                // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
+                //
+                if (opdata[1] == 0)
+                {
+                    bw.CreateCallMR({
+                        .base = local(opdata[0]),
+                        .numArgs = numFixedParams,
+                        .numRets = 0
+                    });
 #ifndef NDEBUG
-                auto operands = bw.DecodeCallM(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
-                assert(operands.numArgs == numFixedParams);
-                assert(operands.numRets == numResults);
+                    auto operands = bw.DecodeCallMR(bcPosForCurBytecode);
+                    assert(operands.base == local(opdata[0]));
+                    assert(operands.numArgs == numFixedParams);
+                    assert(operands.numRets == 0);
 #endif
+                }
+                else
+                {
+                    assert(opdata[1] > 0);
+                    uint16_t numResults = static_cast<uint16_t>(opdata[1] - 1);
+                    bw.CreateCallM({
+                        .base = local(opdata[0]),
+                        .numArgs = numFixedParams,
+                        .numRets = numResults
+                    });
+#ifndef NDEBUG
+                    auto operands = bw.DecodeCallM(bcPosForCurBytecode);
+                    assert(operands.base == local(opdata[0]));
+                    assert(operands.numArgs == numFixedParams);
+                    assert(operands.numRets == numResults);
+#endif
+                }
                 break;
             }
             case LJOpcode::CALL:
             {
                 TestAssert(opdata.size() == 3);
-                // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
-                // Coincidentally we use -1 to represent 'store all results', so we can simply subtract 1
-                //
-                int16_t numResults = SafeIntegerCast<int16_t>(opdata[1] - 1);
                 // For CALL, C holds 1 + # of fixed params
                 //
                 uint16_t numFixedParams = SafeIntegerCast<uint16_t>(opdata[2] - 1);
-                bw.CreateCall({
-                    .base = local(opdata[0]),
-                    .numArgs = numFixedParams,
-                    .numRets = numResults
-                });
+                // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
+                //
+                if (opdata[1] == 0)
+                {
+                    bw.CreateCallR({
+                        .base = local(opdata[0]),
+                        .numArgs = numFixedParams,
+                        .numRets = 0
+                    });
 #ifndef NDEBUG
-                auto operands = bw.DecodeCall(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
-                assert(operands.numArgs == numFixedParams);
-                assert(operands.numRets == numResults);
+                    auto operands = bw.DecodeCallR(bcPosForCurBytecode);
+                    assert(operands.base == local(opdata[0]));
+                    assert(operands.numArgs == numFixedParams);
+                    assert(operands.numRets == 0);
 #endif
+                }
+                else
+                {
+                    assert(opdata[1] > 0);
+                    uint16_t numResults = static_cast<uint16_t>(opdata[1] - 1);
+                    bw.CreateCall({
+                        .base = local(opdata[0]),
+                        .numArgs = numFixedParams,
+                        .numRets = numResults
+                    });
+#ifndef NDEBUG
+                    auto operands = bw.DecodeCall(bcPosForCurBytecode);
+                    assert(operands.base == local(opdata[0]));
+                    assert(operands.numArgs == numFixedParams);
+                    assert(operands.numRets == numResults);
+#endif
+                }
                 break;
             }
             case LJOpcode::CALLMT:
@@ -1937,7 +1971,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
         ucb->m_cstTable = constantTableData.first;
 
         ucb->m_bytecode = bytecodeData.first;
-        ucb->m_bytecodeLength = static_cast<uint32_t>(bytecodeData.second);
+        ucb->m_bytecodeLengthIncludingTailPadding = static_cast<uint32_t>(bytecodeData.second);
         ucb->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
         const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
         assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);

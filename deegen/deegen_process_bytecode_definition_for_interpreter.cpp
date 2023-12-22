@@ -705,11 +705,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 : m_length(static_cast<size_t>(-1))
                 , m_outputOperandOffset(static_cast<size_t>(-1))
                 , m_branchOperandOffset(static_cast<size_t>(-1))
+                , m_variantOrd(static_cast<size_t>(-1))
+                , m_isBarrier(false)
+                , m_mayMakeTailCall(false)
             { }
 
             size_t m_length;
             size_t m_outputOperandOffset;
             size_t m_branchOperandOffset;
+            size_t m_variantOrd;
+            bool m_isBarrier;
+            bool m_mayMakeTailCall;
         };
 
         // Only contains the primitive (non-quickening) variants
@@ -718,6 +724,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         std::unordered_map<size_t /*variantOrd*/, size_t /*opcodeVariantOrdinal*/> opcodeVariantOrdinalMap;
 
+        size_t bytecodeDfgNsdLength = static_cast<size_t>(-1);
         size_t currentBytecodeVariantOrdinal = 0;
         for (auto& bytecodeVariantDef : bytecodeDef)
         {
@@ -727,6 +734,9 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             BytecodeIrInfo* bii = bvdImplMap[bytecodeVariantDef.get()].get();
             std::unique_ptr<Module> resultModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*bii);
             std::vector<std::string> affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
+
+            traitInfo.m_isBarrier = !bytecodeVariantDef->BytecodeMayFallthroughToNextBytecode();
+            traitInfo.m_mayMakeTailCall = bytecodeVariantDef->BytecodeMayMakeTailCall();
 
             size_t totalSubVariantsInThisVariant = 1 + affliatedFunctionNameList.size();
             totalCreatedBytecodeFunctionsInThisBytecode += totalSubVariantsInThisVariant;
@@ -991,12 +1001,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             // Generate the implementation that decodes the bytecode
             //
-            fprintf(fp, "    Operands DeegenDecodeImpl%u(size_t bcPos)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "    Operands ALWAYS_INLINE DeegenDecodeImpl%u(size_t bcPos)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             fprintf(fp, "    {\n");
 
             fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
             fprintf(fp, "        [[maybe_unused]] uint8_t* base = crtp->GetBytecodeStart() + bcPos;\n");
-            fprintf(fp, "        assert(UnalignedLoad<uint16_t>(base) == CRTP::template GetBytecodeOpcodeBase<%s>() + %d);\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+            fprintf(fp, "        assert(crtp->GetCanonicalizedOpcodeFromOpcode(UnalignedLoad<uint16_t>(base)) == CRTP::template GetBytecodeOpcodeBase<%s>() + %d);\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
 
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
@@ -1086,10 +1096,51 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             fprintf(fp, "    }\n\n");
 
+            // Generate the Read/Write/Clobber information getters
+            //
+            fprintf(fp, "%s\n", bytecodeVariantDef->m_rcwInfoFuncs.c_str());
+
+            fprintf(fp, "%s\n", bytecodeVariantDef->m_bcIntrinsicInfoGetterFunc.c_str());
+
+            // Generate the DFG node-specific-data emitters, which should simply carry all the literals in this bytecode
+            //
+            size_t dfgNsdLength = 0;
+            fprintf(fp, "    void PopulateDfgNodeSpecificDataImpl%u([[maybe_unused]] uint8_t* nsdPtr, size_t bcPos)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "    {\n");
+            fprintf(fp, "        [[maybe_unused]] Operands ops = DeegenDecodeImpl%u(bcPos);\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            {
+                BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                if (operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral)
+                {
+                    BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
+                    size_t numBytes = lit->m_numBytes;
+                    bool isSigned = lit->m_isSigned;
+                    fprintf(fp, "        UnalignedStore<%sint%d_t>(nsdPtr + %d, ops.%s.m_value);\n",
+                            (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
+                            static_cast<int>(dfgNsdLength),
+                            lit->OperandName().c_str());
+                    dfgNsdLength += numBytes;
+                }
+            }
+            fprintf(fp, "    }\n\n");
+
+            if (bytecodeDfgNsdLength == static_cast<size_t>(-1))
+            {
+                bytecodeDfgNsdLength = dfgNsdLength;
+            }
+            else
+            {
+                // All the variants' node-specific-data must have the same length, as they all just consist of the literal fields in the bytecode
+                //
+                ReleaseAssert(bytecodeDfgNsdLength == dfgNsdLength);
+            }
+
             ReleaseAssert(!opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
             opcodeVariantOrdinalMap[bytecodeVariantDef->m_variantOrd] = currentBytecodeVariantOrdinal;
 
             traitInfo.m_length = bytecodeVariantDef->GetBytecodeStructLength();
+            traitInfo.m_variantOrd = bytecodeVariantDef->m_variantOrd;
             ReleaseAssert(!bytecodeTraitInfoMap.count(currentBytecodeVariantOrdinal));
             bytecodeTraitInfoMap[currentBytecodeVariantOrdinal] = traitInfo;
             currentBytecodeVariantOrdinal += totalSubVariantsInThisVariant;
@@ -1122,6 +1173,18 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         fprintf(fp, "        __builtin_unreachable();\n");
         fprintf(fp, "        } /*switch opcode*/\n");
         fprintf(fp, "    }\n\n");
+
+        fprintf(fp, "    template<size_t variantOrd>\n");
+        fprintf(fp, "    Operands WARN_UNUSED ALWAYS_INLINE Decode%s_Variant(size_t bcPos)\n", bytecodeDef[0]->m_bytecodeName.c_str());
+        fprintf(fp, "    {\n        ");
+        for (auto& bytecodeVariantDef : bytecodeDef)
+        {
+            ReleaseAssert(opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "if constexpr(variantOrd == %d) {\n", static_cast<int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "            return DeegenDecodeImpl%d(bcPos);\n", static_cast<int>(bytecodeVariantDef->m_variantOrd));
+            fprintf(fp, "        } else ");
+        }
+        fprintf(fp, "{\n            static_assert(type_dependent_false<decltype(variantOrd)>::value);\n        }\n    }\n");
 
         fprintf(fp, "protected:\n");
         fprintf(fp, "    static constexpr size_t GetNumVariants() { return %d; }\n", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
@@ -1181,12 +1244,160 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         }
         fprintf(fp, " };\n");
 
+        fprintf(fp, "    static constexpr std::array<uint8_t, %d> x_isBytecodeBarrier = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            uint8_t value = 255;
+            if (bytecodeTraitInfoMap.count(i))
+            {
+                value = (bytecodeTraitInfoMap[i].m_isBarrier ? 1 : 0);
+            }
+            fprintf(fp, "%d", static_cast<int>(value));
+        }
+        fprintf(fp, " };\n");
+
+        fprintf(fp, "    static constexpr std::array<uint8_t, %d> x_bytecodeMayMakeTailCall = { ", SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            uint8_t value = 255;
+            if (bytecodeTraitInfoMap.count(i))
+            {
+                value = (bytecodeTraitInfoMap[i].m_mayMakeTailCall ? 1 : 0);
+            }
+            fprintf(fp, "%d", static_cast<int>(value));
+        }
+        fprintf(fp, " };\n");
+
         // If the bytecode is not in a 'SameLengthConstraint' set, it is definitely not allowed to replace it.
         // We will assert at runtime that the replacing bytecode has the same length as the replaced bytecode as well,
         // but providing this information statically allows us to catch more errors statically.
         //
         fprintf(fp, "    static constexpr bool x_isPotentiallyReplaceable = %s;\n",
                 (bytecodeDef[0]->m_sameLengthConstraintList.size() > 0) ? "true" : "false");
+
+        // Emit the arrays of RWC information getters
+        //
+        fprintf(fp, "    using RWCInfoGetterFn = BytecodeRWCInfo(%s<CRTP>::*)(size_t);\n", generatedClassName.c_str());
+
+        auto printRWCGetterArray = [&](std::string rwcName)
+        {
+            fprintf(fp, "    static constexpr std::array<RWCInfoGetterFn, %d> x_bytecode%sDeclGetters = { ",
+                    SafeIntegerCast<int>(currentBytecodeVariantOrdinal),
+                    rwcName.c_str());
+            for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+            {
+                if (i > 0) { fprintf(fp, ", "); }
+                if (bytecodeTraitInfoMap.count(i))
+                {
+                    fprintf(fp, "&%s<CRTP>::DeegenGetBytecode%sDeclarationsImpl%d",
+                            generatedClassName.c_str(),
+                            rwcName.c_str(),
+                            static_cast<int>(bytecodeTraitInfoMap[i].m_variantOrd));
+                }
+                else
+                {
+                    fprintf(fp, "nullptr");
+                }
+            }
+            fprintf(fp, " };\n");
+        };
+
+        printRWCGetterArray("Read");
+        printRWCGetterArray("Write");
+        printRWCGetterArray("Clobber");
+
+        if (bytecodeDef[0]->m_bcIntrinsicOrd != static_cast<size_t>(-1))
+        {
+            ReleaseAssert(bytecodeDef[0]->m_bcIntrinsicOrd < 255);
+            fprintf(fp, "    static constexpr uint8_t x_bytecodeIntrinsicOrdinal = %d;\n", static_cast<int>(bytecodeDef[0]->m_bcIntrinsicOrd));
+            fprintf(fp, "    using BytecodeIntrinsicDefTy = BytecodeIntrinsicInfo::%s;\n", bytecodeDef[0]->m_bcIntrinsicName.c_str());
+            fprintf(fp, "    using BytecodeIntrinsicInfoGetterFn = BytecodeIntrinsicDefTy(%s<CRTP>::*)(size_t);\n",
+                    generatedClassName.c_str());
+            fprintf(fp, "    static constexpr std::array<BytecodeIntrinsicInfoGetterFn, %d> x_bytecodeIntrinsicInfoGetters = { ",
+                    SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+            for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+            {
+                if (i > 0) { fprintf(fp, ", "); }
+                if (bytecodeTraitInfoMap.count(i))
+                {
+                    fprintf(fp, "&%s<CRTP>::GetIntrinsicInfoImpl%d",
+                            generatedClassName.c_str(),
+                            static_cast<int>(bytecodeTraitInfoMap[i].m_variantOrd));
+                }
+                else
+                {
+                    fprintf(fp, "nullptr");
+                }
+            }
+            fprintf(fp, " };\n");
+        }
+        else
+        {
+            fprintf(fp, "    static constexpr uint8_t x_bytecodeIntrinsicOrdinal = 255;\n");
+            fprintf(fp, "    using BytecodeIntrinsicDefTy = void;\n");
+        }
+
+        ReleaseAssert(bytecodeDfgNsdLength != static_cast<size_t>(-1));
+        fprintf(fp, "    static constexpr size_t x_dfgNodeSpecificDataLength = %u;\n", static_cast<unsigned int>(bytecodeDfgNsdLength));
+        fprintf(fp, "    using DfgNsdInfoWriterFn = void(%s<CRTP>::*)(uint8_t*, size_t);\n", generatedClassName.c_str());
+        fprintf(fp, "    static constexpr std::array<DfgNsdInfoWriterFn, %d> x_dfgNsdInfoWriterFns = { ",
+                SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+        for (size_t i = 0; i < currentBytecodeVariantOrdinal; i++)
+        {
+            if (i > 0) { fprintf(fp, ", "); }
+            if (bytecodeTraitInfoMap.count(i))
+            {
+                fprintf(fp, "&%s<CRTP>::PopulateDfgNodeSpecificDataImpl%d",
+                        generatedClassName.c_str(),
+                        static_cast<int>(bytecodeTraitInfoMap[i].m_variantOrd));
+            }
+            else
+            {
+                fprintf(fp, "nullptr");
+            }
+        }
+        fprintf(fp, " };\n");
+
+        // Emit the DFG node-specific-data dump function
+        //
+        {
+            size_t curNsdOffset = 0;
+            bool isFirstItem = true;
+            fprintf(fp, "\n    static void DumpDfgNodeSpecificDataImpl([[maybe_unused]] FILE* file, [[maybe_unused]] uint8_t* nsdPtr, [[maybe_unused]] bool& shouldPrefixCommaOnFirstItem)\n");
+            fprintf(fp, "    {\n");
+            for (size_t i = 0; i < bytecodeDef[0]->m_list.size(); i++)
+            {
+                BcOperand* operand = bytecodeDef[0]->m_list[i].get();
+                if (operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral)
+                {
+                    BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
+                    size_t numBytes = lit->m_numBytes;
+                    bool isSigned = lit->m_isSigned;
+                    fprintf(fp, "        {\n");
+                    fprintf(fp, "            %sint%d_t value = UnalignedLoad<%sint%d_t>(nsdPtr + %u);\n",
+                            (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
+                            (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
+                            static_cast<unsigned int>(curNsdOffset));
+                    curNsdOffset += numBytes;
+                    if (isFirstItem)
+                    {
+                        fprintf(fp, "            if (shouldPrefixCommaOnFirstItem) { fprintf(file, \", \"); }\n");
+                    }
+                    fprintf(fp, "            fprintf(file, \"%s%s=%%%s\", static_cast<%s>(value));\n",
+                            (isFirstItem ? "" : ", "),
+                            lit->OperandName().c_str(),
+                            (isSigned ? "lld" : "llu"),
+                            (isSigned ? "long long" : "unsigned long long"));
+                    fprintf(fp, "            shouldPrefixCommaOnFirstItem = true;\n");
+                    fprintf(fp, "        }\n");
+                    isFirstItem = false;
+                }
+            }
+            fprintf(fp, "    }\n\n");
+            ReleaseAssert(curNsdOffset == bytecodeDfgNsdLength);
+        }
 
         // Emit out the bytecode metadata type list for this bytecode
         //

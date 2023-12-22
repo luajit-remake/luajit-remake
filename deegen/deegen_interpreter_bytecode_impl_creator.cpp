@@ -67,8 +67,8 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         m_valuePreserver.Preserve(x_curBytecode, curBytecode);
 
         Value* codeBlock = m_wrapper->getArg(3);
-        codeBlock->setName(x_codeBlock);
-        m_valuePreserver.Preserve(x_codeBlock, codeBlock);
+        codeBlock->setName(x_interpreterCodeBlock);
+        m_valuePreserver.Preserve(x_interpreterCodeBlock, codeBlock);
     }
     else
     {
@@ -96,7 +96,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         Instruction* codeblock = CreateCallToDeegenCommonSnippet(GetModule(), "GetCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
         ReleaseAssert(llvm_value_has_type<void*>(codeblock));
 
-        m_valuePreserver.Preserve(x_codeBlock, codeblock);
+        m_valuePreserver.Preserve(x_interpreterCodeBlock, codeblock);
         m_valuePreserver.Preserve(x_curBytecode, bytecodePtr);
     }
 
@@ -114,14 +114,14 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
                 GetCoroutineCtx(),
                 GetStackBase(),
                 GetCurBytecode(),
-                GetCodeBlock(),
+                GetInterpreterCodeBlock(),
                 dummyInst /*insertBefore*/);
             dummyInst->eraseFromParent();
         }
 
         // Check for osr entry
         //
-        Value* tierUpCounter = CreateCallToDeegenCommonSnippet(m_module.get(), "GetInterpreterTierUpCounter", { GetCodeBlock() }, currentBlock);
+        Value* tierUpCounter = CreateCallToDeegenCommonSnippet(m_module.get(), "GetInterpreterTierUpCounter", { GetInterpreterCodeBlock() }, currentBlock);
         ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
 
         Value* shouldTierUp = new ICmpInst(*currentBlock, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
@@ -188,7 +188,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
             Value* metadataPtrOffset32 = m_bytecodeDef->m_metadataPtrOffset->GetOperandValueFromBytecodeStruct(this, currentBlock);
             ReleaseAssert(llvm_value_has_type<uint32_t>(metadataPtrOffset32));
             Value* offset64 = new ZExtInst(metadataPtrOffset32, llvm_type_of<uint64_t>(ctx), "", currentBlock);
-            GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetCodeBlock(), { offset64 }, "", currentBlock);
+            GetElementPtrInst* metadataPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), GetInterpreterCodeBlock(), { offset64 }, "", currentBlock);
             m_valuePreserver.Preserve(x_metadataPtr, metadataPtr);
             metadataPtr->setName(x_metadataPtr);
         }
@@ -304,6 +304,7 @@ InterpreterBytecodeImplCreator::InterpreterBytecodeImplCreator(BytecodeIrCompone
     m_wrapper = nullptr;
     m_resultFuncName = bic.m_identFuncName;
     m_generated = false;
+    m_mayFallthroughToNextBytecode = false;
 }
 
 std::unique_ptr<InterpreterBytecodeImplCreator> WARN_UNUSED InterpreterBytecodeImplCreator::LowerOneComponent(BytecodeIrComponent& bic)
@@ -356,6 +357,20 @@ void InterpreterBytecodeImplCreator::DoLowering()
     m_impl = nullptr;
 
     m_valuePreserver.RefreshAfterTransform();
+
+    m_mayFallthroughToNextBytecode = AstBytecodeReturn::CheckMayFallthroughToNextBytecode(m_wrapper);
+
+    {
+        m_mayMakeTailCall = false;
+        std::vector<AstMakeCall> allCalls = AstMakeCall::GetAllUseInFunction(m_wrapper);
+        for (AstMakeCall& callInfo : allCalls)
+        {
+            if (callInfo.m_isMustTailCall)
+            {
+                m_mayMakeTailCall = true;
+            }
+        }
+    }
 
     // Now we can do the lowerings
     //
@@ -463,10 +478,26 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
 
     std::unique_ptr<Module> module;
 
+    // Records some per-component info that we want to aggregate
+    //
+    struct PerComponentInfo
+    {
+        bool m_mayFallthroughToNextBytecode;
+        bool m_mayMakeTailCall;
+    };
+
+    std::unordered_map<std::string /*funcName*/, PerComponentInfo> componentInfoMap;
+
     // Process the main component
     //
     {
         std::unique_ptr<InterpreterBytecodeImplCreator> mainComponent = InterpreterBytecodeImplCreator::LowerOneComponent(*bi.m_interpreterMainComponent.get());
+
+        ReleaseAssert(!componentInfoMap.count(mainComponent->m_resultFuncName));
+        componentInfoMap[mainComponent->m_resultFuncName] = PerComponentInfo {
+            .m_mayFallthroughToNextBytecode = mainComponent->m_mayFallthroughToNextBytecode,
+            .m_mayMakeTailCall = mainComponent->m_mayMakeTailCall
+        };
 
         // Extract the necessary functions from the main component
         // We need to extract the result function and any IC body functions that didn't get inlined
@@ -520,6 +551,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
         ReleaseAssert(expectedFnName == bi.m_affliatedBytecodeFnNames[fusedInIcOrd]);
 
+        ReleaseAssert(!componentInfoMap.count(expectedFnName));
+        componentInfoMap[expectedFnName] = PerComponentInfo {
+            .m_mayFallthroughToNextBytecode = component->m_mayFallthroughToNextBytecode,
+            .m_mayMakeTailCall = component->m_mayMakeTailCall
+        };
+
         Linker linker(*module.get());
         // linkInModule returns true on error
         //
@@ -546,6 +583,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         ReleaseAssert(expectedSpName == BytecodeIrInfo::GetQuickeningSlowPathFuncName(bytecodeDef));
         ReleaseAssert(spModule->getFunction(expectedSpName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedSpName)->empty());
+
+        ReleaseAssert(!componentInfoMap.count(expectedSpName));
+        componentInfoMap[expectedSpName] = PerComponentInfo {
+            .m_mayFallthroughToNextBytecode = component->m_mayFallthroughToNextBytecode,
+            .m_mayMakeTailCall = component->m_mayMakeTailCall
+        };
 
         Linker linker(*module.get());
         // linkInModule returns true on error
@@ -580,6 +623,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         {
             ReleaseAssert(module->getFunction(expectedRcName)->empty());
         }
+
+        ReleaseAssert(!componentInfoMap.count(expectedRcName));
+        componentInfoMap[expectedRcName] = PerComponentInfo {
+            .m_mayFallthroughToNextBytecode = component->m_mayFallthroughToNextBytecode,
+            .m_mayMakeTailCall = component->m_mayMakeTailCall
+        };
 
         Linker linker(*module.get());
         // linkInModule returns true on error
@@ -618,6 +667,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         ReleaseAssert(spModule->getFunction(expectedFnName) != nullptr);
         ReleaseAssert(!spModule->getFunction(expectedFnName)->empty());
 
+        ReleaseAssert(!componentInfoMap.count(expectedFnName));
+        componentInfoMap[expectedFnName] = PerComponentInfo {
+            .m_mayFallthroughToNextBytecode = component->m_mayFallthroughToNextBytecode,
+            .m_mayMakeTailCall = component->m_mayMakeTailCall
+        };
+
         Linker linker(*module.get());
         // linkInModule returns true on error
         //
@@ -628,6 +683,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
         ReleaseAssert(!linkedInFn->empty());
         ReleaseAssert(!linkedInFn->hasSection());
         linkedInFn->setSection(x_cold_code_section_name);
+    }
+
+    for (const auto& it : componentInfoMap)
+    {
+        const std::string& fnName = it.first;
+        ReleaseAssert(module->getFunction(fnName) != nullptr);
     }
 
     // Now, having linked in everything, we can strip dead return continuations and slow paths by
@@ -654,6 +715,49 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     }
 
     RunLLVMDeadGlobalElimination(module.get());
+
+    // After DCE, we have reliable information to determine whether this bytecode may transfer control to the next bytecode:
+    // if any component that may transfer control to the next bytecode survived DCE, the bytecode can.
+    //
+    bool bytecodeMayFallthroughToNextBytecode = false;
+    bool bytecodeMayMakeTailCall = false;
+    for (const auto& it : componentInfoMap)
+    {
+        const std::string& fnName = it.first;
+        PerComponentInfo componentInfo = it.second;
+        if (module->getFunction(fnName) != nullptr)
+        {
+            if (componentInfo.m_mayFallthroughToNextBytecode)
+            {
+                bytecodeMayFallthroughToNextBytecode = true;
+            }
+            if (componentInfo.m_mayMakeTailCall)
+            {
+                bytecodeMayMakeTailCall = true;
+            }
+        }
+        else
+        {
+            ReleaseAssert(module->getNamedValue(fnName) == nullptr);
+        }
+    }
+
+    // This is not a comprehensive assert: we do not allow mixing MakeTailCall and other terminal APIs (except Throw) in general,
+    // but one assert is better than none..
+    //
+    if (bytecodeMayFallthroughToNextBytecode && bytecodeMayMakeTailCall)
+    {
+        fprintf(stderr, "[ERROR] You cannot mix MakeTailCall and other terminal APIs (except Throw) in the same bytecode!\n");
+        abort();
+    }
+
+    ReleaseAssert(!bytecodeDef->m_bytecodeMayFallthroughToNextBytecodeDetermined);
+    bytecodeDef->m_bytecodeMayFallthroughToNextBytecodeDetermined = true;
+    bytecodeDef->m_bytecodeMayFallthroughToNextBytecode = bytecodeMayFallthroughToNextBytecode;
+
+    ReleaseAssert(!bytecodeDef->m_bytecodeMayMakeTailCallDetermined);
+    bytecodeDef->m_bytecodeMayMakeTailCallDetermined = true;
+    bytecodeDef->m_bytecodeMayMakeTailCall = bytecodeMayMakeTailCall;
 
     // In theory it's fine to leave them with internal linkage now, since they are exclusively
     // used by our bytecode, but some of our callers expects them to have external linkage.

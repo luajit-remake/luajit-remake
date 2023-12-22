@@ -158,6 +158,41 @@ add_custom_command(
   DEPENDS fps 
 )
 
+# generate the DFG JIT bytecode specialization info
+#
+set(dfg_jit_specialization_info_cpp_file_list "")
+set(dfg_jit_specialization_info_hdr_file_list "")
+foreach(cur_src ${DEEGEN_BYTECODE_DEFINITION_SOURCES})
+  set(input_json "${GENERATED_FILES_DIR}/bytecode_info.interpreter.${cur_src}.json")
+
+  string(SHA1 cur_src_hash "${cur_src}")
+  set(post_process_cpp "${GENERATED_FILES_DIR}/deegen_dfg_jit_specialization_info.${cur_src_hash}.cpp")
+  set_source_files_properties(${post_process_cpp} PROPERTIES GENERATED true)
+  list(APPEND dfg_jit_specialization_info_cpp_file_list "${post_process_cpp}")
+  
+  set(post_process_hdr "${GENERATED_FILES_DIR}/deegen_dfg_jit_specialization_info.${cur_src_hash}.h")
+  set_source_files_properties(${post_process_hdr} PROPERTIES GENERATED true)
+  list(APPEND dfg_jit_specialization_info_hdr_file_list "${post_process_hdr}")
+  
+  add_custom_command(
+    OUTPUT ${post_process_cpp}
+    OUTPUT ${post_process_hdr}
+    COMMAND ${fps_exec} --generate-dfg-jit-specialized-bytecode-info --bytecode-name-table=${interpreter_opcode_name_table_json} --bytecode-trait-table=${bytecode_opcode_trait_table_json} --json-input=${input_json} --hdr-output=${post_process_hdr} --cpp-output=${post_process_cpp} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+    DEPENDS fps ${interpreter_opcode_name_table_json} ${input_json} ${bytecode_opcode_trait_table_json}
+  )
+endforeach()
+
+set(dfg_jit_info_api_header "${GENERATED_FILES_DIR}/deegen_dfg_jit_all_generated_info.h")
+set_source_files_properties(${dfg_jit_info_api_header} PROPERTIES GENERATED true)
+
+list(JOIN dfg_jit_specialization_info_hdr_file_list "," comma_separated_dfg_jit_specialization_info_hdr_file_list)
+add_custom_command(
+    OUTPUT ${dfg_jit_info_api_header}
+    COMMAND ${fps_exec} --generate-dfg-jit-bytecode-info-api-header --bytecode-name-table=${interpreter_opcode_name_table_json} --bytecode-trait-table=${bytecode_opcode_trait_table_json} --input-list='${comma_separated_dfg_jit_specialization_info_hdr_file_list}' --hdr-output=${dfg_jit_info_api_header} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+    DEPENDS fps ${interpreter_opcode_name_table_json} ${bytecode_opcode_trait_table_json} ${dfg_jit_specialization_info_hdr_file_list}
+)
+add_custom_target(deegen_dfg_jit_info_api_header DEPENDS ${dfg_jit_info_api_header})
+ 
 add_library(deegen_generated_interpreter_impl OBJECT
   ${generated_src_list}
   ${interpreter_dispatch_table_builder}
@@ -165,6 +200,8 @@ add_library(deegen_generated_interpreter_impl OBJECT
   ${baseline_jit_misc_helper_logic_asm}
   ${baseline_jit_function_entry_decl_cpp}
   ${baseline_jit_function_entry_emitter_asm}
+  ${dfg_jit_specialization_info_cpp_file_list}
 )
 set_target_properties(deegen_generated_interpreter_impl PROPERTIES COMPILE_FLAGS " -O3 ")
+add_dependencies(deegen_generated_interpreter_impl deegen_dfg_jit_info_api_header)
 

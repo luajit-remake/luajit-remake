@@ -89,28 +89,28 @@ void* WARN_UNUSED UnlinkedCodeBlock::GetInterpreterEntryPoint()
 CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
     assert(ucb->m_bytecodeMetadataLength % 8 == 0);
-    size_t sizeToAllocate = GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength + sizeof(TValue) * ucb->m_cstTableLength + RoundUpToMultipleOf<8>(ucb->m_bytecodeLength);
+    size_t sizeToAllocate = GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength + sizeof(TValue) * ucb->m_cstTableLength + RoundUpToMultipleOf<8>(ucb->m_bytecodeLengthIncludingTailPadding);
     uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
 
     CodeBlock* cb = reinterpret_cast<CodeBlock*>(addressBegin + sizeof(TValue) * ucb->m_cstTableLength);
     ConstructInPlace(cb);
-    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
+    cb->SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
     cb->m_executableCodeKind = Kind::BytecodeFunction;
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
-    cb->m_bytecode = reinterpret_cast<uint8_t*>(cb) + GetTrailingArrayOffset();
-    memcpy(cb->m_bytecode, ucb->m_bytecode, ucb->m_bytecodeLength);
-    cb->m_bestEntryPoint = ucb->GetInterpreterEntryPoint();
     cb->m_globalObject = globalObject;
     cb->m_stackFrameNumSlots = ucb->m_stackFrameNumSlots;
     cb->m_numUpvalues = ucb->m_numUpvalues;
-    cb->m_bytecodeLength = ucb->m_bytecodeLength;
+    cb->m_owner = ucb;
+    cb->m_bestEntryPoint = ucb->GetInterpreterEntryPoint();
+    cb->m_bytecodeLengthIncludingTailPadding = ucb->m_bytecodeLengthIncludingTailPadding;
     cb->m_bytecodeMetadataLength = ucb->m_bytecodeMetadataLength;
     cb->m_baselineCodeBlock = nullptr;
+    cb->m_dfgCodeBlock = nullptr;
     if (vm->InterpreterCanTierUpFurther())
     {
-        cb->m_interpreterTierUpCounter = x_interpreter_tier_up_threshold_bytecode_length_multiplier * ucb->m_bytecodeLength;
+        cb->m_interpreterTierUpCounter = x_interpreter_tier_up_threshold_bytecode_length_multiplier * ucb->m_bytecodeLengthIncludingTailPadding;
     }
     else
     {
@@ -118,8 +118,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
         //
         cb->m_interpreterTierUpCounter = 1LL << 62;
     }
-    cb->m_floCodeBlock = nullptr;
-    cb->m_owner = ucb;
+    memcpy(cb->GetBytecodeStream(), ucb->m_bytecode, ucb->m_bytecodeLengthIncludingTailPadding);
 
     ForEachBytecodeMetadata(cb, []<typename T>(T* md) ALWAYS_INLINE {
         md->Init();
@@ -260,13 +259,23 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
                                                          void* jitRegionStart,
                                                          uint32_t jitRegionSize)
 {
-    size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(SlowPathDataAndBytecodeOffset) * numBytecodes + slowPathDataStreamLength;
+    size_t numEntriesInConstantTable = cb->m_owner->m_cstTableLength;
+    static_assert(alignof(BaselineCodeBlock) == 8);         // the computation below relies on this
+    size_t sizeToAllocate = sizeof(TValue) * numEntriesInConstantTable + GetTrailingArrayOffset() + sizeof(SlowPathDataAndBytecodeOffset) * numBytecodes + slowPathDataStreamLength;
     sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
-    BaselineCodeBlock* res = reinterpret_cast<BaselineCodeBlock*>(new uint64_t[sizeToAllocate / 8]);
 
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
+    memcpy(addressBegin, cb->m_owner->m_cstTable, sizeof(TValue) * numEntriesInConstantTable);
+
+    BaselineCodeBlock* res = reinterpret_cast<BaselineCodeBlock*>(addressBegin + sizeof(TValue) * numEntriesInConstantTable);
+    ConstructInPlace(res);
     res->m_jitCodeEntry = jitCodeEntry;
     res->m_owner = cb;
+    res->m_globalObject = cb->m_globalObject;
     res->m_numBytecodes = numBytecodes;
+    res->m_stackFrameNumSlots = cb->m_stackFrameNumSlots;
+    res->m_maxObservedNumVariadicArgs = 0;
     res->m_slowPathDataStreamLength = slowPathDataStreamLength;
     res->m_jitRegionStart = jitRegionStart;
     res->m_jitRegionSize = jitRegionSize;

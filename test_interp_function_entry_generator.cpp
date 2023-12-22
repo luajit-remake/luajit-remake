@@ -54,7 +54,7 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_
     }
 
     ReleaseAssert(codeBlock == g_expectedResult.m_expectedCodeBlock);
-    ReleaseAssert(bytecode == g_expectedResult.m_expectedCodeBlock->m_bytecode);
+    ReleaseAssert(bytecode == reinterpret_cast<uint8_t*>(g_expectedResult.m_expectedCodeBlock->m_bytecodeStream));
 
     ReleaseAssert(reinterpret_cast<uint64_t>(hdr->m_func) == 12345678987654321ULL);
     ReleaseAssert(hdr->m_caller == g_expectedResult.m_callerStackFrameBase);
@@ -100,10 +100,9 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    calleeCb->m_bytecode = reinterpret_cast<uint8_t*>(calleeCb->m_bytecodeStream);
     calleeCb->m_numFixedArguments = static_cast<uint32_t>(numFixedArgs);
     calleeCb->m_interpreterTierUpCounter = 1LL << 62;
-    memset(calleeCb->m_bytecode, 0, 128);
+    memset(calleeCb->m_bytecodeStream, 0, 128);
 
     CoroutineRuntimeContext* coroCtx = CoroutineRuntimeContext::Create(vm, UserHeapPointer<TableObject> {} /*globalObject*/);
 

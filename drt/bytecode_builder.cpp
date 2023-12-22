@@ -48,4 +48,11 @@ uint32_t WARN_UNUSED PatchBytecodeMetadataFields(RestrictPtr<uint8_t> bytecodeSt
     return trailingArraySize;
 }
 
+BytecodeDecoder::BytecodeDecoder(CodeBlock* cb)
+    : BytecodeAccessor<true /*isDecodingMode*/>(
+          cb->GetBytecodeStream(),
+          cb->GetBytecodeLength(),
+          cb->GetConstantTableEnd())
+{ }
+
 }   // DeegenBytecodeBuilder

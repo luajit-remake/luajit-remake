@@ -3,21 +3,22 @@
 
 #include "runtime_utils.h"
 
-static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint16_t /*numArgs*/, int16_t numRets)
+template<bool storeVariadicRes>
+static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint16_t /*numArgs*/, [[maybe_unused]] uint16_t numRets)
 {
-    if (numRets < 0)
+    if constexpr(!storeVariadicRes)
     {
-        StoreReturnValuesAsVariadicResults();
+        StoreReturnValuesTo(base /*dst*/, static_cast<size_t>(numRets) /*numToStore*/);
     }
     else
     {
-        StoreReturnValuesTo(base /*dst*/, static_cast<size_t>(numRets) /*numToStore*/);
+        StoreReturnValuesAsVariadicResults();
     }
     Return();
 }
 
-template<bool passVariadicRes>
-static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, int16_t /*numRets*/, TValue* argStart, uint16_t numArgs, TValue func)
+template<bool passVariadicRes, bool storeVariadicRes>
+static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, uint16_t /*numRets*/, TValue* argStart, uint16_t numArgs, TValue func)
 {
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
@@ -27,16 +28,16 @@ static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArg
 
     if constexpr(passVariadicRes)
     {
-        MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+        MakeCallPassingVariadicRes(callTarget, func, argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
     }
     else
     {
-        MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation);
+        MakeCall(callTarget, func, argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
     }
 }
 
-template<bool passVariadicRes>
-static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, int16_t /*numRets*/)
+template<bool passVariadicRes, bool storeVariadicRes>
+static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, uint16_t /*numRets*/)
 {
     TValue func = base[0];
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
@@ -45,40 +46,79 @@ static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, int16_t 
     {
         if constexpr(passVariadicRes)
         {
-            MakeInPlaceCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation);
+            MakeInPlaceCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
         }
         else
         {
-            MakeInPlaceCall(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation);
+            MakeInPlaceCall(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
         }
     }
 
-    EnterSlowPath<CheckMetatableSlowPath<passVariadicRes>>(argStart, numArgs, func);
+    EnterSlowPath<CheckMetatableSlowPath<passVariadicRes, storeVariadicRes>>(argStart, numArgs, func);
 }
 
-DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes)
+DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes, bool storeVariadicRes)
 {
+    // If storeVariadicRes == true, "numRets" is not useful.
+    // However, we still take this dummy parameter so we can easily reuse most of the code here
+    // (we specify it to be 0 in all Variants, so it doesn't even have to sit in the bytecode struct).
+    //
     Operands(
         BytecodeRangeBaseRW("base"),
         Literal<uint16_t>("numArgs"),
-        Literal<int16_t>("numRets")
+        Literal<uint16_t>("numRets")
     );
     Result(NoOutput);
-    Implementation(CallOperationImpl<passVariadicRes>);
+    Implementation(CallOperationImpl<passVariadicRes, storeVariadicRes>);
     for (uint16_t numArgs = 0; numArgs < 6; numArgs++)
     {
-        for (int16_t numRets = -1; numRets < 4; numRets++)
+        if (!storeVariadicRes)
+        {
+            for (uint16_t numRets = 0; numRets < 4; numRets++)
+            {
+                Variant(
+                    Op("numArgs").HasValue(numArgs),
+                    Op("numRets").HasValue(numRets)
+                );
+            }
+        }
+        else
         {
             Variant(
                 Op("numArgs").HasValue(numArgs),
-                Op("numRets").HasValue(numRets)
+                Op("numRets").HasValue(0)
             );
         }
     }
-    Variant();
+    if (!storeVariadicRes)
+    {
+        Variant();
+    }
+    else
+    {
+        Variant(Op("numRets").HasValue(0));
+    }
+
+    DeclareReads(
+        Range(Op("base"), 1),
+        Range(Op("base") + x_numSlotsForStackFrameHeader, Op("numArgs")),
+        VariadicResults(passVariadicRes)
+    );
+    if (!storeVariadicRes)
+    {
+        DeclareWrites(Range(Op("base"), Op("numRets")));
+        DeclareClobbers(Range(Op("base") + Op("numRets"), Infinity()));
+    }
+    else
+    {
+        DeclareWrites(VariadicResults());
+        DeclareClobbers(Range(Op("base"), Infinity()));
+    }
 }
 
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Call, CallOperation, false /*passVariadicRes*/);
-DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CallM, CallOperation, true /*passVariadicRes*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Call, CallOperation, false /*passVariadicRes*/, false /*storeVariadicRes*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CallM, CallOperation, true /*passVariadicRes*/, false /*storeVariadicRes*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CallR, CallOperation, false /*passVariadicRes*/, true /*storeVariadicRes*/);
+DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(CallMR, CallOperation, true /*passVariadicRes*/, true /*storeVariadicRes*/);
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -138,7 +138,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
             coroCtx,
             stackBase,
             UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
-            codeBlock,
+            bcb,
             dummyInst);
 
         dummyInst->eraseFromParent();
@@ -349,12 +349,14 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
                                                                                        dummyInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(target));
 
+        Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
+
         InterpreterFunctionInterface::CreateDispatchToBytecode(
             target,
             coroutineCtx,
             stackBaseAfterFixUp,
             UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
-            calleeCodeBlock,
+            baselineCodeBlock,
             dummyInst /*insertBefore*/);
 
         dummyInst->eraseFromParent();

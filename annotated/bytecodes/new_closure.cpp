@@ -21,6 +21,9 @@ DEEGEN_DEFINE_BYTECODE(NewClosure)
     Result(BytecodeValue);
     Implementation(NewClosureImpl);
     Variant();
+    DeclareAsIntrinsic<Intrinsic::CreateClosure>({
+        .proto = Op("unlinkedCb")
+    });
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS
