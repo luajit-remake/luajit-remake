@@ -36,6 +36,15 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
     {
         CHECK_REPORT_BLOCK(bb->m_nodes.size() > 0, bb, "Empty basic blocks are disallowed!");
 
+        if (bb == graph->GetEntryBB())
+        {
+            CHECK_REPORT_BLOCK(bb->m_bcForInterpreterStateAtBBStart.IsInvalid(), bb, "root block should have invalid bcAtBBStart");
+        }
+        else
+        {
+            CHECK_REPORT_BLOCK(!bb->m_bcForInterpreterStateAtBBStart.IsInvalid(), bb, "non-root block should have a valid bcAtBBStart");
+        }
+
         // Check that the terminator is valid
         //
         Node* terminatorNode = bb->m_terminator;
@@ -152,9 +161,135 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         CHECK_REPORT_BLOCK(bb->GetNumSuccessors() <= 2, bb, "Invalid number of successors");
         for (size_t i = 0; i < bb->GetNumSuccessors(); i++)
         {
-            BasicBlock* succ = bb->m_successors[i];
+            BasicBlock* succ = bb->GetSuccessor(i);
             CHECK_REPORT_BLOCK(allBBs.count(succ), bb, "Invalid successor basic block for ord %u", static_cast<unsigned int>(i));
             CHECK_REPORT_BLOCK(succ != graph->GetEntryBB(), bb, "It is not allowed for a block to branch to the entry block");
+            CHECK_REPORT_BLOCK(succ->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame() ==
+                               bb->GetSuccessor(0)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame(),
+                               bb, "All successors should have the same InlinedCalledFrame origin");
+        }
+    }
+
+    // Check that the SetLocal and ShadowStore form a consistent state at the end of every basic block
+    //
+    for (BasicBlock* bb : graph->m_blocks)
+    {
+        TempUnorderedMap<size_t /*interpreterSlot*/, Node*> shadowStoreWrites(alloc);
+        TempUnorderedMap<size_t /*interpreterSlot*/, Node*> setLocalWrites(alloc);
+
+        for (Node* node : bb->m_nodes)
+        {
+            if (node->IsSetLocalNode())
+            {
+                InterpreterSlot slot = node->GetLocalOperationInterpreterSlot();
+                CHECK_REPORT_NODE(shadowStoreWrites.count(slot.Value()),
+                                  node,
+                                  "SetLocal is not preceded by a ShadowStore on the same location");
+                {
+                    Node* shadowStoreNode = shadowStoreWrites[slot.Value()];
+                    Value setLocalValue = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                    Value shadowStoreValue = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                    CHECK_REPORT_NODE(setLocalValue.IsIdenticalAs(shadowStoreValue),
+                                      node,
+                                      "SetLocal is not preceded by a ShadowStore writing the same value");
+                }
+
+                bool isSetLocalLiveAtTail = bb->IsSetLocalBytecodeLiveAtTail(node);
+                if (graph->IsBlockLocalSSAForm())
+                {
+                    CHECK_REPORT_NODE(isSetLocalLiveAtTail, node, "In block-local SSA form, all SetLocal should live at tail");
+                }
+                if (isSetLocalLiveAtTail)
+                {
+                    VirtualRegisterMappingInfo vrmi = bb->GetVirtualRegisterForInterpreterSlotAtTail(slot);
+                    TestAssert(vrmi.IsLive());
+                    TestAssert(!vrmi.IsUmmapedToAnyVirtualReg());
+                    TestAssert(vrmi.GetVirtualRegister().Value() == node->GetLocalOperationVirtualRegister().Value());
+                    setLocalWrites[slot.Value()] = node;
+                    std::ignore = vrmi;
+                }
+            }
+            if (node->IsShadowStoreNode())
+            {
+                InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
+                shadowStoreWrites[slot.Value()] = node;
+            }
+        }
+
+        for (auto& it : setLocalWrites)
+        {
+            InterpreterSlot slot = InterpreterSlot(it.first);
+            Node* setLocalNode = it.second;
+            TestAssert(setLocalNode->IsSetLocalNode());
+            Value setLocalVal = setLocalNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+
+            CHECK_REPORT_NODE(shadowStoreWrites.count(slot.Value()),
+                              setLocalNode,
+                              "SetLocal disagrees with ShadowStore at BB end (no ShadowStore found)");
+
+            Node* shadowStoreNode = shadowStoreWrites[slot.Value()];
+            TestAssert(shadowStoreNode->IsShadowStoreNode());
+            Value shadowStoreVal = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+
+            CHECK_REPORT_NODE(setLocalVal.IsIdenticalAs(shadowStoreVal),
+                              setLocalNode,
+                              "SetLocal disagrees with ShadowStore at BB end (ShadowStore value different from SetLocal value");
+        }
+
+        for (auto& it : shadowStoreWrites)
+        {
+            InterpreterSlot slot = InterpreterSlot(it.first);
+            Node* shadowStoreNode = it.second;
+            TestAssert(shadowStoreNode->IsShadowStoreNode());
+            Value shadowStoreVal = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+
+            VirtualRegisterMappingInfo vrmi = bb->GetVirtualRegisterForInterpreterSlotAtTail(slot);
+            if (!vrmi.IsLive())
+            {
+                // This is not a comprehensive assert: it's still possible that this value
+                // becomes dead in a successor block. We will not try to spend more effort check it here,
+                // since the OSR stackmap builder should be able to figure this out and fire assertion anyway.
+                //
+                Node* shadowStoreValNode = shadowStoreVal.m_node;
+                CHECK_REPORT_NODE(!shadowStoreValNode->IsCreateCapturedVarNode(),
+                                  shadowStoreNode,
+                                  "A slot storing an CapturedVar must be live (did the bytecode properly emit UpvalueClose?)");
+                continue;
+            }
+
+            if (vrmi.IsUmmapedToAnyVirtualReg())
+            {
+                CHECK_REPORT_NODE(shadowStoreVal.IsConstantValue(),
+                                  shadowStoreNode,
+                                  "A ShadowStore to an interpreter slot not mapped to any VirtualRegister must be a constant value");
+                continue;
+            }
+
+            if (!setLocalWrites.count(slot.Value()))
+            {
+                bool silenceAssert = false;
+                if (bb->GetNumSuccessors() == 1)
+                {
+                    uint32_t hackyCheck = bb->GetSuccessor(0)->m_hackyTolerateBadShadowStoreOrd;
+                    if (hackyCheck != static_cast<uint32_t>(-1) && slot.Value() >= hackyCheck)
+                    {
+                        silenceAssert = true;
+                    }
+                }
+                CHECK_REPORT_NODE(silenceAssert,
+                                  shadowStoreNode,
+                                  "ShadowStore disagrees with SetLocal at BB end (no SetLocal found)");
+            }
+            else
+            {
+                Node* setLocalNode = setLocalWrites[slot.Value()];
+                TestAssert(setLocalNode->IsSetLocalNode());
+                Value setLocalVal = setLocalNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+
+                CHECK_REPORT_NODE(setLocalVal.IsIdenticalAs(shadowStoreVal),
+                                  shadowStoreNode,
+                                  "ShadowStore disagrees with SetLocal at BB end (ShadowStore value different from SetLocal value");
+            }
         }
     }
 

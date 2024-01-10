@@ -146,9 +146,7 @@ struct DfgBuildBasicBlockContext
         {
             if (m_cachedGetFunctionObjectNode == nullptr)
             {
-                VirtualRegister vreg = m_inlinedCallFrame->GetClosureCallFunctionObjectRegister();
-                InterpreterSlot interpSlot = m_inlinedCallFrame->GetInterpreterSlotForStackFrameHeader(0);
-                m_cachedGetFunctionObjectNode = Node::CreateGetLocalNode(vreg, interpSlot);
+                m_cachedGetFunctionObjectNode = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::FunctionObjectLoc());
                 SetupNodeCommonInfoAndPushBack(m_cachedGetFunctionObjectNode);
             }
             return Value(m_cachedGetFunctionObjectNode, 0 /*outputOrd*/);
@@ -169,9 +167,7 @@ struct DfgBuildBasicBlockContext
         {
             if (m_cachedGetNumVarArgsNode == nullptr)
             {
-                VirtualRegister vreg = m_inlinedCallFrame->GetNumVarArgsRegister();
-                InterpreterSlot interpSlot = m_inlinedCallFrame->GetInterpreterSlotForStackFrameHeader(1);
-                m_cachedGetNumVarArgsNode = Node::CreateGetLocalNode(vreg, interpSlot);
+                m_cachedGetNumVarArgsNode = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::NumVarArgsLoc());
                 SetupNodeCommonInfoAndPushBack(m_cachedGetNumVarArgsNode);
             }
             return Value(m_cachedGetNumVarArgsNode, 0 /*outputOrd*/);
@@ -192,9 +188,7 @@ struct DfgBuildBasicBlockContext
 
         if (m_valueForVariadicArgs[varArgOrd].m_node.IsNull())
         {
-            VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForVarArgOrd(varArgOrd);
-            InterpreterSlot interpSlot = m_inlinedCallFrame->GetInterpreterSlotForVariadicArgument(varArgOrd);
-            Node* getLocal = Node::CreateGetLocalNode(vreg, interpSlot);
+            Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::VarArg(varArgOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
             m_valueForVariadicArgs[varArgOrd] = Value(getLocal, 0 /*outputOrd*/);
         }

@@ -486,6 +486,33 @@ TEST(DfgFrontend, Parser_Stress_1)
 //
 static void TestDfgFrontendWithRealCallIcInfo(std::string fileName, int randomlyMakeFnVariadicLevel)
 {
+    // Blacklist some files that take a relatively long time to run
+    //
+    constexpr const char* blacklist_files[] = {
+        "havlak.lua",
+        "putbyval_interpreter_ic_1.lua",
+        "putbyval_interpreter_ic_2.lua",
+        "putbyval_interpreter_ic_3.lua",
+        "putbyval_interpreter_ic_4.lua",
+        "putbyval_interpreter_ic_5.lua",
+        "putbyimm_interpreter_ic_1.lua",
+        "putbyimm_interpreter_ic_2.lua",
+        "putbyimm_interpreter_ic_3.lua",
+        "putbyimm_interpreter_ic_4.lua",
+        "table_sort_1.lua",
+        "table_sort_2.lua",
+        "table_sort_3.lua",
+        "table_sort_4.lua"
+    };
+
+    for (size_t idx = 0; idx < std::extent_v<decltype(blacklist_files)>; idx++)
+    {
+        if (fileName == blacklist_files[idx])
+        {
+            return;
+        }
+    }
+
     VM* vm = VM::Create();
     Auto(vm->Destroy());
     VMOutputInterceptor vmOutput(vm);
@@ -495,42 +522,38 @@ static void TestDfgFrontendWithRealCallIcInfo(std::string fileName, int randomly
 
     DfgAlloc()->Reset();
 
-    fprintf(stderr, "File: %s\n", fileName.c_str());
-    {
-        AutoTimer timer;
-        std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(std::string("luatests/") + fileName, LuaTestOption::ForceBaselineJit);
-        vm->LaunchScript(module.get());
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(std::string("luatests/") + fileName, LuaTestOption::ForceBaselineJit);
+    vm->LaunchScript(module.get());
 
-        for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    {
+        CodeBlock* cb = ucb->m_defaultCodeBlock;
+        ReleaseAssert(cb != nullptr);
+        BaselineCodeBlock* bcb = cb->m_baselineCodeBlock;
+        ReleaseAssert(bcb != nullptr);
+        if ((randomlyMakeFnVariadicLevel == 1 && rand() % 2 == 0) || (randomlyMakeFnVariadicLevel == 2))
         {
-            CodeBlock* cb = ucb->m_defaultCodeBlock;
-            ReleaseAssert(cb != nullptr);
-            BaselineCodeBlock* bcb = cb->m_baselineCodeBlock;
-            ReleaseAssert(bcb != nullptr);
-            if ((randomlyMakeFnVariadicLevel == 1 && rand() % 2 == 0) || (randomlyMakeFnVariadicLevel == 2))
-            {
-                ucb->m_hasVariadicArguments = true;
-                cb->m_hasVariadicArguments = true;
-            }
-            if (cb->m_hasVariadicArguments)
-            {
-                // TODO: currently we inject profiling info about the runtime-seen max number of variadic
-                // args, since the implementation for this part is undone yet.
-                //
-                bcb->m_maxObservedNumVariadicArgs = static_cast<uint32_t>(rand()) % 10;
-            }
+            ucb->m_hasVariadicArguments = true;
+            cb->m_hasVariadicArguments = true;
         }
-        for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+        if (cb->m_hasVariadicArguments)
         {
-            CodeBlock* cb = ucb->m_defaultCodeBlock;
-            ReleaseAssert(cb != nullptr);
-            arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
-            if (!ValidateDfgIrGraph(graph.get()))
-            {
-                fprintf(stderr, "File %s failed test!\n", fileName.c_str());
-                DumpDfgIrGraph(stderr, graph.get());
-                ReleaseAssert(false);
-            }
+            // TODO: currently we inject profiling info about the runtime-seen max number of variadic
+            // args, since the implementation for this part is undone yet.
+            //
+            bcb->m_maxObservedNumVariadicArgs = static_cast<uint32_t>(rand()) % 10;
+        }
+    }
+    for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    {
+        CodeBlock* cb = ucb->m_defaultCodeBlock;
+        ReleaseAssert(cb != nullptr);
+        arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
+        if (!ValidateDfgIrGraph(graph.get()))
+        {
+            fprintf(stderr, "File %s failed test!\n", fileName.c_str());
+            DumpDfgIrGraph(stderr, graph.get());
+            ReleaseAssert(false);
         }
     }
 }

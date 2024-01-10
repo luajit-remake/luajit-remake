@@ -479,12 +479,12 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                     {
                         localOrd = info.GetLogicalVariableInfo()->m_localOrd;
                         interpreterSlotOrd = info.GetLogicalVariableInfo()->m_interpreterSlotOrd;
-                        TestAssert(localOrd == info.GetLocalOrd().Value());
+                        TestAssert(localOrd == info.GetVirtualRegister().Value());
                         TestAssert(interpreterSlotOrd == info.GetInterpreterSlot().Value());
                     }
                     else
                     {
-                        localOrd = info.GetLocalOrd().Value();
+                        localOrd = info.GetVirtualRegister().Value();
                         interpreterSlotOrd = info.GetInterpreterSlot().Value();
                     }
                     std::ignore = interpreterSlotOrd;

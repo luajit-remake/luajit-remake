@@ -78,58 +78,29 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 // GetLocal:
 //     Input: none
 //     Output: 1, the value stored in the local
-//     Param: the local ordinal
+//     Param: the DFG local ordinal
 //
-//     Get the value of the specified local variable.
+//     Get the value of the specified DFG local variable.
 //
 //     Standard load-store forwarding rules apply:
-//     1. A GetLocal preceded by another GetLocal in the same BB can be replaced by the earlier GetLocal.
-//     2. A GetLocal preceded by a SetLocal in the same BB can be replaced by the value stored by the SetLocal.
-//
-//     However, if a GetLocal is not preceded by another GetLocal/SetLocal in the same BB and has no user,
-//     it *cannot* be removed, though one can turned it into a PhantomLocal. See PhantomLocal.
+//     1. A GetLocal preceded by another GetLocal can be replaced by the earlier GetLocal.
+//     2. A GetLocal preceded by a SetLocal can be replaced by the value stored by the SetLocal.
+//     3. A GetLocal with no users can be removed.
 //
 // SetLocal:
 //     Input: 1, the value to store
 //     Output: none
-//     Param: the local ordinal
+//     Param: the DFG local ordinal
 //
-//     Store the value into the specified local variable.
+//     Store the value into the specified DFG local variable.
 //
-//     A SetLocal(Val, virtualReg) must be preceded by a ShadowStore(Val, interpSlot) (with no other SetLocal to
-//     virtualReg or ShadowStore to interpSlot in between) where interpSlot is the interpreter slot corresponding
-//     to virtualReg in this InlinedCallFrame.
+//     If a SetLocal is followed by another SetLocal in the same BB, the SetLocal can be removed.
 //
-//     Dead stores (a SetLocal that cannot flow to any GetLocal or PhantomLocal) can always be removed.
+//     A dead SetLocal that is the last SetLocal to a local in a BB can only be removed if the interpreter slot
+//     corresponding to the DFG local is dead at the head of every successor block.
+//     Precisely, "slot" is dead at the BeforeUse point of bytecode m_bcForInterpreterStateAtBBStart for every successor block.
 //
-// PhantomLocal:
-//     Input: none
-//     Output: none
-//     Param: the local ordinal
-//
-//     It states that the current value of the local is needed for the purpose of OSR exit (so it must be
-//     available in the machine state) until the end of this basic block, or until the next SetLocal to
-//     this local, whichever is earlier.
-//
-//     Therefore, a PhantomLocal generates no code nor OSR event, but it must be treated as a load of the local,
-//     so a SetLocal cannot be removed if it can flow to a PhantomLocal.
-//
-//     There are two creation rules of PhantomLocals:
-//     1. A GetLocal with no user can be turned into to a PhantomLocal.
-//     2. If a basic block is speculatively removed, for each live local at the head of the removed basic
-//        block, a PhantomLocal must be added to the end of all the predecessor basic blocks. (More precisely,
-//        if a local becomes dead at the tail of a predecessor block after the removal, a PhantomLocal must be added).
-//
-//     The semantics of PhantomLocal imply that it can be removed in many cases:
-//     1. If a PhantomLocal is followed or preceded by a GetLocal or another PhantomLocal in the same BB (with
-//        no SetLocal in between), the PhantomLocal can be safely removed. This is because the GetLocal is
-//        already keeping the value of the local available inside the basic block, and GetLocal cannot be
-//        deleted but only turn to PhantomLocal, and a basic block cannot be split.
-//     2. If a PhantomLocal is preceded by a SetLocal in the same BB, the PhantomLocal can be removed. This is
-//        because the value stored into the local is already available inside the basic block.
-//     3. If a PhantomLocal can flow to another PhantomLocal or a GetLocal in data flow, it can be removed.
-//        This is because any SetLocal that can flow to the PhantomLocal must also be able to flow to the other
-//        PhantomLocal/GetLocal thus is kept alive.
+//     See ShadowStore for reason.
 //
 // ShadowStore:
 //     Input: 1, the value to store
@@ -142,17 +113,13 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 //
 //     Therefore, a ShadowStore generates no code, but only an OSR event in the OSR stackmap.
 //
-//     If V is not a constant-like node, one of the following things must happen within the same basic
-//     block afterwards, or the IR is illegal:
-//     1. A SetLocal stores V to the VirtualRegister corresponding to interpreter slot X.
-//     2. A Phantom(V) node show up. The last Phantom(V) in the basic block marks a bytecode death of slot X,
-//        at which point the value of slot X in the interpreter stack becomes UndefValue.
+//     At the end of any basic block, it is required that for each *live* interpreter slot X (a slot is live
+//     if it is live at the head of any successor block), the value in slot X of the imaginary interpreter stack
+//     frame (as set by ShadowStore) is equal to the value in the DFG local corresponding to slot X (as set by SetLocal).
 //
-//     Condition (2) can be relaxed a bit to avoid unnecessary Phantom nodes:
-//     1. If there is another use of V after the last Phantom(V), all the Phantom(V) can be removed since IR
-//        is already keeping V available until the last OSR exit point that may need it.
-//     2. If there is no OSR exit point between ShadowStore and the last Phantom(V), all the Phantom(V) can
-//        be removed for the same reason.
+//     The DFG frontend will always generate a SetLocal after a ShadowStore, which satisfies this invariant.
+//     To maintain this invariant, one may only remove a SetLocal if the SetLocal is storing a constant, or the
+//     corresponding interpreter slot is dead at the head of every successor basic block.
 //
 // Phantom:
 //     Input: 1
@@ -160,7 +127,7 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 //     Param: none
 //
 //     States that the input SSA value is potentially required for the purpose of OSR exit until this point,
-//     so the SSA value must be kept available in the machine state until this point. See ShadowStore.
+//     so the SSA value must be kept available in the machine state until this point.
 //
 //     A Phantom generates no code nor OSR event, it is merely needed so that register allocation knows when
 //     it is truly safe to free a SSA value.
@@ -363,6 +330,17 @@ struct Value
     Value(std::nullptr_t) : m_node(nullptr) { }
     Value(ArenaPtr<Node> node, uint16_t outputOrd) : m_node(node), m_outputOrd(outputOrd) { }
     Value(Node* node, uint16_t outputOrd) : Value(DfgAlloc()->GetArenaPtr(node), outputOrd) { }
+
+    // This is just saying if two Values are referring to the same SSA value
+    //
+    bool IsIdenticalAs(Value other)
+    {
+        return m_node.m_value == other.m_node.m_value && m_outputOrd == other.m_outputOrd;
+    }
+
+    // True if m_node is a constant-like node. Implementation later in this file to circumvent cross reference
+    //
+    bool IsConstantValue();
 
     ArenaPtr<Node> m_node;
     uint16_t m_outputOrd;
@@ -1328,17 +1306,17 @@ public:
 
     struct LocalVarAccessInfo
     {
-        LocalVarAccessInfo(Node* owner, InterpreterSlot interpreterSlot, VirtualRegister virtualRegister)
+        LocalVarAccessInfo(Node* owner, InlinedCallFrame* inlinedCallFrame, InterpreterFrameLocation ifLoc)
         {
             m_dsuParent = owner;
             m_logicalVariableInfo = nullptr;
-            m_interpreterSlotOrd = SafeIntegerCast<uint32_t>(interpreterSlot.Value());
-            m_virtualRegisterOrd = SafeIntegerCast<uint32_t>(virtualRegister.Value());
+            m_inlinedCallFrame = inlinedCallFrame;
+            m_locationInCallFrame = ifLoc;
         }
 
         bool IsConsistentWith(const LocalVarAccessInfo& other)
         {
-            return m_interpreterSlotOrd == other.m_interpreterSlotOrd && m_virtualRegisterOrd == other.m_virtualRegisterOrd;
+            return m_inlinedCallFrame.m_value == other.m_inlinedCallFrame.m_value && m_locationInCallFrame == other.m_locationInCallFrame;
         }
 
         bool IsLogicalVariableInfoPointerSetUp()
@@ -1358,20 +1336,22 @@ public:
             m_logicalVariableInfo = info;
         }
 
-        VirtualRegister GetLocalOrd()
+        InlinedCallFrame* GetInlinedCallFrame() { return m_inlinedCallFrame; }
+
+        VirtualRegister GetVirtualRegister()
         {
-            return VirtualRegister(m_virtualRegisterOrd);
+            return GetInlinedCallFrame()->GetVirtualRegisterForLocation(m_locationInCallFrame);
         }
 
         InterpreterSlot GetInterpreterSlot()
         {
-            return InterpreterSlot(m_interpreterSlotOrd);
+            return GetInlinedCallFrame()->GetInterpreterSlotForLocation(m_locationInCallFrame);
         }
 
         ArenaPtr<Node> m_dsuParent;
         ArenaPtr<LogicalVariableInfo> m_logicalVariableInfo;
-        uint32_t m_interpreterSlotOrd;
-        uint32_t m_virtualRegisterOrd;
+        ArenaPtr<InlinedCallFrame> m_inlinedCallFrame;
+        InterpreterFrameLocation m_locationInCallFrame;
     };
     // Must be 16 bytes since it is stored in input slot 1-2
     //
@@ -1382,16 +1362,33 @@ public:
         return IsGetLocalNode() || IsSetLocalNode() || IsPhantomLocalNode();
     }
 
+    // TODO: change name to add "slow" or "PreUnificiation"
+    //
     VirtualRegister GetLocalOperationVirtualRegister()
     {
         TestAssert(HasLogicalVariableInfo());
-        return GetLocalVarAccessInfo().GetLocalOrd();
+        return GetLocalVarAccessInfo().GetVirtualRegister();
     }
 
     InterpreterSlot GetLocalOperationInterpreterSlot()
     {
         TestAssert(HasLogicalVariableInfo());
         return GetLocalVarAccessInfo().GetInterpreterSlot();
+    }
+
+    struct LocalIdentifier
+    {
+        InlinedCallFrame* m_inlinedCallFrame;
+        InterpreterFrameLocation m_location;
+    };
+
+    LocalIdentifier GetLocalOperationLocalIdentifier()
+    {
+        TestAssert(IsGetLocalNode() || IsSetLocalNode());
+        return LocalIdentifier{
+            .m_inlinedCallFrame = GetLocalVarAccessInfo().m_inlinedCallFrame,
+            .m_location = GetLocalVarAccessInfo().m_locationInCallFrame
+        };
     }
 
     // This information is only available if the graph is in block-local SSA form
@@ -1448,7 +1445,7 @@ public:
             // The merge has been done (because we are an root and one of the children has done the setup), no work to do
             //
             TestAssert(LogicalVariableAccessDsuFindRoot() == this);
-            TestAssert(info.GetLocalOrd().Value() == info.GetLogicalVariableInfo()->m_localOrd);
+            TestAssert(info.GetVirtualRegister().Value() == info.GetLogicalVariableInfo()->m_localOrd);
             TestAssert(info.GetInterpreterSlot().Value() == info.GetLogicalVariableInfo()->m_interpreterSlotOrd);
             return;
         }
@@ -1460,7 +1457,7 @@ public:
         if (!rootInfo.IsLogicalVariableInfoPointerSetUp())
         {
             TestAssert(info.IsConsistentWith(rootInfo));
-            VirtualRegister vreg = rootInfo.GetLocalOrd();
+            VirtualRegister vreg = rootInfo.GetVirtualRegister();
             InterpreterSlot islot = rootInfo.GetInterpreterSlot();
             LogicalVariableInfo* lvInfo = LogicalVariableInfo::Create(vreg, islot);
             RegisterLogicalVariable(graph, lvInfo);
@@ -1468,7 +1465,7 @@ public:
         }
 
         TestAssert(rootInfo.IsLogicalVariableInfoPointerSetUp());
-        TestAssert(info.GetLocalOrd().Value() == rootInfo.GetLogicalVariableInfo()->m_localOrd);
+        TestAssert(info.GetVirtualRegister().Value() == rootInfo.GetLogicalVariableInfo()->m_localOrd);
         TestAssert(info.GetInterpreterSlot().Value() == rootInfo.GetLogicalVariableInfo()->m_interpreterSlotOrd);
 
         // If we are root, we have done the setup above so no need to do anything
@@ -1481,7 +1478,7 @@ public:
         }
 
         TestAssert(info.IsLogicalVariableInfoPointerSetUp());
-        TestAssert(info.GetLocalOrd().Value() == info.GetLogicalVariableInfo()->m_localOrd);
+        TestAssert(info.GetVirtualRegister().Value() == info.GetLogicalVariableInfo()->m_localOrd);
         TestAssert(info.GetInterpreterSlot().Value() == info.GetLogicalVariableInfo()->m_interpreterSlotOrd);
     }
 
@@ -1532,6 +1529,7 @@ public:
     bool IsReturnNode() { return m_nodeKind == NodeKind_Return; }
     bool IsGetKthVariadicResNode() { return m_nodeKind == NodeKind_GetKthVariadicRes; }
     bool IsPrependVariadicResNode() { return m_nodeKind == NodeKind_PrependVariadicRes; }
+    bool IsCreateCapturedVarNode() { return m_nodeKind == NodeKind_CreateCapturedVar; }
 
     static Node* WARN_UNUSED CreateNoopNode()
     {
@@ -1541,22 +1539,24 @@ public:
         return r;
     }
 
-    static Node* WARN_UNUSED CreateGetLocalNode(VirtualRegister vreg, InterpreterSlot interpSlot)
+    static Node* WARN_UNUSED CreateGetLocalNode(InlinedCallFrame* callFrame, InterpreterFrameLocation frameLoc)
     {
+        callFrame->AssertFrameLocationValid(frameLoc);
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_GetLocal);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, interpSlot, vreg);
+        r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
         return r;
     }
 
-    static Node* WARN_UNUSED CreateSetLocalNode(VirtualRegister vreg, InterpreterSlot interpSlot, Value valueToStore)
+    static Node* WARN_UNUSED CreateSetLocalNode(InlinedCallFrame* callFrame, InterpreterFrameLocation frameLoc, Value valueToStore)
     {
+        callFrame->AssertFrameLocationValid(frameLoc);
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_SetLocal);
         r->SetNumInputs(1);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(valueToStore);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, interpSlot, vreg);
+        r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
         return r;
     }
 
@@ -1874,6 +1874,13 @@ private:
 };
 static_assert(offsetof_member_v<&Node::m_nodeKind> == 0);
 
+inline bool Value::IsConstantValue()
+{
+    Node* node = m_node;
+    TestAssertImp(node->IsConstantLikeNode(), m_outputOrd == 0);
+    return node->IsConstantLikeNode();
+}
+
 struct BasicBlock;
 
 struct Phi
@@ -2006,6 +2013,8 @@ private:
     BasicBlock()
         : m_localInfoAtHead(nullptr)
         , m_localInfoAtTail(nullptr)
+        , m_inPlaceCallLocalOrdForInPlaceCallRc(static_cast<uint32_t>(-1))
+        , m_hackyTolerateBadShadowStoreOrd(static_cast<uint32_t>(-1))
         , m_terminator(nullptr)
         , m_numLocals(static_cast<uint32_t>(-1))
         , m_numSuccessors(static_cast<uint8_t>(-1))
@@ -2029,12 +2038,13 @@ public:
     // Each value must be one of the following:
     // (1) A Phi: nothing happened to this local inside this BB, the value of this local in this BB
     //     is described by this Phi, the tail variable must be the same Phi.
-    // (2) A GetLocal/PhantomLocal: the value at head is the DataFlowInfo (a Phi node) of this GetLocal/PhantomLocal.
+    // (2) A GetLocal: the value at head is the DataFlowInfo (a Phi node) of this GetLocal.
     // (3) A SetLocal: the value of the local at the beginning of this basic block does not matter,
     //     since the SetLocal is the first thing done to this local in this basic block.
     // (4) An UndefVal: this local is uninitialized and unused throughout this basic block.
     //     This implies that the tail variable is also UndefVal.
-    // (5) nullptr: this local is unused and dead throughout this BB. Tail value must also be nullptr.
+    // (5) nullptr: this local is unused and DFG-dead (but not necessarily bytecode dead) throughout
+    //     this BB. Tail value must also be nullptr.
     //
     PhiOrNode* m_localInfoAtHead;
 
@@ -2045,12 +2055,13 @@ public:
     //
     // Each value must be one of the following:
     // (1) A Phi: nothing happened to this local inside this BB, the head variable must be the same Phi.
-    // (2) A GetLocal/PhantomLocal: this local is read from, but not written to, in this BB.
-    //     The head variable must be the same GetLocal/PhantomLocal, and the value at tail is the
-    //     DataFlowInfo (a Phi node) of the GetLocal/PhantomLocal.
+    // (2) A GetLocal: this local is read from, but not written to, in this BB.
+    //     The head variable must be the same GetLocal, and the value at tail is the DataFlowInfo (a
+    //     Phi node) of the GetLocal.
     // (3) A SetLocal: the value at tail is the value written by this SetLocal.
     // (4) An UndefVal: this local is uninitialized and unused throughout this basic block.
-    // (5) nullptr: this local is unused and dead throughout this BB. Head value must also be nullptr.                                                                                  //
+    // (5) nullptr: this local is unused and DFG-dead (but not necessarily bytecode dead) throughout
+    //     this BB. Head value must also be nullptr.                                                                                  //
     //
     PhiOrNode* m_localInfoAtTail;
 
@@ -2066,6 +2077,29 @@ public:
     uint32_t m_predOrdForSuccessors[2];
 
     DVector<ArenaPtr<BasicBlock>> m_predecessors;
+
+    // At the start of this basic block, the imaginary interpreter stack should have the expected content as the BeforeUse point
+    // of this bytecode for all the interpreter slots that are live at this point.
+    //
+    // The CodeOrigin is invalid if this is the root function entry block, since the root entry block is responsible for doing
+    // argument setup work (so the DFG state at head does not really agree with the interpreter state before bytecode 0).
+    // This is fine since the root function entry block is not a valid branch target.
+    //
+    // If 'm_inPlaceCallLocalOrdForInPlaceCallRc' is not -1, it means that this basic block is the return continuation
+    // for an in-place call, so a local is not live if its bytecode local ord is >= m_inPlaceCallLocalOrdForInPlaceCallRc,
+    // even if the bytecode liveness reports that it is live.
+    //
+    CodeOrigin m_bcForInterpreterStateAtBBStart;
+    uint32_t m_inPlaceCallLocalOrdForInPlaceCallRc;
+
+    // This is an ugly hack.. For inlined in-place call with trivial return continuation, we currently do the clean up logic that
+    // reset each local used by the in-place call to UndefVal in the join BB. But this means that at the end of each predecessor BB,
+    // the ShadowStore and SetLocal information can be out of sync (in rare edge cases where a ShadowStore wrote to a slot that is
+    // also accessed as an uninitialized slot in caller logic..)
+    // Fixing this will require hoising the cleanup logic to every predecessor BB, which will result in potentially large amounts of
+    // unnecessary IR nodes, so we just use this hack to silence the spurious assertion.
+    //
+    uint32_t m_hackyTolerateBadShadowStoreOrd;
 
     // The terminator node of this basic block
     // If this block has 0/1 successors, the terminator must be pointing to the last node.
@@ -2085,6 +2119,166 @@ public:
         TestAssert(m_numSuccessors <= 2);
         __builtin_assume(m_numSuccessors <= 2);
         return m_numSuccessors;
+    }
+
+    BasicBlock* GetSuccessor(size_t succOrd)
+    {
+        TestAssert(succOrd < m_numSuccessors);
+        return m_successors[succOrd];
+    }
+
+private:
+    InlinedCallFrame* GetInlinedCallFrameAtTail()
+    {
+        TestAssert(GetNumSuccessors() > 0);
+        InlinedCallFrame* frame = GetSuccessor(0)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame();
+
+#ifdef TESTBUILD
+        // All the successors must have the same InlinedCallFrame. Assert this for sanity.
+        //
+        for (size_t i = 1; i < GetNumSuccessors(); i++)
+        {
+            TestAssert(GetSuccessor(i)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame() == frame);
+        }
+#endif
+        return frame;
+    }
+
+    // 'frame' should be the result of GetInlinedCallFrameAtTail()
+    //
+    bool IsBytecodeLocalLiveAtTail(InlinedCallFrame* frame, size_t bytecodeLocalOrd)
+    {
+        // A local in the current frame is live if the local is live at any of the successor head
+        //
+        TestAssert(bytecodeLocalOrd < frame->GetNumBytecodeLocals());
+        size_t numSuccessors = GetNumSuccessors();
+        BytecodeLiveness& bytecodeLiveness = frame->BytecodeLivenessInfo();
+        for (size_t i = 0; i < numSuccessors; i++)
+        {
+            BasicBlock* succ = GetSuccessor(i);
+            if (bytecodeLocalOrd >= succ->m_inPlaceCallLocalOrdForInPlaceCallRc)
+            {
+                TestAssert(succ->m_inPlaceCallLocalOrdForInPlaceCallRc != static_cast<uint32_t>(-1));
+                continue;
+            }
+            size_t bytecodeIndex = succ->m_bcForInterpreterStateAtBBStart.GetBytecodeIndex();
+            if (bytecodeLiveness.IsBytecodeLocalLive(bytecodeIndex, BytecodeLiveness::BeforeUse, bytecodeLocalOrd))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+public:
+    // Return true if this SetLocal is bytecode-live at BB tail thus must not be deleted even if it is DFG dead
+    //
+    bool IsSetLocalBytecodeLiveAtTail(InlinedCallFrame* frame, InterpreterFrameLocation frameLoc)
+    {
+        if (GetNumSuccessors() == 0)
+        {
+            return false;
+        }
+
+        InlinedCallFrame* bbFrame = GetInlinedCallFrameAtTail();
+        if (likely(frame == bbFrame))
+        {
+            // The easy case: the SetLocal is writing to the current frame.
+            //
+            // If it's not a SetLocal to a local (i.e., it's setting up an vararg or stack frame header slot),
+            // it is trivially live.
+            //
+            if (!frameLoc.IsLocal())
+            {
+                return true;
+            }
+
+            // Otherwise, it is live if the bytecode local is live at tail
+            //
+            uint32_t bytecodeLocalOrd = frameLoc.LocalOrd();
+            return IsBytecodeLocalLiveAtTail(bbFrame, bytecodeLocalOrd);
+        }
+
+        // The harder case: the SetLocal is not writing to the current frame.
+        //
+        // Case 1: If the frame that the SetLocal is writing to is not an active frame in the current inlining stack, it must be dead.
+        //
+        InlinedCallFrame* calleeFrameOfSetLocal = nullptr;
+        {
+            InlinedCallFrame* curFrame = bbFrame;
+            while (!curFrame->IsRootFrame())
+            {
+                InlinedCallFrame* parentFrame = curFrame->GetParentFrame();
+                if (parentFrame == frame)
+                {
+                    calleeFrameOfSetLocal = curFrame;
+                    break;
+                }
+                curFrame = parentFrame;
+            }
+        }
+        if (calleeFrameOfSetLocal == nullptr)
+        {
+            return false;
+        }
+
+        // Case 2: if the SetLocal is writing to a local that has become part of the callee frame, it must be dead.
+        //
+        InterpreterSlot slotForSetLocal = frame->GetInterpreterSlotForLocation(frameLoc);
+        {
+            InterpreterSlot slotForCalleeFrameStart = calleeFrameOfSetLocal->GetInterpreterSlotForFrameStart();
+            if (slotForSetLocal.Value() >= slotForCalleeFrameStart.Value())
+            {
+                return false;
+            }
+        }
+
+        // Now we know the SetLocal is writing to a potentially live local in an ancestor call frame
+        //
+        return bbFrame->IsInterpreterSlotBeforeFrameBaseLive(slotForSetLocal);
+    }
+
+    bool IsSetLocalBytecodeLiveAtTail(Node* setLocalNode)
+    {
+        TestAssert(setLocalNode->IsSetLocalNode());
+        Node::LocalIdentifier ident = setLocalNode->GetLocalOperationLocalIdentifier();
+        return IsSetLocalBytecodeLiveAtTail(ident.m_inlinedCallFrame, ident.m_location);
+    }
+
+    // Return the virtual register mapping info for an interpreter slot at the end of this BB
+    // This is mostly for assertion purpose only (to check that the state of the imaginary interpreter
+    // stack agrees with the DFG stack at every BB end)
+    //
+    VirtualRegisterMappingInfo GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot slot)
+    {
+        if (GetNumSuccessors() == 0)
+        {
+            return VirtualRegisterMappingInfo::Dead();
+        }
+
+        InlinedCallFrame* bbFrame = GetInlinedCallFrameAtTail();
+        size_t slotOrd = slot.Value();
+        size_t frameBaseOrd = bbFrame->GetInterpreterSlotForStackFrameBase().Value();
+        if (slotOrd < frameBaseOrd)
+        {
+            return bbFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(slot);
+        }
+        else
+        {
+            size_t bytecodeLocalOrd = slotOrd - frameBaseOrd;
+            if (bytecodeLocalOrd >= bbFrame->GetNumBytecodeLocals())
+            {
+                return VirtualRegisterMappingInfo::Dead();
+            }
+            if (!IsBytecodeLocalLiveAtTail(bbFrame, bytecodeLocalOrd))
+            {
+                return VirtualRegisterMappingInfo::Dead();
+            }
+            else
+            {
+                return VirtualRegisterMappingInfo::VReg(bbFrame->GetRegisterForLocalOrd(bytecodeLocalOrd));
+            }
+        }
     }
 };
 

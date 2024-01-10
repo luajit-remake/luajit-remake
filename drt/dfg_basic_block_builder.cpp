@@ -56,7 +56,7 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
     {
         if (m_valueAtTail[localOrd].m_node.IsNull())
         {
-            Node* getLocal = Node::CreateGetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd));
+            Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
             m_valueAtTail[localOrd] = Value(getLocal, 0 /*outputOrd*/);
         }
@@ -74,7 +74,7 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
     {
         if (m_valueAtTail[localOrd].m_node.IsNull())
         {
-            Node* getLocal = Node::CreateGetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd));
+            Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
             m_valueAtTail[localOrd] = Value(getLocal, 0 /*outputOrd*/);
         }
@@ -90,7 +90,7 @@ Node* DfgBuildBasicBlockContext::SetLocalVariableValue(size_t localOrd, Value va
     {
         if (m_valueAtTail[localOrd].m_node.IsNull())
         {
-            Node* getLocal = Node::CreateGetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd));
+            Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
             m_valueAtTail[localOrd] = Value(getLocal, 0 /*outputOrd*/);
         }
@@ -106,7 +106,7 @@ Node* DfgBuildBasicBlockContext::SetLocalVariableValue(size_t localOrd, Value va
     }
     else
     {
-        Node* setLocal = Node::CreateSetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd), value);
+        Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), value);
         SetupNodeCommonInfoAndPushBack(setLocal);
         m_valueAtTail[localOrd] = value;
         return setLocal;
@@ -117,9 +117,18 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
 {
     TestAssert(m_codeBlock->m_baselineCodeBlock->GetBytecodeOffsetFromBytecodeIndex(curBytecodeIndex) == curBytecodeOffset);
 
-    m_currentCodeOrigin = CodeOrigin(m_inlinedCallFrame, curBytecodeIndex);
-    m_currentOriginForExit = OsrExitDestination(false /*isBranchDest*/, CodeOrigin(m_inlinedCallFrame, curBytecodeIndex));
-    m_isOSRExitOK = !forReturnContinuation;
+    if (!forReturnContinuation)
+    {
+        m_currentCodeOrigin = CodeOrigin(m_inlinedCallFrame, curBytecodeIndex);
+        m_currentOriginForExit = OsrExitDestination(false /*isBranchDest*/, CodeOrigin(m_inlinedCallFrame, curBytecodeIndex));
+        m_isOSRExitOK = true;
+    }
+    else
+    {
+        // For return continuation, caller should have set up the codeOrigin and exitDest for us
+        //
+        TestAssert(!m_isOSRExitOK);
+    }
 
     BCKind bcKind = m_decoder.GetBytecodeKind(curBytecodeOffset);
     Node* node = Node::CreateGuestLanguageNode(bcKind);
@@ -790,6 +799,8 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
     m_primBBs[bbOrd] = m_currentBlock;
     m_allBBs.push_back(m_currentBlock);
 
+    m_currentBlock->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, bbUvInfo->m_bytecodeIndex);
+
     Node* terminatorNode = nullptr;
 
     size_t curBytecodeOffset = bbUvInfo->m_bytecodeOffset;
@@ -930,6 +941,8 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
             ib->m_numSuccessors = 1;
             succField = ib->m_successors;
 
+            ib->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, succBBInfo->m_bytecodeIndex);
+
             StartNewBasicBlock(ib, nullptr /*bbInfo*/);
             m_allBBs.push_back(ib);
 
@@ -940,7 +953,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                 TestAssertImp(bbUvInfo->m_isLocalCapturedAtTail.IsSet(localOrd), succBBInfo->m_isLocalCapturedAtHead.IsSet(localOrd));
                 if (succBBInfo->m_isLocalCapturedAtHead.IsSet(localOrd) && !bbUvInfo->m_isLocalCapturedAtTail.IsSet(localOrd))
                 {
-                    Node* getLocal = Node::CreateGetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd));
+                    Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
                     SetupNodeCommonInfoAndPushBack(getLocal);
                     Node* createClosureVar = Node::CreateCreateCapturedVarNode(Value(getLocal, 0 /*outputOrd*/));
                     SetupNodeCommonInfoAndPushBack(createClosureVar);
@@ -949,7 +962,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                     // This SetLocal shouldn't exit, but even if does, we are still in a consistent state,
                     // since bytecode execution is agnostic of which local is captured by an upvalue.
                     //
-                    Node* setLocal = Node::CreateSetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
+                    Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
                     SetupNodeCommonInfoAndPushBack(setLocal);
                 }
             }
@@ -985,6 +998,15 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
         ib->m_numSuccessors = 1;
         ib->m_successors[0] = mainBlockEntry;
 
+        // The root function's entry BB does not have a valid m_bcForInterpreterStateAtBBStart
+        // If we are not the root frame, at the time this block is executed, all the arguments have been set up,
+        // so the interpreter state *is* what we expect to have before bytecode 0.
+        //
+        if (!m_inlinedCallFrame->IsRootFrame())
+        {
+            ib->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, 0 /*bytecodeIndex*/);
+        }
+
         StartNewBasicBlock(ib, nullptr /*bbInfo*/);
 
         uint32_t numArgs = m_codeBlock->m_owner->m_numFixedArguments;
@@ -1005,7 +1027,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
             m_isOSRExitOK = true;
             for (size_t localOrd = 0; localOrd < numArgs; localOrd++)
             {
-                Node* setLocal = Node::CreateSetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd), m_graph->GetArgumentNode(localOrd));
+                Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), m_graph->GetArgumentNode(localOrd));
                 SetupNodeCommonInfoAndPushBack(setLocal);
             }
         }
@@ -1031,7 +1053,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                         // The speculative inliner is responsible for setting up the values before
                         // branching to this BB, we just need to do GetLocal
                         //
-                        Node* getLocal = Node::CreateGetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd));
+                        Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
                         SetupNodeCommonInfoAndPushBack(getLocal);
                         closureVarInitValue = Value(getLocal, 0 /*outputOrd*/);
                     }
@@ -1048,7 +1070,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                 // This SetLocal shouldn't exit, but even if does, we are still in a consistent state,
                 // since bytecode execution is agnostic of which local is captured by an upvalue.
                 //
-                Node* setLocal = Node::CreateSetLocalNode(GetRegisterForLocalOrd(localOrd), GetInterpreterSlotForLocalOrd(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
+                Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
                 SetupNodeCommonInfoAndPushBack(setLocal);
             }
         }

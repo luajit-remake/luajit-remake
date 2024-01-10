@@ -33,12 +33,9 @@ struct BytecodeLivenessBBInfo
 {
     size_t m_numBytecodesInBB;
     size_t m_firstBytecodeIndex;
-    // The offset of each bytecode in REVERSE order
-    //
-    uint32_t* m_bytecodeOffset;
-    // The uses and defs of the k-th bytecode in REVERSE order can be parsed as the following:
-    // Defs: [m_infoIndex[k*2-1], m_infoIndex[k*2]) of m_info where m_infoIndex[-1] is assumed to be 0
-    // Uses: [m_infoIndex[k*2], m_infoIndex[k*2+1]) of m_info
+    // The uses and defs of the k-th bytecode can be parsed as the following:
+    // Uses: [m_infoIndex[k*2], m_infoIndex[k*2+1]) of m_info where m_infoIndex[0] is 0
+    // Defs: [m_infoIndex[k*2+1], m_infoIndex[k*2+2]) of m_info
     //
     TempVector<uint32_t> m_info;
     uint32_t* m_infoIndex;
@@ -77,7 +74,8 @@ struct BytecodeLivenessBBInfo
 
         m_firstBytecodeIndex = bbInfo->m_bytecodeIndex;
 
-        m_infoIndex = alloc.AllocateArray<uint32_t>(m_numBytecodesInBB * 2);
+        m_infoIndex = alloc.AllocateArray<uint32_t>(m_numBytecodesInBB * 2 + 1);
+        m_infoIndex[0] = 0;
 
         m_atHead.Reset(alloc, numLocals);
         m_atTail.Reset(alloc, numLocals);
@@ -88,137 +86,204 @@ struct BytecodeLivenessBBInfo
         m_lastChangedEpoch = 0;
         m_lastCheckedEpoch = 0;
 
-        m_bytecodeOffset = alloc.AllocateArray<uint32_t>(m_numBytecodesInBB);
-
-        // Compute the offset of each bytecode
-        //
+        bool* isCaptured = alloc.AllocateArray<bool>(numLocals);
+        for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
         {
-            size_t curBytecodeOffset = bbInfo->m_bytecodeOffset;
-            size_t index = m_numBytecodesInBB;
-            for (size_t iterCounter = 0; iterCounter < m_numBytecodesInBB; iterCounter++)
-            {
-                TestAssertIff(iterCounter == m_numBytecodesInBB - 1, curBytecodeOffset == bbInfo->m_terminalNodeBcOffset);
-                TestAssert(index > 0);
-                index--;
-                m_bytecodeOffset[index] = SafeIntegerCast<uint32_t>(curBytecodeOffset);
-                curBytecodeOffset = decoder.GetNextBytecodePosition(curBytecodeOffset);
-            }
-            TestAssert(index == 0);
+            isCaptured[localOrd] = bbInfo->m_isLocalCapturedAtHead.IsSet(localOrd);
         }
 
+        size_t curBytecodeOffset = bbInfo->m_bytecodeOffset;
         for (size_t index = 0; index < m_numBytecodesInBB; index++)
         {
-            size_t curBytecodeOffset = m_bytecodeOffset[index];
+            TestAssertIff(index == m_numBytecodesInBB - 1, curBytecodeOffset == bbInfo->m_terminalNodeBcOffset);
 
-            // Generate the defs of the bytecode
-            //
+            if (decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::CreateClosure>(curBytecodeOffset))
             {
-                BytecodeRWCInfo outputs = decoder.GetDataFlowWriteInfo(curBytecodeOffset);
-                for (size_t itemOrd = 0; itemOrd < outputs.GetNumItems(); itemOrd++)
-                {
-                    BytecodeRWCDesc item = outputs.GetDesc(itemOrd);
-                    if (item.IsLocal())
-                    {
-                        m_info.push_back(SafeIntegerCast<uint32_t>(item.GetLocalOrd()));
-                    }
-                    else if (item.IsRange())
-                    {
-                        TestAssert(item.GetRangeLength() >= 0);
-                        for (size_t i = 0; i < static_cast<size_t>(item.GetRangeLength()); i++)
-                        {
-                            m_info.push_back(SafeIntegerCast<uint32_t>(item.GetRangeStart() + i));
-                        }
-                    }
-                }
-
-                m_infoIndex[index * 2] = SafeIntegerCast<uint32_t>(m_info.size());
-            }
-
-            // Generate the uses of the bytecode
-            //
-            {
-                BytecodeRWCInfo inputs = decoder.GetDataFlowReadInfo(curBytecodeOffset);
-                for (size_t itemOrd = 0; itemOrd < inputs.GetNumItems(); itemOrd++)
-                {
-                    BytecodeRWCDesc item = inputs.GetDesc(itemOrd);
-                    if (item.IsLocal())
-                    {
-                        m_info.push_back(SafeIntegerCast<uint32_t>(item.GetLocalOrd()));
-                    }
-                    else if (item.IsRange())
-                    {
-                        TestAssert(item.GetRangeLength() >= 0);
-                        for (size_t i = 0; i < static_cast<size_t>(item.GetRangeLength()); i++)
-                        {
-                            m_info.push_back(SafeIntegerCast<uint32_t>(item.GetRangeStart() + i));
-                        }
-                    }
-                }
-
-                // Special handling: CreateClosure intrinsic uses all the locals it captures, but except the self reference!
+                // Special handling: CreateClosure intrinsic uses all the locals it captures.
+                // The self-reference local (if it exists) is special: for immutable self-reference, it is never used (but def'ed by the CreateClosure).
+                // For mutable self-reference, if the local is already a CapturedVar, it is used.
+                // But if the local is not a CapturedVar, it is not used (but def'ed by the CreateClosure).
                 //
-                if (decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::CreateClosure>(curBytecodeOffset))
+                BytecodeIntrinsicInfo::CreateClosure info = decoder.GetBytecodeIntrinsicInfo<BytecodeIntrinsicInfo::CreateClosure>(curBytecodeOffset);
+                TestAssert(info.proto.IsConstant());
+                UnlinkedCodeBlock* createClosureUcb = reinterpret_cast<UnlinkedCodeBlock*>(info.proto.AsConstant().m_value);
+                TestAssert(createClosureUcb != nullptr);
+
+#ifdef TESTBUILD
+                BytecodeRWCInfo inputs = decoder.GetDataFlowReadInfo(curBytecodeOffset);
+                TestAssert(inputs.GetNumItems() == 1);
+                TestAssert(inputs.GetDesc(0).IsConstant());
+#endif
+                BytecodeRWCInfo outputs = decoder.GetDataFlowWriteInfo(curBytecodeOffset);
+                TestAssert(outputs.GetNumItems() == 1);
+                BytecodeRWCDesc item = outputs.GetDesc(0 /*itemOrd*/);
+                TestAssert(item.IsLocal());
+                size_t destLocalOrd = item.GetLocalOrd();
+                TestAssert(destLocalOrd < numLocals);
+
+                for (size_t uvOrd = 0; uvOrd < createClosureUcb->m_numUpvalues; uvOrd++)
                 {
-                    BytecodeIntrinsicInfo::CreateClosure info = decoder.GetBytecodeIntrinsicInfo<BytecodeIntrinsicInfo::CreateClosure>(curBytecodeOffset);
-                    TestAssert(info.proto.IsConstant());
-                    UnlinkedCodeBlock* createClosureUcb = reinterpret_cast<UnlinkedCodeBlock*>(info.proto.AsConstant().m_value);
-                    TestAssert(createClosureUcb != nullptr);
-
-                    BytecodeRWCInfo outputs = decoder.GetDataFlowWriteInfo(curBytecodeOffset);
-                    TestAssert(outputs.GetNumItems() == 1);
-                    BytecodeRWCDesc item = outputs.GetDesc(0 /*itemOrd*/);
-                    TestAssert(item.IsLocal());
-                    size_t destLocalOrd = item.GetLocalOrd();
-
-                    for (size_t uvOrd = 0; uvOrd < createClosureUcb->m_numUpvalues; uvOrd++)
+                    UpvalueMetadata& uvmt = createClosureUcb->m_upvalueInfo[uvOrd];
+                    if (uvmt.m_isParentLocal)
                     {
-                        UpvalueMetadata& uvmt = createClosureUcb->m_upvalueInfo[uvOrd];
-                        if (uvmt.m_isParentLocal)
+                        TestAssert(uvmt.m_slot < numLocals);
+                        if (uvmt.m_slot == destLocalOrd)
                         {
-                            if (uvmt.m_slot == destLocalOrd)
-                            {
-                                // This is a self-reference, do nothing
-                                // Note that no matter whether this is a mutable reference or not, the value stored in the local
-                                // is never read from, before it is overwritten by the output. Therefore this is never a use.
-                                //
-                            }
-                            else
+                            // This is a self-reference.
+                            // It is only used if it is a mutable self-reference and the local is already a CapturedVar
+                            //
+                            if (!uvmt.m_isImmutable && isCaptured[uvmt.m_slot])
                             {
                                 m_info.push_back(uvmt.m_slot);
                             }
                         }
+                        else
+                        {
+                            m_info.push_back(uvmt.m_slot);
+                        }
                     }
                 }
+                m_infoIndex[index * 2 + 1] = SafeIntegerCast<uint32_t>(m_info.size());
 
-                // Special handling: UpvalueClose intrinsic uses all the captured locals that it closes
-                //
-                if (decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::UpvalueClose>(curBytecodeOffset))
+                for (size_t uvOrd = 0; uvOrd < createClosureUcb->m_numUpvalues; uvOrd++)
                 {
-                    TestAssert(curBytecodeOffset == bbInfo->m_terminalNodeBcOffset);
-                    BytecodeIntrinsicInfo::UpvalueClose info = decoder.GetBytecodeIntrinsicInfo<BytecodeIntrinsicInfo::UpvalueClose>(curBytecodeOffset);
-                    TestAssert(info.start.IsLocal());
-                    size_t uvCloseStart = info.start.AsLocal();
-                    TestAssert(uvCloseStart <= numLocals);
-
-                    for (size_t localOrd = uvCloseStart; localOrd < numLocals; localOrd++)
+                    UpvalueMetadata& uvmt = createClosureUcb->m_upvalueInfo[uvOrd];
+                    if (uvmt.m_isParentLocal)
                     {
-                        if (bbInfo->m_isLocalCapturedAtHead.IsSet(localOrd) || bbInfo->m_isLocalCapturedInBB.IsSet(localOrd))
+                        TestAssert(uvmt.m_slot < numLocals);
+                        // If the local is converted to a CapturedVar by this CreateClosure, it is def'ed
+                        //
+                        if (!uvmt.m_isImmutable)
                         {
-                            // This value is captured before the UpvalueClose and closed by the upvalue.
-                            //
-                            m_info.push_back(SafeIntegerCast<uint32_t>(localOrd));
+                            if (!isCaptured[uvmt.m_slot])
+                            {
+                                m_info.push_back(uvmt.m_slot);
+                                isCaptured[uvmt.m_slot] = true;
+                            }
                         }
                     }
                 }
 
-                m_infoIndex[index * 2 + 1] = SafeIntegerCast<uint32_t>(m_info.size());
+                // If the destination slot is not a CapturedVar, it is also def'ed
+                //
+                if (!isCaptured[destLocalOrd])
+                {
+                    m_info.push_back(SafeIntegerCast<uint32_t>(destLocalOrd));
+                }
+
+                m_infoIndex[index * 2 + 2] = SafeIntegerCast<uint32_t>(m_info.size());
             }
+            else if (decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::UpvalueClose>(curBytecodeOffset))
+            {
+                // Special handling: UpvalueClose intrinsic uses and defs all the captured locals that it closes
+                //
+                TestAssert(curBytecodeOffset == bbInfo->m_terminalNodeBcOffset);
+                TestAssert(decoder.GetDataFlowReadInfo(curBytecodeOffset).GetNumItems() == 0);
+                TestAssert(decoder.GetDataFlowWriteInfo(curBytecodeOffset).GetNumItems() == 0);
+                BytecodeIntrinsicInfo::UpvalueClose info = decoder.GetBytecodeIntrinsicInfo<BytecodeIntrinsicInfo::UpvalueClose>(curBytecodeOffset);
+                TestAssert(info.start.IsLocal());
+                size_t uvCloseStart = info.start.AsLocal();
+                TestAssert(uvCloseStart <= numLocals);
+
+                for (size_t localOrd = uvCloseStart; localOrd < numLocals; localOrd++)
+                {
+                    if (isCaptured[localOrd])
+                    {
+                        // This value is captured before the UpvalueClose and closed by the upvalue.
+                        // This means that UpvalueClose needs to read the CapturedVar stored in this local (use it),
+                        // then write to the local the value stored in the CapturedVar (def it)
+                        //
+                        m_info.push_back(SafeIntegerCast<uint32_t>(localOrd));
+                    }
+                }
+                m_infoIndex[index * 2 + 1] = SafeIntegerCast<uint32_t>(m_info.size());
+
+                for (size_t localOrd = uvCloseStart; localOrd < numLocals; localOrd++)
+                {
+                    if (isCaptured[localOrd])
+                    {
+                        m_info.push_back(SafeIntegerCast<uint32_t>(localOrd));
+                        isCaptured[localOrd] = false;
+                    }
+                }
+                m_infoIndex[index * 2 + 2] = SafeIntegerCast<uint32_t>(m_info.size());
+            }
+            else
+            {
+                // This is a conventional bytecode
+                // Generate the uses of the bytecode
+                //
+                {
+                    BytecodeRWCInfo inputs = decoder.GetDataFlowReadInfo(curBytecodeOffset);
+                    for (size_t itemOrd = 0; itemOrd < inputs.GetNumItems(); itemOrd++)
+                    {
+                        BytecodeRWCDesc item = inputs.GetDesc(itemOrd);
+                        if (item.IsLocal())
+                        {
+                            m_info.push_back(SafeIntegerCast<uint32_t>(item.GetLocalOrd()));
+                        }
+                        else if (item.IsRange())
+                        {
+                            TestAssert(item.GetRangeLength() >= 0);
+                            for (size_t i = 0; i < static_cast<size_t>(item.GetRangeLength()); i++)
+                            {
+                                m_info.push_back(SafeIntegerCast<uint32_t>(item.GetRangeStart() + i));
+                            }
+                        }
+                    }
+                    m_infoIndex[index * 2 + 1] = SafeIntegerCast<uint32_t>(m_info.size());
+                }
+
+                // Generate the defs of the bytecode
+                // Note that a local is only def'ed if it is not captured:
+                // if it is captured, we are writing into the CapturedVar, not the local itself!
+                //
+                {
+                    BytecodeRWCInfo outputs = decoder.GetDataFlowWriteInfo(curBytecodeOffset);
+                    for (size_t itemOrd = 0; itemOrd < outputs.GetNumItems(); itemOrd++)
+                    {
+                        BytecodeRWCDesc item = outputs.GetDesc(itemOrd);
+                        if (item.IsLocal())
+                        {
+                            size_t localOrd = item.GetLocalOrd();
+                            TestAssert(localOrd < numLocals);
+                            if (!isCaptured[localOrd])
+                            {
+                                m_info.push_back(SafeIntegerCast<uint32_t>(localOrd));
+                            }
+                        }
+                        else if (item.IsRange())
+                        {
+                            TestAssert(item.GetRangeLength() >= 0);
+                            for (size_t i = 0; i < static_cast<size_t>(item.GetRangeLength()); i++)
+                            {
+                                size_t localOrd = item.GetRangeStart() + i;
+                                TestAssert(localOrd < numLocals);
+                                if (!isCaptured[localOrd])
+                                {
+                                    m_info.push_back(SafeIntegerCast<uint32_t>(localOrd));
+                                }
+                            }
+                        }
+                    }
+                    m_infoIndex[index * 2 + 2] = SafeIntegerCast<uint32_t>(m_info.size());
+                }
+            }
+
+            curBytecodeOffset = decoder.GetNextBytecodePosition(curBytecodeOffset);
         }
 
 #ifdef TESTBUILD
         // Assert every value is in range
         //
         for (uint32_t val : m_info) { TestAssert(val < numLocals); }
+
+        // Assert that the current capture state agrees with the tail state
+        //
+        for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
+        {
+            TestAssertIff(isCaptured[localOrd], bbInfo->m_isLocalCapturedAtTail.IsSet(localOrd));
+        }
 #endif
 
         // Compute the masks for quick update
@@ -251,17 +316,14 @@ struct BytecodeLivenessBBInfo
         TestAssert(tmpBv.m_length == m_atTail.m_length);
         tmpBv.CopyFromEqualLengthBitVector(m_atTail);
 
-        size_t curIndex = 0;
-        size_t curInfoEndIndex = 0;
-        size_t totalInfoTerms = 2 * m_numBytecodesInBB;
         uint32_t* infoData = m_info.data();
-        while (curInfoEndIndex < totalInfoTerms)
+        for (size_t indexInBB = m_numBytecodesInBB; indexInBB--;)
         {
             // Process all the defs
             //
             {
-                size_t endIndex = m_infoIndex[curInfoEndIndex];
-                curInfoEndIndex++;
+                size_t curIndex = m_infoIndex[indexInBB * 2 + 1];
+                size_t endIndex = m_infoIndex[indexInBB * 2 + 2];
                 TestAssert(endIndex <= m_info.size());
                 TestAssert(curIndex <= endIndex);
 
@@ -277,9 +339,8 @@ struct BytecodeLivenessBBInfo
             // Process all the uses
             //
             {
-                TestAssert(curInfoEndIndex < totalInfoTerms);
-                size_t endIndex = m_infoIndex[curInfoEndIndex];
-                curInfoEndIndex++;
+                size_t curIndex = m_infoIndex[indexInBB * 2];
+                size_t endIndex = m_infoIndex[indexInBB * 2 + 1];
                 TestAssert(endIndex <= m_info.size());
                 TestAssert(curIndex <= endIndex);
 
@@ -292,8 +353,6 @@ struct BytecodeLivenessBBInfo
                 }
             }
         }
-        TestAssert(curInfoEndIndex == totalInfoTerms);
-        TestAssert(curIndex == m_info.size());
     }
 
     void ComputeHeadBasedOnTailFast(TempBitVector& tmpBv /*out*/)
@@ -314,10 +373,8 @@ struct BytecodeLivenessBBInfo
         TestAssert(m_numBytecodesInBB > 0);
 
         size_t numLocals = m_atHead.m_length;
-        size_t lastBytecodeIndex = m_firstBytecodeIndex + m_numBytecodesInBB - 1;
-        TestAssert(lastBytecodeIndex < r.m_beforeUse.size());
-
-        for (size_t bytecodeIndex = m_firstBytecodeIndex; bytecodeIndex <= lastBytecodeIndex; bytecodeIndex++)
+        TestAssert(m_firstBytecodeIndex + m_numBytecodesInBB <= r.m_beforeUse.size());
+        for (size_t bytecodeIndex = m_firstBytecodeIndex; bytecodeIndex < m_firstBytecodeIndex + m_numBytecodesInBB; bytecodeIndex++)
         {
             TestAssert(r.m_beforeUse[bytecodeIndex].m_length == 0);
             TestAssert(r.m_afterUse[bytecodeIndex].m_length == 0);
@@ -325,20 +382,16 @@ struct BytecodeLivenessBBInfo
             r.m_afterUse[bytecodeIndex].Reset(numLocals);
         }
 
-        size_t curIndex = 0;
-        size_t bytecodeIndex = lastBytecodeIndex;
         uint32_t* infoData = m_info.data();
-        for (size_t index = 0; index < m_numBytecodesInBB; index++)
+        for (size_t indexInBB = m_numBytecodesInBB; indexInBB--;)
         {
-            TestAssert(bytecodeIndex < r.m_afterUse.size());
-
             // "afterUse" is computed by the next bytecode's "beforeUse" + all defs set to false
             //
-            DBitVector& afterUse = r.m_afterUse[bytecodeIndex];
-            if (index > 0)
+            DBitVector& afterUse = r.m_afterUse[m_firstBytecodeIndex + indexInBB];
+            if (indexInBB + 1 < m_numBytecodesInBB)
             {
-                TestAssert(bytecodeIndex + 1 < r.m_beforeUse.size());
-                afterUse.CopyFromEqualLengthBitVector(r.m_beforeUse[bytecodeIndex + 1]);
+                TestAssert(m_firstBytecodeIndex + indexInBB + 1 < r.m_beforeUse.size());
+                afterUse.CopyFromEqualLengthBitVector(r.m_beforeUse[m_firstBytecodeIndex + indexInBB + 1]);
             }
             else
             {
@@ -346,7 +399,8 @@ struct BytecodeLivenessBBInfo
             }
 
             {
-                size_t endIndex = m_infoIndex[index * 2];
+                size_t curIndex = m_infoIndex[indexInBB * 2 + 1];
+                size_t endIndex = m_infoIndex[indexInBB * 2 + 2];
                 TestAssert(endIndex <= m_info.size() && curIndex <= endIndex);
                 while (curIndex < endIndex)
                 {
@@ -359,11 +413,12 @@ struct BytecodeLivenessBBInfo
 
             // "beforeUse" is computed by "afterUse" + all uses set to true
             //
-            DBitVector& beforeUse = r.m_beforeUse[bytecodeIndex];
+            DBitVector& beforeUse = r.m_beforeUse[m_firstBytecodeIndex + indexInBB];
             beforeUse.CopyFromEqualLengthBitVector(afterUse);
 
             {
-                size_t endIndex = m_infoIndex[index * 2 + 1];
+                size_t curIndex = m_infoIndex[indexInBB * 2];
+                size_t endIndex = m_infoIndex[indexInBB * 2 + 1];
                 TestAssert(endIndex <= m_info.size() && curIndex <= endIndex);
                 while (curIndex < endIndex)
                 {
@@ -373,11 +428,17 @@ struct BytecodeLivenessBBInfo
                     beforeUse.SetBit(useSlot);
                 }
             }
-
-            bytecodeIndex--;
         }
-        TestAssert(curIndex == m_info.size());
-        TestAssert(bytecodeIndex + 1 == m_firstBytecodeIndex);
+
+#ifdef TESTBUILD
+        if (m_numBytecodesInBB > 0)
+        {
+            for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
+            {
+                TestAssertIff(r.m_beforeUse[m_firstBytecodeIndex].IsSet(localOrd), m_atHead.IsSet(localOrd));
+            }
+        }
+#endif
     }
 };
 
@@ -493,7 +554,7 @@ BytecodeLiveness* WARN_UNUSED BytecodeLiveness::ComputeBytecodeLiveness(CodeBloc
                         }
                     }
 
-                    // Set bb->m_atTail to be tmpBv and check if it changes ithe tail value
+                    // Set bb->m_atTail to be tmpBv and check if it changes the tail value
                     //
                     bool tailChanged = UpdateBitVectorAfterMonotonicPropagation(bb->m_atTail /*inout*/, tmpBv /*copyFrom*/);
 

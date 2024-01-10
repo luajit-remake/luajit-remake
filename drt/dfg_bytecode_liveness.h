@@ -44,20 +44,20 @@ struct BytecodeLiveness
         }
     }
 
-    bool IsInterpreterSlotLive(size_t bytecodeIndex, CalculationPoint calculationPoint, size_t interpreterSlot)
+    bool IsBytecodeLocalLive(size_t bytecodeIndex, CalculationPoint calculationPoint, size_t bytecodeLocalOrd)
     {
         TestAssert(IsInitialized());
         if (calculationPoint == CalculationPoint::BeforeUse)
         {
             TestAssert(bytecodeIndex < m_beforeUse.size());
-            TestAssert(interpreterSlot < m_beforeUse[bytecodeIndex].m_length);
-            return m_beforeUse[bytecodeIndex].IsSet(interpreterSlot);
+            TestAssert(bytecodeLocalOrd < m_beforeUse[bytecodeIndex].m_length);
+            return m_beforeUse[bytecodeIndex].IsSet(bytecodeLocalOrd);
         }
         else
         {
             TestAssert(bytecodeIndex < m_afterUse.size());
-            TestAssert(interpreterSlot < m_afterUse[bytecodeIndex].m_length);
-            return m_afterUse[bytecodeIndex].IsSet(interpreterSlot);
+            TestAssert(bytecodeLocalOrd < m_afterUse[bytecodeIndex].m_length);
+            return m_afterUse[bytecodeIndex].IsSet(bytecodeLocalOrd);
         }
     }
 

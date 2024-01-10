@@ -128,6 +128,58 @@ public:
     CodeBlock* GetCodeBlock() { return m_codeBlock; }
     CodeOrigin GetCallerCodeOrigin() { TestAssert(!IsRootFrame()); return m_caller; }
 
+    VirtualRegister GetVirtualRegisterForLocation(InterpreterFrameLocation ifLoc)
+    {
+        if (likely(ifLoc.IsLocal()))
+        {
+            return GetRegisterForLocalOrd(ifLoc.LocalOrd());
+        }
+        else if (ifLoc.IsVarArg())
+        {
+            return GetRegisterForVarArgOrd(ifLoc.VarArgOrd());
+        }
+        else if (ifLoc.IsFunctionObjectLoc())
+        {
+            return GetClosureCallFunctionObjectRegister();
+        }
+        else
+        {
+            TestAssert(ifLoc.IsNumVarArgsLoc());
+            return GetNumVarArgsRegister();
+        }
+    }
+
+    InterpreterSlot GetInterpreterSlotForLocation(InterpreterFrameLocation ifLoc)
+    {
+        if (likely(ifLoc.IsLocal()))
+        {
+            return GetInterpreterSlotForLocalOrd(ifLoc.LocalOrd());
+        }
+        else if (ifLoc.IsVarArg())
+        {
+            return GetInterpreterSlotForVariadicArgument(ifLoc.VarArgOrd());
+        }
+        else if (ifLoc.IsFunctionObjectLoc())
+        {
+            return GetInterpreterSlotForStackFrameHeader(0);
+        }
+        else
+        {
+            TestAssert(ifLoc.IsNumVarArgsLoc());
+            return GetInterpreterSlotForStackFrameHeader(1);
+        }
+    }
+
+    void AssertFrameLocationValid(InterpreterFrameLocation TESTBUILD_ONLY(ifLoc))
+    {
+        // If it's invalid, the operations below will fire assertion
+        //
+#ifdef TESTBUILD
+        std::ignore = GetVirtualRegisterForLocation(ifLoc);
+        std::ignore = GetInterpreterSlotForLocation(ifLoc);
+#endif
+    }
+
     InterpreterSlot GetInterpreterSlotForLocalOrd(size_t localOrd)
     {
         return InterpreterSlot(m_baseInterpreterFrameSlot + localOrd);
@@ -155,7 +207,7 @@ public:
     //
     InterpreterSlot GetInterpreterSlotForFrameEnd()
     {
-        return InterpreterSlot(m_baseInterpreterFrameSlot + GetCodeBlock()->m_stackFrameNumSlots);
+        return InterpreterSlot(m_baseInterpreterFrameSlot + m_numBytecodeLocals);
     }
 
     InterpreterSlot GetInterpreterSlotForStackFrameBase()
@@ -182,6 +234,8 @@ public:
         return InterpreterSlot(vaBase + vaOrd);
     }
 
+    uint32_t GetNumBytecodeLocals() { return m_numBytecodeLocals; }
+
     bool IsDirectCall() { TestAssert(!IsRootFrame()); return m_isDirectCall; }
     bool IsTailCall() { TestAssert(!IsRootFrame()); return m_isTailCall; }
     bool StaticallyKnowsNumVarArgs() { TestAssert(!IsRootFrame()); return m_canStaticallyDetermineNumVarArgs; }
@@ -201,14 +255,14 @@ public:
 
     VirtualRegister GetRegisterForLocalOrd(size_t localOrd)
     {
-        TestAssert(localOrd < GetCodeBlock()->m_stackFrameNumSlots);
+        TestAssert(localOrd < m_numBytecodeLocals);
         TestAssert(m_localToRegisterMap[localOrd] != static_cast<uint32_t>(-1));
         return VirtualRegister(m_localToRegisterMap[localOrd]);
     }
 
     void SetRegisterForLocalOrd(size_t localOrd, VirtualRegister vreg)
     {
-        TestAssert(localOrd < GetCodeBlock()->m_stackFrameNumSlots);
+        TestAssert(localOrd < m_numBytecodeLocals);
         TestAssert(m_localToRegisterMap[localOrd] == static_cast<uint32_t>(-1));
         m_localToRegisterMap[localOrd] = SafeIntegerCast<uint32_t>(vreg.Value());
     }
@@ -307,6 +361,7 @@ public:
         r->m_maxVariadicArguments = 0;
         r->m_baseInterpreterFrameSlot = 0;
         size_t numLocals = codeBlock->m_stackFrameNumSlots;
+        r->m_numBytecodeLocals = SafeIntegerCast<uint32_t>(numLocals);
         r->m_localToRegisterMap = DfgAlloc()->AllocateArray<uint32_t>(numLocals);
         for (size_t i = 0; i < numLocals; i++)
         {
@@ -320,6 +375,7 @@ public:
         r->m_bytecodeLiveness = nullptr;
         r->m_virtualRegisterVectorLength = static_cast<uint32_t>(-1);
         r->m_isVirtualRegisterUsed = nullptr;
+        r->m_virtualRegisterMappingBeforeThisFrame = nullptr;
         return r;
     }
 
@@ -348,6 +404,7 @@ public:
         r->m_baseInterpreterFrameSlot = SafeIntegerCast<uint32_t>(baseInterpreterFrameSlot.Value());
         TestAssert(baseInterpreterFrameSlot.Value() >= x_numSlotsForStackFrameHeader + maxVariadicArguments);
         size_t numLocals = codeBlock->m_stackFrameNumSlots;
+        r->m_numBytecodeLocals = SafeIntegerCast<uint32_t>(numLocals);
         r->m_localToRegisterMap = DfgAlloc()->AllocateArray<uint32_t>(numLocals);
         for (size_t i = 0; i < numLocals; i++)
         {
@@ -372,6 +429,7 @@ public:
         r->m_bytecodeLiveness = nullptr;
         r->m_virtualRegisterVectorLength = static_cast<uint32_t>(-1);
         r->m_isVirtualRegisterUsed = nullptr;
+        r->m_virtualRegisterMappingBeforeThisFrame = DfgAlloc()->AllocateArray<VirtualRegisterMappingInfo>(r->m_baseInterpreterFrameSlot);
         return r;
     }
 
@@ -398,7 +456,7 @@ public:
             inUse[vreg.Value()] = false;
         };
 
-        for (size_t i = 0; i < m_codeBlock->m_stackFrameNumSlots; i++)
+        for (size_t i = 0; i < m_numBytecodeLocals; i++)
         {
             markVReg(GetRegisterForLocalOrd(i));
         }
@@ -448,7 +506,7 @@ public:
             m_isVirtualRegisterUsed[vreg.Value()] = true;
         };
 
-        size_t numLocals = m_codeBlock->m_stackFrameNumSlots;
+        size_t numLocals = m_numBytecodeLocals;
         for (size_t i = 0; i < numLocals; i++)
         {
             markVReg(GetRegisterForLocalOrd(i));
@@ -523,6 +581,38 @@ public:
     {
         TestAssert(m_bytecodeLiveness != nullptr);
         return *m_bytecodeLiveness;
+    }
+
+    void SetInterpreterSlotBeforeFrameBaseMapping(InterpreterSlot slot, VirtualRegisterMappingInfo info)
+    {
+        size_t slotOrd = slot.Value();
+        TestAssert(slotOrd < m_baseInterpreterFrameSlot);
+        TestAssert(!m_virtualRegisterMappingBeforeThisFrame[slotOrd].IsInitialized());
+        TestAssert(info.IsInitialized());
+        m_virtualRegisterMappingBeforeThisFrame[slotOrd] = info;
+    }
+
+    void AssertVirtualRegisterMappingBeforeThisFrameComplete()
+    {
+#ifdef TESTBUILD
+        for (size_t i = 0; i < m_baseInterpreterFrameSlot; i++)
+        {
+            TestAssert(m_virtualRegisterMappingBeforeThisFrame[i].IsInitialized());
+        }
+#endif
+    }
+
+    VirtualRegisterMappingInfo GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(InterpreterSlot slot)
+    {
+        size_t slotOrd = slot.Value();
+        TestAssert(slotOrd < m_baseInterpreterFrameSlot);
+        TestAssert(m_virtualRegisterMappingBeforeThisFrame[slotOrd].IsInitialized());
+        return m_virtualRegisterMappingBeforeThisFrame[slotOrd];
+    }
+
+    bool IsInterpreterSlotBeforeFrameBaseLive(InterpreterSlot slot)
+    {
+        return GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(slot).IsLive();
     }
 
 private:
@@ -621,10 +711,20 @@ private:
     //
     uint32_t m_virtualRegisterVectorLength;
 
+    // The number of bytecode locals in this frame
+    //
+    uint32_t m_numBytecodeLocals;
+
     // An array of length m_virtualRegisterVectorLength
     // Index i is true if VirtualRegister i is used by this function or any of the functions inlined into this function
     //
     bool* m_isVirtualRegisterUsed;
+
+    // An array of length m_baseInterpreterFrameSlot
+    // Index i stores the virtual register ordinal mapped for interpreter slot i
+    // -1 means the interpreter slot is dead before the bytecode that resulted in this call frame
+    //
+    VirtualRegisterMappingInfo* m_virtualRegisterMappingBeforeThisFrame;
 };
 
 // The alignment must be >1 since OsrExitDestination steals its bit 0
