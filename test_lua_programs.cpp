@@ -950,6 +950,21 @@ TEST(LuaTestTierUpToBaselineJit, TableVariadicPut_2)
     RunSimpleLuaTest("luatests/table_variadic_put_2.lua", LuaTestOption::UpToBaselineJit);
 }
 
+TEST(LuaTest, UpvalueClosedOnException)
+{
+    RunSimpleLuaTest("luatests/upvalue_closed_on_exception.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, UpvalueClosedOnException)
+{
+    RunSimpleLuaTest("luatests/upvalue_closed_on_exception.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaTestTierUpToBaselineJit, UpvalueClosedOnException)
+{
+    RunSimpleLuaTest("luatests/upvalue_closed_on_exception.lua", LuaTestOption::UpToBaselineJit);
+}
+
 TEST(LuaBenchmark, NBody)
 {
     RunSimpleLuaTest("luatests/n-body.lua", LuaTestOption::ForceInterpreter);

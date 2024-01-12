@@ -136,6 +136,10 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
         assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
 
+        // Close all upvalues on the coroutine stack
+        //
+        currentCoro->CloseUpvalues(currentCoro->m_stackBegin);
+
         CoroutineRuntimeContext* parentCoro = currentCoro->m_parent;
         if (unlikely(parentCoro == nullptr))
         {
@@ -220,6 +224,11 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
     StackFrameHeader* protectedCallFrame = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
     assert(protectedCallFrame != nullptr);
 
+    // Every upvalue >= the frame base of the pcall/xpcall needs to be closed
+    //
+    CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
+    currentCoro->CloseUpvalues(reinterpret_cast<TValue*>(protectedCallFrame + 1));
+
     bool isXpcall;
     {
         TValue* locals = reinterpret_cast<TValue*>(protectedCallFrame + 1);
@@ -271,6 +280,11 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
             stackFrameSize = 0;
         }
 
+        // TODO: is this really correct? It seems like hdr->m_func is the function called by xpcall, but it's
+        // not necessarily the function that throws out an error, since the error could be thrown out in a callee.
+        // I don't think this is a correctness issue since there's no "cleanup" step in Lua whatsoever, so leave
+        // it as is fow now.
+        //
         TValue* callFrameBegin = GetStackBase() + stackFrameSize;
         callFrameBegin[0] = TValue::CreatePointer(handler);
         callFrameBegin[x_numSlotsForStackFrameHeader] = errorObject;
