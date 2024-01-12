@@ -93,8 +93,10 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 //     Param: the DFG local ordinal
 //
 //     Store the value into the specified DFG local variable.
+//     The interpreter slot corresponding to this DFG local must contain the same value at this time point.
 //
-//     If a SetLocal is followed by another SetLocal in the same BB, the SetLocal can be removed.
+//     If a SetLocal is followed by another SetLocal in the same BB, the SetLocal can be removed (of course, you need to
+//     replace all the GetLocals that sees this SetLocal to the value stored by this SetLocal).
 //
 //     A dead SetLocal that is the last SetLocal to a local in a BB can only be removed if the interpreter slot
 //     corresponding to the DFG local is dead at the head of every successor block.
@@ -118,8 +120,8 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 //     frame (as set by ShadowStore) is equal to the value in the DFG local corresponding to slot X (as set by SetLocal).
 //
 //     The DFG frontend will always generate a SetLocal after a ShadowStore, which satisfies this invariant.
-//     To maintain this invariant, one may only remove a SetLocal if the SetLocal is storing a constant, or the
-//     corresponding interpreter slot is dead at the head of every successor basic block.
+//     To maintain this invariant, one may only remove a SetLocal if the corresponding interpreter slot is dead at the
+//     head of every successor basic block.
 //
 // Phantom:
 //     Input: 1
