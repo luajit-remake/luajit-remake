@@ -461,15 +461,10 @@ TEST(DfgFrontend, Parser_Stress_1)
 
     constexpr size_t numFiles = std::extent_v<decltype(x_lua_files_for_parser_test)>;
 
-    std::vector<std::unique_ptr<ScriptModule>> allModules;
     for (size_t i = 0; i < numFiles; i++)
     {
         std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(std::string("luatests/") + x_lua_files_for_parser_test[i], LuaTestOption::ForceBaselineJit);
-        allModules.push_back(std::move(module));
-    }
 
-    for (auto& module : allModules)
-    {
         for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
         {
             CodeBlock* cb = ucb->m_defaultCodeBlock;
@@ -756,6 +751,56 @@ TEST(DfgFrontend, Inlining_Stress_8)
 TEST(DfgFrontend, Inlining_Stress_9)
 {
     TestDfgFrontendWithRandomCallIcInfoWithConfig(3 /*fileNamesSetSize*/, 2 /*randomlyMakeFnVariadicLevel*/);
+}
+
+TEST(DfgFrontend, SpeculativelyInlineADeadLoop)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+    VMOutputInterceptor vmOutput(vm);
+
+    vm->SetEngineStartingTier(VM::EngineStartingTier::BaselineJIT);
+    vm->SetEngineMaxTier(VM::EngineMaxTier::BaselineJIT);
+
+    DfgAlloc()->Reset();
+
+    std::unique_ptr<ScriptModule> module = ParseLuaScriptOrFail(std::string("luatests/speculatively_inline_dead_loop.lua"), LuaTestOption::ForceBaselineJit);
+    vm->LaunchScript(module.get());
+
+    UnlinkedCodeBlock* targetUcb = nullptr;
+    for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    {
+        if (ucb->m_numFixedArguments == 2)
+        {
+            ReleaseAssert(targetUcb == nullptr);
+            targetUcb = ucb;
+        }
+    }
+    ReleaseAssert(targetUcb != nullptr);
+    CodeBlock* cb = targetUcb->m_defaultCodeBlock;
+    ReleaseAssert(cb != nullptr);
+    arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
+    ReleaseAssert(ValidateDfgIrGraph(graph.get()));
+
+    // We should see 2 basic blocks where BB0->BB1 and BB1->BB1
+    //
+    ReleaseAssert(graph->m_blocks.size() == 2);
+    ReleaseAssert(graph->m_blocks[0]->GetNumSuccessors() == 1);
+    ReleaseAssert(graph->m_blocks[0]->GetSuccessor(0) == graph->m_blocks[1]);
+    ReleaseAssert(graph->m_blocks[1]->GetNumSuccessors() == 1);
+    ReleaseAssert(graph->m_blocks[1]->GetSuccessor(0) == graph->m_blocks[1]);
+
+    // In the entry block, we should see exactly 2 SetLocals
+    //
+    size_t numSetLocals = 0;
+    for (Node* node : graph->GetEntryBB()->m_nodes)
+    {
+        if (node->IsSetLocalNode())
+        {
+            numSetLocals++;
+        }
+    }
+    ReleaseAssert(numSetLocals == 2);
 }
 
 TEST(DfgFrontend, Dump_1)

@@ -646,7 +646,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                 {
                     LogicalVariableInfo* lvi = info.GetLogicalVariableInfo();
                     TestAssert(logicalVarLabelMap.count(lvi));
-                    fprintf(file, "#%d)", static_cast<int>(logicalVarLabelMap[lvi]));
+                    fprintf(file, "#%d", static_cast<int>(logicalVarLabelMap[lvi]));
                 }
                 else
                 {

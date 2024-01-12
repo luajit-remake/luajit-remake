@@ -5,6 +5,8 @@
 
 namespace dfg {
 
+constexpr bool x_run_validation_after_each_pass_in_test_build = true;
+
 struct IRValidateOptions
 {
     IRValidateOptions()

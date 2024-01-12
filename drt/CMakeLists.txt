@@ -15,6 +15,7 @@ add_library(deegen_rt
 	dfg_speculative_inliner.cpp
 	dfg_bytecode_liveness.cpp
 	dfg_construct_block_local_ssa.cpp
+	dfg_trivial_cfg_cleanup.cpp
 )
 
 add_dependencies(deegen_rt 

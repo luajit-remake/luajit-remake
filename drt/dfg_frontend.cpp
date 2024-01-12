@@ -1,6 +1,9 @@
 #include "dfg_frontend.h"
 #include "dfg_basic_block_builder.h"
 #include "dfg_control_flow_and_upvalue_analysis.h"
+#include "dfg_construct_block_local_ssa.h"
+#include "dfg_trivial_cfg_cleanup.h"
+#include "dfg_ir_validator.h"
 
 namespace dfg {
 
@@ -47,13 +50,16 @@ arena_unique_ptr<Graph> WARN_UNUSED RunDfgFrontend(CodeBlock* codeBlock)
 
     TestAssert(graph->GetTotalNumLocals() == ctx.m_inlinedCallFrame->GetVirtualRegisterVectorLength());
 
-    graph->ComputeReachabilityAndPredecessors();
+    if (x_run_validation_after_each_pass_in_test_build)
+    {
+        TestAssert(ValidateDfgIrGraph(graph.get(), IRValidateOptions().SetAllowUnreachableBlocks()));
+    }
 
-    // It's possible that we have trivially unreachable basic blocks at this time due to speculative inlining.
-    // For example, function 'f' is a dead loop and gets speculatively inlined into our root function,
-    // then all the code in the root function after the call becomes trivially unreachable. Remove them.
-    //
-    graph->RemoveTriviallyUnreachableBlocks();
+    RunCleanupControlFlowGraphPass(graph.get());
+    TestAssertImp(x_run_validation_after_each_pass_in_test_build, ValidateDfgIrGraph(graph.get()));
+
+    InitializeBlockLocalSSAFormAndSetupLogicalVariables(graph.get());
+    TestAssertImp(x_run_validation_after_each_pass_in_test_build, ValidateDfgIrGraph(graph.get()));
 
     return graph;
 }

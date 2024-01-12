@@ -164,9 +164,6 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
             BasicBlock* succ = bb->GetSuccessor(i);
             CHECK_REPORT_BLOCK(allBBs.count(succ), bb, "Invalid successor basic block for ord %u", static_cast<unsigned int>(i));
             CHECK_REPORT_BLOCK(succ != graph->GetEntryBB(), bb, "It is not allowed for a block to branch to the entry block");
-            CHECK_REPORT_BLOCK(succ->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame() ==
-                               bb->GetSuccessor(0)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame(),
-                               bb, "All successors should have the same InlinedCalledFrame origin");
         }
     }
 
@@ -265,22 +262,10 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 continue;
             }
 
-            if (!setLocalWrites.count(slot.Value()))
-            {
-                bool silenceAssert = false;
-                if (bb->GetNumSuccessors() == 1)
-                {
-                    uint32_t hackyCheck = bb->GetSuccessor(0)->m_hackyTolerateBadShadowStoreOrd;
-                    if (hackyCheck != static_cast<uint32_t>(-1) && slot.Value() >= hackyCheck)
-                    {
-                        silenceAssert = true;
-                    }
-                }
-                CHECK_REPORT_NODE(silenceAssert,
-                                  shadowStoreNode,
-                                  "ShadowStore disagrees with SetLocal at BB end (no SetLocal found)");
-            }
-            else
+            CHECK_REPORT_NODE(setLocalWrites.count(slot.Value()),
+                              shadowStoreNode,
+                              "ShadowStore disagrees with SetLocal at BB end (no SetLocal found)");
+
             {
                 Node* setLocalNode = setLocalWrites[slot.Value()];
                 TestAssert(setLocalNode->IsSetLocalNode());
@@ -292,6 +277,20 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
             }
         }
     }
+
+    if (graph->IsCfgAvailable())
+    {
+        CHECK_REPORT_BLOCK(graph->CheckCfgConsistent(), nullptr, "CFG predecessor / successor info is broken");
+    }
+
+    // This is bad, since the assertion is only done in test build.. but for now..
+    //
+#ifdef TESTBUILD
+    for (BasicBlock* bb : graph->m_blocks)
+    {
+        bb->AssertVirtualRegisterMappingConsistentAtTail();
+    }
+#endif
 
     // Check that all the basic blocks are reachable
     //

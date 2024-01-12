@@ -263,7 +263,6 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
   , (GetFunctionObject)                             \
   , (Nop)                                           \
   , (GetLocal)                                      \
-  , (PhantomLocal)                                  \
   , (SetLocal)                                      \
   , (ShadowStore)                                   \
   , (Phantom)                                       \
@@ -666,12 +665,14 @@ public:
         void ReplaceOperandBasedOnReplacement()
         {
             Node* node = GetOperand();
-            ArenaPtr<Node> replacementMaybeNull = node->GetReplacementNodeMaybeNullptr();
-            if (!replacementMaybeNull.IsNull())
+            Value replacementVal = node->GetReplacementMaybeNonExistent();
+            if (!replacementVal.m_node.IsNull())
             {
-                SetOperand(replacementMaybeNull);
-                TestAssert(GetOperand()->GetReplacementNodeMaybeNullptr().IsNull());
-                TestAssert(GetOperand()->IsOutputOrdValid(GetOutputOrdinal()));
+                TestAssert(GetOutputOrdinal() == 0);
+                SetOperand(replacementVal.m_node);
+                m_outputOrd = replacementVal.m_outputOrd;
+                TestAssert(GetOperand()->GetReplacementMaybeNonExistent().m_node.IsNull());
+                TestAssert(IsOutputOrdValid());
             }
         }
 
@@ -681,6 +682,7 @@ public:
         }
 
         uint16_t WARN_UNUSED GetOutputOrdinal() { return m_outputOrd; }
+        bool WARN_UNUSED IsOutputOrdValid() { return GetOperand()->IsOutputOrdValid(GetOutputOrdinal()); }
 
         bool IsStaticallyKnownNoCheckNeeded() { return BFM_isStaticallyProven::Get(m_encodedVal); }
 
@@ -1101,7 +1103,7 @@ private:
         TValue m_constantNodeConstantValue;         // used only for constant node
         CapturedVarInfo m_capturedVarInfo;          // used only for CreateCapturedVar node
         UpvalueInfo m_upvalueInfo;                  // used only for GetUpvalue node
-        Phi* m_getLocalDataFlowInfo;                // used only for GetLocal and PhantomLocal node
+        Phi* m_getLocalDataFlowInfo;                // used only for GetLocal node
         uint64_t m_nsdAsU64;
     };
 
@@ -1300,9 +1302,6 @@ public:
 
     bool IsGetLocalNode() { return m_nodeKind == NodeKind_GetLocal; }
     bool IsSetLocalNode() { return m_nodeKind == NodeKind_SetLocal; }
-    bool IsPhantomLocalNode() { return m_nodeKind == NodeKind_PhantomLocal; }
-
-    bool IsGetOrPhantomLocalNode() { return IsGetLocalNode() || IsPhantomLocalNode(); }
 
     struct LocalVarAccessInfo
     {
@@ -1359,7 +1358,7 @@ public:
 
     bool HasLogicalVariableInfo()
     {
-        return IsGetLocalNode() || IsSetLocalNode() || IsPhantomLocalNode();
+        return IsGetLocalNode() || IsSetLocalNode();
     }
 
     // TODO: change name to add "slow" or "PreUnificiation"
@@ -1395,13 +1394,13 @@ public:
     //
     Phi* GetDataFlowInfoForGetLocal()
     {
-        TestAssert(IsGetLocalNode() || IsPhantomLocalNode());
+        TestAssert(IsGetLocalNode());
         return m_getLocalDataFlowInfo;
     }
 
     void SetDataFlowInfoForGetLocal(Phi* info)
     {
-        TestAssert(IsGetLocalNode() || IsPhantomLocalNode());
+        TestAssert(IsGetLocalNode());
         m_getLocalDataFlowInfo = info;
     }
 
@@ -1705,17 +1704,22 @@ public:
     void SetOsrExitDest(OsrExitDestination dest) { m_osrExitDest = dest; }
     OsrExitDestination GetOsrExitDest() { return m_osrExitDest; }
 
-    void ClearReplacement() { m_replacement = nullptr; }
-    ArenaPtr<Node> GetReplacementNodeMaybeNullptr() { return m_replacement; }
+    void ClearReplacement() { m_replacement.m_node = nullptr; }
+    Value GetReplacementMaybeNonExistent() { return m_replacement; }
 
-    void SetReplacement(Node* replacement)
+    // This is a simple utility that allows replacing an SSA value with another SSA value
+    // It currently requires that node just has one output (since that's all we need right now),
+    // and would replace all reference to that output with the given value.
+    //
+    void SetReplacement(Value replacementVal)
     {
-        TestAssert(replacement != nullptr);
+        TestAssert(Edge(replacementVal).IsOutputOrdValid());
+        TestAssert(HasDirectOutput() && !HasExtraOutput());
         // We forbid setting replacement for a constant-like node for now because it doesn't seem reasonable,
         // and also the Graph::ClearAllReplacements() currently does not clear replacement for constant-like nodes
         //
         TestAssert(!IsConstantLikeNode());
-        m_replacement = replacement;
+        m_replacement = replacementVal;
     }
 
     // For each input node X, if X has been marked to be replaced by node Y, change the input node to Y.
@@ -1862,8 +1866,7 @@ public:
         SetFlagsForNopNode();
     }
 
-private:
-    ArenaPtr<Node> m_replacement;
+    Value m_replacement;
 
 private:
 #ifndef NDEBUG
@@ -2013,8 +2016,8 @@ private:
     BasicBlock()
         : m_localInfoAtHead(nullptr)
         , m_localInfoAtTail(nullptr)
-        , m_inPlaceCallLocalOrdForInPlaceCallRc(static_cast<uint32_t>(-1))
-        , m_hackyTolerateBadShadowStoreOrd(static_cast<uint32_t>(-1))
+        , m_inPlaceCallRcFrameLocalOrd(static_cast<uint32_t>(-1))
+        , m_inPlaceCallResultLocalOrds(nullptr)
         , m_terminator(nullptr)
         , m_numLocals(static_cast<uint32_t>(-1))
         , m_numSuccessors(static_cast<uint8_t>(-1))
@@ -2085,21 +2088,22 @@ public:
     // argument setup work (so the DFG state at head does not really agree with the interpreter state before bytecode 0).
     // This is fine since the root function entry block is not a valid branch target.
     //
-    // If 'm_inPlaceCallLocalOrdForInPlaceCallRc' is not -1, it means that this basic block is the return continuation
-    // for an in-place call, so a local is not live if its bytecode local ord is >= m_inPlaceCallLocalOrdForInPlaceCallRc,
-    // even if the bytecode liveness reports that it is live.
+    // 'm_inPlaceCallRcFrameLocalOrd' and 'm_inPlaceCallResultLocalOrds' are two weird things to deal with return continuations.
+    // For inlined in-place call, we currently do the clean up logic that reset each local used by the in-place call to UndefVal
+    // in the join BB. But this means that at the end of each predecessor BB, the ShadowStore and SetLocal information can be out
+    // of sync (in rare edge cases where a ShadowStore wrote to a slot that is also accessed as an uninitialized slot in caller logic..)
+    // Furthermore, for trivial return continuations, the logic that stores the result of the call to locals in the parent frame
+    // is done in the callee logic.
+    //
+    // So to summarize: at the return continuation join block of a in-place call, all locals >= in-place call frame are dead, unless
+    // the call has trivial return continuation, in which case the locals that are used to store the results are live.
+    //
+    // m_inPlaceCallRcFrameLocalOrd records the local ord where the in-place call frame starts, and if m_inPlaceCallResultLocalOrds
+    // is not nullptr, it is a bitvector of all the locals that are used to store the results of the call.
     //
     CodeOrigin m_bcForInterpreterStateAtBBStart;
-    uint32_t m_inPlaceCallLocalOrdForInPlaceCallRc;
-
-    // This is an ugly hack.. For inlined in-place call with trivial return continuation, we currently do the clean up logic that
-    // reset each local used by the in-place call to UndefVal in the join BB. But this means that at the end of each predecessor BB,
-    // the ShadowStore and SetLocal information can be out of sync (in rare edge cases where a ShadowStore wrote to a slot that is
-    // also accessed as an uninitialized slot in caller logic..)
-    // Fixing this will require hoising the cleanup logic to every predecessor BB, which will result in potentially large amounts of
-    // unnecessary IR nodes, so we just use this hack to silence the spurious assertion.
-    //
-    uint32_t m_hackyTolerateBadShadowStoreOrd;
+    uint32_t m_inPlaceCallRcFrameLocalOrd;
+    ArenaPtr<DBitVector> m_inPlaceCallResultLocalOrds;
 
     // The terminator node of this basic block
     // If this block has 0/1 successors, the terminator must be pointing to the last node.
@@ -2108,6 +2112,8 @@ public:
     // a branch direction flag, that is only taken at the end of the basic block).
     //
     ArenaPtr<Node> m_terminator;
+
+    ArenaPtr<BasicBlock> m_replacement;
 
     uint32_t m_numLocals;
     uint8_t m_numSuccessors;
@@ -2128,59 +2134,34 @@ public:
     }
 
 private:
-    InlinedCallFrame* GetInlinedCallFrameAtTail()
+    bool IsBytecodeLocalLiveAtHead(size_t bytecodeLocalOrd)
     {
-        TestAssert(GetNumSuccessors() > 0);
-        InlinedCallFrame* frame = GetSuccessor(0)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame();
-
-#ifdef TESTBUILD
-        // All the successors must have the same InlinedCallFrame. Assert this for sanity.
-        //
-        for (size_t i = 1; i < GetNumSuccessors(); i++)
-        {
-            TestAssert(GetSuccessor(i)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame() == frame);
-        }
-#endif
-        return frame;
-    }
-
-    // 'frame' should be the result of GetInlinedCallFrameAtTail()
-    //
-    bool IsBytecodeLocalLiveAtTail(InlinedCallFrame* frame, size_t bytecodeLocalOrd)
-    {
-        // A local in the current frame is live if the local is live at any of the successor head
-        //
+        InlinedCallFrame* frame = m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame();
         TestAssert(bytecodeLocalOrd < frame->GetNumBytecodeLocals());
-        size_t numSuccessors = GetNumSuccessors();
-        BytecodeLiveness& bytecodeLiveness = frame->BytecodeLivenessInfo();
-        for (size_t i = 0; i < numSuccessors; i++)
+        if (bytecodeLocalOrd >= m_inPlaceCallRcFrameLocalOrd)
         {
-            BasicBlock* succ = GetSuccessor(i);
-            if (bytecodeLocalOrd >= succ->m_inPlaceCallLocalOrdForInPlaceCallRc)
+            TestAssert(m_inPlaceCallRcFrameLocalOrd != static_cast<uint32_t>(-1));
+            if (!m_inPlaceCallResultLocalOrds.IsNull())
             {
-                TestAssert(succ->m_inPlaceCallLocalOrdForInPlaceCallRc != static_cast<uint32_t>(-1));
-                continue;
+                DBitVector* bv = m_inPlaceCallResultLocalOrds;
+                TestAssert(bv->m_length == frame->GetNumBytecodeLocals());
+                if (bv->IsSet(bytecodeLocalOrd))
+                {
+                    return true;
+                }
             }
-            size_t bytecodeIndex = succ->m_bcForInterpreterStateAtBBStart.GetBytecodeIndex();
-            if (bytecodeLiveness.IsBytecodeLocalLive(bytecodeIndex, BytecodeLiveness::BeforeUse, bytecodeLocalOrd))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-public:
-    // Return true if this SetLocal is bytecode-live at BB tail thus must not be deleted even if it is DFG dead
-    //
-    bool IsSetLocalBytecodeLiveAtTail(InlinedCallFrame* frame, InterpreterFrameLocation frameLoc)
-    {
-        if (GetNumSuccessors() == 0)
-        {
             return false;
         }
 
-        InlinedCallFrame* bbFrame = GetInlinedCallFrameAtTail();
+        size_t bytecodeIndex = m_bcForInterpreterStateAtBBStart.GetBytecodeIndex();
+        return frame->BytecodeLivenessInfo().IsBytecodeLocalLive(bytecodeIndex, BytecodeLiveness::BeforeUse, bytecodeLocalOrd);
+    }
+
+    // Return true if a SetLocal to location <frame, frameLoc> is bytecode live at BB head
+    //
+    bool IsSetLocalLocationLiveAtHead(InlinedCallFrame* frame, InterpreterFrameLocation frameLoc)
+    {
+        InlinedCallFrame* bbFrame = m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame();
         if (likely(frame == bbFrame))
         {
             // The easy case: the SetLocal is writing to the current frame.
@@ -2193,10 +2174,10 @@ public:
                 return true;
             }
 
-            // Otherwise, it is live if the bytecode local is live at tail
+            // Otherwise, it is live if the bytecode local is live at head
             //
             uint32_t bytecodeLocalOrd = frameLoc.LocalOrd();
-            return IsBytecodeLocalLiveAtTail(bbFrame, bytecodeLocalOrd);
+            return IsBytecodeLocalLiveAtHead(bytecodeLocalOrd);
         }
 
         // The harder case: the SetLocal is not writing to the current frame.
@@ -2238,6 +2219,23 @@ public:
         return bbFrame->IsInterpreterSlotBeforeFrameBaseLive(slotForSetLocal);
     }
 
+public:
+    bool IsSetLocalBytecodeLiveAtTail(InlinedCallFrame* frame, InterpreterFrameLocation frameLoc)
+    {
+        size_t numSuccessors = GetNumSuccessors();
+        for (size_t succOrd = 0; succOrd < numSuccessors; succOrd++)
+        {
+            BasicBlock* succ = GetSuccessor(succOrd);
+            if (succ->IsSetLocalLocationLiveAtHead(frame, frameLoc))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Return true if this SetLocal is bytecode-live at BB tail thus must not be deleted even if it is DFG dead
+    //
     bool IsSetLocalBytecodeLiveAtTail(Node* setLocalNode)
     {
         TestAssert(setLocalNode->IsSetLocalNode());
@@ -2245,18 +2243,9 @@ public:
         return IsSetLocalBytecodeLiveAtTail(ident.m_inlinedCallFrame, ident.m_location);
     }
 
-    // Return the virtual register mapping info for an interpreter slot at the end of this BB
-    // This is mostly for assertion purpose only (to check that the state of the imaginary interpreter
-    // stack agrees with the DFG stack at every BB end)
-    //
-    VirtualRegisterMappingInfo GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot slot)
+    VirtualRegisterMappingInfo GetVirtualRegisterForInterpreterSlotAtHead(InterpreterSlot slot)
     {
-        if (GetNumSuccessors() == 0)
-        {
-            return VirtualRegisterMappingInfo::Dead();
-        }
-
-        InlinedCallFrame* bbFrame = GetInlinedCallFrameAtTail();
+        InlinedCallFrame* bbFrame = m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame();
         size_t slotOrd = slot.Value();
         size_t frameBaseOrd = bbFrame->GetInterpreterSlotForStackFrameBase().Value();
         if (slotOrd < frameBaseOrd)
@@ -2270,7 +2259,7 @@ public:
             {
                 return VirtualRegisterMappingInfo::Dead();
             }
-            if (!IsBytecodeLocalLiveAtTail(bbFrame, bytecodeLocalOrd))
+            if (!IsBytecodeLocalLiveAtHead(bytecodeLocalOrd))
             {
                 return VirtualRegisterMappingInfo::Dead();
             }
@@ -2279,6 +2268,200 @@ public:
                 return VirtualRegisterMappingInfo::VReg(bbFrame->GetRegisterForLocalOrd(bytecodeLocalOrd));
             }
         }
+    }
+
+    // Return the virtual register mapping info for an interpreter slot at the end of this BB
+    // This is for assertion purpose only (to check that the state of the imaginary interpreter
+    // stack agrees with the DFG stack at every BB end), so it intentionally does not return early
+    // so that it can run all assertions
+    //
+    VirtualRegisterMappingInfo GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot slot)
+    {
+        size_t numSuccessors = GetNumSuccessors();
+        if (numSuccessors == 0)
+        {
+            return VirtualRegisterMappingInfo::Dead();
+        }
+
+        VirtualRegisterMappingInfo info = GetSuccessor(0)->GetVirtualRegisterForInterpreterSlotAtHead(slot);
+
+        for (size_t succOrd = 1; succOrd < numSuccessors; succOrd++)
+        {
+            BasicBlock* succ = GetSuccessor(succOrd);
+            VirtualRegisterMappingInfo newInfo = succ->GetVirtualRegisterForInterpreterSlotAtHead(slot);
+
+            if (info.IsLive())
+            {
+                if (newInfo.IsLive())
+                {
+                    // If the slot is live in both successors, the mappings must agree.
+                    //
+                    TestAssertIff(info.IsUmmapedToAnyVirtualReg(), newInfo.IsUmmapedToAnyVirtualReg());
+                    TestAssertImp(!info.IsUmmapedToAnyVirtualReg(), info.GetVirtualRegister().Value() == newInfo.GetVirtualRegister().Value());
+                }
+            }
+            else
+            {
+                info = newInfo;
+            }
+        }
+        return info;
+    }
+
+    void AssertVirtualRegisterMappingConsistentAtTail()
+    {
+#ifdef TESTBUILD
+        size_t maxSlotOrd = 0;
+        if (!m_bcForInterpreterStateAtBBStart.IsInvalid())
+        {
+            maxSlotOrd = m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame()->GetInterpreterSlotForFrameEnd().Value();
+        }
+        for (size_t i = 0; i < GetNumSuccessors(); i++)
+        {
+            maxSlotOrd = std::max(
+                maxSlotOrd,
+                GetSuccessor(i)->m_bcForInterpreterStateAtBBStart.GetInlinedCallFrame()->GetInterpreterSlotForFrameEnd().Value());
+        }
+        for (size_t interpSlot = 0; interpSlot < maxSlotOrd; interpSlot++)
+        {
+            // This will trigger assertion if there's discrepancy
+            //
+            std::ignore = GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot(interpSlot));
+        }
+#endif
+    }
+
+    // Remove 'nop' nodes with no input edges
+    //
+    void RemoveEmptyNopNodes()
+    {
+        TestAssert(!m_nodes.empty());
+        size_t newCount = 0;
+        Node* removedNode = nullptr;
+        for (Node* node : m_nodes)
+        {
+            if (node->IsNoopNode() && node->GetNumInputs() == 0)
+            {
+                removedNode = node;
+                continue;
+            }
+            m_nodes[newCount] = node;
+            newCount++;
+        }
+
+        // We do not allow empty BB, so do not remove the last NOP node if the BB becomes empty
+        //
+        if (newCount == 0)
+        {
+            TestAssert(removedNode != nullptr);
+            m_nodes[newCount] = removedNode;
+            newCount++;
+        }
+
+        m_nodes.resize(newCount);
+
+        // Update terminator node
+        //
+        if (GetNumSuccessors() <= 1)
+        {
+            m_terminator = m_nodes.back();
+        }
+        else
+        {
+            TestAssert(!GetTerminator()->IsNoopNode());
+        }
+    }
+
+    // Merge successor block into this block.
+    // The control flow edges (successors and predecessors) are updated, but localInfoAtHead/Tail is broken
+    //
+    void MergeSuccessorBlock(BasicBlock* bb)
+    {
+        TestAssert(bb != this);
+        TestAssert(GetNumSuccessors() == 1 && GetSuccessor(0) == bb);
+        TestAssert(bb->m_predecessors.size() == 1 && bb->m_predecessors[0] == this);
+
+        m_nodes.reserve(m_nodes.size() + bb->m_nodes.size());
+
+        {
+            // This is really ugly: we must special-case the PrependVariadicResNode that represents inheritance of the variadic
+            // result from another block, so that the variadic result use-def is chained correctly..
+            //
+            Node* inheritVarResNode = nullptr;
+            Node* lastVarResProducingNode = nullptr;
+            size_t originalNumNodes = m_nodes.size();
+            bool hasSeenInheritVarResNode = false;
+            for (Node* node : bb->m_nodes)
+            {
+                if (node->IsPrependVariadicResNode() && node->GetVariadicResultInputNode() == nullptr)
+                {
+                    TestAssert(node->GetNumInputs() == 0);
+                    TestAssert(!hasSeenInheritVarResNode);
+                    hasSeenInheritVarResNode = true;
+                    TestAssert(inheritVarResNode == nullptr);
+                    TestAssert(lastVarResProducingNode == nullptr);
+                    // The frontend will only generate the PrependVariadicResNode to inherit VR when there is a node
+                    // in this BB that consumes VR. Under such assumptions, it's easily to prove that the loop
+                    // below will scan through each node at most once when we merge a chain of BBs.
+                    //
+                    for (size_t idx = originalNumNodes; idx--;)
+                    {
+                        Node* other = m_nodes[idx];
+                        if (other->IsNodeGeneratesVR())
+                        {
+                            lastVarResProducingNode = other;
+                            break;
+                        }
+                    }
+                    if (lastVarResProducingNode != nullptr)
+                    {
+                        // The predecessor block has a node that produces variadic result
+                        // We should not push this node, and we should replace all the nodes that uses this node as
+                        // variadic result input to use 'lastVarResProducingNode' instead
+                        //
+                        inheritVarResNode = node;
+                        continue;
+                    }
+                    m_nodes.push_back(node);
+                }
+                else
+                {
+                    if (node->IsNodeAccessesVR())
+                    {
+                        Node* vrNode = node->GetVariadicResultInputNode();
+                        TestAssert(vrNode != nullptr);
+                        if (vrNode == inheritVarResNode)
+                        {
+                            TestAssert(lastVarResProducingNode != nullptr);
+                            node->SetVariadicResultInputNode(lastVarResProducingNode);
+                        }
+                    }
+                    m_nodes.push_back(node);
+                }
+            }
+            std::ignore = hasSeenInheritVarResNode;
+        }
+
+        m_numSuccessors = bb->m_numSuccessors;
+        for (size_t i = 0; i < m_numSuccessors; i++)
+        {
+            BasicBlock* succ = bb->m_successors[i];
+            TestAssert(succ != bb);
+            m_successors[i] = succ;
+            m_predOrdForSuccessors[i] = bb->m_predOrdForSuccessors[i];
+            TestAssert(m_predOrdForSuccessors[i] < succ->m_predecessors.size());
+            // It's possible that the predecessor is already changed to 'this' in case of multi-edge
+            //
+            TestAssert(succ->m_predecessors[m_predOrdForSuccessors[i]] == bb ||
+                       succ->m_predecessors[m_predOrdForSuccessors[i]] == this);
+            succ->m_predecessors[m_predOrdForSuccessors[i]] = this;
+        }
+        m_terminator = bb->m_terminator;
+
+        // For sanity, remove successor and predecessor edges for bb as well
+        //
+        bb->m_numSuccessors = 0;
+        bb->m_predecessors.clear();
     }
 };
 
@@ -2343,7 +2526,7 @@ public:
     bool IsPreUnificationForm() { return m_graphForm == Form::PreUnification; }
     bool IsLoadStoreForm() { return m_graphForm == Form::LoadStore; }
     bool IsBlockLocalSSAForm() { return m_graphForm == Form::BlockLocalSSA; }
-    void DegradeToLoadStoreForm() { m_graphForm = Form::LoadStore; }
+    void DegradeToLoadStoreForm() { TestAssert(IsBlockLocalSSAForm()); m_graphForm = Form::LoadStore; }
     void UpgradeToBlockLocalSSAForm() { m_graphForm = Form::BlockLocalSSA; }
 
     Value WARN_UNUSED GetConstant(TValue value)
@@ -2520,7 +2703,7 @@ public:
                 for (uint32_t inputOrd = 0; inputOrd < numInputs; inputOrd++)
                 {
                     Edge& e = node->GetInputEdge(inputOrd);
-                    TestAssert(e.GetOperand()->GetReplacementNodeMaybeNullptr().IsNull());
+                    TestAssert(e.GetOperand()->GetReplacementMaybeNonExistent().m_node.IsNull());
                     TestAssert(e.GetOperand()->IsOutputOrdValid(e.GetOutputOrdinal()));
                 }
             }
@@ -2583,17 +2766,57 @@ public:
         m_isCfgAvailable = true;
     }
 
-    // True if the predecessor info is up-to-date in the basic blocks
+    // Check that all successors point to valid blocks, and successor info agrees with predecessor info
+    // For assertion purpose only
+    //
+    bool WARN_UNUSED CheckCfgConsistent()
+    {
+        TempArenaAllocator alloc;
+        TempUnorderedSet<BasicBlock*> allBlocks(alloc);
+        for (BasicBlock* bb : m_blocks)
+        {
+            CHECK(!allBlocks.count(bb));
+            allBlocks.insert(bb);
+        }
+        for (BasicBlock* bb : m_blocks)
+        {
+            for (size_t succOrd = 0; succOrd < bb->GetNumSuccessors(); succOrd++)
+            {
+                BasicBlock* succ = bb->GetSuccessor(succOrd);
+                CHECK(allBlocks.count(succ));
+                CHECK(succ != GetEntryBB());
+                CHECK(bb->m_predOrdForSuccessors[succOrd] < succ->m_predecessors.size());
+                CHECK(succ->m_predecessors[bb->m_predOrdForSuccessors[succOrd]] == bb);
+            }
+            for (size_t predOrd = 0; predOrd < bb->m_predecessors.size(); predOrd++)
+            {
+                BasicBlock* pred = bb->m_predecessors[predOrd];
+                CHECK(allBlocks.count(pred));
+                bool found = false;
+                for (size_t succOrd = 0; succOrd < pred->GetNumSuccessors(); succOrd++)
+                {
+                    if (pred->GetSuccessor(succOrd) == bb)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                CHECK(found);
+                for (size_t i = 0; i < predOrd; i++) { CHECK(pred != bb->m_predecessors[i]); }
+            }
+        }
+        return true;
+    }
+
+    // True if the predecessor and reachability info is up-to-date in the basic blocks
     // Code that invalidates the info is responsible for calling InvalidateCfg()
     //
     bool IsCfgAvailable() { return m_isCfgAvailable; }
     void InvalidateCfg() { m_isCfgAvailable = false; }
 
-    // You cannot use this if you are *speculatively* removing a basic block!
-    // This is only intended to be used by the DFG frontend to remove trivially dead basic block in the initial IR graph.
-    //
     void RemoveTriviallyUnreachableBlocks()
     {
+        TestAssert(IsCfgAvailable());
         size_t numSurvivedBlocks = 0;
         TestAssert(m_blocks.size() > 0 && m_blocks[0]->m_isReachable);
         for (size_t i = 0; i < m_blocks.size(); i++)

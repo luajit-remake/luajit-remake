@@ -5,6 +5,8 @@
 
 namespace dfg {
 
+namespace {
+
 struct ConstructBlockLocalSSAPass
 {
     TempArenaAllocator m_alloc;
@@ -40,15 +42,15 @@ struct ConstructBlockLocalSSAPass
         Node* undefVal = m_graph->GetUndefValue().m_node;
 
         // Validate that for each local, there should only be at most two events:
-        // (1) A GetLocal or PhantomLocal or nothing
-        // (2) A SetLocal
+        // (1) (Optionally) a GetLocal
+        // (2) (Optionally) a SetLocal
         //
-        // Validate that each GetLocal/SetLocal/PhantomLocal must be either an event head or an event tail
+        // Validate that each GetLocal/SetLocal must be either an event head or an event tail
         //
         TempUnorderedSet<Node*> allLocOpNodes(m_alloc);
         for (Node* node : bb->m_nodes)
         {
-            if (node->IsGetLocalNode() || node->IsSetLocalNode() || node->IsPhantomLocalNode())
+            if (node->IsGetLocalNode() || node->IsSetLocalNode())
             {
                 VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
                 TestAssert(vreg.Value() < numLocals);
@@ -56,14 +58,14 @@ struct ConstructBlockLocalSSAPass
                 TestAssert(localInfoAtHead[vreg.Value()] == node || localInfoAtTail[vreg.Value()] == node);
                 TestAssert(!allLocOpNodes.count(node));
                 allLocOpNodes.insert(node);
-                if (node->IsGetOrPhantomLocalNode())
+                if (node->IsGetLocalNode())
                 {
                     TestAssertIff(isDataFlowInfoSetUp, node->GetDataFlowInfoForGetLocal() != nullptr);
                 }
             }
         }
         // Validate each event head / event tail indeed points to valid nodes in this basic block,
-        // and if the head != tail, the head must be a GetLocal/PhantomLocal, and the tail must be a SetLocal
+        // and if the head != tail, the head must be a GetLocal, and the tail must be a SetLocal
         //
         for (size_t i = 0; i < numLocals; i++)
         {
@@ -77,6 +79,7 @@ struct ConstructBlockLocalSSAPass
                     {
                         TestAssert(pred->m_localInfoAtTail[i] == undefVal);
                     }
+                    continue;
                 }
                 if (localInfoAtHead[i].IsPhi())
                 {
@@ -88,7 +91,7 @@ struct ConstructBlockLocalSSAPass
                 TestAssert(allLocOpNodes.count(localInfoAtTail[i].AsNode()));
                 if (localInfoAtHead[i].AsNode() != localInfoAtTail[i].AsNode())
                 {
-                    TestAssert(localInfoAtHead[i].AsNode()->IsGetOrPhantomLocalNode());
+                    TestAssert(localInfoAtHead[i].AsNode()->IsGetLocalNode());
                     TestAssert(localInfoAtTail[i].AsNode()->IsSetLocalNode());
                 }
             }
@@ -96,8 +99,8 @@ struct ConstructBlockLocalSSAPass
 #endif
     }
 
-    // Remove redundant or unnecessary GetLocal/SetLocal/PhantomLocal in a basic block.
-    // Dead SetLocals are not removed since we need data flow information to do that.
+    // Remove redundant or unnecessary GetLocal/SetLocal in a basic block.
+    // The last SetLocal to a local is always kept since we need data flow info to know if it's dead
     //
     void CanonicalizeLocalOperationsInBasicBlock(BasicBlock* bb)
     {
@@ -150,8 +153,8 @@ struct ConstructBlockLocalSSAPass
                     {
                         // GetLocal -> GetLocal, this GetLocal can be replaced by the previous GetLocal
                         //
+                        node->SetReplacement(Value(event.AsNode(), 0 /*outputOrd*/));
                         node->ConvertToNop();
-                        node->SetReplacement(event.AsNode());
                         break;
                     }
                     case NodeKind_SetLocal:
@@ -159,31 +162,17 @@ struct ConstructBlockLocalSSAPass
                         // SetLocal -> GetLocal, this GetLocal can be replaced by the value of the SetLocal
                         //
                         Node* setLocal = event.AsNode();
-                        Node* value = setLocal->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetOperand();
-                        node->ConvertToNop();
+                        Value value = setLocal->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
                         node->SetReplacement(value);
-                        break;
-                    }
-                    case NodeKind_PhantomLocal:
-                    {
-                        // PhantomLocal -> GetLocal, the earlier PhantomLocal can be removed
-                        //
-                        Node* phantomLocal = event.AsNode();
-                        if (localInfoAtHead[vreg.Value()] == phantomLocal)
-                        {
-                            localInfoAtHead[vreg.Value()] = node;
-                        }
-                        phantomLocal->ConvertToNop();
-                        node->SetDataFlowInfoForGetLocal(nullptr);
-                        localInfoAtTail[vreg.Value()] = node;
+                        node->ConvertToNop();
                         break;
                     }
                     case NodeKind_UndefValue:
                     {
                         // This local is guaranteed to see UndefValue, it can be replaced by UndefValue
                         //
+                        node->SetReplacement(m_graph->GetUndefValue());
                         node->ConvertToNop();
-                        node->SetReplacement(undefVal);
                         break;
                     }
                     default:
@@ -211,9 +200,8 @@ struct ConstructBlockLocalSSAPass
                     switch (event.GetNodeKind())
                     {
                     case NodeKind_GetLocal:
-                    case NodeKind_PhantomLocal:
                     {
-                        // GetLocal/PhantomLocal -> SetLocal, nothing can be done, just update the tail event
+                        // GetLocal -> SetLocal, nothing can be done, just update the tail event
                         //
                         TestAssert(!localInfoAtHead[vreg.Value()].IsNull());
                         localInfoAtTail[vreg.Value()] = node;
@@ -255,41 +243,26 @@ struct ConstructBlockLocalSSAPass
                     localInfoAtTail[vreg.Value()] = node;
                 }
             }
-            else if (node->IsPhantomLocalNode())
+        }
+
+        // Remove dead GetLocals
+        //
+        for (Node* node : bb->m_nodes)
+        {
+            if (node->IsGetLocalNode() && !node->IsNodeReferenced())
             {
                 VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
-                TestAssert(vreg.Value() < numLocals);
-                PhiOrNode event = localInfoAtTail[vreg.Value()];
-                if (!event.IsNull())
+                TestAssert(localInfoAtHead[vreg.Value()] == node);
+                if (localInfoAtTail[vreg.Value()] == node)
                 {
-                    switch (event.GetNodeKind())
-                    {
-                    case NodeKind_GetLocal:
-                    case NodeKind_SetLocal:
-                    case NodeKind_PhantomLocal:
-                    case NodeKind_UndefValue:
-                    {
-                        // GetLocal/SetLocal/PhantomLocal/UndefValue -> PhantomLocal, this PhantomLocal can be removed
-                        // Note that UndefValue means we are guaranteed that this local hasn't been initialized yet,
-                        // so there is no SetLocal that this PhantomLocal can keep alive.
-                        //
-                        node->ConvertToNop();
-                        break;
-                    }
-                    default:
-                    {
-                        TestAssert(false);
-                        __builtin_unreachable();
-                    }
-                    }   /*switch*/
+                    localInfoAtHead[vreg.Value()] = nullptr;
+                    localInfoAtTail[vreg.Value()] = nullptr;
                 }
                 else
                 {
-                    node->SetDataFlowInfoForGetLocal(nullptr);
-                    TestAssert(localInfoAtHead[vreg.Value()].IsNull());
-                    localInfoAtHead[vreg.Value()] = node;
-                    localInfoAtTail[vreg.Value()] = node;
+                    localInfoAtHead[vreg.Value()] = localInfoAtTail[vreg.Value()];
                 }
+                node->ConvertToNop();
             }
         }
 
@@ -324,7 +297,7 @@ struct ConstructBlockLocalSSAPass
         }
         else
         {
-            TestAssert(valueAtHead.AsNode()->IsGetOrPhantomLocalNode());
+            TestAssert(valueAtHead.AsNode()->IsGetLocalNode());
             TestAssert(phi == valueAtHead.AsNode()->GetDataFlowInfoForGetLocal());
         }
 #endif
@@ -364,7 +337,6 @@ struct ConstructBlockLocalSSAPass
                 switch (valueAtHead.GetNodeKind())
                 {
                 case NodeKind_GetLocal:
-                case NodeKind_PhantomLocal:
                 {
                     Phi* succPhi = valueAtHead.AsNode()->GetDataFlowInfoForGetLocal();
                     size_t incomingOrd = bb->m_predOrdForSuccessors[succOrd];
@@ -387,6 +359,13 @@ struct ConstructBlockLocalSSAPass
                     break;
                 }
                 case NodeKind_UndefValue:
+                {
+                    // Normally this is impossible, but we might see UndefValue as the intermediate state
+                    // during we convert all Phi that are trivially UndefValue to UndefValue.
+                    //
+                    TestAssert(phi->IsTriviallyUndefValue());
+                    break;
+                }
                 default:
                 {
                     TestAssert(false);
@@ -398,11 +377,11 @@ struct ConstructBlockLocalSSAPass
     }
 
     // It checks the following:
-    // (1) Each GetLocal/PhantomLocal node has a valid Phi data flow info
+    // (1) Each GetLocal node has a valid Phi data flow info
     // (2) Each Phi node's children are valid and agrees with the info in the graph
     // (3) If graph is unified, everything in the same Phi graph has the same LogicalVariable
-    // (4) There's no stray Phi nodes: every Phi node should be transitively used by a GetLocal/PhantomLocal
-    // (5) If expectNoDeadStores, every SetLocal node should be transitively used by a Phi node
+    // (4) There's no stray Phi nodes: every Phi node should be transitively used by a GetLocal
+    // (5) If expectNoDeadStores, every SetLocal node should either be transitively used by a Phi node, or is bytecode-live at BB tail
     //
     void AssertPhiGraphConsistent([[maybe_unused]] bool isPreUnification,
                                   [[maybe_unused]] bool expectNoTriviallyUndefPhi,
@@ -421,7 +400,7 @@ struct ConstructBlockLocalSSAPass
             }
             else
             {
-                TestAssert(bb->m_localInfoAtTail[localOrd].AsNode()->IsGetOrPhantomLocalNode());
+                TestAssert(bb->m_localInfoAtTail[localOrd].AsNode()->IsGetLocalNode());
                 TestAssert(phi == bb->m_localInfoAtTail[localOrd].AsNode()->GetDataFlowInfoForGetLocal());
             }
         };
@@ -433,7 +412,7 @@ struct ConstructBlockLocalSSAPass
         {
             for (Node* node : bb->m_nodes)
             {
-                if (node->IsGetOrPhantomLocalNode())
+                if (node->IsGetLocalNode())
                 {
                     Phi* phi = node->GetDataFlowInfoForGetLocal();
                     TestAssert(phi != nullptr);
@@ -528,20 +507,32 @@ struct ConstructBlockLocalSSAPass
 
         if (expectNoDeadStores)
         {
-            for (auto& it : allStores)
+            for (BasicBlock* bb : m_graph->m_blocks)
             {
-                TestAssert(it.second);
+                for (Node* node : bb->m_nodes)
+                {
+                    if (node->IsSetLocalNode())
+                    {
+                        TestAssert(allStores.count(node));
+                        // For each SetLocal that is DFG dead, assert that it is bytecode-live (or it should have been removed)
+                        //
+                        if (!allStores[node])
+                        {
+                            TestAssert(bb->IsSetLocalBytecodeLiveAtTail(node));
+                        }
+                    }
+                }
             }
         }
 
-        // Assert that there's no stray Phi nodes: every Phi node should be transitively used by a GetLocal/PhantomLocal
+        // Assert that there's no stray Phi nodes: every Phi node should be transitively used by a GetLocal
         //
         TempVector<Phi*> worklist(m_alloc);
         for (BasicBlock* bb : m_graph->m_blocks)
         {
             for (Node* node : bb->m_nodes)
             {
-                if (node->IsGetOrPhantomLocalNode())
+                if (node->IsGetLocalNode())
                 {
                     Phi* phi = node->GetDataFlowInfoForGetLocal();
                     TestAssert(phi != nullptr);
@@ -588,8 +579,7 @@ struct ConstructBlockLocalSSAPass
 #endif
     }
 
-    // Converts GetLocals with no user to PhantomLocal, build Phi data flow graph,
-    // remove dead SetLocals, replace GetLocals that are guaranteed to see UndefVal with UndefVal.
+    // Build Phi data flow graph, remove dead SetLocals, replace GetLocals that are guaranteed to see UndefVal with UndefVal.
     //
     void BuildPhiDataFlowGraph(bool isPreUnification)
     {
@@ -607,48 +597,40 @@ struct ConstructBlockLocalSSAPass
             TestAssert(bb->m_numLocals == numLocals);
             PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
 
-            // For each local which head event is GetLocal/PhantomLocal, create a Phi node and push into work queue
+            // For each GetLocal, create a Phi node and push into work queue
             //
-            for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
+            for (Node* node : bb->m_nodes)
             {
-                if (!localInfoAtHead[localOrd].IsNull())
+                if (node->IsGetLocalNode())
                 {
-                    Node* node = localInfoAtHead[localOrd].AsNode();
-                    if (node->IsGetOrPhantomLocalNode())
+                    VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                    TestAssert(localInfoAtHead[vreg.Value()] == node);
+
+                    Phi* phi;
+                    if (isPreUnification)
                     {
-                        // If a GetLocal is not used, convert it to a PhantomLocal.
-                        //
-                        if (node->IsGetLocalNode() && !node->IsNodeReferenced())
-                        {
-                            node->m_nodeKind = NodeKind_PhantomLocal;
-                        }
-
-                        Phi* phi;
-                        if (isPreUnification)
-                        {
-                            phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, localOrd, node);
-                        }
-                        else
-                        {
-                            phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, localOrd, node->GetLogicalVariableInfo());
-                        }
-                        allPhis.push_back(phi);
-
-                        TestAssert(node->GetDataFlowInfoForGetLocal() == nullptr);
-                        node->SetDataFlowInfoForGetLocal(phi);
-                        q.push_back(phi);
+                        phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, vreg.Value(), node);
                     }
+                    else
+                    {
+                        phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, vreg.Value(), node->GetLogicalVariableInfo());
+                    }
+                    allPhis.push_back(phi);
+
+                    TestAssert(node->GetDataFlowInfoForGetLocal() == nullptr);
+                    node->SetDataFlowInfoForGetLocal(phi);
+                    q.push_back(phi);
                 }
             }
 
 #ifdef TESTBUILD
-            // Every GetLocal/PhantomLocal should now have their DataFlowInfo set up
+            // For sanity, assert that the info in localInfoAtHead agrees with the GetLocals
             //
-            for (Node* node : bb->m_nodes)
+            for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
             {
-                if (node->IsGetOrPhantomLocalNode())
+                if (!localInfoAtHead[localOrd].IsNull() && localInfoAtHead[localOrd].GetNodeKind() == NodeKind_GetLocal)
                 {
-                    TestAssert(node->GetDataFlowInfoForGetLocal() != nullptr);
+                    TestAssert(localInfoAtHead[localOrd].AsNode()->GetDataFlowInfoForGetLocal() != nullptr);
                 }
             }
 #endif
@@ -700,7 +682,6 @@ struct ConstructBlockLocalSSAPass
                     switch (valueAtTail.GetNodeKind())
                     {
                     case NodeKind_GetLocal:
-                    case NodeKind_PhantomLocal:
                     {
                         Phi* incomingPhi = valueAtTail.AsNode()->GetDataFlowInfoForGetLocal();
                         TestAssert(incomingPhi != nullptr);
@@ -763,6 +744,8 @@ struct ConstructBlockLocalSSAPass
         }
         else
         {
+            // This relies on the fact that unreachable blocks have been removed
+            //
             for (Phi* phi : allPhis)
             {
                 phi->SetNotTriviallyUndefValue();
@@ -783,15 +766,15 @@ struct ConstructBlockLocalSSAPass
                 {
                     BasicBlock* bb = phi->GetBasicBlock();
                     size_t localOrd = phi->GetLocalOrd();
+                    ForEachPhiSuccessor(phi, [&](Phi* succPhi, size_t incomingOrd) ALWAYS_INLINE {
+                        succPhi->IncomingValue(incomingOrd) = undefVal;
+                    });
                     if (bb->m_localInfoAtHead[localOrd] == phi)
                     {
                         TestAssert(bb->m_localInfoAtTail[localOrd] == phi);
                         bb->m_localInfoAtHead[localOrd] = undefVal;
                         bb->m_localInfoAtTail[localOrd] = undefVal;
                     }
-                    ForEachPhiSuccessor(phi, [&](Phi* succPhi, size_t incomingOrd) ALWAYS_INLINE {
-                        succPhi->IncomingValue(incomingOrd) = undefVal;
-                    });
                 }
             }
         }
@@ -808,7 +791,7 @@ struct ConstructBlockLocalSSAPass
                 {
                     node->DoReplacementForInputs();
                 }
-                if (node->IsGetOrPhantomLocalNode())
+                if (node->IsGetLocalNode())
                 {
                     if (node->GetDataFlowInfoForGetLocal()->IsTriviallyUndefValue())
                     {
@@ -825,17 +808,9 @@ struct ConstructBlockLocalSSAPass
                             TestAssert(bb->m_localInfoAtTail[localOrd].GetNodeKind() == NodeKind_SetLocal);
                             bb->m_localInfoAtHead[localOrd] = bb->m_localInfoAtTail[localOrd];
                         }
-                        if (node->IsGetLocalNode())
-                        {
-                            node->ConvertToNop();
-                            node->SetReplacement(undefVal);
-                            hasReplacement = true;
-                        }
-                        else
-                        {
-                            TestAssert(node->IsPhantomLocalNode());
-                            node->ConvertToNop();
-                        }
+                        node->SetReplacement(m_graph->GetUndefValue());
+                        node->ConvertToNop();
+                        hasReplacement = true;
                     }
                 }
                 else if (node->IsSetLocalNode())
@@ -857,7 +832,7 @@ struct ConstructBlockLocalSSAPass
                                 hasUsers = true;
                                 break;
                             }
-                            else if (valueAtHead.AsNode()->IsGetOrPhantomLocalNode())
+                            else if (valueAtHead.AsNode()->IsGetLocalNode())
                             {
                                 TestAssert(valueAtHead.AsNode()->GetDataFlowInfoForGetLocal()->IncomingValue(bb->m_predOrdForSuccessors[succOrd]) == node);
                                 hasUsers = true;
@@ -867,26 +842,41 @@ struct ConstructBlockLocalSSAPass
                     }
                     if (!hasUsers)
                     {
-                        if (bb->m_localInfoAtHead[localOrd] == node)
+                        // We can remove a SetLocal that is dead in DFG only if it is also dead in bytecode
+                        //
+                        if (!bb->IsSetLocalBytecodeLiveAtTail(node))
                         {
-                            bb->m_localInfoAtHead[localOrd] = nullptr;
-                            bb->m_localInfoAtTail[localOrd] = nullptr;
+                            if (bb->m_localInfoAtHead[localOrd] == node)
+                            {
+                                bb->m_localInfoAtHead[localOrd] = nullptr;
+                                bb->m_localInfoAtTail[localOrd] = nullptr;
+                            }
+                            else
+                            {
+                                bb->m_localInfoAtTail[localOrd] = bb->m_localInfoAtHead[localOrd];
+                            }
+                            node->ConvertToNop();
                         }
-                        else
-                        {
-                            bb->m_localInfoAtTail[localOrd] = bb->m_localInfoAtHead[localOrd];
-                        }
-                        node->ConvertToNop();
+                    }
+                    else
+                    {
+                        // Right now, the DFG liveness is equal to the bytecode liveness, so a SetLocal that
+                        // is live in DFG must also be live in bytecode.
+                        // In the future we might have optimizations that makes DFG liveness a superset of
+                        // bytecode liveness (e.g., sink operations across BBs), but let's fix this assert
+                        // when that actually happens.
+                        //
+                        TestAssert(bb->IsSetLocalBytecodeLiveAtTail(node));
                     }
                 }
             }
         }
     }
 
-    // Set up Logical Variable for each GetLocal/SetLocal/PhantomLocal
+    // Set up Logical Variable for each GetLocal and SetLocal
     //
-    // The invariant here is that for any SetLocal that can flow to a GetLocal/PhantomLocal,
-    // the SetLocal and the GetLocal/PhantomLocal must have the same logical variable.
+    // The invariant here is that for any SetLocal that can flow to a GetLocal,
+    // the SetLocal and the GetLocal must have the same logical variable.
     //
     void SetupLogicalVariables()
     {
@@ -905,7 +895,7 @@ struct ConstructBlockLocalSSAPass
                     {
                         allPhis.push_back(valueAtHead.AsPhi());
                     }
-                    else if (valueAtHead.AsNode()->IsGetOrPhantomLocalNode())
+                    else if (valueAtHead.AsNode()->IsGetLocalNode())
                     {
                         allPhis.push_back(valueAtHead.AsNode()->GetDataFlowInfoForGetLocal());
                     }
@@ -942,7 +932,7 @@ struct ConstructBlockLocalSSAPass
         {
             for (Node* node : bb->m_nodes)
             {
-                if (node->IsGetLocalNode() || node->IsSetLocalNode() || node->IsPhantomLocalNode())
+                if (node->IsGetLocalNode() || node->IsSetLocalNode())
                 {
                     node->SetupLogicalVariableInfoAfterDsuMerge(m_graph);
                 }
@@ -953,6 +943,16 @@ struct ConstructBlockLocalSSAPass
         {
             LogicalVariableInfo* info = phi->GetPhiOriginNodeForUnification()->GetLogicalVariableInfo();
             phi->SetLogicalVariable(info);
+        }
+    }
+
+    // This pass turns unnecessary GetLocal/SetLocal to nop nodes, remove them in the end
+    //
+    void RemoveNopNodes()
+    {
+        for (BasicBlock* bb : m_graph->m_blocks)
+        {
+            bb->RemoveEmptyNopNodes();
         }
     }
 
@@ -973,9 +973,12 @@ struct ConstructBlockLocalSSAPass
             SetupLogicalVariables();
             AssertBlockLocalSSAInvariant(false /*isPreUnification*/);
         }
+        RemoveNopNodes();
         m_graph->UpgradeToBlockLocalSSAForm();
     }
 };
+
+}   // anonymous namespace
 
 void InitializeBlockLocalSSAFormAndSetupLogicalVariables(Graph* graph)
 {

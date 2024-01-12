@@ -1099,23 +1099,16 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         if (trait->m_rcTrivialness == TrivialRCKind::NotTrivial)
         {
             rcBB->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, bcIndex);
-            if (trait->m_isInPlaceCall)
-            {
-                TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-                rcBB->m_inPlaceCallLocalOrdForInPlaceCallRc = SafeIntegerCast<uint32_t>(rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader);
-            }
         }
         else
         {
             rcBB->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, bcIndex + 1);
-            // Hack to workaround spurious assertions, see comment on 'm_tolerateBadShadowStoreOrd'
-            //
-            if (trait->m_isInPlaceCall)
-            {
-                TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-                InterpreterSlot inPlaceCallStartSlot = m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader);
-                rcBB->m_hackyTolerateBadShadowStoreOrd = SafeIntegerCast<uint32_t>(inPlaceCallStartSlot.Value());
-            }
+        }
+
+        if (trait->m_isInPlaceCall)
+        {
+            TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
+            rcBB->m_inPlaceCallRcFrameLocalOrd = SafeIntegerCast<uint32_t>(rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader);
         }
 
         // The codeOrigin and exitDst used for trivial return continuation logic
@@ -1513,8 +1506,20 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         //
         if (trait->m_isInPlaceCall)
         {
-            TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-            size_t localOrdStart = rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader;
+            TestAssert(rcBB->m_inPlaceCallRcFrameLocalOrd != static_cast<uint32_t>(-1));
+            size_t localOrdStart = rcBB->m_inPlaceCallRcFrameLocalOrd;
+
+            // If the return continuation is not trivial, logic of storing the results of the call is done
+            // inside the callee logic. So at rcBB, those locals are already live.
+            //
+            bool isResultLocalsLiveAtBBHead = (trait->m_rcTrivialness != TrivialRCKind::NotTrivial);
+            bool shouldAllocateBv = (isResultLocalsLiveAtBBHead && virtualRegistersUsedForResultOfCall.size() > 0);
+            DBitVector* bv = nullptr;
+            if (shouldAllocateBv)
+            {
+                bv = DfgAlloc()->AllocateObject<DBitVector>();
+                bv->Reset(m_baselineCodeBlock->m_stackFrameNumSlots);
+            }
             for (size_t localOrd = localOrdStart; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
             {
                 VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd);
@@ -1524,6 +1529,10 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 {
                     // This virtual register is used to store the call results, it contains valid info now
                     //
+                    if (shouldAllocateBv)
+                    {
+                        bv->SetBit(localOrd);
+                    }
                     continue;
                 }
 
@@ -1535,6 +1544,11 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 //
                 Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), m_graph->GetUndefValue());
                 m_bbContext->SetupNodeCommonInfoAndPushBack(setLocal);
+            }
+
+            if (shouldAllocateBv)
+            {
+                rcBB->m_inPlaceCallResultLocalOrds = bv;
             }
         }
     }
