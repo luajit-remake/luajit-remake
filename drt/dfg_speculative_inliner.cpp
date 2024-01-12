@@ -1446,7 +1446,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 {
                     TestAssert(node->GetNumInputs() == 1);
                     TestAssert(node->GetInputEdge(0).GetOperand() == rcNode);
-                    VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                    VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                     TestAssert(!virtualRegistersUsedForResultOfCall.count(vreg.Value()));
                     virtualRegistersUsedForResultOfCall.insert(vreg.Value());
                 }

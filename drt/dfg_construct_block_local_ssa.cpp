@@ -52,7 +52,7 @@ struct ConstructBlockLocalSSAPass
         {
             if (node->IsGetLocalNode() || node->IsSetLocalNode())
             {
-                VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                 TestAssert(vreg.Value() < numLocals);
                 TestAssert(!localInfoAtHead[vreg.Value()].IsNull() && !localInfoAtTail[vreg.Value()].IsNull());
                 TestAssert(localInfoAtHead[vreg.Value()] == node || localInfoAtTail[vreg.Value()] == node);
@@ -142,7 +142,7 @@ struct ConstructBlockLocalSSAPass
             node->DoReplacementForInputsAndSetReferenceBit();
             if (node->IsGetLocalNode())
             {
-                VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                 TestAssert(vreg.Value() < numLocals);
                 PhiOrNode event = localInfoAtTail[vreg.Value()];
                 if (!event.IsNull())
@@ -192,7 +192,7 @@ struct ConstructBlockLocalSSAPass
             }
             else if (node->IsSetLocalNode())
             {
-                VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                 TestAssert(vreg.Value() < numLocals);
                 PhiOrNode event = localInfoAtTail[vreg.Value()];
                 if (!event.IsNull())
@@ -251,7 +251,7 @@ struct ConstructBlockLocalSSAPass
         {
             if (node->IsGetLocalNode() && !node->IsNodeReferenced())
             {
-                VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                 TestAssert(localInfoAtHead[vreg.Value()] == node);
                 if (localInfoAtTail[vreg.Value()] == node)
                 {
@@ -421,7 +421,7 @@ struct ConstructBlockLocalSSAPass
 
                     if (!isPreUnification)
                     {
-                        TestAssert(node->GetLogicalVariableInfo() == phi->GetLogicalVariable());
+                        TestAssert(node->GetLogicalVariable() == phi->GetLogicalVariable());
                     }
                     else
                     {
@@ -477,7 +477,7 @@ struct ConstructBlockLocalSSAPass
                 {
                     hasSetLocal = true;
                     Node* setLocal = incomingVal.AsNode();
-                    TestAssert(setLocal->GetLocalOperationVirtualRegister().Value() == phi->GetLocalOrd());
+                    TestAssert(setLocal->GetLocalOperationVirtualRegisterSlow().Value() == phi->GetLocalOrd());
                     TestAssert(pred->m_localInfoAtTail[phi->GetLocalOrd()] == setLocal);
                     TestAssert(allStores.count(setLocal));
                     allStores[setLocal] = true;
@@ -498,7 +498,7 @@ struct ConstructBlockLocalSSAPass
                     }
                     else if (nodeKind == NodeKind_SetLocal)
                     {
-                        TestAssert(phi->GetLogicalVariable() == incomingVal.AsNode()->GetLogicalVariableInfo());
+                        TestAssert(phi->GetLogicalVariable() == incomingVal.AsNode()->GetLogicalVariable());
                     }
                 }
             }
@@ -603,7 +603,7 @@ struct ConstructBlockLocalSSAPass
             {
                 if (node->IsGetLocalNode())
                 {
-                    VirtualRegister vreg = node->GetLocalOperationVirtualRegister();
+                    VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
                     TestAssert(localInfoAtHead[vreg.Value()] == node);
 
                     Phi* phi;
@@ -613,7 +613,7 @@ struct ConstructBlockLocalSSAPass
                     }
                     else
                     {
-                        phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, vreg.Value(), node->GetLogicalVariableInfo());
+                        phi = m_graph->AllocatePhi(bb->m_predecessors.size(), bb, vreg.Value(), node->GetLogicalVariable());
                     }
                     allPhis.push_back(phi);
 
@@ -795,7 +795,7 @@ struct ConstructBlockLocalSSAPass
                 {
                     if (node->GetDataFlowInfoForGetLocal()->IsTriviallyUndefValue())
                     {
-                        size_t localOrd = node->GetLocalOperationVirtualRegister().Value();
+                        size_t localOrd = node->GetLocalOperationVirtualRegisterSlow().Value();
                         TestAssert(bb->m_localInfoAtHead[localOrd] == node);
                         if (bb->m_localInfoAtTail[localOrd] == node)
                         {
@@ -815,7 +815,7 @@ struct ConstructBlockLocalSSAPass
                 }
                 else if (node->IsSetLocalNode())
                 {
-                    size_t localOrd = node->GetLocalOperationVirtualRegister().Value();
+                    size_t localOrd = node->GetLocalOperationVirtualRegisterSlow().Value();
                     TestAssert(localOrd < numLocals);
                     TestAssert(bb->m_localInfoAtTail[localOrd] == node);
                     size_t numSuccessors = bb->GetNumSuccessors();
@@ -941,7 +941,7 @@ struct ConstructBlockLocalSSAPass
 
         for (Phi* phi : allPhis)
         {
-            LogicalVariableInfo* info = phi->GetPhiOriginNodeForUnification()->GetLogicalVariableInfo();
+            LogicalVariableInfo* info = phi->GetPhiOriginNodeForUnification()->GetLogicalVariable();
             phi->SetLogicalVariable(info);
         }
     }

@@ -178,7 +178,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         {
             if (node->IsSetLocalNode())
             {
-                InterpreterSlot slot = node->GetLocalOperationInterpreterSlot();
+                InterpreterSlot slot = node->GetLocalOperationInterpreterSlotSlow();
                 CHECK_REPORT_NODE(shadowStoreWrites.count(slot.Value()),
                                   node,
                                   "SetLocal is not preceded by a ShadowStore on the same location");
@@ -201,7 +201,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                     VirtualRegisterMappingInfo vrmi = bb->GetVirtualRegisterForInterpreterSlotAtTail(slot);
                     TestAssert(vrmi.IsLive());
                     TestAssert(!vrmi.IsUmmapedToAnyVirtualReg());
-                    TestAssert(vrmi.GetVirtualRegister().Value() == node->GetLocalOperationVirtualRegister().Value());
+                    TestAssert(vrmi.GetVirtualRegister().Value() == node->GetLocalOperationVirtualRegisterSlow().Value());
                     setLocalWrites[slot.Value()] = node;
                     std::ignore = vrmi;
                 }

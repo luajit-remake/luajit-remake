@@ -1361,15 +1361,17 @@ public:
         return IsGetLocalNode() || IsSetLocalNode();
     }
 
-    // TODO: change name to add "slow" or "PreUnificiation"
+    // After unification pass, it's faster to get this info from LogicalVariable
     //
-    VirtualRegister GetLocalOperationVirtualRegister()
+    VirtualRegister GetLocalOperationVirtualRegisterSlow()
     {
         TestAssert(HasLogicalVariableInfo());
         return GetLocalVarAccessInfo().GetVirtualRegister();
     }
 
-    InterpreterSlot GetLocalOperationInterpreterSlot()
+    // After unification pass, it's faster to get this info from LogicalVariable
+    //
+    InterpreterSlot GetLocalOperationInterpreterSlotSlow()
     {
         TestAssert(HasLogicalVariableInfo());
         return GetLocalVarAccessInfo().GetInterpreterSlot();
@@ -1519,7 +1521,7 @@ public:
         }
     }
 
-    LogicalVariableInfo* GetLogicalVariableInfo()
+    LogicalVariableInfo* GetLogicalVariable()
     {
         return GetLocalVarAccessInfo().GetLogicalVariableInfo();
     }
