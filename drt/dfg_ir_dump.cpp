@@ -508,12 +508,13 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                 case NodeKind_GetNumVariadicRes:
                 case NodeKind_PrependVariadicRes:
                 case NodeKind_Return:
+                case NodeKind_Phantom:
                 {
                     break;
                 }
                 case NodeKind_GetKthVariadicRes:
                 {
-                    fprintf(file, "%llu", static_cast<unsigned long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, ", %llu", static_cast<unsigned long long>(curNode->GetNodeParamAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }

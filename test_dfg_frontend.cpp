@@ -7,6 +7,7 @@
 #include "dfg_ir_dump.h"
 #include "dfg_ir_validator.h"
 #include "dfg_speculative_inliner.h"
+#include "dfg_phantom_insertion.h"
 
 using namespace dfg;
 
@@ -471,6 +472,9 @@ TEST(DfgFrontend, Parser_Stress_1)
             ReleaseAssert(cb != nullptr);
             arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
+
+            RunPhantomInsertionPass(graph.get());
+            ReleaseAssert(ValidateDfgIrGraph(graph.get()));
         }
     }
 }
@@ -550,6 +554,8 @@ static void TestDfgFrontendWithRealCallIcInfo(std::string fileName, int randomly
             DumpDfgIrGraph(stderr, graph.get());
             ReleaseAssert(false);
         }
+        RunPhantomInsertionPass(graph.get());
+        ReleaseAssert(ValidateDfgIrGraph(graph.get()));
     }
 }
 
@@ -683,6 +689,8 @@ static void TestDfgFrontendWithRandomCallIcInfo(VM* vm, std::vector<std::string>
             fprintf(stderr, "\n");
             ReleaseAssert(false);
         }
+        RunPhantomInsertionPass(graph.get());
+        ReleaseAssert(ValidateDfgIrGraph(graph.get()));
     }
 }
 
@@ -818,4 +826,146 @@ TEST(DfgFrontend, Dump_1)
 
     arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
     DumpDfgIrGraph(stdout, graph.get());
+}
+
+TEST(DfgUtils, BatchedInsertion)
+{
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
+    DfgAlloc()->Reset();
+
+    size_t numElements = 100;
+    std::vector<Node*> nodeForOriginalVector;
+    for (size_t i = 0; i < numElements; i++)
+    {
+        nodeForOriginalVector.push_back(Node::CreateNoopNode());
+    }
+
+    size_t maxInsertions = 1000;
+    std::vector<Node*> nodeForInsertion;
+    for (size_t i = 0; i < maxInsertions; i++)
+    {
+        nodeForInsertion.push_back(Node::CreateNoopNode());
+    }
+
+    auto doTest = [&](size_t numInsertions, size_t randMode, bool ordered)
+    {
+        ReleaseAssert(numInsertions <= maxInsertions);
+
+        BasicBlock* bb = DfgAlloc()->AllocateObject<BasicBlock>();
+        for (size_t i = 0; i < numElements; i++)
+        {
+            bb->m_nodes.push_back(nodeForOriginalVector[i]);
+        }
+
+        std::vector<std::pair<size_t, Node*>> insertions;
+        for (size_t i = 0; i < numInsertions; i++)
+        {
+            size_t insertBefore;
+            if (randMode == 0)
+            {
+                insertBefore = static_cast<size_t>(rand()) % (numElements + 1);
+            }
+            else if (randMode == 1)
+            {
+                insertBefore = static_cast<size_t>(rand()) % (numElements / 10);
+            }
+            else if (randMode == 2)
+            {
+                insertBefore = static_cast<size_t>(rand()) % (numElements / 10) + (numElements + 1 - numElements / 10);
+            }
+            else if (randMode == 3)
+            {
+                insertBefore = static_cast<size_t>(rand()) % (numElements / 3) + (numElements / 3);
+            }
+            else
+            {
+                insertBefore = static_cast<size_t>(rand()) % (numElements / 10 + 1) * 10;
+            }
+            ReleaseAssert(insertBefore <= numElements);
+            insertions.push_back(std::make_pair(insertBefore, nodeForInsertion[i]));
+        }
+
+        if (ordered)
+        {
+            std::sort(insertions.begin(), insertions.end());
+        }
+
+        std::vector<std::vector<Node*>> expectedInsertions;
+        expectedInsertions.resize(numElements + 1);
+        for (auto& it : insertions)
+        {
+            size_t insertBefore = it.first;
+            Node* node = it.second;
+            ReleaseAssert(insertBefore <= numElements);
+            expectedInsertions[insertBefore].push_back(node);
+        }
+
+        std::vector<Node*> expectedResult;
+        for (size_t i = 0; i <= numElements; i++)
+        {
+            for (Node* node : expectedInsertions[i])
+            {
+                expectedResult.push_back(node);
+            }
+            if (i < numElements)
+            {
+                expectedResult.push_back(bb->m_nodes[i]);
+            }
+        }
+        ReleaseAssert(expectedResult.size() == numElements + numInsertions);
+
+        TempArenaAllocator alloc;
+        BatchedInsertions inserter(alloc);
+        inserter.Reset(bb);
+        for (auto& it : insertions)
+        {
+            size_t insertBefore = it.first;
+            Node* node = it.second;
+            inserter.Add(insertBefore, node);
+        }
+        inserter.Commit();
+
+        ReleaseAssert(bb->m_nodes.size() == numElements + numInsertions);
+        for (size_t i = 0; i < bb->m_nodes.size(); i++)
+        {
+            ReleaseAssert(bb->m_nodes[i] == expectedResult[i]);
+        }
+    };
+
+    for (size_t testIter = 0; testIter < 40; testIter++)
+    {
+        for (size_t numInsertionsMode = 0; numInsertionsMode < 5; numInsertionsMode++)
+        {
+            size_t numInsertions;
+            if (numInsertionsMode == 0)
+            {
+                numInsertions = static_cast<size_t>(rand()) % 15;
+            }
+            else if (numInsertionsMode == 1)
+            {
+                numInsertions = static_cast<size_t>(rand()) % 80;
+            }
+            else if (numInsertionsMode == 2)
+            {
+                numInsertions = static_cast<size_t>(rand()) % 100 + 50;
+            }
+            else if (numInsertionsMode == 3)
+            {
+                numInsertions = static_cast<size_t>(rand()) % 200 + 200;
+            }
+            else
+            {
+                numInsertions = static_cast<size_t>(rand()) % 500 + 500;
+            }
+            for (size_t randMode = 0; randMode < 5; randMode++)
+            {
+                for (bool ordered : {false, true})
+                {
+                    doTest(numInsertions, randMode, ordered);
+                }
+            }
+        }
+    }
 }

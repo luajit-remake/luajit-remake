@@ -39,7 +39,7 @@ struct ConstructBlockLocalSSAPass
         size_t numLocals = bb->m_numLocals;
         PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
         PhiOrNode* localInfoAtTail = bb->m_localInfoAtTail;
-        Node* undefVal = m_graph->GetUndefValue().m_node;
+        Node* undefVal = m_graph->GetUndefValue().GetOperand();
 
         // Validate that for each local, there should only be at most two events:
         // (1) (Optionally) a GetLocal
@@ -110,7 +110,7 @@ struct ConstructBlockLocalSSAPass
 
         PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
         PhiOrNode* localInfoAtTail = bb->m_localInfoAtTail;
-        Node* undefVal = m_graph->GetUndefValue().m_node;
+        Node* undefVal = m_graph->GetUndefValue().GetOperand();
         if (bb == m_graph->GetEntryBB())
         {
             // The function entry block is guaranteed to have all values undef at head,
@@ -585,17 +585,15 @@ struct ConstructBlockLocalSSAPass
     {
         m_graph->FreeMemoryForAllPhi();
 
-        Node* undefVal = m_graph->GetUndefValue().m_node;
+        Node* undefVal = m_graph->GetUndefValue().GetOperand();
 
         TempVector<Phi*> allPhis(m_alloc);
         TempVector<Phi*> q(m_alloc);
 
-        size_t numLocals = m_graph->GetTotalNumLocals();
-
         for (BasicBlock* bb : m_graph->m_blocks)
         {
-            TestAssert(bb->m_numLocals == numLocals);
-            PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
+            TestAssert(bb->m_numLocals == m_graph->GetTotalNumLocals());
+            [[maybe_unused]] PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
 
             // For each GetLocal, create a Phi node and push into work queue
             //
@@ -626,7 +624,7 @@ struct ConstructBlockLocalSSAPass
 #ifdef TESTBUILD
             // For sanity, assert that the info in localInfoAtHead agrees with the GetLocals
             //
-            for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
+            for (size_t localOrd = 0; localOrd < m_graph->GetTotalNumLocals(); localOrd++)
             {
                 if (!localInfoAtHead[localOrd].IsNull() && localInfoAtHead[localOrd].GetNodeKind() == NodeKind_GetLocal)
                 {

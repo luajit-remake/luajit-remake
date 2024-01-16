@@ -186,7 +186,7 @@ struct DfgBuildBasicBlockContext
             return m_graph->GetConstant(TValue::Create<tNil>());
         }
 
-        if (m_valueForVariadicArgs[varArgOrd].m_node.IsNull())
+        if (m_valueForVariadicArgs[varArgOrd].IsNull())
         {
             Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::VarArg(varArgOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
@@ -206,13 +206,13 @@ struct DfgBuildBasicBlockContext
             size_t maxVarArgs = m_inlinedCallFrame->MaxVarArgsAllowed();
             for (size_t i = 0; i < maxVarArgs; i++)
             {
-                m_valueForVariadicArgs[i].m_node = nullptr;
+                m_valueForVariadicArgs[i] = nullptr;
             }
         }
         size_t numLocals = m_codeBlock->m_stackFrameNumSlots;
         for (size_t i = 0; i < numLocals; i++)
         {
-            m_valueAtTail[i].m_node = nullptr;
+            m_valueAtTail[i] = nullptr;
         }
     }
 

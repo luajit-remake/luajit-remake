@@ -73,6 +73,51 @@ struct BitVectorImpl
         }
     }
 
+    // Iterates through each set bit in a bit vector expression of n + 1 bitvectors of equal length (the first vector is always this)
+    //
+    // 'func' should take argument 'size_t ord', which is the ordinal of the set bit
+    // 'exprFunc' should take n + 1 uint64_t values and return uint64_t, the result of the expression
+    //
+    template<typename ActionFunc, typename ExprFunc, typename... OtherBvDeleters>
+    void ALWAYS_INLINE ForEachSetBitInExpression(const ActionFunc& actionFunc, const ExprFunc& exprFunc, const BitVectorImpl<OtherBvDeleters>&... others) const
+    {
+#ifdef TESTBUILD
+        {
+            std::array<size_t, sizeof...(others)> lens { (others.m_length)... };
+            for (size_t i = 0; i < sizeof...(others); i++) { TestAssert(lens[i] == m_length); }
+        }
+#endif
+        size_t allocLen = GetAllocLength();
+        for (size_t i = 0; i < allocLen; i++)
+        {
+            size_t baseOrd = i * 64;
+            uint64_t exprVal = exprFunc(m_data[i], (others.m_data[i])...);
+            while (exprVal != 0)
+            {
+                uint32_t lowestSetBit = static_cast<uint32_t>(__builtin_ctzll(exprVal));
+                TestAssert((exprVal & (static_cast<uint64_t>(1) << lowestSetBit)) != 0);
+                exprVal ^= static_cast<uint64_t>(1) << lowestSetBit;
+                actionFunc(lowestSetBit + baseOrd);
+            }
+        }
+    }
+
+    template<typename Func>
+    void ALWAYS_INLINE ForEachSetBit(const Func& func) const
+    {
+        ForEachSetBitInExpression(func, [](uint64_t val) ALWAYS_INLINE { return val; });
+    }
+
+    template<typename OtherDeleter, typename Func>
+    void ALWAYS_INLINE ForEachSetBitThatIsClearInOther(const BitVectorImpl<OtherDeleter>& other, const Func& func) const
+    {
+        auto expr = [](uint64_t v1, uint64_t v2) ALWAYS_INLINE
+        {
+            return v1 & (~v2);
+        };
+        ForEachSetBitInExpression(func, expr, other);
+    }
+
     std::unique_ptr<uint64_t[], Deleter> m_data;
     size_t m_length;
 

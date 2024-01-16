@@ -35,6 +35,7 @@ arena_unique_ptr<Graph> WARN_UNUSED RunDfgFrontend(CodeBlock* codeBlock)
     ctx.m_inlinedCallFrame->InitializeVirtualRegisterUsageArray(ctx.m_vrState.GetVirtualRegisterVectorLength());
     ctx.m_graph = graph.get();
     ctx.m_graph->UpdateTotalNumLocals(ctx.m_vrState.GetVirtualRegisterVectorLength());
+    ctx.m_graph->UpdateTotalNumInterpreterSlots(ctx.m_inlinedCallFrame->GetInterpreterSlotForFrameEnd().Value());
     DfgTranslateFunctionResult res = DfgTranslateFunction(ctx);
     TestAssert(res.m_functionEntry != nullptr);
     TestAssert(graph->m_blocks.empty());

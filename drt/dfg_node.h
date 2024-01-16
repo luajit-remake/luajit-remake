@@ -332,6 +332,9 @@ struct Value
     Value(ArenaPtr<Node> node, uint16_t outputOrd) : m_node(node), m_outputOrd(outputOrd) { }
     Value(Node* node, uint16_t outputOrd) : Value(DfgAlloc()->GetArenaPtr(node), outputOrd) { }
 
+    bool IsNull() { return m_node.IsNull(); }
+    Node* GetOperand() { return m_node; }
+
     // This is just saying if two Values are referring to the same SSA value
     //
     bool IsIdenticalAs(Value other)
@@ -440,10 +443,12 @@ public:
     bool HasOutlinedNodeSpecificData() { return Flags_HasOutlinedNodeSpecificData::Get(m_flags); }
 
     // Whether this node may OSR exit
+    // Note that this flag only indicates whether the node itself may exit or not.
+    // Input edges may have checks that cause exit even if the node itself does not exit.
     //
     using Flags_MayOsrExit = BitFieldMember<FlagsTy, bool, 5 /*start*/, 1 /*width*/>;
 
-    bool MayOsrExit() { return Flags_MayOsrExit::Get(m_flags); }
+    bool MayOsrExitNotConsideringChecks() { return Flags_MayOsrExit::Get(m_flags); }
     void SetMayOsrExit(bool val) { Flags_MayOsrExit::Set(m_flags, val); }
 
     // Whether this node is OK to OSR exit
@@ -644,8 +649,8 @@ public:
 
         Edge(Value value, UseKind useKind = UseKind_Untyped, bool isStaticallyKnownNoCheckNeeded = false)
         {
-            AssertImp(value.m_outputOrd == 0, DfgAlloc()->GetPtr(value.m_node)->HasDirectOutput());
-            assert(value.m_outputOrd <= DfgAlloc()->GetPtr(value.m_node)->m_numExtraOutputs);
+            AssertImp(value.m_outputOrd == 0, value.GetOperand()->HasDirectOutput());
+            assert(value.m_outputOrd <= value.GetOperand()->m_numExtraOutputs);
             m_operand = value.m_node;
             m_outputOrd = value.m_outputOrd;
             uint16_t encodedVal = 0;
@@ -668,12 +673,12 @@ public:
         {
             Node* node = GetOperand();
             Value replacementVal = node->GetReplacementMaybeNonExistent();
-            if (!replacementVal.m_node.IsNull())
+            if (!replacementVal.IsNull())
             {
                 TestAssert(GetOutputOrdinal() == 0);
                 SetOperand(replacementVal.m_node);
                 m_outputOrd = replacementVal.m_outputOrd;
-                TestAssert(GetOperand()->GetReplacementMaybeNonExistent().m_node.IsNull());
+                TestAssert(GetOperand()->GetReplacementMaybeNonExistent().IsNull());
                 TestAssert(IsOutputOrdValid());
             }
         }
@@ -1020,6 +1025,24 @@ public:
         assert(m_initializedNumOutputs);
         TestAssert((outputOrd == 0 && HasDirectOutput()) || (1 <= outputOrd && outputOrd <= m_numExtraOutputs));
         return DfgAlloc()->GetPtr(m_outputInfoArray)[outputOrd];
+    }
+
+    bool MayOsrExit()
+    {
+        if (MayOsrExitNotConsideringChecks())
+        {
+            return true;
+        }
+
+        bool edgeHasCheck = false;
+        ForEachInputEdge([&](Edge& e) ALWAYS_INLINE
+        {
+            if (e.NeedsTypeCheck())
+            {
+                edgeHasCheck = true;
+            }
+        });
+        return edgeHasCheck;
     }
 
     // Some notes about Captured Variables:
@@ -1533,6 +1556,7 @@ public:
     bool IsGetKthVariadicResNode() { return m_nodeKind == NodeKind_GetKthVariadicRes; }
     bool IsPrependVariadicResNode() { return m_nodeKind == NodeKind_PrependVariadicRes; }
     bool IsCreateCapturedVarNode() { return m_nodeKind == NodeKind_CreateCapturedVar; }
+    bool IsPhantomNode() { return m_nodeKind == NodeKind_Phantom; }
 
     static Node* WARN_UNUSED CreateNoopNode()
     {
@@ -1560,6 +1584,15 @@ public:
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(valueToStore);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
+        return r;
+    }
+
+    static Node* WARN_UNUSED CreatePhantomNode(Value value)
+    {
+        Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_Phantom);
+        r->SetNumInputs(1);
+        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
+        r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         return r;
     }
 
@@ -1666,6 +1699,7 @@ public:
         r->SetNumInputs(1);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = value;
+        r->SetMayOsrExit(true);
         r->m_nsdAsU64 = bound;
         return r;
     }
@@ -1708,7 +1742,7 @@ public:
     void SetOsrExitDest(OsrExitDestination dest) { m_osrExitDest = dest; }
     OsrExitDestination GetOsrExitDest() { return m_osrExitDest; }
 
-    void ClearReplacement() { m_replacement.m_node = nullptr; }
+    void ClearReplacement() { m_replacement = nullptr; }
     Value GetReplacementMaybeNonExistent() { return m_replacement; }
 
     // This is a simple utility that allows replacing an SSA value with another SSA value
@@ -1870,7 +1904,12 @@ public:
         SetFlagsForNopNode();
     }
 
-    Value m_replacement;
+    union {
+        Value m_replacement;
+        // Used for custom purpose inside a pass
+        //
+        size_t m_customMarker;
+    };
 
 private:
 #ifndef NDEBUG
@@ -2021,7 +2060,6 @@ private:
         : m_localInfoAtHead(nullptr)
         , m_localInfoAtTail(nullptr)
         , m_inPlaceCallRcFrameLocalOrd(static_cast<uint32_t>(-1))
-        , m_inPlaceCallResultLocalOrds(nullptr)
         , m_terminator(nullptr)
         , m_numLocals(static_cast<uint32_t>(-1))
         , m_numSuccessors(static_cast<uint8_t>(-1))
@@ -2092,22 +2130,18 @@ public:
     // argument setup work (so the DFG state at head does not really agree with the interpreter state before bytecode 0).
     // This is fine since the root function entry block is not a valid branch target.
     //
-    // 'm_inPlaceCallRcFrameLocalOrd' and 'm_inPlaceCallResultLocalOrds' are two weird things to deal with return continuations.
-    // For inlined in-place call, we currently do the clean up logic that reset each local used by the in-place call to UndefVal
+    // 'm_inPlaceCallRcFrameLocalOrd' is needed to deal with some corner cases with return continuations.
+    // For inlined in-place call, currently in some cases, we do the clean up logic that reset each local used by the in-place call to UndefVal
     // in the join BB. But this means that at the end of each predecessor BB, the ShadowStore and SetLocal information can be out
     // of sync (in rare edge cases where a ShadowStore wrote to a slot that is also accessed as an uninitialized slot in caller logic..)
     // Furthermore, for trivial return continuations, the logic that stores the result of the call to locals in the parent frame
     // is done in the callee logic.
     //
-    // So to summarize: at the return continuation join block of a in-place call, all locals >= in-place call frame are dead, unless
-    // the call has trivial return continuation, in which case the locals that are used to store the results are live.
-    //
-    // m_inPlaceCallRcFrameLocalOrd records the local ord where the in-place call frame starts, and if m_inPlaceCallResultLocalOrds
-    // is not nullptr, it is a bitvector of all the locals that are used to store the results of the call.
+    // So to summarize: at the return continuation join block of a in-place call, in some cases, we must treat all locals >= in-place call
+    // frame as dead even if bytecode liveness report that they are live.
     //
     CodeOrigin m_bcForInterpreterStateAtBBStart;
     uint32_t m_inPlaceCallRcFrameLocalOrd;
-    ArenaPtr<DBitVector> m_inPlaceCallResultLocalOrds;
 
     // The terminator node of this basic block
     // If this block has 0/1 successors, the terminator must be pointing to the last node.
@@ -2145,15 +2179,6 @@ private:
         if (bytecodeLocalOrd >= m_inPlaceCallRcFrameLocalOrd)
         {
             TestAssert(m_inPlaceCallRcFrameLocalOrd != static_cast<uint32_t>(-1));
-            if (!m_inPlaceCallResultLocalOrds.IsNull())
-            {
-                DBitVector* bv = m_inPlaceCallResultLocalOrds;
-                TestAssert(bv->m_length == frame->GetNumBytecodeLocals());
-                if (bv->IsSet(bytecodeLocalOrd))
-                {
-                    return true;
-                }
-            }
             return false;
         }
 
@@ -2364,9 +2389,9 @@ public:
 
         m_nodes.resize(newCount);
 
-        // Update terminator node
+        // Update terminator node to avoid the case that the old terminator points to a NOP and we deleted it
         //
-        if (GetNumSuccessors() <= 1)
+        if (GetNumSuccessors() == 1)
         {
             m_terminator = m_nodes.back();
         }
@@ -2522,6 +2547,7 @@ private:
         // Avoid corner case where we don't have any locals
         //
         m_totalNumLocals = 1;
+        m_totalNumInterpreterSlots = 0;
     }
 
 public:
@@ -2657,6 +2683,16 @@ public:
     uint32_t GetTotalNumLocals()
     {
         return m_totalNumLocals;
+    }
+
+    void UpdateTotalNumInterpreterSlots(size_t numSlots)
+    {
+        m_totalNumInterpreterSlots = std::max(m_totalNumInterpreterSlots, SafeIntegerCast<uint32_t>(numSlots));
+    }
+
+    uint32_t GetTotalNumInterpreterSlots()
+    {
+        return m_totalNumInterpreterSlots;
     }
 
     void RegisterLogicalVariable(LogicalVariableInfo* info)
@@ -2856,6 +2892,7 @@ private:
     TempArenaAllocator m_phiNodeAllocator;
     DVector<ArenaPtr<LogicalVariableInfo>> m_allLogicalVariables;
     uint32_t m_totalNumLocals;
+    uint32_t m_totalNumInterpreterSlots;
     Form m_graphForm;
     bool m_isCfgAvailable;
 };
@@ -2864,5 +2901,204 @@ inline void Node::RegisterLogicalVariable(Graph* graph, LogicalVariableInfo* inf
 {
     graph->RegisterLogicalVariable(info);
 }
+
+// Describes a pending batch of insertions of nodes to a basic block
+//
+struct BatchedInsertions
+{
+    BatchedInsertions(TempArenaAllocator& alloc)
+        : m_basicBlock(nullptr)
+        , m_isSorted(true)
+        , m_allInsertions(alloc)
+        , m_radixSortArray(alloc)
+    { }
+
+    // Reset to prepare insertion for a new basic block
+    // It asserts that there are no pending insertions: caller should either commit or discard the existing insertion batch.
+    //
+    void Reset(BasicBlock* bb)
+    {
+        TestAssert(bb != nullptr);
+        TestAssert(m_allInsertions.empty());
+        m_basicBlock = bb;
+        m_isSorted = true;
+    }
+
+    // Multiple insertions to the same 'insertBefore' will happen in the same order as 'Add' is called.
+    //
+    void Add(size_t insertBefore, Node* node)
+    {
+        TestAssert(m_basicBlock != nullptr);
+        TestAssert(insertBefore <= m_basicBlock->m_nodes.size());
+        if (m_allInsertions.size() > 0 && insertBefore < m_allInsertions.back().m_insertBefore)
+        {
+            m_isSorted = false;
+        }
+        m_allInsertions.push_back({
+            .m_insertBefore = SafeIntegerCast<uint32_t>(insertBefore),
+            .m_node = node
+        });
+    }
+
+    void Commit()
+    {
+        TestAssert(m_basicBlock != nullptr);
+        CommitImpl();
+        m_allInsertions.clear();
+        m_isSorted = true;
+    }
+
+    void DiscardAll()
+    {
+        m_allInsertions.clear();
+        m_isSorted = true;
+    }
+
+private:
+    void CommitImpl()
+    {
+        if (m_allInsertions.empty())
+        {
+            return;
+        }
+        if (m_isSorted)
+        {
+            DoSortedInsertion();
+        }
+        else
+        {
+            DoUnorderedInsertion();
+        }
+    }
+
+    void DoSortedInsertion()
+    {
+        DVector<ArenaPtr<Node>>& nodes = m_basicBlock->m_nodes;
+        size_t oldSize = nodes.size();
+        nodes.resize(oldSize + m_allInsertions.size());
+        size_t curIndex = nodes.size();
+        // The last uninserted value in the old vector is oldVectorIndex - 1
+        //
+        size_t oldVectorIndex = oldSize;
+
+        // Insert all old vector values down to 'targetIdx' inclusive
+        //
+        auto insertOldVectorValuesDownto = [&](size_t targetIdx) ALWAYS_INLINE
+        {
+            TestAssert(oldVectorIndex >= targetIdx);
+            while (oldVectorIndex > targetIdx)
+            {
+                oldVectorIndex--;
+                TestAssert(curIndex > 0);
+                curIndex--;
+                TestAssert(curIndex >= oldVectorIndex);
+                nodes[curIndex] = nodes[oldVectorIndex];
+            }
+        };
+
+        for (size_t insertionSetIdx = m_allInsertions.size(); insertionSetIdx--;)
+        {
+            size_t insertBefore = m_allInsertions[insertionSetIdx].m_insertBefore;
+            ArenaPtr<Node> nodeToInsert = m_allInsertions[insertionSetIdx].m_node;
+            TestAssert(insertBefore <= oldSize);
+            insertOldVectorValuesDownto(insertBefore);
+            TestAssert(curIndex > 0);
+            curIndex--;
+            nodes[curIndex] = nodeToInsert;
+        }
+
+        // No need to do anything to the untouched prefix of the old vector
+        //
+        TestAssert(curIndex == oldVectorIndex);
+    }
+
+    void DoUnorderedInsertion()
+    {
+        DVector<ArenaPtr<Node>>& nodes = m_basicBlock->m_nodes;
+        size_t oldSize = nodes.size();
+        if (m_radixSortArray.size() < oldSize + 1)
+        {
+            m_radixSortArray.resize(oldSize + 1);
+        }
+
+        for (size_t i = 0; i <= oldSize; i++)
+        {
+            m_radixSortArray[i] = static_cast<uint32_t>(-1);
+        }
+
+        for (size_t idx = 0, numInsertions = m_allInsertions.size(); idx < numInsertions; idx++)
+        {
+            Insertion& insertion = m_allInsertions[idx];
+            TestAssert(insertion.m_insertBefore <= oldSize);
+            auto& linkedListTail = m_radixSortArray[insertion.m_insertBefore];
+            if (linkedListTail == static_cast<uint32_t>(-1))
+            {
+                insertion.m_insertBefore = static_cast<uint32_t>(-1);
+            }
+            else
+            {
+                TestAssert(linkedListTail < m_allInsertions.size());
+                insertion.m_insertBefore = linkedListTail;
+            }
+            linkedListTail = SafeIntegerCast<uint32_t>(idx);
+        }
+
+        nodes.resize(oldSize + m_allInsertions.size());
+
+        size_t curIndex = nodes.size();
+
+        auto insertItems = [&](size_t insertBefore) ALWAYS_INLINE
+        {
+            TestAssert(insertBefore <= oldSize);
+            uint32_t idx = m_radixSortArray[insertBefore];
+            while (idx != static_cast<uint32_t>(-1))
+            {
+                TestAssert(curIndex > 0);
+                curIndex--;
+                TestAssert(idx < m_allInsertions.size());
+                nodes[curIndex] = m_allInsertions[idx].m_node;
+                idx = m_allInsertions[idx].m_insertBefore;
+            }
+        };
+
+        for (size_t oldNodeIdx = oldSize; oldNodeIdx--;)
+        {
+            insertItems(oldNodeIdx + 1);
+            TestAssert(curIndex > 0);
+            curIndex--;
+            TestAssert(curIndex >= oldNodeIdx);
+            if (curIndex == oldNodeIdx)
+            {
+                // Everything <= curIndex must be untouched, we can return early
+                //
+#ifdef TESTBUILD
+                for (size_t i = 0; i <= curIndex; i++)
+                {
+                    TestAssert(m_radixSortArray[i] == static_cast<uint32_t>(-1));
+                }
+#endif
+                return;
+            }
+            nodes[curIndex] = nodes[oldNodeIdx];
+        }
+        insertItems(0);
+
+        TestAssert(curIndex == 0);
+    }
+
+    struct Insertion
+    {
+        // A value between [0, numNodes], insert before the k-th node (or insert at end)
+        // During radix sort for unordered insertion, this is repurposed to the 'prev' pointer
+        //
+        uint32_t m_insertBefore;
+        ArenaPtr<Node> m_node;
+    };
+
+    BasicBlock* m_basicBlock;
+    bool m_isSorted;
+    TempVector<Insertion> m_allInsertions;
+    TempVector<uint32_t /*tailIdx*/> m_radixSortArray;
+};
 
 }   // namespace dfg

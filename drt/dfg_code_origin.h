@@ -84,6 +84,8 @@ struct OsrExitDestination
         m_bytecodeIndex = dest.m_bytecodeIndex;
     }
 
+    bool IsInvalid() { return m_compositeValue == 0; }
+
     bool IsBranchDest() { return (m_compositeValue & 1U); }
 
     CodeOrigin GetNormalDestination()
@@ -102,6 +104,16 @@ struct OsrExitDestination
         p.m_value = m_compositeValue ^ 1U;
         assert((p.m_value & 1U) == 0);
         return CodeOrigin(p, m_bytecodeIndex);
+    }
+
+    friend bool operator==(const OsrExitDestination& a, const OsrExitDestination& b)
+    {
+        return a.m_compositeValue == b.m_compositeValue && a.m_bytecodeIndex == b.m_bytecodeIndex;
+    }
+
+    friend bool operator!=(const OsrExitDestination& a, const OsrExitDestination& b)
+    {
+        return !(a.m_compositeValue == b.m_compositeValue && a.m_bytecodeIndex == b.m_bytecodeIndex);
     }
 
 private:
@@ -730,5 +742,73 @@ private:
 // The alignment must be >1 since OsrExitDestination steals its bit 0
 //
 static_assert(alignof(InlinedCallFrame) > 1);
+
+// A simple helper class to query liveness info at a CodeOrigin, before the bytecode pointed by the CodeOrigin is executed
+//
+struct CodeOriginLivenessInfo
+{
+    CodeOriginLivenessInfo(CodeOrigin codeOrigin)
+    {
+        m_inlinedCallFrame = codeOrigin.GetInlinedCallFrame();
+        m_bytecodeIndex = codeOrigin.GetBytecodeIndex();
+        m_frameBase = m_inlinedCallFrame->GetInterpreterSlotForStackFrameBase().Value();
+        m_numLocals = m_inlinedCallFrame->GetNumBytecodeLocals();
+    }
+
+    bool IsLive(InterpreterSlot slot)
+    {
+        size_t ord = slot.Value();
+        if (ord < m_frameBase)
+        {
+            VirtualRegisterMappingInfo vrmi = m_inlinedCallFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(slot);
+            return vrmi.IsLive();
+        }
+        else
+        {
+            size_t bytecodeLocalOrd = ord - m_frameBase;
+            if (bytecodeLocalOrd >= m_inlinedCallFrame->GetNumBytecodeLocals())
+            {
+                return false;
+            }
+            else
+            {
+                return m_inlinedCallFrame->BytecodeLivenessInfo().IsBytecodeLocalLive(m_bytecodeIndex, BytecodeLiveness::BeforeUse, bytecodeLocalOrd);
+            }
+        }
+    }
+
+    VirtualRegisterMappingInfo GetVirtualRegisterMappingInfo(InterpreterSlot slot)
+    {
+        size_t ord = slot.Value();
+        if (ord < m_frameBase)
+        {
+            return m_inlinedCallFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(slot);
+        }
+        else
+        {
+            size_t bytecodeLocalOrd = ord - m_frameBase;
+            if (bytecodeLocalOrd >= m_inlinedCallFrame->GetNumBytecodeLocals())
+            {
+                return VirtualRegisterMappingInfo::Dead();
+            }
+            else
+            {
+                if (m_inlinedCallFrame->BytecodeLivenessInfo().IsBytecodeLocalLive(m_bytecodeIndex, BytecodeLiveness::BeforeUse, bytecodeLocalOrd))
+                {
+                    return VirtualRegisterMappingInfo::VReg(m_inlinedCallFrame->GetRegisterForLocalOrd(bytecodeLocalOrd));
+                }
+                else
+                {
+                    return VirtualRegisterMappingInfo::Dead();
+                }
+            }
+        }
+    }
+
+    InlinedCallFrame* m_inlinedCallFrame;
+    size_t m_bytecodeIndex;
+    size_t m_frameBase;
+    size_t m_numLocals;
+};
 
 }   // namespace dfg

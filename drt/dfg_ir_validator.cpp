@@ -48,14 +48,17 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         // Check that the terminator is valid
         //
         Node* terminatorNode = bb->m_terminator;
+        size_t terminatorNodeIndex = static_cast<size_t>(-1);
         {
             CHECK_REPORT_BLOCK(terminatorNode != nullptr, bb, "Terminator node is nullptr");
             bool foundTerminatorNode = false;
-            for (Node* node : bb->m_nodes)
+            for (size_t idx = 0; idx < bb->m_nodes.size(); idx++)
             {
+                Node* node = bb->m_nodes[idx];
                 if (node == terminatorNode)
                 {
                     foundTerminatorNode = true;
+                    terminatorNodeIndex = static_cast<size_t>(idx);
                     break;
                 }
             }
@@ -82,11 +85,15 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         //
         CHECK_REPORT_NODE(terminatorNode->GetNumNodeControlFlowSuccessors() == bb->GetNumSuccessors(), terminatorNode, "Wrong number of successor blocks");
 
-        // If the basic block has 0 or 1 successor, the terminator node should be at terminal position
+        // If the basic block has 0 successor, all nodes after the terminator node should be Phantom nodes
         //
-        if (bb->GetNumSuccessors() <= 1)
+        if (bb->GetNumSuccessors() == 0)
         {
-            CHECK_REPORT_NODE(terminatorNode == bb->m_nodes.back(), terminatorNode, "Terminator node should be the last node if BB has 0 or 1 successors");
+            for (size_t idx = terminatorNodeIndex + 1; idx < bb->m_nodes.size(); idx++)
+            {
+                Node* node = bb->m_nodes[idx];
+                CHECK_REPORT_NODE(node->IsPhantomNode(), terminatorNode, "For basic block with 0 successors, only phantom nodes are allowed to follow terminator node");
+            }
         }
 
         TempUnorderedSet<Node*> nodesInBB(alloc);
@@ -247,7 +254,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 // becomes dead in a successor block. We will not try to spend more effort check it here,
                 // since the OSR stackmap builder should be able to figure this out and fire assertion anyway.
                 //
-                Node* shadowStoreValNode = shadowStoreVal.m_node;
+                Node* shadowStoreValNode = shadowStoreVal.GetOperand();
                 CHECK_REPORT_NODE(!shadowStoreValNode->IsCreateCapturedVarNode(),
                                   shadowStoreNode,
                                   "A slot storing an CapturedVar must be live (did the bytecode properly emit UpvalueClose?)");
@@ -291,6 +298,28 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         bb->AssertVirtualRegisterMappingConsistentAtTail();
     }
 #endif
+
+    // Check that branch-dest OSR exit destination should only show up at the end of the block
+    //
+    for (BasicBlock* bb : graph->m_blocks)
+    {
+        bool seenBranchyDest = false;
+        OsrExitDestination branchyDest;
+        for (Node* node : bb->m_nodes)
+        {
+            OsrExitDestination exitDest = node->GetOsrExitDest();
+            if (seenBranchyDest)
+            {
+                CHECK_REPORT_NODE(exitDest == branchyDest, node, "The exit dest should be the same after a branchy OSR exit");
+            }
+            else if (exitDest.IsBranchDest())
+            {
+                CHECK_REPORT_NODE(bb->GetNumSuccessors() == 2, node, "Branchy OSR exit dest should only show up in a block with 2 successors");
+                seenBranchyDest = true;
+                branchyDest = exitDest;
+            }
+        }
+    }
 
     // Check that all the basic blocks are reachable
     //

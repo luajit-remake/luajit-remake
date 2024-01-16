@@ -234,6 +234,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     prologue->SetNodeHasBranchTarget(false);
     prologue->SetNodeMakesTailCallNotConsideringTransform(false);
 
+    prologue->SetMayOsrExit(true);
     prologue->SetNodeInlinerSpecialization(true /*isPrologue*/, SafeIntegerCast<uint8_t>(callSiteTargetOrdinal));
 
     bool isOriginalNodeAccessesVR = prologue->IsNodeAccessesVR();
@@ -684,9 +685,10 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
 
     newFrame->InitializeVirtualRegisterUsageArray(tfCtx.m_vrState.GetVirtualRegisterVectorLength());
 
-    // Update the max # of locals in the graph
+    // Update the max # of locals and interpreter slots in the graph
     //
     tfCtx.m_graph->UpdateTotalNumLocals(tfCtx.m_vrState.GetVirtualRegisterVectorLength());
+    tfCtx.m_graph->UpdateTotalNumInterpreterSlots(newFrame->GetInterpreterSlotForFrameEnd().Value());
 
     // Compute the interpreterSlot <-> VirtualRegister mapping for everything before the new call frame base
     //
@@ -961,8 +963,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 TestAssert(oldLocalOrd < m_baselineCodeBlock->m_stackFrameNumSlots);
                 VirtualRegister oldVreg = m_inlinedCallFrame->GetRegisterForLocalOrd(oldLocalOrd);
                 TestAssert(oldVreg.Value() == destVReg.Value());
-                TestAssert(m_bbContext->m_valueAtTail[oldLocalOrd].m_node.m_value == argValues[ordInArgSeq].m_node.m_value);
-                TestAssert(m_bbContext->m_valueAtTail[oldLocalOrd].m_outputOrd == argValues[ordInArgSeq].m_outputOrd);
+                TestAssert(m_bbContext->m_valueAtTail[oldLocalOrd].IsIdenticalAs(argValues[ordInArgSeq]));
 #endif
                 // However, we still must emit SetLocal, since their interpreter slots might be different,
                 // so they must not use the same LogicalVariable!
@@ -1005,6 +1006,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     // All ShadowStores are complete, OSR exit is OK again
     //
     m_bbContext->m_isOSRExitOK = true;
+    m_bbContext->m_currentOriginForExit = OsrExitDestination(false /*isBranchDest*/, CodeOrigin(newFrame, 0 /*bytecodeIndex*/));
 
     // Emit stores for each argument and the information about the call frame as needed
     //
@@ -1105,10 +1107,11 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             rcBB->m_bcForInterpreterStateAtBBStart = CodeOrigin(m_inlinedCallFrame, bcIndex + 1);
         }
 
+        size_t inPlaceCallCallerFrameLocalOrd = 0;
         if (trait->m_isInPlaceCall)
         {
             TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-            rcBB->m_inPlaceCallRcFrameLocalOrd = SafeIntegerCast<uint32_t>(rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader);
+            inPlaceCallCallerFrameLocalOrd = SafeIntegerCast<uint32_t>(rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader);
         }
 
         // The codeOrigin and exitDst used for trivial return continuation logic
@@ -1128,6 +1131,51 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         {
             trivialRcInfo = trait->m_trivialRCInfoGetter(m_decoder, bcOffset);
         }
+
+        // If the return continuation is ReturnKthResult or StoreFirstKResults,
+        // those logic would be executed in the callee basic blocks.
+        // For consistency and simplicity in determining bytecode liveness, we will also emit the cleanup logic for
+        // in-place call that sets each caller slot used by callee to Undef in the callee basic blocks.
+        //
+        auto emitCleanupShadowStoresIfInPlaceCall = [&](BasicBlock* bb) ALWAYS_INLINE
+        {
+            if (!trait->m_isInPlaceCall)
+            {
+                return;
+            }
+            for (size_t localOrd = inPlaceCallCallerFrameLocalOrd; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
+            {
+                InterpreterSlot slot = m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(localOrd);
+                Node* shadowStore = Node::CreateShadowStoreNode(slot, m_graph->GetUndefValue());
+                shadowStore->SetExitOK(false);
+                shadowStore->SetNodeOrigin(codeOrigin);
+                shadowStore->SetOsrExitDest(disallowedExitDst);
+                bb->m_nodes.push_back(shadowStore);
+            }
+        };
+
+        auto emitCleanupSetLocalsIfInPlaceCall = [&](BasicBlock* bb, size_t skipLocalStart, size_t numSkipLocals) ALWAYS_INLINE
+        {
+            TestAssert(trait->m_rcTrivialness == TrivialRCKind::ReturnKthResult || trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults);
+            if (!trait->m_isInPlaceCall)
+            {
+                return;
+            }
+            for (size_t localOrd = inPlaceCallCallerFrameLocalOrd; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
+            {
+                if (skipLocalStart <= localOrd && localOrd < skipLocalStart + numSkipLocals)
+                {
+                    continue;
+                }
+                Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame,
+                                                          InterpreterFrameLocation::Local(localOrd),
+                                                          m_graph->GetUndefValue());
+                setLocal->SetExitOK(true);
+                setLocal->SetNodeOrigin(codeOrigin);
+                setLocal->SetOsrExitDest(exitDstForTrivialRc);
+                bb->m_nodes.push_back(setLocal);
+            }
+        };
 
         for (BasicBlock* bb : tfRes.m_allBBs)
         {
@@ -1157,6 +1205,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         getKthResult->SetNodeOrigin(codeOrigin);
                         getKthResult->SetOsrExitDest(disallowedExitDst);
                         bb->m_nodes.push_back(getKthResult);
+                        emitCleanupShadowStoresIfInPlaceCall(bb);
                         Node* shadowStore = Node::CreateShadowStoreNode(m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(localOrd),
                                                                         Value(getKthResult, 0 /*outputOrd*/));
                         shadowStore->SetExitOK(false);
@@ -1170,6 +1219,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         setLocal->SetNodeOrigin(codeOrigin);
                         setLocal->SetOsrExitDest(exitDstForTrivialRc);
                         bb->m_nodes.push_back(setLocal);
+                        emitCleanupSetLocalsIfInPlaceCall(bb, localOrd /*skipLocalStart*/, 1 /*numSkipLocals*/);
                         bb->m_terminator = bb->m_nodes.back();
                     }
                     else if (trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults)
@@ -1183,6 +1233,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             getKthResult->SetOsrExitDest(disallowedExitDst);
                             bb->m_nodes.push_back(getKthResult);
                         }
+                        emitCleanupShadowStoresIfInPlaceCall(bb);
                         for (size_t i = 0; i < trivialRcInfo.m_num; i++)
                         {
                             size_t localOrd = trivialRcInfo.m_rangeStart + i;
@@ -1208,6 +1259,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             setLocal->SetOsrExitDest(exitDstForTrivialRc);
                             bb->m_nodes.push_back(setLocal);
                         }
+                        emitCleanupSetLocalsIfInPlaceCall(bb, trivialRcInfo.m_rangeStart /*skipLocalStart*/, trivialRcInfo.m_num /*numSkipLocals*/);
                         TestAssert(bb->m_nodes.size() > 0);
                         bb->m_terminator = bb->m_nodes.back();
                     }
@@ -1265,6 +1317,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         Value val = getKthValueInReturnNode(trivialRcInfo.m_num);
                         TestAssert(m_decoder->BytecodeHasOutputOperand(bcOffset));
                         size_t localOrd = m_decoder->GetOutputOperand(bcOffset);
+                        emitCleanupShadowStoresIfInPlaceCall(bb);
                         Node* shadowStore = Node::CreateShadowStoreNode(m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(localOrd), val);
                         shadowStore->SetExitOK(false);
                         shadowStore->SetNodeOrigin(codeOrigin);
@@ -1277,6 +1330,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         setLocal->SetNodeOrigin(codeOrigin);
                         setLocal->SetOsrExitDest(exitDstForTrivialRc);
                         bb->m_nodes.push_back(setLocal);
+                        emitCleanupSetLocalsIfInPlaceCall(bb, localOrd /*skipLocalStart*/, 1 /*numSkipLocals*/);
                     }
                     else if (trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults)
                     {
@@ -1285,6 +1339,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         {
                             allValues.push_back(getKthValueInReturnNode(i));
                         }
+                        emitCleanupShadowStoresIfInPlaceCall(bb);
                         for (size_t i = 0; i < trivialRcInfo.m_num; i++)
                         {
                             size_t localOrd = trivialRcInfo.m_rangeStart + i;
@@ -1306,6 +1361,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             setLocal->SetOsrExitDest(exitDstForTrivialRc);
                             bb->m_nodes.push_back(setLocal);
                         }
+                        emitCleanupSetLocalsIfInPlaceCall(bb, trivialRcInfo.m_rangeStart /*skipLocalStart*/, trivialRcInfo.m_num /*numSkipLocals*/);
                     }
                     else
                     {
@@ -1355,7 +1411,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
 
                     TestAssert(bb->m_nodes.size() > 0);
                     bb->m_terminator = bb->m_nodes.back();
-                    bb->m_terminator = bb->m_nodes.back();
                     bb->m_numSuccessors = 1;
                     bb->m_successors[0] = rcBB;
                 }
@@ -1372,13 +1427,11 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         m_bbContext->m_currentCodeOrigin = codeOrigin;
         m_bbContext->m_currentOriginForExit = disallowedExitDst;
 
-        TempUnorderedSet<size_t /*virtualRegisterOrdinal*/> virtualRegistersUsedForResultOfCall(alloc);
-
         // Implement logic for the return continuation block
         // (1) If RCTrivialness is ReturnKthResult or StoreFirstKResults, those logic have been emitted in the terminator blocks,
         //     so nothing to do in the join block.
         // (2) If RCTrivialness is StoreAllAsVariadicResults, we have created the variadic result in the terminator blocks,
-        //     so nothing to do in the join block.
+        //     but the cleanup logic is not executed yet, so we need to emit cleanup logic in the join block.
         // (3) If RCTrivialness is NotTrivial, we need to emit the epilogue node, which is the return continuation logic for this call.
         //
         if (trait->m_rcTrivialness == TrivialRCKind::NotTrivial)
@@ -1396,6 +1449,8 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 m_bbContext->SetupNodeCommonInfoAndPushBack(vrNodeToUse);
                 m_bbContext->m_currentVariadicResult = vrNodeToUse;
             }
+
+            emitCleanupShadowStoresIfInPlaceCall(rcBB);
 
             // For now, for simplicity, we conservatively assume that the return continuation takes all inputs the bytecode takes
             // However, if the call is an in-place call, everything >= the in-place call frame have been clobbered and must see Undef
@@ -1437,119 +1492,81 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 TestAssert(rcNode->GetVariadicResultInputNode() == vrNodeToUse);
             }
 
-            // Figure out all the locals that this node writes to by inspecting all the SetLocals after the node. A bit ugly, but it works..
-            //
-            for (size_t nodeIndex = nodeIndexInVector + 1; nodeIndex < rcBB->m_nodes.size(); nodeIndex++)
-            {
-                Node* node = rcBB->m_nodes[nodeIndex];
-                if (node->IsSetLocalNode())
-                {
-                    TestAssert(node->GetNumInputs() == 1);
-                    TestAssert(node->GetInputEdge(0).GetOperand() == rcNode);
-                    VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
-                    TestAssert(!virtualRegistersUsedForResultOfCall.count(vreg.Value()));
-                    virtualRegistersUsedForResultOfCall.insert(vreg.Value());
-                }
-            }
-            TestAssert(virtualRegistersUsedForResultOfCall.size() == rcNode->GetNumTotalOutputs());
-
             // The ParseAndProcessBytecode should have changed exitOK to true and exitDest to the next bytecode
             //
             TestAssert(m_bbContext->m_isOSRExitOK);
-        }
-        else
-        {
-            if (trait->m_rcTrivialness == TrivialRCKind::ReturnKthResult)
+            TestAssert(m_bbContext->m_currentOriginForExit.IsBranchDest() || m_bbContext->m_currentOriginForExit.GetNormalDestination() != rcNode->GetNodeOrigin());
+
+            // Store undef to each local that is used by the in-place call callee and not used to store results
+            //
+            if (trait->m_isInPlaceCall)
             {
-                // The VirtualRegister used to store the output is just the virtual register for the output operand
+                // Figure out all the locals that this node writes to by inspecting all the SetLocals after the node. A bit ugly, but it works..
                 //
-                TestAssert(m_decoder->BytecodeHasOutputOperand(bcOffset));
-                size_t localOrd = m_decoder->GetOutputOperand(bcOffset);
-                VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd);
-                TestAssert(virtualRegistersUsedForResultOfCall.empty());
-                virtualRegistersUsedForResultOfCall.insert(vreg.Value());
-            }
-            else if (trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults)
-            {
-                for (size_t i = 0; i < trivialRcInfo.m_num; i++)
+                TempUnorderedSet<size_t /*virtualRegisterOrdinal*/> virtualRegistersUsedForResultOfCall(alloc);
+                for (size_t nodeIndex = nodeIndexInVector + 1; nodeIndex < rcBB->m_nodes.size(); nodeIndex++)
                 {
-                    size_t localOrd = trivialRcInfo.m_rangeStart + i;
-                    VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd);
-                    TestAssert(!virtualRegistersUsedForResultOfCall.count(vreg.Value()));
-                    virtualRegistersUsedForResultOfCall.insert(vreg.Value());
+                    Node* node = rcBB->m_nodes[nodeIndex];
+                    if (node->IsSetLocalNode())
+                    {
+                        TestAssert(node->GetNumInputs() == 1);
+                        TestAssert(node->GetInputEdge(0).GetOperand() == rcNode);
+                        VirtualRegister vreg = node->GetLocalOperationVirtualRegisterSlow();
+                        TestAssert(!virtualRegistersUsedForResultOfCall.count(vreg.Value()));
+                        virtualRegistersUsedForResultOfCall.insert(vreg.Value());
+                    }
                 }
-                TestAssert(virtualRegistersUsedForResultOfCall.size() == trivialRcInfo.m_num);
-            }
-            else
-            {
-                // No locals are used to store the result if the return continuation is to store everthing as variadic results
+                TestAssert(virtualRegistersUsedForResultOfCall.size() == rcNode->GetNumTotalOutputs());
+
+                for (size_t localOrd = inPlaceCallCallerFrameLocalOrd; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
+                {
+                    VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd);
+                    TestAssert(!m_bbContext->m_isLocalCaptured[localOrd]);
+
+                    if (virtualRegistersUsedForResultOfCall.count(vreg.Value()))
+                    {
+                        continue;
+                    }
+
+                    Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), m_graph->GetUndefValue());
+                    m_bbContext->SetupNodeCommonInfoAndPushBack(setLocal);
+                }
+
+                // At start of RC BB, the liveness state equals the BeforeUse of the call bytecode, except that
+                // all bytecode locals >= inPlaceCallCallerFrameLocalOrd must be considered dead
                 //
-                TestAssert(trait->m_rcTrivialness == TrivialRCKind::StoreAllAsVariadicResults);
+                rcBB->m_inPlaceCallRcFrameLocalOrd = SafeIntegerCast<uint32_t>(inPlaceCallCallerFrameLocalOrd);
             }
+        }
+        else if (trait->m_rcTrivialness == TrivialRCKind::StoreAllAsVariadicResults)
+        {
+            emitCleanupShadowStoresIfInPlaceCall(rcBB);
 
             m_bbContext->m_isOSRExitOK = true;
             m_bbContext->m_currentOriginForExit = exitDstForTrivialRc;
-        }
 
-        TestAssert(m_bbContext->m_isOSRExitOK);
-
-        // If this is a in-place call, we need to explicitly assign Undef to every local that is used by the callee frame
-        // but not used to store the result of the call. There are two reasons that we need to do this.
-        // First, because we allow bytecodes to use uninitialized slots. They must not see the stale local value in
-        // the callee, otherwise this could break our invariant that for any SetLocal that can flow to a GetLocal,
-        // they must share the same InlinedCallFrame and InterpreterFrameLocation. Second, we want to be able to assert
-        // that the SetLocals and ShadowStores are consistent at each BB end.
-        //
-        // This might seem problematic with variadic results at first glance: the variadic results might be stored
-        // in the callee frame, could it be clobbered by those SetLocals? Actually it couldn't, since in DFG, we do
-        // all the calls at the end of the whole frame, so the varadic results must not overlap with any of the DFG slots.
-        //
-        if (trait->m_isInPlaceCall)
-        {
-            TestAssert(rcBB->m_inPlaceCallRcFrameLocalOrd != static_cast<uint32_t>(-1));
-            size_t localOrdStart = rcBB->m_inPlaceCallRcFrameLocalOrd;
-
-            // If the return continuation is not trivial, logic of storing the results of the call is done
-            // inside the callee logic. So at rcBB, those locals are already live.
-            //
-            bool isResultLocalsLiveAtBBHead = (trait->m_rcTrivialness != TrivialRCKind::NotTrivial);
-            bool shouldAllocateBv = (isResultLocalsLiveAtBBHead && virtualRegistersUsedForResultOfCall.size() > 0);
-            DBitVector* bv = nullptr;
-            if (shouldAllocateBv)
+            if (trait->m_isInPlaceCall)
             {
-                bv = DfgAlloc()->AllocateObject<DBitVector>();
-                bv->Reset(m_baselineCodeBlock->m_stackFrameNumSlots);
-            }
-            for (size_t localOrd = localOrdStart; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
-            {
-                VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd);
-                TestAssert(!m_bbContext->m_isLocalCaptured[localOrd]);
-
-                if (virtualRegistersUsedForResultOfCall.count(vreg.Value()))
+                for (size_t localOrd = inPlaceCallCallerFrameLocalOrd; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
                 {
-                    // This virtual register is used to store the call results, it contains valid info now
-                    //
-                    if (shouldAllocateBv)
-                    {
-                        bv->SetBit(localOrd);
-                    }
-                    continue;
+                    TestAssert(!m_bbContext->m_isLocalCaptured[localOrd]);
+                    Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), m_graph->GetUndefValue());
+                    m_bbContext->SetupNodeCommonInfoAndPushBack(setLocal);
                 }
 
-                InterpreterSlot slot = m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(localOrd);
-                Node* shadowStore = Node::CreateShadowStoreNode(slot, m_graph->GetUndefValue());
-                m_bbContext->SetupNodeCommonInfoAndPushBack(shadowStore);
-                // It's fine that the SetLocal exits: we are just storing undef to uninitialized locals,
-                // interpreters should work regardless of what value is stored in uninitialized locals
+                // At start of RC BB, the liveness state equals the BeforeUse of the next bytecode after the call,
+                // except that all bytecode locals >= inPlaceCallCallerFrameLocalOrd must be considered dead
                 //
-                Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), m_graph->GetUndefValue());
-                m_bbContext->SetupNodeCommonInfoAndPushBack(setLocal);
+                rcBB->m_inPlaceCallRcFrameLocalOrd = SafeIntegerCast<uint32_t>(inPlaceCallCallerFrameLocalOrd);
             }
-
-            if (shouldAllocateBv)
-            {
-                rcBB->m_inPlaceCallResultLocalOrds = bv;
-            }
+        }
+        else
+        {
+            // All the store results and clean up logic has been done in the callee basic blocks, no need to do anything here.
+            // Notably, the liveness at the start of RC BB already agrees with the next bytecode after the call,
+            // so no need to set m_inPlaceCallRcFrameLocalOrd even if it is an in-place call
+            //
+            TestAssert(trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults || trait->m_rcTrivialness == TrivialRCKind::ReturnKthResult);
         }
     }
     else

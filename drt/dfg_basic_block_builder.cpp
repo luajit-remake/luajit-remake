@@ -54,7 +54,7 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
     TestAssert(localOrd < m_codeBlock->m_stackFrameNumSlots);
     if (m_isLocalCaptured[localOrd])
     {
-        if (m_valueAtTail[localOrd].m_node.IsNull())
+        if (m_valueAtTail[localOrd].IsNull())
         {
             Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
@@ -62,9 +62,9 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
         }
 
         Value capturedVar = m_valueAtTail[localOrd];
-        assert(!capturedVar.m_node.IsNull());
-        TestAssert(DfgAlloc()->GetPtr(capturedVar.m_node)->GetNodeKind() == NodeKind_CreateCapturedVar ||
-                   DfgAlloc()->GetPtr(capturedVar.m_node)->GetNodeKind() == NodeKind_GetLocal);
+        assert(!capturedVar.IsNull());
+        TestAssert(capturedVar.GetOperand()->GetNodeKind() == NodeKind_CreateCapturedVar ||
+                   capturedVar.GetOperand()->GetNodeKind() == NodeKind_GetLocal);
 
         Node* getCapturedVar = Node::CreateGetCapturedVarNode(capturedVar);
         SetupNodeCommonInfoAndPushBack(getCapturedVar);
@@ -72,7 +72,7 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
     }
     else
     {
-        if (m_valueAtTail[localOrd].m_node.IsNull())
+        if (m_valueAtTail[localOrd].IsNull())
         {
             Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
@@ -88,7 +88,7 @@ Node* DfgBuildBasicBlockContext::SetLocalVariableValue(size_t localOrd, Value va
     TestAssert(localOrd < m_codeBlock->m_stackFrameNumSlots);
     if (m_isLocalCaptured[localOrd])
     {
-        if (m_valueAtTail[localOrd].m_node.IsNull())
+        if (m_valueAtTail[localOrd].IsNull())
         {
             Node* getLocal = Node::CreateGetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd));
             SetupNodeCommonInfoAndPushBack(getLocal);
@@ -96,9 +96,9 @@ Node* DfgBuildBasicBlockContext::SetLocalVariableValue(size_t localOrd, Value va
         }
 
         Value capturedVar = m_valueAtTail[localOrd];
-        assert(!capturedVar.m_node.IsNull());
-        TestAssert(DfgAlloc()->GetPtr(capturedVar.m_node)->GetNodeKind() == NodeKind_CreateCapturedVar ||
-                   DfgAlloc()->GetPtr(capturedVar.m_node)->GetNodeKind() == NodeKind_GetLocal);
+        assert(!capturedVar.IsNull());
+        TestAssert(capturedVar.GetOperand()->GetNodeKind() == NodeKind_CreateCapturedVar ||
+                   capturedVar.GetOperand()->GetNodeKind() == NodeKind_GetLocal);
 
         Node* setCapturedVar = Node::CreateSetCapturedVarNode(capturedVar, value);
         SetupNodeCommonInfoAndPushBack(setCapturedVar);
@@ -446,19 +446,27 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             TestAssert(info.dst.IsLocal());
             size_t dstLocalStart = info.dst.AsLocal();
 
-            // The good thing about GetVarArgPrefix is that it's idempotent, so we don't need 2PC:
-            // if any of the SetLocal exited, just let it re-execute this bytecode again and we'll be fine.
-            //
+            m_isOSRExitOK = false;
+            for (size_t i = 0; i < numToGet; i++)
+            {
+                size_t dstSlot = dstLocalStart + i;
+                TestAssert(dstSlot < numLocals);
+                if (!m_isLocalCaptured[dstSlot])
+                {
+                    Value val = GetVariadicArgument(i);
+                    Node* shadowStore = Node::CreateShadowStoreNode(GetInterpreterSlotForLocalOrd(dstSlot), val);
+                    SetupNodeCommonInfoAndPushBack(shadowStore);
+                }
+            }
+
+            m_currentOriginForExit = OsrExitDestination(false /*isBranchDest*/, CodeOrigin(m_inlinedCallFrame, curBytecodeIndex + 1));
+            m_isOSRExitOK = true;
+
             for (size_t i = 0; i < numToGet; i++)
             {
                 Value val = GetVariadicArgument(i);
                 size_t dstSlot = dstLocalStart + i;
                 TestAssert(dstSlot < numLocals);
-                if (!m_isLocalCaptured[dstSlot])
-                {
-                    Node* shadowStore = Node::CreateShadowStoreNode(GetInterpreterSlotForLocalOrd(dstSlot), val);
-                    SetupNodeCommonInfoAndPushBack(shadowStore);
-                }
                 SetLocalVariableValue(dstSlot, val);
             }
 
