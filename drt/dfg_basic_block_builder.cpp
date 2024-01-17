@@ -875,14 +875,10 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
         }
 
         TestAssert(m_currentBlock->m_nodes.size() > 0);
-        if (numBBSuccessors == 1)
-        {
-            m_currentBlock->m_terminator = m_currentBlock->m_nodes.back();
-        }
-        else
+        if (numBBSuccessors != 1)
         {
             TestAssert(terminatorNode != nullptr);
-            m_currentBlock->m_terminator = terminatorNode;
+            m_currentBlock->SetTerminator(terminatorNode);
             if (numBBSuccessors == 0)
             {
                 // This is a static property and ideally should have been asserted statically. But for now..
@@ -890,7 +886,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                 TestAssert(terminatorNode == m_currentBlock->m_nodes.back() && "a node that has no successor must have no output!");
             }
         }
-        TestAssert(m_currentBlock->GetTerminator()->GetNumNodeControlFlowSuccessors() == m_currentBlock->GetNumSuccessors());
+        m_currentBlock->AssertTerminatorNodeConsistent();
     }
 
     // We are done with emitting nodes into the main logic block, clear info to prevent accidental use
@@ -938,7 +934,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
 
             {
                 TestAssert(mainBlockEnd != nullptr);
-                Node* incomingBBTerminator = mainBlockEnd->m_terminator;
+                Node* incomingBBTerminator = mainBlockEnd->GetTerminator();
                 TestAssert(incomingBBTerminator != nullptr);
                 m_currentCodeOrigin = incomingBBTerminator->GetNodeOrigin();
             }
@@ -974,9 +970,6 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                     SetupNodeCommonInfoAndPushBack(setLocal);
                 }
             }
-
-            TestAssert(ib->m_nodes.size() > 0);
-            ib->m_terminator = ib->m_nodes.back();
 
             StartNewBasicBlock(nullptr /*bb*/, nullptr /*bbInfo*/);
         }
@@ -1101,7 +1094,6 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
         }
         else
         {
-            ib->m_terminator = ib->m_nodes.back();
             m_functionEntry = ib;
             m_allBBs.push_back(ib);
         }

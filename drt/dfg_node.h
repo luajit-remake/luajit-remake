@@ -2067,10 +2067,38 @@ private:
     { }
 
 public:
+    // If the block has 0 or 2 successors, returns the node that terminates / makes branch decision
+    // Otherwise, returns the last node in the block
+    //
     Node* GetTerminator()
     {
-        TestAssert(!m_terminator.IsNull());
-        return m_terminator;
+        if (GetNumSuccessors() == 1)
+        {
+            TestAssert(!m_nodes.empty());
+            return m_nodes.back();
+        }
+        else
+        {
+            TestAssert(!m_terminator.IsNull());
+            return m_terminator;
+        }
+    }
+
+    // Should only be called for blocks with numSuccessors != 1
+    //
+    void SetTerminator(ArenaPtr<Node> node)
+    {
+        TestAssert(GetNumSuccessors() != 1);
+        TestAssert(!node.IsNull());
+        m_terminator = node;
+    }
+
+    void AssertTerminatorNodeConsistent()
+    {
+#ifdef TESTBUILD
+        if (GetNumSuccessors() == 1) { return; }
+        TestAssert(GetTerminator()->GetNumNodeControlFlowSuccessors() == GetNumSuccessors());
+#endif
     }
 
     DVector<ArenaPtr<Node>> m_nodes;
@@ -2143,14 +2171,22 @@ public:
     CodeOrigin m_bcForInterpreterStateAtBBStart;
     uint32_t m_inPlaceCallRcFrameLocalOrd;
 
+private:
     // The terminator node of this basic block
-    // If this block has 0/1 successors, the terminator must be pointing to the last node.
+    //
+    // If this block has 0 successor, the terminator points at the terminal node, but it is not necessarily the last node:
+    // Phantom nodes are allowed to follow the terminal node. However, since phantom insertion happens at backend, the frontend
+    // and optimizer passes can assume that the terminal node is the last node.
+    //
     // If this block has 2 successors, the terminator points to the branchy node, but it is not necessarily the last node,
-    // since there can be straightline operations after the branchy node (you should think of the branchy node as outputting
+    // and there can be any straightline operations after the branchy node (you should think of the branchy node as outputting
     // a branch direction flag, that is only taken at the end of the basic block).
+    //
+    // If this block has 1 successor, m_terminator is invalid! It may be nullptr or any trash pointer and must not be dereferenced.
     //
     ArenaPtr<Node> m_terminator;
 
+public:
     ArenaPtr<BasicBlock> m_replacement;
 
     uint32_t m_numLocals;
@@ -2389,13 +2425,7 @@ public:
 
         m_nodes.resize(newCount);
 
-        // Update terminator node to avoid the case that the old terminator points to a NOP and we deleted it
-        //
-        if (GetNumSuccessors() == 1)
-        {
-            m_terminator = m_nodes.back();
-        }
-        else
+        if (GetNumSuccessors() != 1)
         {
             TestAssert(!GetTerminator()->IsNoopNode());
         }
@@ -2485,7 +2515,10 @@ public:
                        succ->m_predecessors[m_predOrdForSuccessors[i]] == this);
             succ->m_predecessors[m_predOrdForSuccessors[i]] = this;
         }
-        m_terminator = bb->m_terminator;
+        if (m_numSuccessors != 1)
+        {
+            m_terminator = bb->m_terminator;
+        }
 
         // For sanity, remove successor and predecessor edges for bb as well
         //

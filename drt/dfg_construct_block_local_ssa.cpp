@@ -590,9 +590,10 @@ struct ConstructBlockLocalSSAPass
         TempVector<Phi*> allPhis(m_alloc);
         TempVector<Phi*> q(m_alloc);
 
+        [[maybe_unused]] size_t numLocals = m_graph->GetTotalNumLocals();
         for (BasicBlock* bb : m_graph->m_blocks)
         {
-            TestAssert(bb->m_numLocals == m_graph->GetTotalNumLocals());
+            TestAssert(bb->m_numLocals == numLocals);
             [[maybe_unused]] PhiOrNode* localInfoAtHead = bb->m_localInfoAtHead;
 
             // For each GetLocal, create a Phi node and push into work queue
@@ -624,7 +625,7 @@ struct ConstructBlockLocalSSAPass
 #ifdef TESTBUILD
             // For sanity, assert that the info in localInfoAtHead agrees with the GetLocals
             //
-            for (size_t localOrd = 0; localOrd < m_graph->GetTotalNumLocals(); localOrd++)
+            for (size_t localOrd = 0; localOrd < numLocals; localOrd++)
             {
                 if (!localInfoAtHead[localOrd].IsNull() && localInfoAtHead[localOrd].GetNodeKind() == NodeKind_GetLocal)
                 {

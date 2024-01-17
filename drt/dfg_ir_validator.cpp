@@ -47,7 +47,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
 
         // Check that the terminator is valid
         //
-        Node* terminatorNode = bb->m_terminator;
+        Node* terminatorNode = bb->GetTerminator();
         size_t terminatorNodeIndex = static_cast<size_t>(-1);
         {
             CHECK_REPORT_BLOCK(terminatorNode != nullptr, bb, "Terminator node is nullptr");

@@ -1058,7 +1058,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
 #ifdef TESTBUILD
     for (BasicBlock* bb : tfRes.m_allBBs)
     {
-        TestAssert(bb->GetTerminator()->GetNumNodeControlFlowSuccessors() == bb->GetNumSuccessors());
+        bb->AssertTerminatorNodeConsistent();
     }
 #endif
 
@@ -1069,7 +1069,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     // Finish up the current block, and let the current block jump to the entry point of the callee function
     //
     TestAssert(m_bbContext->m_currentBlock->m_nodes.size() > 0);
-    m_bbContext->m_currentBlock->m_terminator = m_bbContext->m_currentBlock->m_nodes.back();
     m_bbContext->m_currentBlock->m_numSuccessors = 1;
     m_bbContext->m_currentBlock->m_successors[0] = tfRes.m_functionEntry;
 
@@ -1192,6 +1191,9 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                     TestAssert(!terminator->IsNodeGeneratesVR());
                     terminator->SetNodeGeneratesVR(true);
 
+                    bb->m_numSuccessors = 1;
+                    bb->m_successors[0] = rcBB;
+
                     // If the return continuation is trivial with kind ReturnKthResult or StoreFirstKResults,
                     // we need to append logic that store the results to stack frame.
                     // Otherwise, 'terminator' already produces variadic results, so we are good.
@@ -1220,7 +1222,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         setLocal->SetOsrExitDest(exitDstForTrivialRc);
                         bb->m_nodes.push_back(setLocal);
                         emitCleanupSetLocalsIfInPlaceCall(bb, localOrd /*skipLocalStart*/, 1 /*numSkipLocals*/);
-                        bb->m_terminator = bb->m_nodes.back();
                     }
                     else if (trait->m_rcTrivialness == TrivialRCKind::StoreFirstKResults)
                     {
@@ -1261,11 +1262,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                         }
                         emitCleanupSetLocalsIfInPlaceCall(bb, trivialRcInfo.m_rangeStart /*skipLocalStart*/, trivialRcInfo.m_num /*numSkipLocals*/);
                         TestAssert(bb->m_nodes.size() > 0);
-                        bb->m_terminator = bb->m_nodes.back();
                     }
-
-                    bb->m_numSuccessors = 1;
-                    bb->m_successors[0] = rcBB;
                 }
             }
         }
@@ -1410,7 +1407,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                     }
 
                     TestAssert(bb->m_nodes.size() > 0);
-                    bb->m_terminator = bb->m_nodes.back();
                     bb->m_numSuccessors = 1;
                     bb->m_successors[0] = rcBB;
                 }
@@ -1580,7 +1576,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     //
     for (BasicBlock* bb : tfRes.m_allBBs)
     {
-        TestAssert(bb->GetTerminator()->GetNumNodeControlFlowSuccessors() == bb->GetNumSuccessors());
+        bb->AssertTerminatorNodeConsistent();
         m_bbContext->m_allBBs.push_back(bb);
     }
 
