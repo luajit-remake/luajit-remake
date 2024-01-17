@@ -123,6 +123,14 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 //     To maintain this invariant, one may only remove a SetLocal if the corresponding interpreter slot is dead at the
 //     head of every successor basic block.
 //
+// ShadowStoreUndefToRange:
+//     Input: none
+//     Output: none
+//     Param: a range of interpreter stack slots
+//
+//     Equivalent to ShadowStore(UndefValue) to every interpreter slot in the given range.
+//     This is used in favor of a bunch of ShadowStores to reduce the total number of IR nodes.
+//
 // Phantom:
 //     Input: 1
 //     Output: none
@@ -267,6 +275,7 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
   , (GetLocal)                                      \
   , (SetLocal)                                      \
   , (ShadowStore)                                   \
+  , (ShadowStoreUndefToRange)                       \
   , (Phantom)                                       \
   , (CreateCapturedVar)                             \
   , (GetCapturedVar)                                \
@@ -332,6 +341,8 @@ struct Value
     Value(ArenaPtr<Node> node, uint16_t outputOrd) : m_node(node), m_outputOrd(outputOrd) { }
     Value(Node* node, uint16_t outputOrd) : Value(DfgAlloc()->GetArenaPtr(node), outputOrd) { }
 
+    // IsNull() means this value is invalid
+    //
     bool IsNull() { return m_node.IsNull(); }
     Node* GetOperand() { return m_node; }
 
@@ -339,6 +350,7 @@ struct Value
     //
     bool IsIdenticalAs(Value other)
     {
+        TestAssert(!IsNull() && !other.IsNull());
         return m_node.m_value == other.m_node.m_value && m_outputOrd == other.m_outputOrd;
     }
 
@@ -1118,6 +1130,12 @@ private:
     //
     ArenaPtr<Node> m_variadicResultInput;
 
+    struct InterpreterSlotRangeInfo
+    {
+        uint32_t m_slotStart;
+        uint32_t m_numSlots;
+    };
+
     // Stores node-specific data which interpretation depends on the node type
     // This mainly includes all sorts of immediate constants in the bytecode
     // Make sure to not exceed 8 bytes!
@@ -1125,10 +1143,11 @@ private:
     union {
         uint8_t* m_outlinedNodeSpecificData;
         uint8_t m_inlinedNodeSpecifcData[8];
-        TValue m_constantNodeConstantValue;         // used only for constant node
-        CapturedVarInfo m_capturedVarInfo;          // used only for CreateCapturedVar node
-        UpvalueInfo m_upvalueInfo;                  // used only for GetUpvalue node
-        Phi* m_getLocalDataFlowInfo;                // used only for GetLocal node
+        TValue m_constantNodeConstantValue;                 // used only for constant node
+        CapturedVarInfo m_capturedVarInfo;                  // used only for CreateCapturedVar node
+        UpvalueInfo m_upvalueInfo;                          // used only for GetUpvalue node
+        Phi* m_getLocalDataFlowInfo;                        // used only for GetLocal node
+        InterpreterSlotRangeInfo m_interpSlotRangeInfo;     // used only for ShadowStoreUndefToRange node
         uint64_t m_nsdAsU64;
     };
 
@@ -1634,6 +1653,18 @@ public:
         return r;
     }
 
+    static Node* WARN_UNUSED CreateShadowStoreUndefToRangeNode(InterpreterSlot interpSlotStart, size_t numSlots)
+    {
+        Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_ShadowStoreUndefToRange);
+        r->SetNumInputs(0);
+        r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
+        r->m_interpSlotRangeInfo = {
+            .m_slotStart = SafeIntegerCast<uint32_t>(interpSlotStart.Value()),
+            .m_numSlots = SafeIntegerCast<uint32_t>(numSlots)
+        };
+        return r;
+    }
+
     static Node* WARN_UNUSED CreateGetKthVariadicResNode(size_t k, Node* vrProducer)
     {
         TestAssert(vrProducer != nullptr && reinterpret_cast<uint64_t>(vrProducer) != 1);
@@ -1715,11 +1746,24 @@ public:
     }
 
     bool IsShadowStoreNode() { return m_nodeKind == NodeKind_ShadowStore; }
+    bool IsShadowStoreUndefToRangeNode() { return m_nodeKind == NodeKind_ShadowStoreUndefToRange; }
 
     InterpreterSlot WARN_UNUSED GetShadowStoreInterpreterSlotOrd()
     {
         TestAssert(IsShadowStoreNode());
         return InterpreterSlot(m_nsdAsU64);
+    }
+
+    InterpreterSlot WARN_UNUSED GetShadowStoreUndefToRangeStartInterpSlotOrd()
+    {
+        TestAssert(IsShadowStoreUndefToRangeNode());
+        return InterpreterSlot(m_interpSlotRangeInfo.m_slotStart);
+    }
+
+    size_t WARN_UNUSED GetShadowStoreUndefToRangeRangeLength()
+    {
+        TestAssert(IsShadowStoreUndefToRangeNode());
+        return m_interpSlotRangeInfo.m_numSlots;
     }
 
     void SetNodeOrigin(CodeOrigin origin)

@@ -501,6 +501,14 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
+                case NodeKind_ShadowStoreUndefToRange:
+                {
+                    size_t slotStart = curNode->GetShadowStoreUndefToRangeStartInterpSlotOrd().Value();
+                    size_t numSlots = curNode->GetShadowStoreUndefToRangeRangeLength();
+                    fprintf(file, "slot%llu~%llu", static_cast<unsigned long long>(slotStart), static_cast<unsigned long long>(slotStart + numSlots - 1));
+                    shouldPrefixCommaForFirstItem = true;
+                    break;
+                }
                 case NodeKind_Nop:
                 case NodeKind_CreateCapturedVar:
                 case NodeKind_GetCapturedVar:

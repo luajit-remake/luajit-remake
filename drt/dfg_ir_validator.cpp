@@ -181,6 +181,19 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         TempUnorderedMap<size_t /*interpreterSlot*/, Node*> shadowStoreWrites(alloc);
         TempUnorderedMap<size_t /*interpreterSlot*/, Node*> setLocalWrites(alloc);
 
+        auto getShadowStoreValue = [&](Node* node)
+        {
+            if (node->IsShadowStoreNode())
+            {
+                return node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+            }
+            else
+            {
+                TestAssert(node->IsShadowStoreUndefToRangeNode());
+                return graph->GetUndefValue();
+            }
+        };
+
         for (Node* node : bb->m_nodes)
         {
             if (node->IsSetLocalNode())
@@ -192,7 +205,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 {
                     Node* shadowStoreNode = shadowStoreWrites[slot.Value()];
                     Value setLocalValue = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
-                    Value shadowStoreValue = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                    Value shadowStoreValue = getShadowStoreValue(shadowStoreNode);
                     CHECK_REPORT_NODE(setLocalValue.IsIdenticalAs(shadowStoreValue),
                                       node,
                                       "SetLocal is not preceded by a ShadowStore writing the same value");
@@ -218,6 +231,15 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
                 shadowStoreWrites[slot.Value()] = node;
             }
+            else if (node->IsShadowStoreUndefToRangeNode())
+            {
+                InterpreterSlot slotStart = node->GetShadowStoreUndefToRangeStartInterpSlotOrd();
+                size_t numSlots = node->GetShadowStoreUndefToRangeRangeLength();
+                for (size_t i = 0; i < numSlots; i++)
+                {
+                    shadowStoreWrites[slotStart.Value() + i] = node;
+                }
+            }
         }
 
         for (auto& it : setLocalWrites)
@@ -232,8 +254,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                               "SetLocal disagrees with ShadowStore at BB end (no ShadowStore found)");
 
             Node* shadowStoreNode = shadowStoreWrites[slot.Value()];
-            TestAssert(shadowStoreNode->IsShadowStoreNode());
-            Value shadowStoreVal = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+            Value shadowStoreVal = getShadowStoreValue(shadowStoreNode);
 
             CHECK_REPORT_NODE(setLocalVal.IsIdenticalAs(shadowStoreVal),
                               setLocalNode,
@@ -244,8 +265,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         {
             InterpreterSlot slot = InterpreterSlot(it.first);
             Node* shadowStoreNode = it.second;
-            TestAssert(shadowStoreNode->IsShadowStoreNode());
-            Value shadowStoreVal = shadowStoreNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+            Value shadowStoreVal = getShadowStoreValue(shadowStoreNode);
 
             VirtualRegisterMappingInfo vrmi = bb->GetVirtualRegisterForInterpreterSlotAtTail(slot);
             if (!vrmi.IsLive())

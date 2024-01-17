@@ -992,15 +992,17 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     // see the stale local value in the parent function or in other inlined callees, and break our invariant that
     // for every SetLocal that can flow to a GetLocal, they must be operating on the same InlinedCallFrame and InterpreterFrameLocation
     //
-    // Technically we only need to emit ShadowStores for interpreter slots that are actually accessed while undefined (i.e.,
-    // live at the entry block of the callee), but we just emit everything unconditionally for sanity so that every SetLocal
-    // is always preceded by a ShadowStore.
-    //
-    for (size_t localOrd = calleeCb->m_numFixedArguments; localOrd < calleeCb->m_stackFrameNumSlots; localOrd++)
     {
-        InterpreterSlot slot = newFrame->GetInterpreterSlotForLocalOrd(localOrd);
-        Node* shadowStore = Node::CreateShadowStoreNode(slot, m_graph->GetUndefValue());
-        m_bbContext->SetupNodeCommonInfoAndPushBack(shadowStore);
+        // Fill Undef to bytecode local range [calleeCb->m_numFixedArguments, calleeCb->m_stackFrameNumSlots)
+        //
+        TestAssert(calleeCb->m_stackFrameNumSlots >= calleeCb->m_numFixedArguments);
+        InterpreterSlot slotStart = newFrame->GetInterpreterSlotForLocalOrd(calleeCb->m_numFixedArguments);
+        size_t numSlots = calleeCb->m_stackFrameNumSlots - calleeCb->m_numFixedArguments;
+        if (numSlots > 0)
+        {
+            Node* shadowStoreUndefToRange = Node::CreateShadowStoreUndefToRangeNode(slotStart, numSlots);
+            m_bbContext->SetupNodeCommonInfoAndPushBack(shadowStoreUndefToRange);
+        }
     }
 
     // All ShadowStores are complete, OSR exit is OK again
@@ -1142,14 +1144,16 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             {
                 return;
             }
-            for (size_t localOrd = inPlaceCallCallerFrameLocalOrd; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
+            TestAssert(m_baselineCodeBlock->m_stackFrameNumSlots >= inPlaceCallCallerFrameLocalOrd);
+            InterpreterSlot slotStart = m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(inPlaceCallCallerFrameLocalOrd);
+            size_t numSlots = m_baselineCodeBlock->m_stackFrameNumSlots - inPlaceCallCallerFrameLocalOrd;
+            if (numSlots > 0)
             {
-                InterpreterSlot slot = m_inlinedCallFrame->GetInterpreterSlotForLocalOrd(localOrd);
-                Node* shadowStore = Node::CreateShadowStoreNode(slot, m_graph->GetUndefValue());
-                shadowStore->SetExitOK(false);
-                shadowStore->SetNodeOrigin(codeOrigin);
-                shadowStore->SetOsrExitDest(disallowedExitDst);
-                bb->m_nodes.push_back(shadowStore);
+                Node* shadowStoreUndefToRange = Node::CreateShadowStoreUndefToRangeNode(slotStart, numSlots);
+                shadowStoreUndefToRange->SetExitOK(false);
+                shadowStoreUndefToRange->SetNodeOrigin(codeOrigin);
+                shadowStoreUndefToRange->SetOsrExitDest(disallowedExitDst);
+                bb->m_nodes.push_back(shadowStoreUndefToRange);
             }
         };
 

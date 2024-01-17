@@ -304,9 +304,8 @@ struct PhantomInsertionPassImpl
                 }
             }
 
-            if (node->IsShadowStoreNode())
+            auto processShadowStore = [&](InterpreterSlot slot, Value value) ALWAYS_INLINE
             {
-                InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
                 TestAssert(slot.Value() < m_interpSlotVal.size());
                 // It is impossible that a SetLocal to this slot has occured: SetLocal should
                 // always be the last thing that happened to a slot in a BB
@@ -318,8 +317,25 @@ struct PhantomInsertionPassImpl
                     //
                     ProcessInterpreterSlotDeath(slot.Value());
                 }
-                m_interpSlotVal[slot.Value()] = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                m_interpSlotVal[slot.Value()] = value;
                 m_interpSlotHasValue.SetBit(slot.Value());
+            };
+
+            if (node->IsShadowStoreNode())
+            {
+                InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
+                Value value = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                processShadowStore(slot, value);
+            }
+            else if (node->IsShadowStoreUndefToRangeNode())
+            {
+                Value undefVal = m_graph->GetUndefValue();
+                InterpreterSlot slotStart = node->GetShadowStoreUndefToRangeStartInterpSlotOrd();
+                size_t numSlots = node->GetShadowStoreUndefToRangeRangeLength();
+                for (size_t i = 0; i < numSlots; i++)
+                {
+                    processShadowStore(InterpreterSlot(slotStart.Value() + i), undefVal);
+                }
             }
             else if (node->IsSetLocalNode())
             {
@@ -498,6 +514,17 @@ struct PhantomInsertionPassImpl
                 InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
                 TestAssert(slot.Value() < m_interpSlotVal.size());
                 m_interpSlotVal[slot.Value()] = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+            }
+            else if (node->IsShadowStoreUndefToRangeNode())
+            {
+                InterpreterSlot slotStart = node->GetShadowStoreUndefToRangeStartInterpSlotOrd();
+                size_t numSlots = node->GetShadowStoreUndefToRangeRangeLength();
+                for (size_t i = 0; i < numSlots; i++)
+                {
+                    size_t slotOrd = slotStart.Value() + i;
+                    TestAssert(slotOrd < m_interpSlotVal.size());
+                    m_interpSlotVal[slotOrd] = m_graph->GetUndefValue();
+                }
             }
             else if (node->IsSetLocalNode())
             {
