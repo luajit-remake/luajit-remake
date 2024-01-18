@@ -1,4 +1,3 @@
-#include "common.h"
 #include "deegen_api.h"
 #include "runtime_utils.h"
 
