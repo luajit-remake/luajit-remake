@@ -1,3 +1,4 @@
+#include "common.h"
 #include "deegen_api.h"
 #include "runtime_utils.h"
 
@@ -8,7 +9,7 @@
 //
 DEEGEN_DEFINE_LIB_FUNC(os_clock)
 {
-    ThrowError("Library function 'os.clock' is not implemented yet!");
+    Return(TValue::Create<tDouble>((clock()) * (1.0 / CLOCKS_PER_SEC)));
 }
 
 // os.date -- https://www.lua.org/manual/5.1/manual.html#pdf-os.date
@@ -40,7 +41,11 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_difftime)
 {
-    ThrowError("Library function 'os.difftime' is not implemented yet!");
+    double a2 = 0;
+    if (GetArg(1).IsDouble())
+        a2 = GetArg(1).ViewAsDouble();
+
+    Return(TValue::Create<tDouble>(difftime(GetArg(0).ViewAsDouble(), a2)));
 }
 
 // os.execute -- https://www.lua.org/manual/5.1/manual.html#pdf-os.execute
@@ -51,7 +56,18 @@ DEEGEN_DEFINE_LIB_FUNC(os_difftime)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_execute)
 {
-    ThrowError("Library function 'os.execute' is not implemented yet!");
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    if (unlikely(GetNumArgs()) == 0)
+    {
+        Return(TValue::Create<tBool>(system(nullptr)));
+    }
+    if (unlikely(!GetArg(0).Is<tString>()))
+    {
+        ThrowError("bad argument #1 to 'execute' (string expected)");
+    }
+
+    HeapString* hs = TranslateToRawPointer(vm, GetArg(0).As<tString>());
+    Return(TValue::Create<tInt32>(system(reinterpret_cast<char *>(hs->m_string))));
 }
 
 // os.exit -- https://www.lua.org/manual/5.1/manual.html#pdf-os.exit
@@ -61,7 +77,17 @@ DEEGEN_DEFINE_LIB_FUNC(os_execute)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_exit)
 {
-    ThrowError("Library function 'os.exit' is not implemented yet!");
+    int code = EXIT_SUCCESS;
+    if (GetNumArgs() > 0)
+    {
+        if (unlikely(!GetArg(0).IsInt32()))
+            ThrowError("bad argument #1 to 'exit' (number expected)");
+
+        code = GetArg(0).AsInt32();
+    }
+
+    //TODO: Probably need to cleanup VM and other stuff, unless they are already set as destructors
+    exit(code);
 }
 
 // os.getenv -- https://www.lua.org/manual/5.1/manual.html#pdf-os.getenv
@@ -71,7 +97,28 @@ DEEGEN_DEFINE_LIB_FUNC(os_exit)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_getenv)
 {
-    ThrowError("Library function 'os.getenv' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'getenv' (string expected, got no value)");
+    }
+
+    if (unlikely(!GetArg(0).Is<tString>()))
+    {
+        ThrowError("bad argument #1 to 'getenv' (string expected)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    HeapString* hs = TranslateToRawPointer(vm, GetArg(0).As<tString>());
+    const char* env = getenv(reinterpret_cast<char *>(hs->m_string));
+    if (env == nullptr)
+    {
+        Return(TValue::Create<tNil>());
+    }
+    else
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString(env)));
+    }
 }
 
 // os.remove -- https://www.lua.org/manual/5.1/manual.html#pdf-os.remove
@@ -82,7 +129,32 @@ DEEGEN_DEFINE_LIB_FUNC(os_getenv)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_remove)
 {
-    ThrowError("Library function 'os.remove' is not implemented yet!");
+    // ThrowError("Library function 'os.remove' is not implemented yet!");
+    if (unlikely(GetNumArgs() == 0))
+    {
+        ThrowError("bad argument #1 to 'remove' (string expected, got no value)");
+    }
+
+    if (unlikely(!GetArg(0).Is<tString>()))
+    {
+        ThrowError("bad argument #1 to 'remove' (string expected)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    HeapString* hs = TranslateToRawPointer(vm, GetArg(0).As<tString>());
+
+    //suprisingly a C89 function, same with rename
+    int ret = remove(reinterpret_cast<char *>(hs->m_string));
+
+    if (ret != 0)
+    {
+        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(errno))));
+    }
+    else
+    {
+        Return(TValue::Create<tBool>(true));
+    }
 }
 
 // os.rename -- https://www.lua.org/manual/5.1/manual.html#pdf-os.rename
@@ -92,7 +164,36 @@ DEEGEN_DEFINE_LIB_FUNC(os_remove)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_rename)
 {
-    ThrowError("Library function 'os.rename' is not implemented yet!");
+    if (unlikely(GetNumArgs() < 2))
+    {
+        ThrowError("bad argument #1 to 'rename' (string expected, got no value)");
+    }
+
+    if (unlikely(!GetArg(0).Is<tString>()))
+    {
+        ThrowError("bad argument #1 to 'rename' (string expected)");
+    }
+
+    if (unlikely(!GetArg(1).Is<tString>()))
+    {
+        ThrowError("bad argument #2 to 'rename' (string expected)");
+    }
+
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    HeapString* from = TranslateToRawPointer(vm, GetArg(0).As<tString>());
+    HeapString* to = TranslateToRawPointer(vm, GetArg(1).As<tString>());
+
+    int ret = rename(reinterpret_cast<char *>(from->m_string), reinterpret_cast<char *>(to->m_string));
+
+    if (ret != 0)
+    {
+        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(errno))));
+    }
+    else
+    {
+        Return(TValue::Create<tBool>(true));
+    }
 }
 
 // os.setlocale -- https://www.lua.org/manual/5.1/manual.html#pdf-os.setlocale
@@ -109,7 +210,109 @@ DEEGEN_DEFINE_LIB_FUNC(os_rename)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_setlocale)
 {
-    ThrowError("Library function 'os.setlocale' is not implemented yet!");
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    // ThrowError("Library function 'os.setlocale' is not implemented yet!");
+    size_t numArgs = GetNumArgs();
+    if (unlikely(numArgs == 0))
+    {
+        ThrowError("bad argument #1 to 'setlocale' (string expected, got no value)");
+    }
+
+    if (unlikely(!GetArg(0).Is<tString>()))
+    {
+        ThrowError("bad argument #1 to 'setlocale' (string expected)");
+    }
+
+    HeapString* lcl = TranslateToRawPointer(VM::GetActiveVMForCurrentThread(), GetArg(0).As<tString>());
+
+    int opt = LC_ALL;
+    if (numArgs > 1)
+    {
+        if (unlikely(!GetArg(1).Is<tString>()))
+        {
+            ThrowError("bad argument #2 to 'setlocale' (string expected)");
+        }
+
+        HeapString* catHs = TranslateToRawPointer(vm, GetArg(1).As<tString>());
+        const char *cat = reinterpret_cast<char *>(catHs->m_string);
+        if (strcmp(cat, "all") == 0)
+        {
+            opt = LC_ALL;
+        }
+        else if (strcmp(cat, "collate") == 0)
+        {
+            opt = LC_COLLATE;
+        }
+        else if (strcmp(cat, "ctype") == 0)
+        {
+            opt = LC_CTYPE;
+        }
+        else if (strcmp(cat, "monetary") == 0)
+        {
+            opt = LC_MONETARY;
+        }
+        else if (strcmp(cat, "numeric") == 0)
+        {
+            opt = LC_NUMERIC;
+        }
+        else if (strcmp(cat, "time") == 0)
+        {
+            opt = LC_TIME;
+        }
+        else
+        {
+            ThrowError("bad argument #2 to 'setlocale' (invalid category)");
+        }
+    }
+
+    char *ret = setlocale(opt, reinterpret_cast<char *>(lcl->m_string));
+    if (ret == nullptr)
+    {
+        Return(TValue::Create<tNil>());
+    }
+    else
+    {
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString(ret)));
+    }
+}
+
+inline TValue IndexTable(VM* vm, HeapPtr<TableObject> tbl, std::string_view key)
+{
+    //TODO: many allocations for the keys, maybe better way?
+    UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(key.data(), static_cast<uint32_t>(key.length()));
+
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(tbl, hs, icInfo);
+    return TableObject::GetById(tbl, hs.As<void>(), icInfo);
+}
+
+inline TValue IndexValueOrError(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, std::string_view err)
+{
+    TValue val = IndexTable(vm, tbl, key);
+    if (val.IsNil())
+    {
+        ThrowError(err.data());
+    }
+    else
+    {
+        return val;
+    }
+}
+
+//probably could make specialisations but i am lazy
+template<typename TValueType, typename T>
+inline TValue IndexValueOr(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, T defaultValue)
+{
+    TValue val = IndexTable(vm, tbl, key);
+    if (val.IsNil())
+    {
+        return TValue::Create<TValueType>(defaultValue);
+    }
+    else
+    {
+        return val;
+    }
 }
 
 // os.time -- https://www.lua.org/manual/5.1/manual.html#pdf-os.time
@@ -125,7 +328,39 @@ DEEGEN_DEFINE_LIB_FUNC(os_setlocale)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_time)
 {
-    ThrowError("Library function 'os.time' is not implemented yet!");
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    time_t t;
+    if (GetNumArgs() == 0)
+    {
+        t = time(nullptr);
+    }
+    // time table
+    else
+    {
+        if (unlikely(!GetArg(0).Is<tTable>()))
+        {
+            ThrowError("bad argument #1 to 'time' (table expected)");
+        }
+
+        HeapPtr<TableObject> tbl = GetArg(0).As<tTable>();
+
+        struct tm tm;
+        //day month year are manditory
+        tm.tm_mday = IndexValueOrError(vm, tbl, "day", "field 'day' missing in date table").AsInt32();
+        tm.tm_mon = IndexValueOrError(vm, tbl, "month", "field 'month' missing in date table").AsInt32() - 1;
+        tm.tm_year = IndexValueOrError(vm, tbl, "year", "field 'year' missing in date table").AsInt32() - 1900;
+
+        //rest are optional
+        tm.tm_hour = IndexValueOr<tInt32>(vm, tbl, "hour", 12).AsInt32();
+        tm.tm_min = IndexValueOr<tInt32>(vm, tbl, "min", 0).AsInt32();
+        tm.tm_sec = IndexValueOr<tInt32>(vm, tbl, "sec", 0).AsInt32();
+        tm.tm_isdst = IndexValueOr<tBool>(vm, tbl, "isdst", false).As<tBool>();
+
+        t = mktime(&tm);
+    }
+
+    Return(TValue::Create<tInt32>(static_cast<int32_t>(t)));
 }
 
 // os.tmpname -- https://www.lua.org/manual/5.1/manual.html#pdf-os.tmpname
@@ -140,7 +375,22 @@ DEEGEN_DEFINE_LIB_FUNC(os_time)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_tmpname)
 {
-    ThrowError("Library function 'os.tmpname' is not implemented yet!");
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    char buf[15+1];
+    strcpy(buf, "/tmp/lua_XXXXXX");
+    int fp = mkstemp(buf);
+    if (fp != -1)
+    {
+        close(fp);
+    }
+    else
+    {
+        ThrowError("unable to create temporary file");
+    }
+
+
+    Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf)));
 }
 
 DEEGEN_END_LIB_FUNC_DEFINITIONS
