@@ -2,6 +2,54 @@
 #include "deegen_api.h"
 #include "runtime_utils.h"
 
+inline TValue IndexTable(VM* vm, HeapPtr<TableObject> tbl, std::string_view key)
+{
+    //TODO: many allocations for the keys, maybe better way?
+    UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(key.data(), static_cast<uint32_t>(key.length()));
+
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(tbl, hs, icInfo);
+    return TableObject::GetById(tbl, hs.As<void>(), icInfo);
+}
+
+inline TValue IndexValueOrError(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, std::string_view err)
+{
+    TValue val = IndexTable(vm, tbl, key);
+    if (val.IsNil())
+    {
+        ThrowError(err.data());
+    }
+    else
+    {
+        return val;
+    }
+}
+
+//probably could make specialisations but i am lazy
+template<typename TValueType, typename T>
+inline TValue IndexValueOr(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, T defaultValue)
+{
+    TValue val = IndexTable(vm, tbl, key);
+    if (val.IsNil())
+    {
+        return TValue::Create<TValueType>(defaultValue);
+    }
+    else
+    {
+        return val;
+    }
+}
+
+template<typename TValueType, typename T>
+inline void SetTableValue(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, T value)
+{
+    UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(key.data(), static_cast<uint32_t>(key.length()));
+
+    PutByIdICInfo icInfo;
+    TableObject::PreparePutById(tbl, hs, icInfo);
+    TableObject::PutById(tbl, hs.As<void>(), TValue::Create<TValueType>(value), icInfo);
+}
+
 // os.clock -- https://www.lua.org/manual/5.1/manual.html#pdf-os.clock
 //
 // os.clock ()
@@ -31,7 +79,84 @@ DEEGEN_DEFINE_LIB_FUNC(os_clock)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_date)
 {
-    ThrowError("Library function 'os.date' is not implemented yet!");
+    VM* vm = VM::GetActiveVMForCurrentThread();
+
+    const char *fmt;
+    if (GetNumArgs() > 0)
+    {
+        if (unlikely(!GetArg(0).Is<tString>()))
+        {
+            ThrowError("bad argument #1 to 'date' (string expected)");
+        }
+
+        fmt = reinterpret_cast<const char *>(TranslateToRawPointer(vm, GetArg(0).As<tString>())->m_string);
+    }
+    else
+    {
+        fmt = "%c";
+    }
+
+    time_t t;
+    if (GetNumArgs() > 1)
+    {
+        if (unlikely(!GetArg(1).Is<tInt32>()))
+        {
+            ThrowError("bad argument #2 to 'date' (number expected)");
+        }
+
+        t = GetArg(1).AsInt32();
+    }
+    else
+    {
+        t = time(nullptr);
+    }
+
+
+    //On POSIX its better to use _r functions, but for now this works
+    struct tm *tm;
+    //parsing the fmt
+    if (fmt[0] == '!')
+    {
+        fmt++;
+        tm = gmtime(&t);
+    }
+    else
+    {
+        tm = localtime(&t);
+    }
+
+    if (tm == nullptr)
+    {
+        Return(TValue::Create<tNil>());
+    }
+    else if (strcmp(fmt, "*t") == 0)
+    {
+        //table object length: day, month, year + optional: hour, min, sec, wday, yday, isdst
+        HeapPtr<TableObject> tbl = TableObject::CreateEmptyTableObject(vm, 7, 0);
+
+        SetTableValue<tInt32>(vm, tbl, "day", tm->tm_mday);
+        SetTableValue<tInt32>(vm, tbl, "month", tm->tm_mon + 1);
+        SetTableValue<tInt32>(vm, tbl, "year", tm->tm_year + 1900);
+        SetTableValue<tInt32>(vm, tbl, "hour", tm->tm_hour);
+        SetTableValue<tInt32>(vm, tbl, "min", tm->tm_min);
+        SetTableValue<tInt32>(vm, tbl, "sec", tm->tm_sec);
+        SetTableValue<tInt32>(vm, tbl, "wday", tm->tm_wday + 1);
+
+        Return(TValue::Create<tTable>(tbl));
+    }
+    else
+    {
+        char buf[256];
+        size_t len = strftime(buf, sizeof(buf), fmt, tm);
+        if (len == 0)
+        {
+            Return(TValue::Create<tNil>());
+        }
+        else
+        {
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(len)).As<HeapString>()));
+        }
+    }
 }
 
 // os.difftime -- https://www.lua.org/manual/5.1/manual.html#pdf-os.difftime
@@ -274,44 +399,6 @@ DEEGEN_DEFINE_LIB_FUNC(os_setlocale)
     else
     {
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString(ret)));
-    }
-}
-
-inline TValue IndexTable(VM* vm, HeapPtr<TableObject> tbl, std::string_view key)
-{
-    //TODO: many allocations for the keys, maybe better way?
-    UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(key.data(), static_cast<uint32_t>(key.length()));
-
-    GetByIdICInfo icInfo;
-    TableObject::PrepareGetById(tbl, hs, icInfo);
-    return TableObject::GetById(tbl, hs.As<void>(), icInfo);
-}
-
-inline TValue IndexValueOrError(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, std::string_view err)
-{
-    TValue val = IndexTable(vm, tbl, key);
-    if (val.IsNil())
-    {
-        ThrowError(err.data());
-    }
-    else
-    {
-        return val;
-    }
-}
-
-//probably could make specialisations but i am lazy
-template<typename TValueType, typename T>
-inline TValue IndexValueOr(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, T defaultValue)
-{
-    TValue val = IndexTable(vm, tbl, key);
-    if (val.IsNil())
-    {
-        return TValue::Create<TValueType>(defaultValue);
-    }
-    else
-    {
-        return val;
     }
 }
 
