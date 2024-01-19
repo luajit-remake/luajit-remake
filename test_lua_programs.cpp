@@ -2938,6 +2938,26 @@ TEST(LuaLibTierUpToBaselineJit, base_lib_unpack)
     RunSimpleLuaTest("luatests/base_lib_unpack.lua", LuaTestOption::UpToBaselineJit);
 }
 
+TEST(LuaLib, os_lib_clock)
+{
+    RunSimpleLuaTest("luatests/os_lib_clock.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaLib, os_lib_date)
+{
+    RunSimpleLuaTest("luatests/os_lib_date.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaLib, os_lib_time)
+{
+    RunSimpleLuaTest("luatests/os_lib_time.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaLib, os_lib_difftime)
+{
+    RunSimpleLuaTest("luatests/os_lib_difftime.lua", LuaTestOption::ForceInterpreter);
+}
+
 TEST(LuaLib, string_lib_byte)
 {
     RunSimpleLuaTest("luatests/string_lib_byte.lua", LuaTestOption::ForceInterpreter);
