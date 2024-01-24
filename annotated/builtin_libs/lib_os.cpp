@@ -1,6 +1,7 @@
 #include "deegen_api.h"
 #include "runtime_utils.h"
 
+// Easy way to index tables
 inline TValue IndexTable(VM* vm, HeapPtr<TableObject> tbl, std::string_view key)
 {
     //TODO: many allocations for the keys, maybe better way?
@@ -11,20 +12,21 @@ inline TValue IndexTable(VM* vm, HeapPtr<TableObject> tbl, std::string_view key)
     return TableObject::GetById(tbl, hs.As<void>(), icInfo);
 }
 
-inline TValue IndexValueOrError(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, std::string_view err)
-{
-    TValue val = IndexTable(vm, tbl, key);
-    if (val.IsNil())
-    {
-        ThrowError(err.data());
-    }
-    else
-    {
-        return val;
-    }
-}
+// TODO: Linker error caused on `ThrowError` call, so macro must be used
+// `x = tbl[x] or error(msg)`
+#define IndexValueOrError(vm, tbl, key, err) \
+    ({ \
+        TValue val = IndexTable(vm, tbl, key); \
+        if (val.IsNil()) \
+        { \
+            ThrowError(err); \
+        } \
+        val;\
+    })
 
-//probably could make specialisations but i am lazy
+#define OSResult(stat, fname) ({})
+
+//In order to do an operation like `tbl[key] = x or default_value`
 template<typename TValueType, typename T>
 inline TValue IndexValueOr(VM* vm, HeapPtr<TableObject> tbl, std::string_view key, T defaultValue)
 {
@@ -56,6 +58,7 @@ inline void SetTableValue(VM* vm, HeapPtr<TableObject> tbl, std::string_view key
 //
 DEEGEN_DEFINE_LIB_FUNC(os_clock)
 {
+    // Direct rip from luajit: https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/lib_os.c#L127
     Return(TValue::Create<tDouble>((clock()) * (1.0 / CLOCKS_PER_SEC)));
 }
 
@@ -80,6 +83,7 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
 
+    //Could be a string literal, so has to be const
     const char *fmt;
     if (GetNumArgs() > 0)
     {
@@ -88,6 +92,7 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
             ThrowError("bad argument #1 to 'date' (string expected)");
         }
 
+        //m_string is a uint8_t[], it isn't the best to cast from unsigned to signed but we can assume the bytes will all be <127
         fmt = reinterpret_cast<const char *>(TranslateToRawPointer(vm, GetArg(0).As<tString>())->m_string);
     }
     else
@@ -95,6 +100,8 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
         fmt = "%c";
     }
 
+
+    //2nd arg, current time used if not specified
     time_t t;
     if (GetNumArgs() > 1)
     {
@@ -110,8 +117,6 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
         t = time(nullptr);
     }
 
-
-    //On POSIX its better to use _r functions, but for now this works
     struct tm *tm;
     //parsing the fmt
     if (fmt[0] == '!')
@@ -130,11 +135,13 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
     }
     else if (strcmp(fmt, "*t") == 0)
     {
-        //table object length: day, month, year + optional: hour, min, sec, wday, yday, isdst
-        HeapPtr<TableObject> tbl = TableObject::CreateEmptyTableObject(vm, 7, 0);
+        //table object length = day, month, year + optional: hour, min, sec, wday, yday, isdst, total: 9
+        HeapPtr<TableObject> tbl = TableObject::CreateEmptyTableObject(vm, 9, 0);
 
         SetTableValue<tInt32>(vm, tbl, "day", tm->tm_mday);
+        //0 indexed months and weekdays. Why, WG14?
         SetTableValue<tInt32>(vm, tbl, "month", tm->tm_mon + 1);
+        // `gmtime` shows time since 1900, so add the 1900 missing years
         SetTableValue<tInt32>(vm, tbl, "year", tm->tm_year + 1900);
         SetTableValue<tInt32>(vm, tbl, "hour", tm->tm_hour);
         SetTableValue<tInt32>(vm, tbl, "min", tm->tm_min);
@@ -145,15 +152,26 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
     }
     else
     {
-        char buf[256];
-        size_t len = strftime(buf, sizeof(buf), fmt, tm);
-        if (len == 0)
+        //calculating how much size is needed, in LuaJIT (and replicated here) this is done by iterating the format, and for every instance of `%`, adding 30
+        //https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/lib_os.c#L211
+        size_t siz = 1;
+        for (const char *fmt_ptr = fmt; *fmt; fmt++)
         {
+            siz += *fmt == '%' ? 30 : 1;
+        }
+
+        auto buf = new char[siz];
+        size_t len = strftime(buf, sizeof(buf), fmt, tm);
+        if (len == 0) //Error
+        {
+            delete[] buf;
             Return(TValue::Create<tNil>());
         }
         else
         {
-            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(len)).As<HeapString>()));
+            auto hs = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(len)).As<HeapString>();
+            delete[] buf;
+            Return(TValue::Create<tString>(hs));
         }
     }
 }
@@ -165,8 +183,9 @@ DEEGEN_DEFINE_LIB_FUNC(os_date)
 //
 DEEGEN_DEFINE_LIB_FUNC(os_difftime)
 {
+    //On Lua 5.1 this is 0, later lua versions make the ommitiance of the 2nd arg to be an error
     double a2 = 0;
-    if (GetArg(1).IsDouble())
+    if (GetNumArgs() > 1 && GetArg(1).IsDouble())
         a2 = GetArg(1).ViewAsDouble();
 
     Return(TValue::Create<tDouble>(difftime(GetArg(0).ViewAsDouble(), a2)));
@@ -191,7 +210,7 @@ DEEGEN_DEFINE_LIB_FUNC(os_execute)
     }
 
     HeapString* hs = TranslateToRawPointer(vm, GetArg(0).As<tString>());
-    Return(TValue::Create<tInt32>(system(reinterpret_cast<char *>(hs->m_string))));
+    Return(TValue::Create<tInt32>(system(reinterpret_cast<const char *>(hs->m_string))));
 }
 
 // os.exit -- https://www.lua.org/manual/5.1/manual.html#pdf-os.exit
@@ -234,13 +253,14 @@ DEEGEN_DEFINE_LIB_FUNC(os_getenv)
     VM* vm = VM::GetActiveVMForCurrentThread();
 
     HeapString* hs = TranslateToRawPointer(vm, GetArg(0).As<tString>());
-    const char* env = getenv(reinterpret_cast<char *>(hs->m_string));
+    const char* env = getenv(reinterpret_cast<const char *>(hs->m_string));
     if (env == nullptr)
     {
         Return(TValue::Create<tNil>());
     }
     else
     {
+        // the result of getenv doesn't need to be freed
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString(env)));
     }
 }
@@ -273,7 +293,9 @@ DEEGEN_DEFINE_LIB_FUNC(os_remove)
 
     if (ret != 0)
     {
-        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(errno))));
+        //using the format of luaL_fileresult (as found here: https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/lib_aux.c#L32)
+        int en = errno;
+        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(en))), TValue::Create<tInt32>(en));
     }
     else
     {
@@ -308,11 +330,12 @@ DEEGEN_DEFINE_LIB_FUNC(os_rename)
     HeapString* from = TranslateToRawPointer(vm, GetArg(0).As<tString>());
     HeapString* to = TranslateToRawPointer(vm, GetArg(1).As<tString>());
 
-    int ret = rename(reinterpret_cast<char *>(from->m_string), reinterpret_cast<char *>(to->m_string));
+    int ret = rename(reinterpret_cast<const char *>(from->m_string), reinterpret_cast<char *>(to->m_string));
 
     if (ret != 0)
     {
-        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(errno))));
+        int en = errno;
+        Return(TValue::Create<tNil>(), TValue::Create<tString>(vm->CreateStringObjectFromRawCString(strerror(errno))), TValue::Create<tInt32>(en));
     }
     else
     {
@@ -336,7 +359,6 @@ DEEGEN_DEFINE_LIB_FUNC(os_setlocale)
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
 
-    // ThrowError("Library function 'os.setlocale' is not implemented yet!");
     size_t numArgs = GetNumArgs();
     if (unlikely(numArgs == 0))
     {

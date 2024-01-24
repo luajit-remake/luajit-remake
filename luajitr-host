@@ -2,6 +2,8 @@
 
 CONTAINER_NAME="luajitr-run"
 
+EXECUTABLE="luajitr"
+
 if [ "$1" = "--delete" ]; then
     if docker ps -a | grep -q "$CONTAINER_NAME"; then
         docker rm -f "$CONTAINER_NAME"
@@ -20,4 +22,4 @@ if ! docker ps | grep -q "$CONTAINER_NAME"; then
 fi
 
 # Execute the command in the running container
-docker exec -it "$CONTAINER_NAME" sh -c "./luajitr $*"
+docker exec -it "$CONTAINER_NAME" sh -c "./$EXECUTABLE $*"
