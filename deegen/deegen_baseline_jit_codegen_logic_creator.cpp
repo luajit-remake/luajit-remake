@@ -2,6 +2,7 @@
 #include "deegen_baseline_jit_impl_creator.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/IR/ReplaceConstant.h"
+#include "deegen_jit_slow_path_data.h"
 #include "drt/baseline_jit_codegen_helper.h"
 #include "deegen_ast_inline_cache.h"
 #include "deegen_stencil_fixup_cross_reference_helper.h"
@@ -827,7 +828,11 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
     //
     Value* advancedSlowPathData = nullptr;
     Instruction* advancedSlowPathDataOffset = nullptr;
+    BaselineJitSlowPathDataLayout* slowPathDataLayout = bytecodeDef->GetBaselineJitSlowPathDataLayout();
     {
+        // For assertion that we didn't forget to write a field
+        //
+        size_t totalFieldsWritten = 0;
         Value* slowPathData = cg.GetSlowPathDataPtr();
 
         // Write opcode (offset 0)
@@ -837,56 +842,21 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         static_assert(BytecodeVariantDefinition::x_opcodeSizeBytes == 2);
         new StoreInst(CreateLLVMConstantInt<uint16_t>(ctx, SafeIntegerCast<uint16_t>(opcodeOrd)), slowPathData, false /*isVolatile*/, Align(1), entryBB);
 
-        // Write jitAddr (offset x_opcodeSizeBytes)
+        // Write jitAddr
         //
-        {
-            Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
-                                                            { CreateLLVMConstantInt<uint64_t>(ctx, BytecodeVariantDefinition::x_opcodeSizeBytes) }, "", entryBB);
-
-            Value* val64 = new PtrToIntInst(fastPathBaseAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
-            Value* val32 = new TruncInst(val64, llvm_type_of<uint32_t>(ctx), "", entryBB);
-            new StoreInst(val32, addr, false /*isVolatile*/, Align(1), entryBB);
-        }
+        slowPathDataLayout->m_jitAddr.EmitSetValueLogic(slowPathData, fastPathBaseAddr, entryBB);
+        totalFieldsWritten++;
 
         // Emit a fixup record to fixup the SlowPathData if the bytecode can branch
         //
         if (bytecodeDef->m_hasConditionalBranchTarget)
         {
-            Value* addr = bytecodeDef->GetAddressOfCondBrOperandForBaselineJit(slowPathData, entryBB);
+            Value* addr = slowPathDataLayout->m_condBrJitAddr.EmitGetFieldAddressLogic(slowPathData, entryBB);
             condBrPatchList.push_back(std::make_pair(addr, BaselineJitCondBrLatePatchKind::SlowPathData));
+            // The condBrTarget + condBrBcIndex (two fields) will be populated by late fixup logic
+            //
+            totalFieldsWritten += 2;
         }
-
-        // Write the bytecode operands
-        //
-        auto writeOperand = [&](BcOperand* operand, Value* decodedValue)
-        {
-            ReleaseAssert(decodedValue != nullptr);
-
-            size_t offset = operand->GetOffsetInBaselineJitSlowPathDataStruct();
-            size_t size = operand->GetSizeInBaselineJitSlowPathDataStruct();
-            ReleaseAssert(offset != static_cast<size_t>(-1) && size > 0);
-
-            Value* src = decodedValue;
-            ReleaseAssert(src->getType()->isIntegerTy());
-            size_t srcBitWidth = src->getType()->getIntegerBitWidth();
-            ReleaseAssert(srcBitWidth >= size * 8);
-
-            Type* dstTy = Type::getIntNTy(ctx, static_cast<unsigned int>(size * 8));
-            Value* dst;
-            if (srcBitWidth == size * 8)
-            {
-                dst = src;
-            }
-            else
-            {
-                dst = new TruncInst(src, dstTy, "", entryBB);
-            }
-            ReleaseAssert(dst->getType() == dstTy);
-
-            Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
-                                                            { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
-            new StoreInst(dst, addr, false /*isVolatile*/, Align(1), entryBB);
-        };
 
         ReleaseAssert(bytecodeDef->m_list.size() == opcodeRawValues.size());
         for (size_t i = 0; i < bytecodeDef->m_list.size(); i++)
@@ -894,7 +864,9 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
             ReleaseAssertIff(bytecodeDef->m_list[i]->IsElidedFromBytecodeStruct(), opcodeRawValues[i] == nullptr);
             if (!bytecodeDef->m_list[i]->IsElidedFromBytecodeStruct())
             {
-                writeOperand(bytecodeDef->m_list[i].get(), opcodeRawValues[i]);
+                Value* valueToWrite = opcodeRawValues[i];
+                slowPathDataLayout->GetBytecodeOperand(i).EmitSetValueLogic(slowPathData, valueToWrite, entryBB);
+                totalFieldsWritten++;
             }
         }
 
@@ -902,18 +874,23 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         //
         if (bytecodeDef->m_hasOutputValue)
         {
-            writeOperand(bytecodeDef->m_outputOperand.get(), outputSlot);
+            slowPathDataLayout->m_outputDest.EmitSetValueLogic(slowPathData, outputSlot, entryBB);
+            totalFieldsWritten++;
         }
 
         // Initialize all the Call IC site data
         //
         size_t numJitCallIcSites = bytecodeDef->GetNumCallICsInJitTier();
-        for (size_t i = 0; i < numJitCallIcSites; i++)
+        if (numJitCallIcSites > 0)
         {
-            size_t offset = bytecodeDef->GetBaselineJitCallIcSiteOffsetInSlowPathData(i);
-            Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
-                                                            { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
-            CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitCallIcSite", { addr }, entryBB);
+            for (size_t i = 0; i < numJitCallIcSites; i++)
+            {
+                size_t offset = slowPathDataLayout->m_callICs.GetOffsetForSite(i);
+                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
+                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
+                CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitCallIcSite", { addr }, entryBB);
+            }
+            totalFieldsWritten++;
         }
 
         // Initialize all the Generic IC site data, and the slowpath/datasec address fields (which exist if Generic IC exists)
@@ -923,35 +900,24 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         {
             // Initialize the JIT slowpath address field
             //
-            {
-                size_t offset = bytecodeDef->GetJitSlowPathOffsetInSlowPathData();
-                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
-                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
-                Value* valI64 = new PtrToIntInst(slowPathBaseAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
-                Value* valI32 = new TruncInst(valI64, llvm_type_of<uint32_t>(ctx), "", entryBB);
-                new StoreInst(valI32, addr, false /*isVolatile*/, Align(1), entryBB);
-            }
+            slowPathDataLayout->m_jitSlowPathAddr.EmitSetValueLogic(slowPathData, slowPathBaseAddr, entryBB);
+            totalFieldsWritten++;
 
             // Initialize the JIT data section address field
             //
-            {
-                size_t offset = bytecodeDef->GetJitDataSectionOffsetInSlowPathData();
-                Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
-                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
-                Value* valI64 = new PtrToIntInst(dataSecBaseAddr, llvm_type_of<uint64_t>(ctx), "", entryBB);
-                Value* valI32 = new TruncInst(valI64, llvm_type_of<uint32_t>(ctx), "", entryBB);
-                new StoreInst(valI32, addr, false /*isVolatile*/, Align(1), entryBB);
-            }
+            slowPathDataLayout->m_jitDataSecAddr.EmitSetValueLogic(slowPathData, dataSecBaseAddr, entryBB);
+            totalFieldsWritten++;
 
             // Initialize every IC site
             //
             for (size_t i = 0; i < numJitGenericIcSites; i++)
             {
-                size_t offset = bytecodeDef->GetBaselineJitGenericIcSiteOffsetInSlowPathData(i);
+                size_t offset = slowPathDataLayout->m_genericICs.GetOffsetForSite(i);
                 Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                                 { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
                 CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitGenericIcSite", { addr }, entryBB);
             }
+            totalFieldsWritten++;
         }
 
         Constant* advanceOffset = CreateLLVMConstantInt<uint64_t>(ctx, bytecodeDef->GetBaselineJitSlowPathDataLength());
@@ -962,6 +928,8 @@ DeegenBytecodeBaselineJitInfo WARN_UNUSED DeegenBytecodeBaselineJitInfo::Create(
         entryBB->getInstList().push_back(advancedSlowPathDataOffset);
 
         res.m_slowPathDataLen = bytecodeDef->GetBaselineJitSlowPathDataLength();
+
+        ReleaseAssert(totalFieldsWritten == slowPathDataLayout->m_totalValidFields);
     }
 
     // Emit all the condBr late fixup records

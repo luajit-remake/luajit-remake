@@ -25,6 +25,8 @@ public:
     //
     static std::vector<uint64_t> WARN_UNUSED GetAvaiableGPRListForBytecodeSlowPath();
     static std::vector<uint64_t> WARN_UNUSED GetAvaiableFPRListForBytecodeSlowPath();
+
+    static llvm::Value* WARN_UNUSED GetArgumentAsInt64Value(llvm::Function* interfaceFn, uint64_t argOrd, llvm::BasicBlock* bb /*insertAtEnd*/);
 };
 
 }   // namespace dast

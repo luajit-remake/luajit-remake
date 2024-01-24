@@ -2,16 +2,11 @@
 
 #include "misc_llvm_helper.h"
 #include "deegen_bytecode_ir_components.h"
+#include "deegen_engine_tier.h"
 
 namespace dast {
 
 class BytecodeVariantDefinition;
-
-enum class DeegenEngineTier
-{
-    Interpreter,
-    BaselineJIT
-};
 
 class InterpreterBytecodeImplCreator;
 class BaselineJitImplCreator;
@@ -60,6 +55,7 @@ public:
 
     bool WARN_UNUSED IsInterpreter() const { return GetTier() == DeegenEngineTier::Interpreter; }
     bool WARN_UNUSED IsBaselineJIT() const { return GetTier() == DeegenEngineTier::BaselineJIT; }
+    bool WARN_UNUSED IsDfgJIT() const { return GetTier() == DeegenEngineTier::DfgJIT; }
 
 protected:
     BytecodeVariantDefinition* m_bytecodeDef;

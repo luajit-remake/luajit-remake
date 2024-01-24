@@ -15,14 +15,12 @@ class BytecodeVariantDefinition;
 class DeegenGlobalBytecodeTraitAccessor;
 struct BytecodeIrInfo;
 
-class BaselineJitImplCreator final : public DeegenBytecodeImplCreatorBase
+class JitImplCreatorBase : public DeegenBytecodeImplCreatorBase
 {
 public:
     // This clones the input module, so that the input module is untouched
     //
-    BaselineJitImplCreator(BytecodeIrComponent& bic);
-
-    virtual DeegenEngineTier WARN_UNUSED GetTier() const override { return DeegenEngineTier::BaselineJIT; }
+    JitImplCreatorBase(BytecodeIrComponent& bic);
 
     // The JIT tier needs different implementation for the fast-path return continuation (which should be JIT'ed code)
     // and the slow-path return continuation (which should be a C++ function but jumps back into JIT'ed code at the end)
@@ -31,15 +29,16 @@ public:
     // When this tag is specified, we create the code for the slow path.
     //
     struct SlowPathReturnContinuationTag { };
-    BaselineJitImplCreator(SlowPathReturnContinuationTag, BytecodeIrComponent& bic);
-
-    void DoLowering(BytecodeIrInfo* bii, const DeegenGlobalBytecodeTraitAccessor& gbta);
+    JitImplCreatorBase(SlowPathReturnContinuationTag, BytecodeIrComponent& bic);
 
     virtual llvm::Module* GetModule() const override { return m_module.get(); }
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetJitSlowPathData() const { return m_valuePreserver.Get(x_jitSlowPathData); }
-    llvm::Value* GetBaselineCodeBlock() const { return m_valuePreserver.Get(x_baselineCodeBlock); }
+
+    // This returns the BaselineCodeBlock for baseline JIT, or the DfgCodeBlock for DFG JIT
+    //
+    llvm::Value* GetJitCodeBlock() const { return m_valuePreserver.Get(GetJitCodeBlockLLVMVarName()); }
 
     // The code pointer for the next bytecode
     //
@@ -47,15 +46,15 @@ public:
 
     std::string WARN_UNUSED GetResultFunctionName() { return m_resultFuncName; }
 
-    bool WARN_UNUSED IsBaselineJitSlowPathReturnContinuation() { return m_isSlowPathReturnContinuation; }
+    bool WARN_UNUSED IsJitSlowPathReturnContinuation() { return m_isSlowPathReturnContinuation; }
 
     bool WARN_UNUSED IsMainComponent() { return m_processKind == BytecodeIrComponentKind::Main; }
 
-    // The baseline JIT slow path has access to the BaselineJitSlowPathData struct
+    // The JIT slow path (which is an AOT function) has access to the BaselineJitSlowPathData / DfgJitSlowPathData struct
     //
-    bool WARN_UNUSED IsBaselineJitSlowPath()
+    bool WARN_UNUSED IsJitSlowPath()
     {
-        return IsBaselineJitSlowPathReturnContinuation() || m_processKind == BytecodeIrComponentKind::SlowPath || m_processKind == BytecodeIrComponentKind::QuickeningSlowPath;
+        return IsJitSlowPathReturnContinuation() || m_processKind == BytecodeIrComponentKind::SlowPath || m_processKind == BytecodeIrComponentKind::QuickeningSlowPath;
     }
 
     // Find the stencil runtime constant placeholder name corresponding to the fallthrough to the next bytecode, or "" if not found
@@ -113,13 +112,26 @@ public:
         return m_numGenericIcCaptures;
     }
 
-
     AstInlineCache::BaselineJitFinalLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
     {
         return m_genericIcLoweringResult;
     }
 
-private:
+    // DFG supports register allocation, so some TValue operands may be register-allocated.
+    // (In addition, TValue ranges may be discretized, and those discretized TValues may also be register allocated,
+    // but this function is not responsible for such cases)
+    //
+    // Returns the argument ordinal in InterpreterFunctionInterface (which implicitly maps to physical register)
+    // if the operandOrd is register-allocated, or -1 if not.
+    //
+    virtual uint64_t WARN_UNUSED GetDfgRegisterSpecilaizationInfo(uint64_t /*operandOrd*/)
+    {
+        // The DFG inherited class should override this
+        //
+        ReleaseAssert(false);
+    }
+
+protected:
     void CreateWrapperFunction();
     std::unique_ptr<llvm::Module> m_module;
     bool m_isSlowPathReturnContinuation;
@@ -176,7 +188,42 @@ private:
 
     static constexpr const char* x_condBrDest = "condBrDest";
     static constexpr const char* x_fallthroughDest = "fallthroughDest";
-    static constexpr const char* x_baselineCodeBlock = "baselineCodeBlock";
+
+    const char* GetJitCodeBlockLLVMVarName() const
+    {
+        DeegenEngineTier tier = GetTier();
+        if (tier == DeegenEngineTier::BaselineJIT)
+        {
+            return "baselineCodeBlock";
+        }
+        else
+        {
+            ReleaseAssert(tier == DeegenEngineTier::DfgJIT);
+            return "dfgCodeBlock";
+        }
+    }
+};
+
+class BaselineJitImplCreator final : public JitImplCreatorBase
+{
+public:
+    BaselineJitImplCreator(BytecodeIrComponent& bic)
+        : JitImplCreatorBase(bic)
+    { }
+
+    BaselineJitImplCreator(SlowPathReturnContinuationTag, BytecodeIrComponent& bic)
+        : JitImplCreatorBase(SlowPathReturnContinuationTag(), bic)
+    { }
+
+    virtual DeegenEngineTier WARN_UNUSED GetTier() const override { return DeegenEngineTier::BaselineJIT; }
+
+    void DoLowering(BytecodeIrInfo* bii, const DeegenGlobalBytecodeTraitAccessor& gbta);
+};
+
+class DfgJitImplCreator final : public JitImplCreatorBase
+{
+    virtual DeegenEngineTier WARN_UNUSED GetTier() const override { return DeegenEngineTier::DfgJIT; }
+
 };
 
 struct DeegenPlaceholderUtils

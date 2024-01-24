@@ -1,6 +1,7 @@
 #include "deegen_call_inline_cache.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_jit_slow_path_data.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
 #include "deegen_baseline_jit_codegen_logic_creator.h"
@@ -749,7 +750,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         CallInst* codeBlockAndEntryPoint = CallInst::Create(
             icCreatorFn,
             {
-                ifi->GetBaselineCodeBlock(),
+                ifi->GetJitCodeBlock(),
                 slowPathDataOffset,
                 slowPathAddrOfThisStencil,
                 dataSecAddrOfThisStencil,
@@ -2142,6 +2143,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
+    BaselineJitSlowPathDataLayout* slowPathDataLayout = ifi->GetBytecodeDef()->GetBaselineJitSlowPathDataLayout();
+
     ReleaseAssert(stencilToFastPathOffsetMap.count(ifi->GetResultFunctionName()));
     size_t stencilBaseOffsetInFastPath = stencilToFastPathOffsetMap[ifi->GetResultFunctionName()];
 
@@ -2253,7 +2256,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     Value* dataSecAddrOfOwningStencil = fn->getArg(4);
     Value* targetTv = fn->getArg(5);
 
-    Value* fastPathAddrOfOwningBytecode = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, entryBB);
+    Value* fastPathAddrOfOwningBytecode = slowPathDataLayout->m_jitAddr.EmitGetValueLogic(slowPathData, entryBB);
     Value* fastPathAddrOfOwningStencil = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddrOfOwningBytecode,
                                                                            { CreateLLVMConstantInt<uint64_t>(ctx, stencilBaseOffsetInFastPath) }, "", entryBB);
 
@@ -2270,7 +2273,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         baselineCodeBlock32 = new ZExtInst(tmp, llvm_type_of<uint64_t>(ctx), "", entryBB);
     }
 
-    size_t icSiteOffsetInSlowPathData = ifi->GetBytecodeDef()->GetBaselineJitCallIcSiteOffsetInSlowPathData(icInfo.m_uniqueOrd);
+    size_t icSiteOffsetInSlowPathData = slowPathDataLayout->m_callICs.GetOffsetForSite(icInfo.m_uniqueOrd);
     Value* icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                       { CreateLLVMConstantInt<uint64_t>(ctx, icSiteOffsetInSlowPathData) }, "", entryBB);
 
@@ -2349,7 +2352,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         Value* condBrDest = nullptr;
         if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
         {
-            condBrDest = ifi->GetBytecodeDef()->GetCondBrTargetCodePtrForBaselineJit(slowPathData, bb);
+            condBrDest = slowPathDataLayout->m_condBrJitAddr.EmitGetValueLogic(slowPathData, bb);
             ReleaseAssert(llvm_value_has_type<void*>(condBrDest));
             condBrDest = new PtrToIntInst(condBrDest, llvm_type_of<uint64_t>(ctx), "", bb);
         }
@@ -2442,7 +2445,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
         Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
 
-        std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
+        std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
+                                                                                                                         ifi->GetBytecodeDef(),
                                                                                                                          slowPathData,
                                                                                                                          slowPathDataOffset,
                                                                                                                          baselineCodeBlock32,
@@ -2460,7 +2464,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         createReturnLogic(calleeCbHeapPtr, codePointer, insertIcDcModeBB);
     }
 
-    std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
+    std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
+                                                                                                                     ifi->GetBytecodeDef(),
                                                                                                                      slowPathData,
                                                                                                                      slowPathDataOffset,
                                                                                                                      baselineCodeBlock32,

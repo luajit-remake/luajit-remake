@@ -7,6 +7,7 @@
 #include "deegen_bytecode_metadata.h"
 #include "deegen_call_inline_cache.h"
 #include "runtime_utils.h"
+#include "deegen_engine_tier.h"
 
 namespace dast {
 
@@ -43,7 +44,9 @@ inline BcOperandKind GetBcOperandKindFromString(const std::string& strBcOpKind)
 }
 
 class InterpreterBytecodeImplCreator;
+class JitImplCreatorBase;
 class BaselineJitImplCreator;
+class DfgJitImplCreator;
 class DeegenBytecodeImplCreatorBase;
 
 // The base class for a bytecode operand
@@ -56,8 +59,6 @@ public:
         , m_operandOrdinal(static_cast<size_t>(-1))
         , m_offsetInBytecodeStruct(static_cast<size_t>(-1))
         , m_sizeInBytecodeStruct(0)
-        , m_offsetInBaselineJitSlowPathDataStruct(static_cast<size_t>(-1))
-        , m_sizeInBaselineJitSlowPathDataStruct(0)
     { }
 
     virtual ~BcOperand() {}
@@ -140,25 +141,10 @@ public:
         return m_sizeInBytecodeStruct;
     }
 
-    size_t GetOffsetInBaselineJitSlowPathDataStruct()
-    {
-        ReleaseAssert(m_offsetInBaselineJitSlowPathDataStruct != static_cast<size_t>(-1));
-        return m_offsetInBaselineJitSlowPathDataStruct;
-    }
-
-    size_t GetSizeInBaselineJitSlowPathDataStruct()
-    {
-        ReleaseAssert(m_offsetInBaselineJitSlowPathDataStruct != static_cast<size_t>(-1));
-        ReleaseAssert(m_sizeInBaselineJitSlowPathDataStruct <= ValueFullByteLength());
-        return m_sizeInBaselineJitSlowPathDataStruct;
-    }
-
     void InvalidateBytecodeStructOffsetAndSize()
     {
         m_offsetInBytecodeStruct = static_cast<size_t>(-1);
         m_sizeInBytecodeStruct = 0;
-        m_offsetInBaselineJitSlowPathDataStruct = static_cast<size_t>(-1);
-        m_sizeInBaselineJitSlowPathDataStruct = 0;
     }
 
     void AssignOrChangeBytecodeStructOffsetAndSize(size_t offset, size_t size)
@@ -178,23 +164,6 @@ public:
         m_sizeInBytecodeStruct = size;
     }
 
-    void AssignOrChangeBaselineJitSlowPathDataOffsetAndSize(size_t offset, size_t size)
-    {
-        size_t maxSize = ValueFullByteLength();
-        if (IsElidedFromBytecodeStruct())
-        {
-            ReleaseAssert(offset == static_cast<size_t>(-1));
-            ReleaseAssert(size == 0);
-        }
-        else
-        {
-            ReleaseAssert(offset > 0 && size > 0);
-        }
-        ReleaseAssert(size <= maxSize);
-        m_offsetInBaselineJitSlowPathDataStruct = offset;
-        m_sizeInBaselineJitSlowPathDataStruct = size;
-    }
-
     bool WARN_UNUSED SupportsGetOperandValueFromBytecodeStruct();
 
     // May only be called if SupportsGetOperandValueFromBytecodeStruct() is true
@@ -207,12 +176,9 @@ public:
     //
     llvm::Value* WARN_UNUSED GetOperandValueFromBytecodeStruct(llvm::Value* bytecodePtr, llvm::BasicBlock* targetBB);
 
-    // Similar to above, but for baseline JIT slow path
-    // Can only be used to decode bytecode operands and the output slot. Cannot decode condBrTarget or other interpreter-bytecode-specific fields.
+    // Generic logic that decodes a bytecode operand from a storage location
     //
-    llvm::Value* WARN_UNUSED GetOperandValueFromBaselineJitSlowPathData(BaselineJitImplCreator* ifi, llvm::BasicBlock* targetBB);
-
-    llvm::Value* WARN_UNUSED GetOperandValueFromBaselineJitSlowPathData(llvm::Value* slowPathDataPtr, llvm::BasicBlock* targetBB);
+    llvm::Value* WARN_UNUSED GetOperandValueFromStorage(llvm::Value* storagePtr, size_t offsetInStorage, size_t storageSize, llvm::Instruction* insertBefore);
 
     virtual json WARN_UNUSED SaveToJSON() = 0;
 
@@ -223,8 +189,6 @@ protected:
     BcOperand(json& j);
 
 private:
-    llvm::Value* WARN_UNUSED EmitGetOperandValueImpl(llvm::Value* structPtr, llvm::BasicBlock* targetBB, bool isBytecodeStruct);
-
     std::string m_name;
     // The ordinal of this operand in the bytecode definition
     //
@@ -234,11 +198,6 @@ private:
     //
     size_t m_offsetInBytecodeStruct;
     size_t m_sizeInBytecodeStruct;
-
-    // The offset and size of this bytecode operand in the baseline JIT SlowPathData struct
-    //
-    size_t m_offsetInBaselineJitSlowPathDataStruct;
-    size_t m_sizeInBaselineJitSlowPathDataStruct;
 };
 
 // A bytecode operand that refers to a bytecode slot
@@ -702,6 +661,9 @@ struct BytecodeOperandQuickeningDescriptor
     TypeSpeculationMask m_speculatedMask;
 };
 
+struct BaselineJitSlowPathDataLayout;
+struct DfgJitSlowPathDataLayout;
+
 class BytecodeVariantDefinition
 {
 public:
@@ -727,10 +689,8 @@ public:
         , m_bytecodeMayMakeTailCall(false)
         , m_isInterpreterToBaselineJitOsrEntryPoint(false)
         , m_bytecodeStructLength(static_cast<size_t>(-1))
-        , m_baselineJitSlowPathDataLength(static_cast<size_t>(-1))
-        , m_baselineJitCallIcBaseOffset(static_cast<size_t>(-1))
-        , m_baselineJitSlowPathAndDataSecInfoOffset(static_cast<size_t>(-1))
-        , m_baselineJitGenericIcBaseOffset(static_cast<size_t>(-1))
+        , m_baselineJitSlowPathData(nullptr)
+        , m_dfgJitSlowPathData(nullptr)
     { }
 
     BytecodeVariantDefinition(json& j);
@@ -903,14 +863,27 @@ public:
 
     bool WARN_UNUSED IsBaselineJitSlowPathDataLayoutDetermined()
     {
-        return m_baselineJitSlowPathDataLength != static_cast<size_t>(-1);
+        return m_baselineJitSlowPathData != nullptr;
     }
 
-    size_t WARN_UNUSED GetBaselineJitSlowPathDataLength()
+    BaselineJitSlowPathDataLayout* WARN_UNUSED GetBaselineJitSlowPathDataLayout()
     {
         ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-        return m_baselineJitSlowPathDataLength;
+        return m_baselineJitSlowPathData;
     }
+
+    bool WARN_UNUSED IsDfgJitSlowPathDataLayoutDetermined()
+    {
+        return m_dfgJitSlowPathData != nullptr;
+    }
+
+    DfgJitSlowPathDataLayout* WARN_UNUSED GetDfgJitSlowPathDataLayout()
+    {
+        ReleaseAssert(IsDfgJitSlowPathDataLayoutDetermined());
+        return m_dfgJitSlowPathData;
+    }
+
+    size_t WARN_UNUSED GetBaselineJitSlowPathDataLength();
 
     void ComputeBaselineJitSlowPathDataLayout();
 
@@ -930,71 +903,6 @@ public:
     {
         ReleaseAssert(m_totalGenericIcEffectKinds != static_cast<size_t>(-1));
         return m_totalGenericIcEffectKinds;
-    }
-
-    bool WARN_UNUSED HasJitSlowPathAndDataSecInfo()
-    {
-        return GetNumGenericICsInJitTier() > 0;
-    }
-
-    size_t GetJitSlowPathOffsetInSlowPathData()
-    {
-        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-        ReleaseAssert(HasJitSlowPathAndDataSecInfo());
-        return m_baselineJitSlowPathAndDataSecInfoOffset;
-    }
-
-    size_t GetJitDataSectionOffsetInSlowPathData()
-    {
-        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-        ReleaseAssert(HasJitSlowPathAndDataSecInfo());
-        return m_baselineJitSlowPathAndDataSecInfoOffset + 4;
-    }
-
-    // Return a ptr for the address of the JIT'ed code's slow path of current bytecode
-    // Only available to use if HasJitSlowPathAndDataSecInfo()
-    //
-    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    // Return a ptr for the address of the JIT'ed code's data section of current bytecode
-    // Only available to use if HasJitSlowPathAndDataSecInfo()
-    //
-    llvm::Value* WARN_UNUSED GetPtrOfCurrentBytecodeDataSectionForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetPtrOfCurrentBytecodeDataSectionForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    // Return a ptr for the address of the JIT'ed code of the current bytecode
-    //
-    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetCodePtrOfCurrentBytecodeForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    // Return a ptr for the address of the JIT'ed code of the next bytecode
-    //
-    llvm::Value* WARN_UNUSED GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetFallthroughCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    // Return a ptr for the address that STORES the cond br destination
-    //
-    llvm::Value* WARN_UNUSED GetAddressOfCondBrOperandForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetAddressOfCondBrOperandForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    // Return a ptr for the address of the JIT'ed code of the cond br target
-    //
-    llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
-    llvm::Value* WARN_UNUSED GetCondBrTargetCodePtrForBaselineJit(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
-
-    size_t WARN_UNUSED GetBaselineJitCallIcSiteOffsetInSlowPathData(size_t ord)
-    {
-        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-        ReleaseAssert(ord < GetNumCallICsInJitTier());
-        return m_baselineJitCallIcBaseOffset + sizeof(JitCallInlineCacheSite) * ord;
-    }
-
-    size_t WARN_UNUSED GetBaselineJitGenericIcSiteOffsetInSlowPathData(size_t ord)
-    {
-        ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-        ReleaseAssert(ord < GetNumGenericICsInJitTier());
-        return m_baselineJitGenericIcBaseOffset + sizeof(JitGenericInlineCacheSite) * ord;
     }
 
     bool BytecodeMayFallthroughToNextBytecode()
@@ -1093,10 +1001,8 @@ private:
     size_t m_bytecodeStructLength;
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 
-    size_t m_baselineJitSlowPathDataLength;
-    size_t m_baselineJitCallIcBaseOffset;
-    size_t m_baselineJitSlowPathAndDataSecInfoOffset;
-    size_t m_baselineJitGenericIcBaseOffset;
+    BaselineJitSlowPathDataLayout* m_baselineJitSlowPathData;
+    DfgJitSlowPathDataLayout* m_dfgJitSlowPathData;
 
     // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
     //

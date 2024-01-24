@@ -393,25 +393,29 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         callSiteInfo = ibc->GetCurBytecode();
         cbOrBcb = ibc->GetInterpreterCodeBlock();
     }
-    else
+    else if (ifi->IsBaselineJIT())
     {
-        ReleaseAssert(ifi->IsBaselineJIT());
         // For baseline JIT, if we are in JIT'ed code, we need to pass the BaselineJitSlowPathData pointer by a stencil hole.
         // If we are already in baseline JIT slow path, we already have our BaselineJitSlowPathData pointer and just need to pass it around.
         //
         BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
-        cbOrBcb = j->GetBaselineCodeBlock();
-        if (j->IsBaselineJitSlowPath())
+        cbOrBcb = j->GetJitCodeBlock();
+        if (j->IsJitSlowPath())
         {
             callSiteInfo = j->GetJitSlowPathData();
         }
         else
         {
             Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(m_origin);
-            Value* baselineJitCodeBlock = j->GetBaselineCodeBlock();
+            Value* baselineJitCodeBlock = j->GetJitCodeBlock();
             ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
             callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", m_origin);
         }
+    }
+    else
+    {
+        ReleaseAssert(ifi->IsDfgJIT());
+        ReleaseAssert(false && "unimplemented");
     }
     ReleaseAssert(llvm_value_has_type<void*>(callSiteInfo));
 

@@ -6,6 +6,7 @@
 #include "base64_util.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
 #include "deegen_bytecode_operand.h"
+#include "deegen_jit_slow_path_data.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -1744,7 +1745,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
     return module;
 }
 
-std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(BytecodeVariantDefinition* bytecodeDef,
+std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier engineTier,
+                                                                                                             BytecodeVariantDefinition* bytecodeDef,
                                                                                                              llvm::Value* slowPathData,
                                                                                                              llvm::Value* slowPathDataOffset,
                                                                                                              llvm::Value* baselineCodeBlock32,
@@ -1756,6 +1758,18 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     ReleaseAssertImp(slowPathDataOffset != nullptr, llvm_value_has_type<uint64_t>(slowPathDataOffset));
     ReleaseAssertImp(baselineCodeBlock32 != nullptr, llvm_value_has_type<uint64_t>(baselineCodeBlock32));
     ReleaseAssert(insertAtEnd != nullptr);
+    ReleaseAssert(engineTier == DeegenEngineTier::BaselineJIT || engineTier == DeegenEngineTier::DfgJIT);
+
+    JitSlowPathDataLayoutBase* slowPathDataLayout;
+    if (engineTier == DeegenEngineTier::BaselineJIT)
+    {
+        slowPathDataLayout = bytecodeDef->GetBaselineJitSlowPathDataLayout();
+    }
+    else
+    {
+        ReleaseAssert(engineTier == DeegenEngineTier::DfgJIT);
+        slowPathDataLayout = bytecodeDef->GetDfgJitSlowPathDataLayout();
+    }
 
     LLVMContext& ctx = insertAtEnd->getContext();
     std::vector<Value*> opcodeRawValues;
@@ -1768,14 +1782,15 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
         }
         else
         {
-            opcodeRawValues.push_back(operand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, insertAtEnd));
+            JitSlowPathDataBcOperand& info = slowPathDataLayout->GetBytecodeOperand(operand->OperandOrdinal());
+            opcodeRawValues.push_back(info.EmitGetValueLogic(slowPathData, insertAtEnd));
         }
     }
 
     Value* outputSlot = nullptr;
     if (bytecodeDef->m_hasOutputValue)
     {
-        outputSlot = bytecodeDef->m_outputOperand->GetOperandValueFromBaselineJitSlowPathData(slowPathData, insertAtEnd);
+        outputSlot = slowPathDataLayout->m_outputDest.EmitGetValueLogic(slowPathData, insertAtEnd);
         ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
     }
 
@@ -1817,7 +1832,7 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     // ordinal 101 (nextBytecodeAddr)
     //
     {
-        Value* nextBytecodePtr = bytecodeDef->GetFallthroughCodePtrForBaselineJit(slowPathData, insertAtEnd);
+        Value* nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddress().EmitGetValueLogic(slowPathData, insertAtEnd);
         ReleaseAssert(llvm_value_has_type<void*>(nextBytecodePtr));
         Value* nextBytecodePtrI64 = new PtrToIntInst(nextBytecodePtr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
         bytecodeValList.push_back(nextBytecodePtrI64);

@@ -142,6 +142,30 @@ std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRLi
     return std::vector<uint64_t> { 10 /*XMM1*/, 11 /*XMM2*/, 12 /*XMM3*/, 13 /*XMM4*/, 14 /*XMM5*/, 15 /*XMM6*/ };
 }
 
+llvm::Value* WARN_UNUSED InterpreterFunctionInterface::GetArgumentAsInt64Value(llvm::Function* interfaceFn, uint64_t argOrd, llvm::BasicBlock* bb /*insertAtEnd*/)
+{
+    using namespace llvm;
+    LLVMContext& ctx = interfaceFn->getContext();
+    ReleaseAssert(interfaceFn->getFunctionType() == InterpreterFunctionInterface::GetType(ctx));
+    ReleaseAssert(argOrd < interfaceFn->arg_size());
+    Value* arg = interfaceFn->getArg(static_cast<uint32_t>(argOrd));
+    if (llvm_value_has_type<double>(arg))
+    {
+        Instruction* dblToI64 = new BitCastInst(arg, llvm_type_of<uint64_t>(ctx), "", bb);
+        return dblToI64;
+    }
+    else if (llvm_value_has_type<void*>(arg))
+    {
+        Instruction* ptrToI64 = new PtrToIntInst(arg, llvm_type_of<uint64_t>(ctx), "", bb);
+        return ptrToI64;
+    }
+    else
+    {
+        ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
+        return arg;
+    }
+}
+
 static llvm::CallInst* InterpreterFunctionCreateDispatchToBytecodeImpl(llvm::Value* target, llvm::Value* coroutineCtx, llvm::Value* stackbase, llvm::Value* bytecodePtr, llvm::Value* codeBlock, llvm::Instruction* insertBefore)
 {
     using namespace llvm;

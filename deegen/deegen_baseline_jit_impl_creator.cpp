@@ -2,6 +2,7 @@
 #include "deegen_ast_inline_cache.h"
 #include "deegen_interpreter_function_interface.h"
 #include "deegen_ast_slow_path.h"
+#include "deegen_jit_slow_path_data.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
 #include "llvm_fcmp_extra_optimizations.h"
 #include "tvalue_typecheck_optimization.h"
@@ -37,7 +38,7 @@ llvm::CallInst* WARN_UNUSED DeegenPlaceholderUtils::CreateConstantPlaceholderFor
     return CallInst::Create(func, { }, "", insertBefore);
 }
 
-llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
+llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     CallInst* ci = DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(GetModule(), ordinal, operandTy, insertBefore);
@@ -45,7 +46,7 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateConstantPlaceholderFor
     return ci;
 }
 
-llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
+llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
     UnreachableInst* dummy = new UnreachableInst(operandTy->getContext(), insertAtEnd);
@@ -54,7 +55,7 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateConstantPlaceholderFor
     return res;
 }
 
-llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
+llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     std::string placeholderName = GetRawRuntimeConstantPlaceholderName(ordinal);
@@ -72,7 +73,7 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlacehold
     return CallInst::Create(func, { }, "", insertBefore);
 }
 
-std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
+std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED JitImplCreatorBase::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
     UnreachableInst* dummy = new UnreachableInst(ty->getContext(), insertAtEnd);
@@ -81,7 +82,7 @@ std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::C
     return res;
 }
 
-std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
+std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED JitImplCreatorBase::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
     size_t resultOrd = m_numGenericIcCaptures;
     m_numGenericIcCaptures++;
@@ -89,7 +90,7 @@ std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED BaselineJitImplCreator::C
     return std::make_pair(inst, resultOrd);
 }
 
-llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
+llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
 {
     using namespace llvm;
     UnreachableInst* dummy = new UnreachableInst(operandTy->getContext(), insertAtEnd);
@@ -98,10 +99,10 @@ llvm::CallInst* WARN_UNUSED BaselineJitImplCreator::CreateOrGetConstantPlacehold
     return res;
 }
 
-llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore, bool useAliasStencilOrd)
+llvm::Value* WARN_UNUSED JitImplCreatorBase::GetSlowPathDataOffsetFromJitFastPath(llvm::Instruction* insertBefore, bool useAliasStencilOrd)
 {
     using namespace llvm;
-    ReleaseAssert(!IsBaselineJitSlowPath());
+    ReleaseAssert(!IsJitSlowPath());
     size_t ordinalToUse = useAliasStencilOrd ? CP_PLACEHOLDER_JIT_SLOW_PATH_DATA_OFFSET : 103 /*ordinal*/;
     return CreateOrGetConstantPlaceholderForOperand(ordinalToUse,
                                                     llvm_type_of<uint64_t>(insertBefore->getContext()),
@@ -110,7 +111,7 @@ llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFas
                                                     insertBefore);
 }
 
-llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd, bool useAliasStencilOrd)
+llvm::Value* WARN_UNUSED JitImplCreatorBase::GetSlowPathDataOffsetFromJitFastPath(llvm::BasicBlock* insertAtEnd, bool useAliasStencilOrd)
 {
     using namespace llvm;
     UnreachableInst* dummy = new UnreachableInst(insertAtEnd->getContext(), insertAtEnd);
@@ -119,7 +120,7 @@ llvm::Value* WARN_UNUSED BaselineJitImplCreator::GetSlowPathDataOffsetFromJitFas
     return res;
 }
 
-BaselineJitImplCreator::BaselineJitImplCreator(BytecodeIrComponent& bic)
+JitImplCreatorBase::JitImplCreatorBase(BytecodeIrComponent& bic)
     : DeegenBytecodeImplCreatorBase(bic.m_bytecodeDef, bic.m_processKind)
 {
     using namespace llvm;
@@ -134,8 +135,8 @@ BaselineJitImplCreator::BaselineJitImplCreator(BytecodeIrComponent& bic)
     m_numGenericIcCaptures = 0;
 }
 
-BaselineJitImplCreator::BaselineJitImplCreator(BaselineJitImplCreator::SlowPathReturnContinuationTag, BytecodeIrComponent& bic)
-    : BaselineJitImplCreator(bic)
+JitImplCreatorBase::JitImplCreatorBase(BaselineJitImplCreator::SlowPathReturnContinuationTag, BytecodeIrComponent& bic)
+    : JitImplCreatorBase(bic)
 {
     ReleaseAssert(m_processKind == BytecodeIrComponentKind::ReturnContinuation);
     m_isSlowPathReturnContinuation = true;
@@ -169,16 +170,27 @@ std::string WARN_UNUSED DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbol
     return std::string("__deegen_cp_placeholder_") + std::to_string(ord);
 }
 
-std::string WARN_UNUSED BaselineJitImplCreator::GetRcPlaceholderNameForFallthrough()
+std::string WARN_UNUSED JitImplCreatorBase::GetRcPlaceholderNameForFallthrough()
 {
-    ReleaseAssert(!IsBaselineJitSlowPath());
+    ReleaseAssert(!IsJitSlowPath());
     return DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(m_stencilRcDefinitions);
 }
 
-void BaselineJitImplCreator::CreateWrapperFunction()
+void JitImplCreatorBase::CreateWrapperFunction()
 {
     using namespace llvm;
     LLVMContext& ctx = m_module->getContext();
+
+    JitSlowPathDataLayoutBase* jitSlowPathDataLayout;
+    if (IsBaselineJIT())
+    {
+        jitSlowPathDataLayout = m_bytecodeDef->GetBaselineJitSlowPathDataLayout();
+    }
+    else
+    {
+        ReleaseAssert(IsDfgJIT());
+        jitSlowPathDataLayout = m_bytecodeDef->GetDfgJitSlowPathDataLayout();
+    }
 
     ReleaseAssert(m_wrapper == nullptr);
 
@@ -198,8 +210,6 @@ void BaselineJitImplCreator::CreateWrapperFunction()
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
-    bool isNonJitSlowPath = false;
-
     if (m_processKind != BytecodeIrComponentKind::ReturnContinuation)
     {
         // Note that we also set parameter names here.
@@ -214,16 +224,15 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
         Value* baselineCodeBlock = m_wrapper->getArg(3);
-        baselineCodeBlock->setName(x_baselineCodeBlock);
-        m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
+        baselineCodeBlock->setName(GetJitCodeBlockLLVMVarName());
+        m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), baselineCodeBlock);
 
-        // The BaselineJitSlowPathData is only useful (and valid) for slow path
+        // The SlowPathData pointer is only useful (and valid) for slow path
         //
-        if (IsBaselineJitSlowPath())
+        if (IsJitSlowPath())
         {
             Value* jitSlowPathData = m_wrapper->getArg(2);
             jitSlowPathData->setName(x_jitSlowPathData);
-            isNonJitSlowPath = true;
             m_valuePreserver.Preserve(x_jitSlowPathData, jitSlowPathData);
         }
     }
@@ -245,29 +254,46 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         numRet->setName(x_numRet);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
-
-        if (IsBaselineJitSlowPath())
+        if (IsJitSlowPath())
         {
-            // Decode the BaselineCodeBlock from the stack frame header
-            //
-            Instruction* baselineCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
-            ReleaseAssert(llvm_value_has_type<void*>(baselineCodeBlock));
+            if (GetTier() == DeegenEngineTier::BaselineJIT)
+            {
+                // Decode the BaselineCodeBlock from the stack frame header
+                //
+                Instruction* baselineCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
+                ReleaseAssert(llvm_value_has_type<void*>(baselineCodeBlock));
 
-            m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
+                m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), baselineCodeBlock);
+            }
+            else
+            {
+                // Mostly a mirror of the above branch, except that we need to get the DFG Codeblock
+                //
+                ReleaseAssert(GetTier() == DeegenEngineTier::DfgJIT);
+                Instruction* dfgCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetDfgCodeBlockFromStackBase", { GetStackBase() }, currentBlock);
+                ReleaseAssert(llvm_value_has_type<void*>(dfgCodeBlock));
 
-            // Decode BaselineJitSlowPathData, which is only useful (and valid) for slow path
+                m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), dfgCodeBlock);
+            }
+
+            // Decode the SlowPathData pointer, which is only useful (and valid) for slow path
             // Furthermore, since this is the return continuation, we must decode this value from the stack frame header
             //
             // Note that the 'm_callerBytecodePtr' is stored in the callee's stack frame header, so we should pass 'calleeStackBase' here
             //
-            Instruction* slowPathDataPtr = CreateCallToDeegenCommonSnippet(GetModule(), "GetBaselineJitSlowpathDataAfterSlowCall", { calleeStackBase, baselineCodeBlock }, currentBlock);
+            // Note that the logic here is the same regardless of whether the CodeBlock is a BaselineCodeBlock or a DfgCodeBlock
+            //
+            Instruction* slowPathDataPtr = CreateCallToDeegenCommonSnippet(
+                GetModule(),
+                "GetJitSlowpathDataAfterSlowCall",
+                { calleeStackBase, GetJitCodeBlock() },
+                currentBlock);
             ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
-            isNonJitSlowPath = true;
             m_valuePreserver.Preserve(x_jitSlowPathData, slowPathDataPtr);
         }
         else
         {
-            // For the JIT fast path, we only need to set up the BaselineCodeBlock, which is hardcoded as a stencil hole
+            // For the JIT fast path, we only need to set up the BaselineCodeBlock or DfgCodeBlock, which is hardcoded as a stencil hole
             // For now since we don't support encoding 64-bit constant, just translate from HeapPtr..
             //
             Value* val = CreateConstantPlaceholderForOperand(104 /*ordinal*/,
@@ -275,10 +301,10 @@ void BaselineJitImplCreator::CreateWrapperFunction()
                                                              1,
                                                              m_stencilRcInserter.GetLowAddrRangeUB(),
                                                              currentBlock);
-            Value* baselineCodeBlockHeapPtr = new IntToPtrInst(val, llvm_type_of<HeapPtr<void>>(ctx), "", currentBlock);
-            Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "SimpleTranslateToRawPointer", { baselineCodeBlockHeapPtr }, currentBlock);
-            ReleaseAssert(llvm_value_has_type<void*>(baselineCodeBlock));
-            m_valuePreserver.Preserve(x_baselineCodeBlock, baselineCodeBlock);
+            Value* jitCodeBlockHeapPtr = new IntToPtrInst(val, llvm_type_of<HeapPtr<void>>(ctx), "", currentBlock);
+            Value* jitCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "SimpleTranslateToRawPointer", { jitCodeBlockHeapPtr }, currentBlock);
+            ReleaseAssert(llvm_value_has_type<void*>(jitCodeBlock));
+            m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), jitCodeBlock);
         }
     }
 
@@ -286,6 +312,25 @@ void BaselineJitImplCreator::CreateWrapperFunction()
     if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
     {
         alreadyDecodedArgs = TypeBasedHCSHelper::GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
+    }
+
+    // For DFG JIT fast path, some TValue operands may come directly in register
+    //
+    std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> operandsInRegister;
+    if (!IsJitSlowPath() && GetTier() == DeegenEngineTier::DfgJIT)
+    {
+        for (auto& operand : m_bytecodeDef->m_list)
+        {
+            if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+            {
+                uint64_t argOrd = GetDfgRegisterSpecilaizationInfo(operand->OperandOrdinal());
+                if (argOrd != static_cast<uint64_t>(-1))
+                {
+                    ReleaseAssert(!operandsInRegister.count(operand->OperandOrdinal()));
+                    operandsInRegister[operand->OperandOrdinal()] = argOrd;
+                }
+            }
+        }
     }
 
     std::vector<Value*> opcodeValues;
@@ -296,11 +341,15 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         {
             opcodeValues.push_back(nullptr);
         }
+        else if (operandsInRegister.count(operand->OperandOrdinal()))
+        {
+            opcodeValues.push_back(nullptr);
+        }
         else if (!operand->SupportsGetOperandValueFromBytecodeStruct())
         {
             opcodeValues.push_back(nullptr);
         }
-        else if (!isNonJitSlowPath)
+        else if (!IsJitSlowPath())
         {
             // This is the fast path JIT'ed code, the operands shall be represented as a runtime constant hole
             // Note that this check has to happen after the SupportsGetOperandValueFromBytecodeStruct() check,
@@ -315,14 +364,17 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         }
         else
         {
-            opcodeValues.push_back(operand->GetOperandValueFromBaselineJitSlowPathData(this, currentBlock));
+            // This is the AOT slow path, operands should be decoded from the SlowPathData
+            //
+            JitSlowPathDataBcOperand& info = jitSlowPathDataLayout->GetBytecodeOperand(operand->OperandOrdinal());
+            opcodeValues.push_back(info.EmitGetValueLogic(GetJitSlowPathData(), currentBlock));
         }
     }
 
     if (m_bytecodeDef->m_hasOutputValue)
     {
         Value* outputSlot;
-        if (!isNonJitSlowPath)
+        if (!IsJitSlowPath())
         {
             outputSlot = CreateConstantPlaceholderForOperand(100 /*operandOrd*/,
                                                              llvm_type_of<uint64_t>(ctx),
@@ -332,7 +384,7 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         }
         else
         {
-            outputSlot = m_bytecodeDef->m_outputOperand->GetOperandValueFromBaselineJitSlowPathData(this, currentBlock);
+            outputSlot = jitSlowPathDataLayout->m_outputDest.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
         }
         ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
         m_valuePreserver.Preserve(x_outputSlot, outputSlot);
@@ -341,7 +393,7 @@ void BaselineJitImplCreator::CreateWrapperFunction()
 
     {
         Value* fallthroughTarget;
-        if (!isNonJitSlowPath)
+        if (!IsJitSlowPath())
         {
             fallthroughTarget = CreateConstantPlaceholderForOperand(101 /*operandOrd*/,
                                                                     llvm_type_of<void*>(ctx),
@@ -351,7 +403,8 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         }
         else
         {
-            fallthroughTarget = m_bytecodeDef->GetFallthroughCodePtrForBaselineJit(GetJitSlowPathData(), currentBlock);
+            JitSlowPathDataJitAddress fallthroughTargetFromSlowPathData = jitSlowPathDataLayout->GetFallthroughJitAddress();
+            fallthroughTarget = fallthroughTargetFromSlowPathData.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
         }
         ReleaseAssert(llvm_value_has_type<void*>(fallthroughTarget));
         m_valuePreserver.Preserve(x_fallthroughDest, fallthroughTarget);
@@ -361,7 +414,7 @@ void BaselineJitImplCreator::CreateWrapperFunction()
     if (m_bytecodeDef->m_hasConditionalBranchTarget)
     {
         Value* condBrTarget;
-        if (!isNonJitSlowPath)
+        if (!IsJitSlowPath())
         {
             condBrTarget = CreateConstantPlaceholderForOperand(102 /*operandOrd*/,
                                                                llvm_type_of<void*>(ctx),
@@ -371,7 +424,7 @@ void BaselineJitImplCreator::CreateWrapperFunction()
         }
         else
         {
-            condBrTarget = m_bytecodeDef->GetCondBrTargetCodePtrForBaselineJit(GetJitSlowPathData(), currentBlock);
+            condBrTarget = jitSlowPathDataLayout->m_condBrJitAddr.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
         }
         ReleaseAssert(llvm_value_has_type<void*>(condBrTarget));
         m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
@@ -390,6 +443,12 @@ void BaselineJitImplCreator::CreateWrapperFunction()
             {
                 size_t argOrd = alreadyDecodedArgs[operand->OperandOrdinal()];
                 Value* arg = TypeBasedHCSHelper::GetBytecodeOperandUsageValueFromAlreadyDecodedArgs(m_wrapper, argOrd, currentBlock);
+                usageValues.push_back(arg);
+            }
+            else if (operandsInRegister.count(operand->OperandOrdinal()))
+            {
+                size_t argOrd = operandsInRegister[operand->OperandOrdinal()];
+                Value* arg = InterpreterFunctionInterface::GetArgumentAsInt64Value(m_wrapper, argOrd, currentBlock);
                 usageValues.push_back(arg);
             }
             else
@@ -501,7 +560,7 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     // Lower the remaining function APIs from the generic IC
     //
-    if (!IsBaselineJitSlowPath())
+    if (!IsJitSlowPath())
     {
         LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
         AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(this, m_wrapper);
@@ -538,7 +597,7 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     // Run the stencil runtime constant insertion pass if this function is for the JIT
     //
-    if (!IsBaselineJitSlowPath())
+    if (!IsJitSlowPath())
     {
         m_stencilRcDefinitions = m_stencilRcInserter.RunOnFunction(m_wrapper);
     }
@@ -601,7 +660,7 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     m_wrapper = m_module->getFunction(m_resultFuncName);
     ReleaseAssert(m_wrapper != nullptr);
 
-    if (IsBaselineJitSlowPath())
+    if (IsJitSlowPath())
     {
         // For non-JIT slow path, we are done at this point. For JIT, we need to do further processing.
         //

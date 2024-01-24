@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "misc_llvm_helper.h"
+#include "deegen_engine_tier.h"
 #include "llvm/BinaryFormat/ELF.h"
 
 namespace dast {
@@ -215,7 +216,8 @@ struct DeegenStencilCodegenResult
     // Create LLVM logic that decodes the SlowPathData and return the bytecode operand vector expected by the codegen function
     // The vector may contain nullptr, in which case caller should assert that the argument is indeed unused by the codegen function, and pass undef instead
     //
-    static std::vector<llvm::Value*> WARN_UNUSED BuildBytecodeOperandVectorFromSlowPathData(BytecodeVariantDefinition* bytecodeDef,
+    static std::vector<llvm::Value*> WARN_UNUSED BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier engineTier,
+                                                                                            BytecodeVariantDefinition* bytecodeDef,
                                                                                             llvm::Value* slowPathData,
                                                                                             llvm::Value* slowPathDataOffset,
                                                                                             llvm::Value* codeBlock32,
