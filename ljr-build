@@ -1,4 +1,4 @@
-#!/usr/bin/python3 
+#!/usr/bin/python3
 
 import os
 import sys
@@ -17,7 +17,7 @@ docker_image_version_major = "0"
 docker_image_version_minor = "0"
 docker_image_version_build = "5"
 
-# The DockerHub username that hosts the image 
+# The DockerHub username that hosts the image
 #
 docker_hub_username = "haoranxu510"
 
@@ -62,7 +62,7 @@ def GetGeneratedDir():
 def GetGeneratedDirFlavor(flavor):
     assert(flavor == 'debug' or flavor == 'testrel' or flavor == 'release')
     return os.path.join(GetGeneratedDir(), flavor)
-    
+
 def CreateDirIfNotExist(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
@@ -80,54 +80,54 @@ def CheckLocalTagExists():
         return False
     else:
         return True
-        
+
 def PushImageToRemoteAndDie():
     if (CheckRemoteTagExists()):
         print("[ERROR] Tag %s already existed on remote! Please update the version before pushing!" % docker_image_tag)
         sys.exit(1)
-    
+
     if (not CheckLocalTagExists()):
         print("[ERROR] Local tag %s does not exist! Did you use update-docker to build the image?" % docker_image_tag)
         sys.exit(1)
-        
+
     r = os.system("docker image tag %s:%s %s/%s:%s" % (docker_image_name, docker_image_tag, docker_hub_username, docker_image_name, docker_image_tag))
     assert(r == 0)
-    
+
     r = os.system("docker push %s/%s:%s" % (docker_hub_username, docker_image_name, docker_image_tag))
     assert(r == 0)
-    
+
     sys.exit(0)
-    
+
 def PullImageFromRemote():
     r = os.system("docker pull %s/%s:%s" % (docker_hub_username, docker_image_name, docker_image_tag))
     if (r != 0):
         print("[ERROR] Failed to pull image %s/%s:%s from remote." % (docker_hub_username, docker_image_name, docker_image_tag))
         sys.exit(r)
-    
+
     r = os.system("docker image tag %s/%s:%s %s:%s " % (docker_hub_username, docker_image_name, docker_image_tag, docker_image_name, docker_image_tag))
     assert(r == 0)
-    
+
 def PullImageFromRemoteIfNeeded():
     if (not CheckLocalTagExists()):
         print('Build environment docker image %s:%s does not exist locally. Pulling from remote, this may take a while...' % (docker_image_name, docker_image_tag))
         PullImageFromRemote()
-        
+
 def UpdateImageAndDie():
     if (CheckRemoteTagExists()):
         print("[ERROR] Tag %s already existed on remote! If you intend to update the image, assign a new image version in '%s' script. If you intend to pull the image from remote, use pull-docker." % (docker_image_tag, script_name))
         sys.exit(1)
-        
+
     docker_dir = os.path.join(base_dir, 'dockerfile')
     if not os.path.exists(os.path.join(docker_dir, 'Dockerfile')):
         print('[ERROR] Dockerfile not found!')
         sys.exit(1)
-        
+
     cmd = 'docker build --tag %s:%s %s' % (docker_image_name, docker_image_tag, docker_dir)
     r = os.system(cmd)
     if (r != 0):
         print('[ERROR] Failed to build docker image, exit code = %d' % r)
         sys.exit(r)
-        
+
     CreateDirIfNotExist(os.path.join(base_dir, 'shared_libs'))
     all_shared_libs = [
 #        '/lib/x86_64-linux-gnu/libtinfo.so.5'
@@ -138,10 +138,10 @@ def UpdateImageAndDie():
         if (r != 0):
             print('[ERROR] Failed to copy shared library %s, exit code = %d' % (shared_lib, r))
             sys.exit(r)
-            
+
     print("Build successful. You may test this image locally, and when you are satisfied, use push-docker to push the image to remote.")
     sys.exit(0)
-    
+
 if (len(sys.argv) < 2):
     PrintUsageGeneralAndDie()
 
@@ -153,19 +153,20 @@ if (op != 'update-docker' and op != "push-docker" and op != "pull-docker" and op
 
 if (op == 'env'):
     PullImageFromRemoteIfNeeded()
-        
+
     cmd = "docker run -it -e CC='clang' -e CXX='clang++' -v %s:/home/u/project --workdir='/home/u/project' %s:%s" % (base_dir, docker_image_name, docker_image_tag)
+    print(f"$ {cmd}")
     r = os.system(cmd)
     sys.exit(r)
 
 if (op == "push-docker"):
     PushImageToRemoteAndDie()
     assert(False)
-    
+
 if (op == "pull-docker"):
     PullImageFromRemote()
     sys.exit(0)
-    
+
 if (op == 'update-docker'):
     UpdateImageAndDie();
     assert(False)
@@ -173,18 +174,18 @@ if (op == 'update-docker'):
 if (op == 'make'):
     if (len(sys.argv) < 3 or len(sys.argv) > 4):
         PrintUsageMakeAndDie()
-        
+
     target = sys.argv[2]
     if (target != 'debug' and target != 'testrel' and target != 'release'):
         print('Unknown make target "%s".' % target)
         PrintUsageMakeAndDie()
-    
+
     isClean = False
     if (len(sys.argv) == 4):
         if (sys.argv[3] != 'clean'):
             PrintUsageMakeAndDie()
         isClean = True
-        
+
     if (isClean):
         dirname = GetBuildDirFlavor(target)
         print('Removing directory: %s' % dirname)
@@ -193,31 +194,31 @@ if (op == 'make'):
         print('Removing directory: %s' % dirname)
         shutil.rmtree(dirname)
         sys.exit(0)
-    
+
     PullImageFromRemoteIfNeeded()
-    
+
     CreateDirIfNotExist(GetBuildDir())
     CreateDirIfNotExist(GetCCacheDir())
     CreateDirIfNotExist(GetBuildDirFlavor(target))
     CreateDirIfNotExist(GetGeneratedDir())
     CreateDirIfNotExist(GetGeneratedDirFlavor(target))
     CreateDirIfNotExist(os.path.join(GetGeneratedDirFlavor(target), 'generated'))
-    
+
     # generate the git commit hash CPP file
     cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project && bash gen_git_hash.sh __generated__/%s/generated/git_commit_hash.cpp'" % (base_dir, docker_image_name, docker_image_tag, target)
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
-        
+
     cmd = "docker run -e CC='clang' -e CXX='clang++' -v %s:/home/u/project %s:%s bash -c 'cd project/build/%s && cmake ../../ -DBUILD_FLAVOR=%s -GNinja'" % (base_dir, docker_image_name, docker_image_tag, target, target.upper())
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
-    
+
     if (not os.path.exists(GetBuildDirFlavor(target))):
         print("[INTERNAL ERROR] Build directory 'build/%s' does not exist. A bug?" % target)
         sys.exit(1)
-       
+
     if (isClean):
         option = "clean"
     else:
@@ -233,21 +234,21 @@ if (op == 'make'):
     r = os.system(cmd)
     if (r != 0):
         sys.exit(r)
-        
+
     if (not isClean):
         # copy executable to project root
         print('Copying built artifact to project root directory..')
         src = os.path.join(GetBuildDirFlavor(target), "main")
         dst = os.path.join(base_dir, "main")
-        p = Popen(['cp', '-p', '--preserve', src, dst])
+        p = Popen(['cp', '-p', src, dst])
         p.wait()
-        
+
         src = os.path.join(GetBuildDirFlavor(target), "luajitr")
         dst = os.path.join(base_dir, "luajitr")
-        p = Popen(['cp', '-p', '--preserve', src, dst])
+        p = Popen(['cp', '-p', src, dst])
         p.wait()
-        print('Build completed successfully.') 
-        
+        print('Build completed successfully.')
+
     sys.exit(0)
 
 assert(False)

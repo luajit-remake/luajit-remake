@@ -1,0 +1,25 @@
+#!/bin/bash
+
+CONTAINER_NAME="luajitr-run"
+
+EXECUTABLE="luajitr"
+
+if [ "$1" = "--delete" ]; then
+    if docker ps -a | grep -q "$CONTAINER_NAME"; then
+        docker rm -f "$CONTAINER_NAME"
+        echo "Deleted container '$CONTAINER_NAME'"
+    fi
+    exit 0
+fi
+
+if ! docker ps | grep -q "$CONTAINER_NAME"; then
+    docker run -dit \
+        --name "$CONTAINER_NAME" \
+        -e CC='clang' -e CXX='clang++' \
+        -v "$(pwd):/home/u/project" --workdir='/home/u/project' \
+        ljr-build:v0.0.5
+    echo "Started container '$CONTAINER_NAME'"
+fi
+
+# Execute the command in the running container
+docker exec -it "$CONTAINER_NAME" sh -c "./$EXECUTABLE $*"
