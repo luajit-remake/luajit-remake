@@ -10,6 +10,7 @@
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "llvm_identical_function_merger.h"
 #include "deegen_global_bytecode_trait_accessor.h"
+#include "deegen_jit_slow_path_data.h"
 
 using namespace dast;
 
@@ -132,7 +133,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             size_t callIcSiteOffsetInSlowPathData;
             if (numCallIcSites > 0)
             {
-                callIcSiteOffsetInSlowPathData = res.m_bytecodeDef->GetBaselineJitCallIcSiteOffsetInSlowPathData(0);
+                callIcSiteOffsetInSlowPathData = res.m_bytecodeDef->GetBaselineJitSlowPathDataLayout()->m_callICs.GetOffsetForSite(0);
             }
             else
             {

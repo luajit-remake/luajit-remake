@@ -472,12 +472,16 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
                 endOfStackFrame = ibc->CallDeegenCommonSnippet(
                     "GetEndOfCallFrameFromInterpreterCodeBlock", { ibc->GetStackBase(), ibc->GetInterpreterCodeBlock() }, m_origin /*insertBefore*/);
             }
-            else
+            else if (ifi->IsBaselineJIT())
             {
-                ReleaseAssert(ifi->IsBaselineJIT());
                 BaselineJitImplCreator* jbc = assert_cast<BaselineJitImplCreator*>(ifi);
                 endOfStackFrame = jbc->CallDeegenCommonSnippet(
-                    "GetEndOfCallFrameFromBaselineCodeBlock", { jbc->GetStackBase(), jbc->GetBaselineCodeBlock() }, m_origin /*insertBefore*/);
+                    "GetEndOfCallFrameFromBaselineCodeBlock", { jbc->GetStackBase(), jbc->GetJitCodeBlock() }, m_origin /*insertBefore*/);
+            }
+            else
+            {
+                ReleaseAssert(ifi->IsDfgJIT());
+                ReleaseAssert(false && "unimplemented");
             }
             ReleaseAssert(llvm_value_has_type<void*>(endOfStackFrame));
 
@@ -916,7 +920,7 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
         Value* callSiteInfo = nullptr;
         if (!m_isMustTailCall)
         {
-            if (ifi->IsBaselineJitSlowPath())
+            if (ifi->IsJitSlowPath())
             {
                 // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
                 // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.

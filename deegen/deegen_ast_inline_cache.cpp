@@ -2,6 +2,7 @@
 #include "deegen_analyze_lambda_capture_pass.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
+#include "deegen_jit_slow_path_data.h"
 #include "deegen_rewrite_closure_call.h"
 #include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
@@ -2505,9 +2506,9 @@ void AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(BaselineJitImplCreat
     for (CallInst* origin : allUses)
     {
         ReleaseAssert(llvm_value_has_type<void*>(origin));
-        ReleaseAssert(!ifi->IsBaselineJitSlowPath());
+        ReleaseAssert(!ifi->IsJitSlowPath());
         Value* offset = ifi->GetSlowPathDataOffsetFromJitFastPath(origin, true /*useAliasOrdinal*/);
-        Value* baselineJitCodeBlock = ifi->GetBaselineCodeBlock();
+        Value* baselineJitCodeBlock = ifi->GetJitCodeBlock();
         ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
         Value* replacement = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", origin);
         origin->replaceAllUsesWith(replacement);
@@ -2844,7 +2845,7 @@ AstInlineCache::BaselineJitLLVMLoweringResult WARN_UNUSED AstInlineCache::DoLowe
 
         Value* icSite = nullptr;
         {
-            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitGenericIcSiteOffsetInSlowPathData(icUsageOrdInBytecode);
+            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitSlowPathDataLayout()->m_genericICs.GetOffsetForSite(icUsageOrdInBytecode);
             icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                        { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", e.m_origin);
         }
@@ -3311,6 +3312,8 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     ReleaseAssertImp(icInfo.m_numPlaceholders > 0, icInfo.m_placeholderStart < ifi->GetNumTotalGenericIcCaptures());
     ReleaseAssert(icInfo.m_placeholderStart + icInfo.m_numPlaceholders <= ifi->GetNumTotalGenericIcCaptures());
 
+    BaselineJitSlowPathDataLayout* slowPathDataLayout = ifi->GetBytecodeDef()->GetBaselineJitSlowPathDataLayout();
+
     std::string cgFnName = x_jit_codegen_ic_impl_placeholder_fn_prefix + std::to_string(icInfo.m_globalOrd);
     if (isCodegenForInlineSlab)
     {
@@ -3403,7 +3406,7 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
 
     Value* slowPathData = cgFn->getArg(1);
 
-    Value* mainLogicFastPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeForBaselineJit(slowPathData, bb);
+    Value* mainLogicFastPath = slowPathDataLayout->m_jitAddr.EmitGetValueLogic(slowPathData, bb);
 
     // For normal generation, 'destJitAddr' is passed in as first param
     // For inline slab generation, 'destJitAddr' is implicit (always the start address of the SMC region).
@@ -3434,7 +3437,8 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     // However, this assert might not hold, as the IC logic might use BaseineCodeBlock32 and SlowPathDataOffset if it tail-duplicated the logic
     // So to support all cases, we need to pass BaselineCodeBlock to IC body
     //
-    std::vector<Value*> bytecodeValList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi->GetBytecodeDef(),
+    std::vector<Value*> bytecodeValList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
+                                                                                                                 ifi->GetBytecodeDef(),
                                                                                                                  slowPathData,
                                                                                                                  nullptr /*slowPathDataOffset, must unused*/,
                                                                                                                  nullptr /*baselineCodeBlock32, must unused*/,
@@ -3466,13 +3470,13 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     //
     std::vector<Value*> headerArgsList;
     headerArgsList.push_back(new PtrToIntInst(mainLogicFastPath, llvm_type_of<uint64_t>(ctx), "", bb));
-    Value* mainLogicSlowPath = ifi->GetBytecodeDef()->GetCodePtrOfCurrentBytecodeSlowPathForBaselineJit(slowPathData, bb);
+    Value* mainLogicSlowPath = slowPathDataLayout->m_jitSlowPathAddr.EmitGetValueLogic(slowPathData, bb);
     headerArgsList.push_back(new PtrToIntInst(mainLogicSlowPath, llvm_type_of<uint64_t>(ctx), "", bb));
     headerArgsList.push_back(new PtrToIntInst(destJitAddr, llvm_type_of<uint64_t>(ctx), "", bb));
     Value* destJitDataSecAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), destJitAddr,
                                                                   { CreateLLVMConstantInt<uint64_t>(ctx, dataSectionOffset) }, "", bb);
     headerArgsList.push_back(new PtrToIntInst(destJitDataSecAddr, llvm_type_of<uint64_t>(ctx), "", bb));
-    Value* mainLogicDataSec = ifi->GetBytecodeDef()->GetPtrOfCurrentBytecodeDataSectionForBaselineJit(slowPathData, bb);
+    Value* mainLogicDataSec = slowPathDataLayout->m_jitDataSecAddr.EmitGetValueLogic(slowPathData, bb);
     headerArgsList.push_back(new PtrToIntInst(mainLogicDataSec, llvm_type_of<uint64_t>(ctx), "", bb));
 
     ReleaseAssert(inlineSlabInfo.m_smcRegionLength >= 5);
@@ -3502,7 +3506,7 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
         //
         Value* isInlineSlabUsed = nullptr;
         {
-            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitGenericIcSiteOffsetInSlowPathData(icUsageOrdInBytecode);
+            size_t offset = ifi->GetBytecodeDef()->GetBaselineJitSlowPathDataLayout()->m_genericICs.GetOffsetForSite(icUsageOrdInBytecode);
             Value* icSite = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathData,
                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", bb);
 
@@ -3536,7 +3540,7 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
     Value* condBrDest = nullptr;
     if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
     {
-        condBrDest = ifi->GetBytecodeDef()->GetCondBrTargetCodePtrForBaselineJit(slowPathData, bb);
+        condBrDest = slowPathDataLayout->m_condBrJitAddr.EmitGetValueLogic(slowPathData, bb);
         ReleaseAssert(condBrDest != nullptr);
     }
 

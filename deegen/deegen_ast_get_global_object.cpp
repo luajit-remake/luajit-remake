@@ -25,7 +25,7 @@ struct LowerGetGlobalObjectApiPass final : public DeegenAbstractSimpleApiLowerin
     {
         using namespace llvm;
         ReleaseAssert(origin->arg_size() == 0);
-        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromBaselineCodeBlock", { ifi->GetBaselineCodeBlock() }, origin /*insertBefore*/);
+        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromBaselineCodeBlock", { ifi->GetJitCodeBlock() }, origin /*insertBefore*/);
         ReleaseAssert(origin->getType() == replacement->getType());
         origin->replaceAllUsesWith(replacement);
         origin->eraseFromParent();

@@ -178,7 +178,7 @@ void AstBytecodeReturn::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi)
         ifi->GetCoroutineCtx(),
         ifi->GetStackBase(),
         UndefValue::get(llvm_type_of<void*>(ctx)),
-        ifi->GetBaselineCodeBlock(),
+        ifi->GetJitCodeBlock(),
         m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);

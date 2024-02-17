@@ -2,6 +2,7 @@
 #include "deegen_bytecode_ir_components.h"
 #include "read_file.h"
 #include "deegen_dfg_jit_process_call_inlining.h"
+#include "deegen_jit_slow_path_data.h"
 #include "json_utils.h"
 #include "transactional_output_file.h"
 
@@ -95,7 +96,7 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
         size_t callIcSiteOffsetInSlowPathData = 0;
         if (numJitCallICs > 0)
         {
-            callIcSiteOffsetInSlowPathData = bii.m_bytecodeDef->GetBaselineJitCallIcSiteOffsetInSlowPathData(0);
+            callIcSiteOffsetInSlowPathData = bii.m_bytecodeDef->GetBaselineJitSlowPathDataLayout()->m_callICs.GetOffsetForSite(0);
         }
         ReleaseAssert(callIcSiteOffsetInSlowPathData <= 65535);
         fprintf(hdrFp, "        impl->set(%u, BytecodeSpeculativeInliningInfo(%u, %u, x_deegen_dfg_speculative_inlining_trait_%s));\n",

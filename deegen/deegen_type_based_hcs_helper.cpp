@@ -58,26 +58,7 @@ std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> TypeBasedHCSHel
 
 llvm::Value* WARN_UNUSED TypeBasedHCSHelper::GetBytecodeOperandUsageValueFromAlreadyDecodedArgs(llvm::Function* interfaceFn, uint64_t argOrd, llvm::BasicBlock* bb)
 {
-    using namespace llvm;
-    LLVMContext& ctx = interfaceFn->getContext();
-    ReleaseAssert(interfaceFn->getFunctionType() == InterpreterFunctionInterface::GetType(ctx));
-    ReleaseAssert(argOrd < interfaceFn->arg_size());
-    Value* arg = interfaceFn->getArg(static_cast<uint32_t>(argOrd));
-    if (llvm_value_has_type<double>(arg))
-    {
-        Instruction* dblToI64 = new BitCastInst(arg, llvm_type_of<uint64_t>(ctx), "", bb);
-        return dblToI64;
-    }
-    else if (llvm_value_has_type<void*>(arg))
-    {
-        Instruction* ptrToI64 = new PtrToIntInst(arg, llvm_type_of<uint64_t>(ctx), "", bb);
-        return ptrToI64;
-    }
-    else
-    {
-        ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
-        return arg;
-    }
+    return InterpreterFunctionInterface::GetArgumentAsInt64Value(interfaceFn, argOrd, bb);
 }
 
 void TypeBasedHCSHelper::GenerateCheckConditionLogic(DeegenBytecodeImplCreatorBase* ifi,
@@ -111,17 +92,22 @@ void TypeBasedHCSHelper::GenerateCheckConditionLogic(DeegenBytecodeImplCreatorBa
             callSiteInfo = ibc->GetCurBytecode();
             cbOrBcb = ibc->GetInterpreterCodeBlock();
         }
-        else
+        else if (ifi->IsBaselineJIT())
         {
             // The baseline JIT needs to pass the BaselineJITSlowPathData pointer
             //
             BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
-            ReleaseAssert(!j->IsBaselineJitSlowPath());
+            ReleaseAssert(!j->IsJitSlowPath());
             Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(tmp /*insertBefore*/);
-            Value* baselineJitCodeBlock = j->GetBaselineCodeBlock();
+            Value* baselineJitCodeBlock = j->GetJitCodeBlock();
             ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
             callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", tmp /*insertBefore*/);
             cbOrBcb = baselineJitCodeBlock;
+        }
+        else
+        {
+            ReleaseAssert(ifi->IsDfgJIT());
+            ReleaseAssert(false && "unimplemented");
         }
         CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(
             slowpathFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, cbOrBcb, tmp /*insertBefore*/);

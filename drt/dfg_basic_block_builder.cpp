@@ -867,6 +867,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
         //
         if (m_currentBlock->m_nodes.size() == 0)
         {
+            TestAssert(numBBSuccessors == 1);
             Node* nopNode = Node::CreateNoopNode();
             m_isOSRExitOK = false;
             m_currentCodeOrigin = CodeOrigin(m_inlinedCallFrame, bbUvInfo->m_bytecodeIndex);
