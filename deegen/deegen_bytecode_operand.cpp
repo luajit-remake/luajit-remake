@@ -27,7 +27,7 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromStorage(llvm::Value* stor
 {
     using namespace llvm;
     LLVMContext& ctx = insertBefore->getContext();
-    ReleaseAssert(llvm_value_has_type<void*>(storagePtr) || llvm_value_has_type<HeapPtr<void>>(storagePtr));
+    ReleaseAssert(llvm_value_has_type<void*>(storagePtr));
     ReleaseAssert(SupportsGetOperandValueFromBytecodeStruct());
 
     Type* storageTypeInBytecodeStruct = Type::getIntNTy(ctx, static_cast<uint32_t>(storageSize * 8));
