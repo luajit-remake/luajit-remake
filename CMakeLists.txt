@@ -218,6 +218,7 @@ set(UNIT_TEST_SRC
   test_dfg_frontend.cpp
   test_temp_arena_allocator.cpp
   test_llvm_effectful_function_checker.cpp
+        annotated/deegen_common_snippets/get_callee_cb_from_u32.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES

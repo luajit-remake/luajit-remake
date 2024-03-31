@@ -9,3 +9,6 @@ ljr.files
 ljr.includes
 main
 shared_libs
+.idea/
+luajitr
+__generated__/

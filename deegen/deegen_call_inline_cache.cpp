@@ -18,7 +18,7 @@ namespace dast {
 
 void DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(DeegenBytecodeImplCreatorBase* ifi,
                                                              llvm::Value* functionObject,
-                                                             llvm::Value*& calleeCbHeapPtr /*out*/,
+                                                             llvm::Value*& calleeCb /*out*/,
                                                              llvm::Value*& codePointer /*out*/,
                                                              llvm::Instruction* insertBefore)
 {
@@ -26,23 +26,23 @@ void DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(DeegenBytecodeImplC
     Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { functionObject }, insertBefore);
     ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 
-    calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertBefore);
+    calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertBefore);
     codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertBefore);
-    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+    ReleaseAssert(llvm_value_has_type<void*>(calleeCb));
     ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 }
 
 static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecodeImplCreator* ifi,
                                                              llvm::Value* functionObject,
-                                                             llvm::Value*& calleeCbHeapPtr /*out*/,
+                                                             llvm::Value*& calleeCb /*out*/,
                                                              llvm::Value*& codePointer /*out*/,
                                                              llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    calleeCbHeapPtr = nullptr;
+    calleeCb = nullptr;
     codePointer = nullptr;
-    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore /*insertBefore*/);
-    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCb /*out*/, codePointer /*out*/, insertBefore /*insertBefore*/);
+    ReleaseAssert(calleeCb != nullptr);
     ReleaseAssert(codePointer != nullptr);
 
     InterpreterCallIcMetadata& ic = ifi->GetBytecodeDef()->GetInterpreterCallIc();
@@ -63,7 +63,7 @@ static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecode
     if (x_allow_interpreter_tier_up_to_baseline_jit)
     {
         Value* doublyLinkAddr = ic.GetDoublyLink()->EmitGetAddress(ifi->GetModule(), ifi->GetBytecodeMetadataPtr(), insertBefore);
-        ifi->CallDeegenCommonSnippet("UpdateInterpreterCallIcDoublyLink", { calleeCbHeapPtr, doublyLinkAddr }, insertBefore);
+        ifi->CallDeegenCommonSnippet("UpdateInterpreterCallIcDoublyLink", { calleeCb, doublyLinkAddr }, insertBefore);
     }
 }
 
@@ -149,7 +149,7 @@ static bool WARN_UNUSED CheckCanHoistCallIcCheck(llvm::Value* functionObject,
 static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator* ifi,
                                                   llvm::Value* tv,
                                                   llvm::BranchInst* term,
-                                                  llvm::Value*& calleeCbHeapPtr /*out*/,
+                                                  llvm::Value*& calleeCb /*out*/,
                                                   llvm::Value*& codePointer /*out*/,
                                                   llvm::Instruction* insertBefore)
 {
@@ -224,8 +224,8 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
     ReleaseAssert(ic.GetCachedCodePointer()->GetSize() == 8);
     Value* icHitCodePtr = new LoadInst(llvm_type_of<void*>(ctx), cachedIcCodePtrAddr, "", false /*isVolatile*/, Align(ic.GetCachedCodePointer()->GetAlignment()), icHitBB);
 
-    Value* icHitCalleeCbHeapPtr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetCbHeapPtrFromTValueFuncObj", { tv }, icHitBB);
-    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(icHitCalleeCbHeapPtr));
+    Value* icHitCalleeCb = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetCbFromTValueFuncObj", { tv }, icHitBB);
+    ReleaseAssert(llvm_value_has_type<void*>(icHitCalleeCb));
     BranchInst::Create(bb, icHitBB);
 
     // The IC miss path should continue the original check on 'tv'
@@ -248,21 +248,21 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
 
     // Set up the logic in IC miss path ('updateIc' basic block), which should run the slow path and then populate IC
     //
-    Value* icMissCalleeCbHeapPtr = nullptr;
+    Value* icMissCalleeCb = nullptr;
     Value* icMissCodePtr = nullptr;
     Value* fo64 = ifi->CallDeegenCommonSnippet("GetFuncObjAsU64FromTValue", { tv }, updateIcBBEnd /*insertBefore*/);
     ReleaseAssert(llvm_value_has_type<uint64_t>(fo64));
-    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, fo64, icMissCalleeCbHeapPtr /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
-    ReleaseAssert(icMissCalleeCbHeapPtr != nullptr);
+    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, fo64, icMissCalleeCb /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
+    ReleaseAssert(icMissCalleeCb != nullptr);
     ReleaseAssert(icMissCodePtr != nullptr);
 
     // Set up the join block logic, which should simply be some PHI instructions that joins the ic-hit path and ic-miss path
     //
     ReleaseAssert(!bb->empty());
     Instruction* phiInsertionPt = bb->getFirstNonPHI();
-    PHINode* joinCalleeCbHeapPtr = PHINode::Create(llvm_type_of<HeapPtr<void>>(ctx), 2 /*reserveInDeg*/, "", phiInsertionPt);
-    joinCalleeCbHeapPtr->addIncoming(icHitCalleeCbHeapPtr, icHitBB);
-    joinCalleeCbHeapPtr->addIncoming(icMissCalleeCbHeapPtr, updateIc);
+    PHINode* joinCalleeCb = PHINode::Create(llvm_type_of<void*>(ctx), 2 /*reserveInDeg*/, "", phiInsertionPt);
+    joinCalleeCb->addIncoming(icHitCalleeCb, icHitBB);
+    joinCalleeCb->addIncoming(icMissCalleeCb, updateIc);
 
     PHINode* joinCodePtr = PHINode::Create(llvm_type_of<void*>(ctx), 2 /*reserveInDeg*/, "", phiInsertionPt);
     joinCodePtr->addIncoming(icHitCodePtr, icHitBB);
@@ -376,13 +376,13 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
         }
     }
 
-    calleeCbHeapPtr = joinCalleeCbHeapPtr;
+    calleeCb = joinCalleeCb;
     codePointer = joinCodePtr;
 }
 
 void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator* ifi,
                                                   llvm::Value* functionObject,
-                                                  llvm::Value*& calleeCbHeapPtr /*out*/,
+                                                  llvm::Value*& calleeCb /*out*/,
                                                   llvm::Value*& codePointer /*out*/,
                                                   llvm::Instruction* insertBefore)
 {
@@ -392,7 +392,7 @@ void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator
     {
         // Inline cache is not available for whatever reason, just honestly emit the slow path
         //
-        EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore);
+        EmitGenericGetCallTargetLogic(ifi, functionObject, calleeCb /*out*/, codePointer /*out*/, insertBefore);
         return;
     }
 
@@ -433,14 +433,14 @@ void DeegenCallIcLogicCreator::EmitForInterpreter(InterpreterBytecodeImplCreator
         {
             ReleaseAssert(tv != nullptr);
             ReleaseAssert(brInst != nullptr);
-            EmitInterpreterCallIcWithHoistedCheck(ifi, tv, brInst, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore);
+            EmitInterpreterCallIcWithHoistedCheck(ifi, tv, brInst, calleeCb /*out*/, codePointer /*out*/, insertBefore);
             return;
         }
     }
 
     // When we reach here, we cannot hoist the IC check. So just generate the slow path and update IC
     //
-    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, functionObject, calleeCbHeapPtr /*out*/, codePointer /*out*/, insertBefore);
+    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, functionObject, calleeCb /*out*/, codePointer /*out*/, insertBefore);
 }
 
 // Emit ASM magic for the CallIC direct-call case (i.e., cache on a fixed FunctionObject)
@@ -627,7 +627,7 @@ static llvm::Instruction* WARN_UNUSED CloneBasicBlockContainingInstruction(llvm:
 static llvm::FunctionType* WARN_UNUSED GetBaselineJitCallIcSlowPathFnPrototype(llvm::LLVMContext& ctx)
 {
     using namespace llvm;
-    StructType* retTy = StructType::get(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
+    StructType* retTy = StructType::get(ctx, { llvm_type_of<void*>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
     FunctionType* fty = FunctionType::get(
         retTy,
         {
@@ -669,11 +669,12 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         ReleaseAssert(isa<CallInst>(dcHitOrigin));
 
         GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CB32);
-        Value* dcHitCalleeCb = new AddrSpaceCastInst(gv, llvm_type_of<HeapPtr<void>>(ctx), "", dcHitOrigin);
+        Value* iGv = new PtrToIntInst(gv, llvm_type_of<uint32_t>(ctx), "", dcHitOrigin);
+        Value* dcHitCalleeCb = ifi->CallDeegenCommonSnippet("GetCalleeCbFromU32", { iGv }, dcHitOrigin);
         Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({
-            .calleeCbHeapPtr = dcHitCalleeCb,
+            .calleeCb = dcHitCalleeCb,
             .codePointer = dcHitCodePtr,
             .origin = dcHitOrigin
         });
@@ -690,7 +691,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     {
         ReleaseAssert(dcMissBB->empty());
         UnreachableInst* dummy = new UnreachableInst(ctx, dcMissBB);
-        // Kind of bad, we are hardcoding the assumption that the CalleeCbHeapPtr is just the zero-extension of calleeCbU32.. but stay simple for now..
+        // Kind of bad, we are hardcoding the assumption that the CalleeCb is just the zero-extension of calleeCbU32.. but stay simple for now..
         //
         Value* calleeCbU32 = ifi->CallDeegenCommonSnippet("GetCalleeCbU32FromTValue", { tv }, dummy /*insertBefore*/);
         InsertBaselineJitCallIcMagicAsmForClosureCall(ifi->GetModule(), calleeCbU32, ccHitBB, ccMissBB, unique_ord, dummy /*insertBefore*/);
@@ -709,12 +710,11 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         ReleaseAssert(isa<CallInst>(ccHitOrigin));
         ReleaseAssert(llvm_value_has_type<uint32_t>(calleeCbU32));
 
-        Value* calleeCbU64 = new ZExtInst(calleeCbU32, llvm_type_of<uint64_t>(ctx), "", ccHitOrigin);
-        Value* calleeCbHeapPtr = new IntToPtrInst(calleeCbU64, llvm_type_of<HeapPtr<void>>(ctx), "", ccHitOrigin);
+        Value* calleeCb = ifi->CallDeegenCommonSnippet("GetCalleeCbFromU32", { calleeCbU32 }, ccHitOrigin);
         Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({
-            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .calleeCb = calleeCb,
             .codePointer = codePtr,
             .origin = ccHitOrigin
         });
@@ -722,10 +722,10 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 
     // Emit logic for the IC miss block, and push the MakeCall instance to finalRes
     //
-    // Basically, we just need to call the create IC functor, which creates the IC and returns the CalleeCbHeapPtr and CodePtr
+    // Basically, we just need to call the create IC functor, which creates the IC and returns the CalleeCb and CodePtr
     //
     // However, currently the create IC takes CodeBlock, execFuncPtr and funcObj, and returns nothing for simplicity
-    // TODO: make it return CalleeCbHeapPtr and CodePtr so the slow path is slightly faster
+    // TODO: make it return CalleeCb and CodePtr so the slow path is slightly faster
     //
     auto emitIcMissBlock = [&](Instruction* icMissOrigin, Value* functionObjectTarget)
     {
@@ -762,13 +762,13 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         ReleaseAssert(codeBlockAndEntryPoint->getType()->isStructTy());
         ReleaseAssert(dyn_cast<StructType>(codeBlockAndEntryPoint->getType())->getNumElements() == 2);
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", icMissOrigin);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", icMissOrigin);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", icMissOrigin);
-        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCb));
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
         finalRes.push_back({
-            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .calleeCb = calleeCb,
             .codePointer = codePointer,
             .origin = icMissOrigin
         });
@@ -2217,7 +2217,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     // is *really* important as we heavily rely on LLVM code sinking pass to sink access to SlowPathData to
     // where the data is actually used. And the easiest way to achieve this is to use a parameter 'noalias' attribute.
     //
-    StructType* retTy = StructType::get(ctx, { llvm_type_of<HeapPtr<void>>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
+    StructType* retTy = StructType::get(ctx, { llvm_type_of<void*>(ctx) /*calleeCb32*/, llvm_type_of<void*>(ctx) /*codePtr*/ });
     FunctionType* fty = FunctionType::get(
         retTy,
         {
@@ -2296,11 +2296,11 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     BranchInst::Create(skipIcCreationBB /*trueBB*/, prepareCreateIcBB /*falseBB*/, isIcCountReachedMaximum, entryBB);
 
-    auto createReturnLogic = [&](Value* cbHeapPtr, Value* entryPoint, BasicBlock* bb)
+    auto createReturnLogic = [&](Value* cb, Value* entryPoint, BasicBlock* bb)
     {
-        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(cbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(cb));
         ReleaseAssert(llvm_value_has_type<void*>(entryPoint));
-        Value* tmp = InsertValueInst::Create(UndefValue::get(retTy), cbHeapPtr, { 0 /*idx*/ }, "", bb);
+        Value* tmp = InsertValueInst::Create(UndefValue::get(retTy), cb, { 0 /*idx*/ }, "", bb);
         tmp = InsertValueInst::Create(tmp, entryPoint, { 1 /*idx*/ }, "", bb);
         ReturnInst::Create(ctx, tmp, bb);
     };
@@ -2311,12 +2311,12 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, skipIcCreationBB);
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", skipIcCreationBB);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", skipIcCreationBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", skipIcCreationBB);
-        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCb));
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        createReturnLogic(calleeCbHeapPtr, codePointer, skipIcCreationBB);
+        createReturnLogic(calleeCb, codePointer, skipIcCreationBB);
     }
 
     // Read icSite->m_mode
@@ -2437,12 +2437,12 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcDcModeBB);
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcDcModeBB);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcDcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcDcModeBB);
-        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCb));
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
+        Value* calleeCbU32 = new PtrToIntInst(calleeCb, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
         Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
 
         std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
@@ -2461,7 +2461,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
                               bytecodeOperandList,
                               insertIcDcModeBB);
 
-        createReturnLogic(calleeCbHeapPtr, codePointer, insertIcDcModeBB);
+        createReturnLogic(calleeCb, codePointer, insertIcDcModeBB);
     }
 
     std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
@@ -2544,12 +2544,12 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcCcModeBB);
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcCcModeBB);
-        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCb));
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
+        Value* calleeCbU32 = new PtrToIntInst(calleeCb, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
         Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcCcModeBB);
 
         emitCallToIcCodegenFn(ccCgFn,
@@ -2561,7 +2561,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
                               bytecodeOperandList,
                               insertIcCcModeBB);
 
-        createReturnLogic(calleeCbHeapPtr, codePointer, insertIcCcModeBB);
+        createReturnLogic(calleeCb, codePointer, insertIcCcModeBB);
     }
 
     ValidateLLVMModule(module.get());

@@ -212,7 +212,7 @@ void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* fu
             target,
             ifi->GetCoroutineCtx(),
             ifi->GetStackBase(),
-            UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
+            UndefValue::get(llvm_type_of<void*>(ctx)),
             errorObject /*numArgs repurposed as errorObj*/,
             UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             callInst /*insertBefore*/);

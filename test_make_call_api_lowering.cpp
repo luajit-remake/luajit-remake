@@ -43,7 +43,7 @@ struct ExpectedResult
     uint64_t* m_stackStart;
     uint64_t* m_expectedCallFrameBase;
     uint64_t m_expectedNumArgs;
-    uint64_t m_expectedCbHeapPtr;
+    uint64_t m_expectedCb;
     uint64_t m_expectedIsMustTail;
     std::vector<uint64_t> m_expectedStackContent;
     bool m_checkerFnCalled;
@@ -51,14 +51,14 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cbHeapPtr, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cb, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
 {
     ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
     ReleaseAssert(tagRegister2 == TValue::x_mivTag);
     ReleaseAssert(g_expectedResult.m_expectedCoroCtx == coroCtx);
     ReleaseAssert(g_expectedResult.m_expectedCallFrameBase == stackBase);
     ReleaseAssert(g_expectedResult.m_expectedNumArgs == numArgs);
-    ReleaseAssert(g_expectedResult.m_expectedCbHeapPtr == cbHeapPtr);
+    ReleaseAssert(g_expectedResult.m_expectedCb == cb);
     ReleaseAssert(g_expectedResult.m_expectedIsMustTail == isMustTail);
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
@@ -237,7 +237,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
 
     g_expectedResult.m_expectedCoroCtx = coroCtx;
     g_expectedResult.m_stackStart = stack;
-    g_expectedResult.m_expectedCbHeapPtr = reinterpret_cast<uint64_t>(TranslateToHeapPtr(calleeCb));
+    g_expectedResult.m_expectedCb = reinterpret_cast<uint64_t>(calleeCb);
     g_expectedResult.m_expectedIsMustTail = isMustTail;
     g_expectedResult.m_checkerFnCalled = false;
 

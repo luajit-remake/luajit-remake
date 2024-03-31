@@ -3,11 +3,11 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static HeapPtr<ExecutableCode> DeegenSnippet_GetCbHeapPtrFromTValueFuncObj(TValue tv)
+static ExecutableCode* DeegenSnippet_GetCbFromTValueFuncObj(TValue tv)
 {
     HeapPtr<FunctionObject> o = tv.As<tFunction>();
     HeapPtr<ExecutableCode> ec = TCGet(o->m_executable).As();
-    return ec;
+    return TranslateToRawPointer(VM_GetActiveVMForCurrentThread(), ec);
 }
 
-DEFINE_DEEGEN_COMMON_SNIPPET("GetCbHeapPtrFromTValueFuncObj", DeegenSnippet_GetCbHeapPtrFromTValueFuncObj)
+DEFINE_DEEGEN_COMMON_SNIPPET("GetCbFromTValueFuncObj", DeegenSnippet_GetCbFromTValueFuncObj)

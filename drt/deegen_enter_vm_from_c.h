@@ -22,7 +22,7 @@ extern "C" DeegenInternalEnterVMFromCReturnResults deegen_enter_vm_from_c_impl(
     void* ghcFn,
     uint64_t* stackBase,
     uint64_t numArgs,
-    HeapPtr<CodeBlock> cbHeapPtr);
+    CodeBlock* cb);
 
 // This function should never be called from C/C++ code!
 //
@@ -52,6 +52,7 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     }
     HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(func->m_executable).As());
     void* ghcFn = cbHeapPtr->m_bestEntryPoint;
-    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, cbHeapPtr);
+    VM* vm = VM_GetActiveVMForCurrentThread();
+    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, TranslateToRawPointer(vm, cbHeapPtr));
     return std::make_pair(result.m_retStart, result.m_numRets);
 }

@@ -70,7 +70,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* preFixupStackBase = func->getArg(1);
         preFixupStackBase->setName("preFixupStackBase");
         Value* numArgsAsPtr = func->getArg(2);
-        Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
+        Value* calleeCodeBlock = func->getArg(3);
         Value* isMustTail64 = func->getArg(6);
 
         BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
@@ -79,12 +79,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
         numArgs->setName("numProvidedArgs");
 
-        ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
-        Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
+        ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
 
         // Set up the function implementation, which should call the baseline JIT codegen function and branch to JIT'ed code
         //
-        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlockHeapPtr }, entryBB);
+        Value* bcbAndCodePointer = CreateCallToDeegenCommonSnippet(module.get(), "TierUpIntoBaselineJit", { calleeCodeBlock }, entryBB);
         ReleaseAssert(bcbAndCodePointer->getType()->isStructTy());
         StructType* sty = dyn_cast<StructType>(bcbAndCodePointer->getType());
         ReleaseAssert(sty->elements().size() == 2);
@@ -99,7 +98,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
             codePointer,
             coroutineCtx,
             preFixupStackBase,
-            calleeCodeBlockHeapPtr,
+            calleeCodeBlock,
             numArgs,
             isMustTail64,
             dummyInst /*insertBefore*/);
@@ -182,7 +181,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     Value* preFixupStackBase = func->getArg(1);
     preFixupStackBase->setName("preFixupStackBase");
     Value* numArgsAsPtr = func->getArg(2);
-    Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
+    Value* calleeCodeBlock = func->getArg(3);
     Value* isMustTail64 = func->getArg(6);
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
@@ -191,8 +190,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
     numArgs->setName("numProvidedArgs");
 
-    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
-    Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
+    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
 
     // Check for tier up
     //
@@ -203,7 +201,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
         {
             // Check if we need to tier up
             //
-            Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCbHeapPtr", { calleeCodeBlockHeapPtr }, entryBB);
+            Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCb", { calleeCodeBlock }, entryBB);
             ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
 
             Value* shouldTierUp = new ICmpInst(*entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
@@ -223,7 +221,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
                 tierUpImpl,
                 coroutineCtx,
                 preFixupStackBase,
-                calleeCodeBlockHeapPtr,
+                calleeCodeBlock,
                 numArgs,
                 isMustTail64,
                 dummyInst /*insertBefore*/);
@@ -245,8 +243,6 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
     // Set up the normal execution BB, which should do the stack frame adjustments as needed and branch to the real function logic
     //
-    Value* calleeCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "SimpleTranslateToRawPointer", { calleeCodeBlockHeapPtr }, normalBB);
-    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
     calleeCodeBlock->setName("calleeCodeBlock");
 
     Value* bytecodePtr = nullptr;
@@ -349,7 +345,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
                                                                                        dummyInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(target));
 
-        Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
+        Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlock", { calleeCodeBlock }, dummyInst);
 
         InterpreterFunctionInterface::CreateDispatchToBytecode(
             target,

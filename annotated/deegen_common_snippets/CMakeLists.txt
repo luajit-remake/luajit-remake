@@ -54,7 +54,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   update_interpreter_tier_up_counter_for_return_or_throw.cpp
   update_interpreter_tier_up_counter_for_branch.cpp
   get_interpreter_tier_up_counter.cpp
-  get_interpreter_tier_up_counter_from_cb_heap_ptr.cpp
+  get_interpreter_tier_up_counter_from_cb.cpp
   tier_up_into_baseline_jit.cpp
   update_interpreter_call_ic_doubly_link.cpp
   osr_entry_into_baseline_jit.cpp
@@ -63,6 +63,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
+  get_callee_cb_from_u32.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

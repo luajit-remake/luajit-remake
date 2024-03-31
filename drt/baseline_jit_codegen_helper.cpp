@@ -332,9 +332,8 @@ void* WARN_UNUSED JitGenericInlineCacheSite::Insert(uint16_t traitKind)
     return entry->m_jitAddr;
 }
 
-BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr)
+BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(CodeBlock* cb)
 {
-    CodeBlock* cb = TranslateToRawPointer(cbHeapPtr);
     BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
     return {
         .baselineCodeBlock = bcb,

@@ -270,7 +270,7 @@ struct BaselineCodeBlockAndEntryPoint
 
 // Tier-up from interpreter to baseline JIT at a function entry
 //
-extern "C" BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr);
+extern "C" BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(CodeBlock* cb);
 
 // Tier-up from interpreter to baseline JIT at any point within a function
 // Returns the entry point corresponding to 'curBytecode'

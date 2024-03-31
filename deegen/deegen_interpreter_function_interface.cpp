@@ -270,14 +270,14 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToReturnContinuation
     return callInst;
 }
 
-llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlockHeapPtr, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore)
+llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value* codePointer, llvm::Value* coroutineCtx, llvm::Value* preFixupStackBase, llvm::Value* calleeCodeBlock, llvm::Value* numArgs, llvm::Value* isMustTail64, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
     LLVMContext& ctx = codePointer->getContext();
     ReleaseAssert(llvm_value_has_type<void*>(codePointer));
     ReleaseAssert(llvm_value_has_type<void*>(coroutineCtx));
     ReleaseAssert(llvm_value_has_type<void*>(preFixupStackBase));
-    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCodeBlockHeapPtr));
+    ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlock));
     ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
     ReleaseAssert(llvm_value_has_type<uint64_t>(isMustTail64));
     ReleaseAssert(insertBefore != nullptr);
@@ -286,10 +286,6 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value
     ReleaseAssert(func != nullptr);
 
     IntToPtrInst* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", insertBefore);
-    // We need this cast only because LLVM's rule of musttail which requires identical prototype..
-    // Callee will cast it back to HeapPtr
-    //
-    Value* fakeCodeBlockPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtr, llvm_type_of<void*>(ctx), "", insertBefore);
 
     CallInst* callInst = CallInst::Create(
         GetType(ctx),
@@ -298,7 +294,7 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value
             /*R13*/ coroutineCtx,
             /*RBP*/ preFixupStackBase,
             /*R12*/ numArgsAsPtr,
-            /*RBX*/ fakeCodeBlockPtr,
+            /*RBX*/ calleeCodeBlock,
             /*R14*/ func->getArg(4),
             /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
             /*RDI*/ isMustTail64,

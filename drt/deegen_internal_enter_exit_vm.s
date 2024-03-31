@@ -19,7 +19,7 @@ deegen_enter_vm_from_c_impl:
 	#   dst 0 (%r13): CoroutineCtx
 	#   dst 1 (%rbp): stackBase
 	#   dst 2 (%r12): numArgs
-	#   dst 3 (%rbx): cbHeapPtr
+	#   dst 3 (%rbx): cb
 	#   dst 4 (%r14): tag register 1
 	#   dst 5 (%rsi): (unused)
 	#   dst 6 (%rdi): isMustTail64 (should be 0)

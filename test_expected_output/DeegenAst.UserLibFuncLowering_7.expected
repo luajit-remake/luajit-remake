@@ -29,8 +29,11 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   %25 = inttoptr i64 %24 to ptr addrspace(256)
   %26 = getelementptr inbounds %0, ptr addrspace(256) %25, i64 0, i32 4
   %27 = load ptr, ptr addrspace(256) %26, align 8, !tbaa !13
-  %28 = addrspacecast ptr addrspace(256) %25 to ptr
-  musttail call ghccc void %27(ptr %0, ptr nonnull %17, ptr null, ptr %28, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %28 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !21
+  %29 = ptrtoint ptr %28 to i64
+  %30 = add i64 %29, %24
+  %31 = inttoptr i64 %30 to ptr
+  musttail call ghccc void %27(ptr %0, ptr nonnull %17, ptr null, ptr %31, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -61,3 +64,4 @@ attributes #1 = { nounwind }
 !18 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
 !19 = !{!"bool", !5, i64 0}
 !20 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}
+!21 = !{!4, !4, i64 0}
