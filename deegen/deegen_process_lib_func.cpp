@@ -325,7 +325,7 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(func->getParent(), "GetCalleeEntryPoint", { calleeValue }, callInst /*insertBefore*/);
         ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", callInst /*insertBefore*/);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", callInst /*insertBefore*/);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", callInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
@@ -333,7 +333,7 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
             codePointer,
             ifi->GetCoroutineCtx(),
             argsBegin,
-            calleeCbHeapPtr,
+            calleeCb,
             numArgs,
             CreateLLVMConstantInt<uint64_t>(ctx, 0) /*isTailCall*/,
             callInst /*insertBefore*/);

@@ -48,7 +48,7 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             // RBX [CC/MSABI callee saved]
             // For bytecode function: the current codeBlock
             // For return continuation: unused
-            // For function entry: codeblockHeapPtr
+            // For function entry: codeblock
             //
             llvm_type_of<void*>(ctx),
 
