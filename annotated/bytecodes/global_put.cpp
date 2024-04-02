@@ -65,7 +65,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
-    HeapPtr<TableObject> base = GetFEnvGlobalObject();
+    TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();
     ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
@@ -108,7 +108,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                     TValue oldValue = TCGet(base->m_inlineStorage[c_slot]);
                     if (unlikely(oldValue.Is<tNil>()))
                     {
-                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
+                        TValue mm = GetNewIndexMetamethodFromTableObject(TranslateToHeapPtr(base));
                         if (unlikely(!mm.Is<tNil>()))
                         {
                             return std::make_pair(mm, true /*hasMetamethod*/);
@@ -126,7 +126,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                     TValue oldValue = TCGet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)));
                     if (unlikely(oldValue.Is<tNil>()))
                     {
-                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
+                        TValue mm = GetNewIndexMetamethodFromTableObject(TranslateToHeapPtr(base));
                         if (unlikely(!mm.Is<tNil>()))
                         {
                             return std::make_pair(mm, true /*hasMetamethod*/);
@@ -145,7 +145,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
     }
 
     assert(!metamethod.Is<tNil>());
-    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), valueToPut, metamethod);
+    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(TranslateToHeapPtr(base)), valueToPut, metamethod);
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalPut)

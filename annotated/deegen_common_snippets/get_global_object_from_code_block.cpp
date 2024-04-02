@@ -3,9 +3,9 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static HeapPtr<TableObject> DeegenSnippet_GetGlobalObjectFromCodeBlock(CodeBlock* cb)
+static TableObject* DeegenSnippet_GetGlobalObjectFromCodeBlock(CodeBlock* cb)
 {
-    return cb->m_globalObject.As();
+    return TranslateToRawPointer(cb->m_globalObject.As());
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetGlobalObjectFromCodeBlock", DeegenSnippet_GetGlobalObjectFromCodeBlock)

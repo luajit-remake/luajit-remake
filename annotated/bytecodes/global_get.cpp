@@ -81,7 +81,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
-    HeapPtr<TableObject> base = GetFEnvGlobalObject();
+    TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();
     ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
@@ -122,7 +122,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         Return(result);
     }
 
-    EnterSlowPath<CheckMetatableSlowPath>(base);
+    EnterSlowPath<CheckMetatableSlowPath>(TranslateToHeapPtr(base));
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalGet)
