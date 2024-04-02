@@ -670,7 +670,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 
         GlobalVariable* gv = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CB32);
         Value* iGv = new PtrToIntInst(gv, llvm_type_of<uint32_t>(ctx), "", dcHitOrigin);
-        Value* dcHitCalleeCb = ifi->CallDeegenCommonSnippet("GetCalleeCbFromU32", { iGv }, dcHitOrigin);
+        Value* dcHitCalleeCb = ifi->CallDeegenCommonSnippet("GetCbFromU32", { iGv }, dcHitOrigin);
         Value* dcHitCodePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({
@@ -710,7 +710,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         ReleaseAssert(isa<CallInst>(ccHitOrigin));
         ReleaseAssert(llvm_value_has_type<uint32_t>(calleeCbU32));
 
-        Value* calleeCb = ifi->CallDeegenCommonSnippet("GetCalleeCbFromU32", { calleeCbU32 }, ccHitOrigin);
+        Value* calleeCb = ifi->CallDeegenCommonSnippet("GetCbFromU32", { calleeCbU32 }, ccHitOrigin);
         Value* codePtr = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR);
 
         finalRes.push_back({

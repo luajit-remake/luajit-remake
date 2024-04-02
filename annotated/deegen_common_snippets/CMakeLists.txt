@@ -63,7 +63,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
-  get_callee_cb_from_u32.cpp
+  get_cb_from_u32.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT
