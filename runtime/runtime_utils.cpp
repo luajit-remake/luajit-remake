@@ -183,12 +183,12 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
     return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
 }
 
-UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
+UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
     HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
-    assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
-    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
+    assert(TranslateToRawPointer(parent->m_executable.As())->IsBytecodeFunction());
+    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(parent->m_executable.As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
     UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
     for (uint32_t ord = 0; ord < numUpvalues; ord++)

@@ -977,13 +977,13 @@ public:
         }
     }
 
-    static TValue GetMutableUpvaluePtrOrImmutableUpvalue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue GetMutableUpvaluePtrOrImmutableUpvalue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
-        return TCGet(self->m_upvalues[ord]);
+        return self->m_upvalues[ord];
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame);
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame);
 
     static constexpr size_t GetTrailingArrayOffset()
     {

@@ -37,7 +37,7 @@ extern "C" TableObject* WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(const TValue* retStart, size_t numRets);
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(const TValue* retStart, size_t numRets);
-extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
+extern "C" FunctionObject* WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
 extern "C" size_t WARN_UNUSED ALWAYS_INLINE DeegenImpl_GetOutputBytecodeSlotOrdinal();
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetMutable(size_t ord);
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetImmutable(size_t ord);
@@ -114,7 +114,7 @@ inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadic
 //
 // Therefore, we must manually check if the upvalue is a self-reference and handle this case specially.
 //
-inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal)
+inline FunctionObject* WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal)
 {
     return DeegenImpl_CreateNewClosure(cb, selfBytecodeSlotOrdinal);
 }
