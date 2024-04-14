@@ -3,7 +3,7 @@
 #include "api_define_bytecode.h"
 #include "deegen_api.h"
 
-HeapPtr<FunctionObject> callee();
+FunctionObject* callee();
 
 size_t a1();
 

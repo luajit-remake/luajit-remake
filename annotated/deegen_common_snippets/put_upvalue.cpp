@@ -7,7 +7,7 @@ static void DeegenSnippet_PutUpvalue(uint64_t* stackBase, size_t upvalueOrd, TVa
 {
     StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     assert(upvalueOrd < hdr->m_func->m_numUpvalues);
-    HeapPtr<Upvalue> uv = FunctionObject::GetMutableUpvaluePtr(hdr->m_func, upvalueOrd);
+    HeapPtr<Upvalue> uv = FunctionObject::GetMutableUpvaluePtr(TranslateToHeapPtr(hdr->m_func), upvalueOrd);
     TValue* ptr = uv->m_ptr;
     *ptr = valueToPut;
 }

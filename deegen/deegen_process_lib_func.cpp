@@ -321,7 +321,6 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
 
         Value* calleeSlot = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), argsBegin, { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", callInst /*insertBefore*/);
         Value* calleeValue = new LoadInst(llvm_type_of<uint64_t>(ctx), calleeSlot, "", false /*isVolatile*/, Align(8), callInst /*insertBefore*/);
-
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(func->getParent(), "GetCalleeEntryPoint", { calleeValue }, callInst /*insertBefore*/);
         ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 

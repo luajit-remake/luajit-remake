@@ -5,7 +5,7 @@
 
 static void* DeegenSnippet_CreateNewJitCallIcForClosureCallModeSite(JitCallInlineCacheSite* site, uint16_t dcIcTraitKind, TValue tv)
 {
-    return site->InsertInClosureCallMode(dcIcTraitKind, tv);
+    return site->InsertInClosureCallMode(dcIcTraitKind, tv.m_value);
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("CreateNewJitCallIcForClosureCallModeSite", DeegenSnippet_CreateNewJitCallIcForClosureCallModeSite)

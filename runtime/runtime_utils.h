@@ -16,6 +16,11 @@ class CodeBlock;
 
 class Upvalue;
 
+inline void StorePtrToCallframe(TValue *callframe, void *ptr)
+{
+    reinterpret_cast<void**>(callframe)[0] = ptr;
+}
+
 inline void NO_RETURN WriteBarrierSlowPath(void* /*obj*/, uint8_t* /*cellState*/)
 {
     // TODO: implement
@@ -415,7 +420,7 @@ struct __attribute__((__packed__, __aligned__(1))) JitCallInlineCacheSite
     //
     // Use attribute 'malloc' to teach LLVM that the returned address is noalias, which is very useful due to how our codegen function is written
     //
-    __attribute__((__malloc__)) void* WARN_UNUSED InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/);
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInDirectCallMode(uint16_t dcIcTraitKind, uint64_t tvU64, uint8_t* transitedToCCMode /*out*/);
 
     // May only be called if m_numEntries < x_maxEntries and m_mode != DirectCall
     // This function handles everything except actually JIT'ting code
@@ -424,7 +429,7 @@ struct __attribute__((__packed__, __aligned__(1))) JitCallInlineCacheSite
     //
     // Note that the passed in IcTraitKind is the DC one, not the CC one!
     //
-    __attribute__((__malloc__)) void* WARN_UNUSED InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv);
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInClosureCallMode(uint16_t dcIcTraitKind, uint64_t tvU64);
 };
 static_assert(sizeof(JitCallInlineCacheSite) == 8);
 static_assert(alignof(JitCallInlineCacheSite) == 1);

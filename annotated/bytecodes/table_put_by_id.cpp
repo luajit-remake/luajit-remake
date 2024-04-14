@@ -25,7 +25,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByIdMetamethodCallContinuation);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByIdMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {

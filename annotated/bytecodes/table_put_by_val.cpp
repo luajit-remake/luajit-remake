@@ -43,7 +43,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
@@ -183,7 +183,7 @@ double_index_handle_metamethod:
             assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
-                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
 
             // Recurse on 'metamethod[index]'
@@ -253,7 +253,7 @@ property_index_handle_metamethod:
             assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
-                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
 
             // Recurse on 'metamethod[index]'
@@ -289,7 +289,7 @@ static void NO_RETURN HandleNotTableObjectNotInt64IndexSlowPath(TValue /*bc_base
 
         if (metamethod.Is<tFunction>())
         {
-            MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
         }
 
         base = metamethod;

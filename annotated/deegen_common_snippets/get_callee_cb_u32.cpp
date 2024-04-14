@@ -3,10 +3,10 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(TValue tv)
+static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(uint64_t tv)
 {
-    HeapPtr<FunctionObject> o = tv.As<tFunction>();
-    SystemHeapPointer<ExecutableCode> ec = TCGet(o->m_executable);
+    FunctionObject* o = reinterpret_cast<FunctionObject*>(tv);
+    SystemHeapPointer<ExecutableCode> ec = o->m_executable;
     return ec.m_value;
 }
 

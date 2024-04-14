@@ -2723,7 +2723,7 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
     return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
 }
 
-inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointer<void> metatableMaybeNull)
+inline FunctionObject* GetCallMetamethodFromMetatableImpl(UserHeapPointer<void> metatableMaybeNull)
 {
     if (metatableMaybeNull.m_value == 0)
     {
@@ -2736,7 +2736,7 @@ inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointe
     TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
     if (likely(target.Is<tFunction>()))
     {
-        return target.As<tFunction>();
+        return TranslateToRawPointer(target.As<tFunction>());
     }
     else
     {
@@ -2754,7 +2754,7 @@ inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointe
 //
 // In Lua 5.4 this behavior has changed and __call can be recursive, and this function will need to be extended correspondingly.
 //
-inline HeapPtr<FunctionObject> WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(TValue value)
+inline FunctionObject* WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(TValue value)
 {
     assert(!value.Is<tFunction>());
 

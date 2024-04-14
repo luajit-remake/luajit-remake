@@ -50,7 +50,7 @@ static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -109,7 +109,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -177,7 +177,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -244,7 +244,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -284,7 +284,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
+            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])

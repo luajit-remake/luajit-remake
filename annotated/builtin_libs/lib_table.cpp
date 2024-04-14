@@ -979,20 +979,20 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(table_sort_no_comparator_continuation)
     if (likely(mm.Is<tFunction>()))
     {
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = mm;
+        reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(mm.As<tFunction>());
         callFrame[x_numSlotsForStackFrameHeader] = lhs;
         callFrame[x_numSlotsForStackFrameHeader + 1] = rhs;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_no_comparator_continuation));
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(mm);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(mm);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(mm));
         }
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        reinterpret_cast<void**>(callFrame)[0] = callTarget;
         callFrame[x_numSlotsForStackFrameHeader] = mm;
         callFrame[x_numSlotsForStackFrameHeader + 1] = lhs;
         callFrame[x_numSlotsForStackFrameHeader + 2] = rhs;
@@ -1020,7 +1020,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(table_sort_usr_comparator_continuation)
     assert(fn.Is<tFunction>());
     qsm.PutToStack();
     TValue* callFrame = qsm.CallFrameEnd();
-    callFrame[0] = fn;
+    reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(fn.As<tFunction>());
     callFrame[x_numSlotsForStackFrameHeader] = action.lhs;
     callFrame[x_numSlotsForStackFrameHeader + 1] = action.rhs;
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_usr_comparator_continuation));
@@ -1077,7 +1077,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
 
         qsm.PutToStack();
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = TValue::Create<tFunction>(func);
+        reinterpret_cast<uint64_t*>(callFrame)[0] = reinterpret_cast<uint64_t>(TranslateToRawPointer(func));
         callFrame[x_numSlotsForStackFrameHeader] = action.lhs;
         callFrame[x_numSlotsForStackFrameHeader + 1] = action.rhs;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_usr_comparator_continuation));
@@ -1229,20 +1229,20 @@ slowpath:
         if (likely(mm.Is<tFunction>()))
         {
             TValue* callFrame = qsm.CallFrameEnd();
-            callFrame[0] = mm;
+            reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(mm.As<tFunction>());
             callFrame[x_numSlotsForStackFrameHeader] = lhs;
             callFrame[x_numSlotsForStackFrameHeader + 1] = rhs;
             MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_no_comparator_continuation));
         }
         else
         {
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(mm);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(mm);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(mm));
             }
             TValue* callFrame = qsm.CallFrameEnd();
-            callFrame[0] = TValue::Create<tFunction>(callTarget);
+            reinterpret_cast<void**>(callFrame)[0] = callTarget;
             callFrame[x_numSlotsForStackFrameHeader] = mm;
             callFrame[x_numSlotsForStackFrameHeader + 1] = lhs;
             callFrame[x_numSlotsForStackFrameHeader + 2] = rhs;

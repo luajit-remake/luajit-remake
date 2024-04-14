@@ -111,7 +111,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    HeapPtr<FunctionObject> calleefo = FunctionObject::Create(vm, calleeCb).As();
+    FunctionObject* calleefo = TranslateToRawPointer(FunctionObject::Create(vm, calleeCb).As());
 
     CodeBlock* callerCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(callerCb);
@@ -119,7 +119,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     callerCb->m_numUpvalues = 0;
     callerCb->m_stackFrameNumSlots = static_cast<uint32_t>(numLocals);
     uint8_t* curBytecode = callerCb->GetBytecodeStream() + 50;
-    HeapPtr<FunctionObject> callerfo = FunctionObject::Create(vm, callerCb).As();
+    FunctionObject* callerfo = TranslateToRawPointer(FunctionObject::Create(vm, callerCb).As());
 
     std::unordered_map<Instruction*, Value*> replaceInstByValueMap;
     std::unordered_map<Instruction*, Instruction*> replaceInstByInstMap;
@@ -152,7 +152,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
                         else if (demangledName == "callee()")
                         {
                             Constant* ptrVal = CreateLLVMConstantInt<uint64_t>(ctx, reinterpret_cast<uint64_t>(calleefo));
-                            Instruction* replaceInst = new IntToPtrInst(ptrVal, llvm_type_of<HeapPtr<void>>(ctx));
+                            Instruction* replaceInst = new IntToPtrInst(ptrVal, llvm_type_of<void*>(ctx));
                             ReleaseAssert(inst.getType() == replaceInst->getType());
                             ReleaseAssert(!replaceInstByValueMap.count(&inst));
                             ReleaseAssert(!replaceInstByInstMap.count(&inst));
@@ -244,7 +244,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     StackFrameHeader* rootSfh = reinterpret_cast<StackFrameHeader*>(stack);
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
-    rootSfh->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(1000000345);
+    rootSfh->m_func = TranslateToRawPointer(reinterpret_cast<HeapPtr<FunctionObject>>(1000000345));
     rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* callerStackBegin = reinterpret_cast<uint64_t*>(rootSfh + 1);

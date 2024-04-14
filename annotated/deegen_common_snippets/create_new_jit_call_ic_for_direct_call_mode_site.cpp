@@ -5,7 +5,7 @@
 
 static void* DeegenSnippet_CreateNewJitCallIcForDirectCallModeSite(JitCallInlineCacheSite* site, uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode)
 {
-    return site->InsertInDirectCallMode(dcIcTraitKind, tv, transitedToCCMode);
+    return site->InsertInDirectCallMode(dcIcTraitKind, tv.m_value, transitedToCCMode);
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("CreateNewJitCallIcForDirectCallModeSite", DeegenSnippet_CreateNewJitCallIcForDirectCallModeSite)

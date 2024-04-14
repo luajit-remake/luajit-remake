@@ -36,10 +36,10 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
     //
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), input, LengthOperatorMetamethodCallContinuation);
+        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), input, LengthOperatorMetamethodCallContinuation);
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));

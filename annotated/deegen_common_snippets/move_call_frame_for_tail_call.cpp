@@ -14,12 +14,12 @@ static void* DeegenSnippet_MoveCallFrameForTailCall(void* stackBase, uint64_t ta
     uint32_t numVarArgs = hdr->m_numVariadicArguments;
     if (likely(numVarArgs == 0))
     {
-        hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);
+        hdr->m_func = reinterpret_cast<FunctionObject*>(target);
         return stackBase;
     }
     else
     {
-        hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);
+        hdr->m_func = reinterpret_cast<FunctionObject*>(target);
         hdr->m_numVariadicArguments = 0;
 
         StackFrameHeader* dstHdr = reinterpret_cast<StackFrameHeader*>(reinterpret_cast<uint64_t*>(hdr) - numVarArgs);

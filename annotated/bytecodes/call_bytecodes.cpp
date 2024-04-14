@@ -20,7 +20,7 @@ static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint16_t /*n
 template<bool passVariadicRes, bool storeVariadicRes>
 static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, uint16_t /*numRets*/, TValue* argStart, uint16_t numArgs, TValue func)
 {
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(func));
@@ -44,13 +44,14 @@ static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, uint16_t
 
     if (likely(func.Is<tFunction>()))
     {
+        FunctionObject* callee = TranslateToRawPointer(func.As<tFunction>());
         if constexpr(passVariadicRes)
         {
-            MakeInPlaceCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
+            MakeInPlaceCallPassingVariadicRes(callee, argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
         }
         else
         {
-            MakeInPlaceCall(func.As<tFunction>(), argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
+            MakeInPlaceCall(callee, argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);
         }
     }
 

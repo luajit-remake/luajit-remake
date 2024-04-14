@@ -97,10 +97,10 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
 
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
+            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
         }
 
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));

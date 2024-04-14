@@ -35,7 +35,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   store_variadic_args_as_variadic_results.cpp
   get_variadic_results_start.cpp
   box_function_object_to_tvalue.cpp
-  get_cb_heap_ptr_from_tvalue.cpp
+  get_cb_from_tvalue.cpp
   get_func_obj_as_u64_from_tvalue.cpp
   get_immutable_upvalue.cpp
   get_mutable_upvalue.cpp

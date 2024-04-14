@@ -87,7 +87,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_dofile_read_stdin_continuation)
 
     assert(r1.Is<tFunction>());
     TValue* callFrame = GetStackBase();
-    callFrame[0] = r1;
+    reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(r1.As<tFunction>());
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
 }
 
@@ -106,7 +106,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_dofile)
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
         TValue* callframe = GetStackBase();
-        callframe[0] = vm->GetLibFn<VM::LibFn::BaseLoad>();
+        StorePtrToCallframe(callframe, TranslateToRawPointer(vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>()));
         callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
         MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_read_stdin_continuation));
     }
@@ -114,18 +114,18 @@ DEEGEN_DEFINE_LIB_FUNC(base_dofile)
     GET_ARG_AS_STRING(dofile, 1, fileNamePtr, fileNameLen);
     std::ignore = fileNameLen;
 
-    HeapPtr<FunctionObject> entryPoint;
+    FunctionObject* entryPoint;
     {
         ParseResult res = ParseLuaScriptFromFile(GetCurrentCoroutine(), fileNamePtr);
         if (res.m_scriptModule.get() == nullptr)
         {
             ThrowError(res.errMsg);
         }
-        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
+        entryPoint = TranslateToRawPointer(res.m_scriptModule->m_defaultEntryPoint.As());
     }
 
     TValue* callFrame = GetStackBase();
-    callFrame[0] = TValue::Create<tFunction>(entryPoint);
+    StorePtrToCallframe(callFrame, entryPoint);
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
 }
 
@@ -299,7 +299,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
 
         TValue* callFrame = sb + 4;
         assert(sb[0].Is<tFunction>());
-        callFrame[0] = sb[0];
+        StorePtrToCallframe(callFrame, TranslateToRawPointer(sb[0].As<tFunction>()));
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
     }
 
@@ -346,7 +346,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
     {
         ThrowError("bad argument #1 to 'load' (function expected)");
     }
-    HeapPtr<FunctionObject> func = GetArg(0).As<tFunction>();
+    FunctionObject* func = TranslateToRawPointer(GetArg(0).As<tFunction>());
 
     // Put all the string pieces into a table
     //
@@ -357,7 +357,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
     sb[3] = TValue::Create<tInt32>(0);
 
     TValue* callFrame = sb + 4;
-    callFrame[0] = TValue::Create<tFunction>(func);
+    StorePtrToCallframe(callFrame, func);
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
 }
 
@@ -379,7 +379,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
         TValue* callframe = GetStackBase();
-        callframe[0] = vm->GetLibFn<VM::LibFn::BaseLoad>();
+        StorePtrToCallframe(callframe, TranslateToRawPointer(vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>()));
         callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
         MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_loadfile_continuation));
     }
@@ -696,6 +696,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_print_continuation)
     // from the call frame. This is required to exhibit identical behavior as official Lua implementation.
     //
     TValue toStringFn = sb[numElementsToPrint + 1];
+    uint64_t toStringFnU64 = reinterpret_cast<uint64_t>(TranslateToRawPointer(toStringFn.As<tFunction>()));
     if (unlikely(toStringFn.m_value != vm->GetLibFn<VM::LibFn::BaseToString>().m_value))
     {
         goto make_call_slowpath;
@@ -727,18 +728,18 @@ make_call_slowpath:
     TValue* callFrame = sb + numElementsToPrint + 2;
     if (likely(toStringFn.Is<tFunction>()))
     {
-        callFrame[0] = toStringFn;
+        reinterpret_cast<uint64_t*>(callFrame)[0] = toStringFnU64;
         callFrame[x_numSlotsForStackFrameHeader] = valueToPrint;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(toStringFn);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(toStringFn);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(toStringFn));
         }
-        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        StorePtrToCallframe(callFrame, callTarget);
         callFrame[x_numSlotsForStackFrameHeader] = toStringFn;
         callFrame[x_numSlotsForStackFrameHeader + 1] = valueToPrint;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
@@ -775,6 +776,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_print)
     size_t cur = 0;
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, currentCoro->m_globalObject.As());
+    auto toStringFnU64 = reinterpret_cast<uint64_t>(TranslateToRawPointer(toStringFn.As<tFunction>()));
     if (unlikely(!isToStringUnchanged))
     {
         goto make_call_slowpath;
@@ -817,18 +819,18 @@ make_call_slowpath:
     TValue* callFrame = sb + numArgs + 2;
     if (likely(toStringFn.Is<tFunction>()))
     {
-        callFrame[0] = toStringFn;
+        reinterpret_cast<uint64_t*>(callFrame)[0] = toStringFnU64;
         callFrame[x_numSlotsForStackFrameHeader] = valueToPrint;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(toStringFn);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(toStringFn);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(toStringFn));
         }
-        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        reinterpret_cast<void**>(callFrame)[0] = callTarget;
         callFrame[x_numSlotsForStackFrameHeader] = toStringFn;
         callFrame[x_numSlotsForStackFrameHeader + 1] = valueToPrint;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_print_continuation));
@@ -1372,18 +1374,18 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
     TValue* callFrame = GetStackBase();
     if (likely(metamethod.Is<tFunction>()))
     {
-        callFrame[0] = metamethod;
+        reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(metamethod.As<tFunction>());
         callFrame[x_numSlotsForStackFrameHeader] = value;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_tostring_continuation));
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));
         }
-        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        reinterpret_cast<void**>(callFrame)[0] = callTarget;
         callFrame[x_numSlotsForStackFrameHeader] = metamethod;
         callFrame[x_numSlotsForStackFrameHeader + 1] = value;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_tostring_continuation));

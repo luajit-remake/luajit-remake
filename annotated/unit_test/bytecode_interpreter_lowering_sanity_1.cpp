@@ -16,7 +16,7 @@ static void NO_RETURN testfn(TValue lhs, TValue rhs)
     }
     else if (lhs.Is<tFunction>())
     {
-        MakeCall(lhs.As<tFunction>(), rhs, testfncont);
+        MakeCall(TranslateToRawPointer(lhs.As<tFunction>()), rhs, testfncont);
     }
     else
     {

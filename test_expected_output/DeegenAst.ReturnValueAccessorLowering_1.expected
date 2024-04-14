@@ -3,7 +3,7 @@ source_filename = "/home/u/project/annotated/unit_test/return_value_accessor_api
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-%0 = type { ptr addrspace(256), ptr, ptr, %1, i32 }
+%0 = type { ptr, ptr, ptr, %1, i32 }
 %1 = type { i32 }
 
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
@@ -20,9 +20,9 @@ define dso_local ghccc void @__deegen_interpreter_op_test1_0_retcont_0(ptr %0, p
   %22 = add i64 %21, %19
   %23 = inttoptr i64 %22 to ptr
   %24 = getelementptr inbounds %0, ptr %16, i64 -1
-  %25 = load ptr addrspace(256), ptr %24, align 8, !tbaa !11
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %25, align 4, !tbaa !12
-  %26 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
+  %25 = load ptr, ptr %24, align 8, !tbaa !11
+  %.sroa.0.0.copyload.i.i = load i32, ptr %25, align 4, !tbaa.struct !12
+  %26 = zext i32 %.sroa.0.0.copyload.i.i to i64
   %27 = add i64 %26, %21
   %28 = inttoptr i64 %27 to ptr
   %29 = getelementptr inbounds i8, ptr %23, i64 2
@@ -58,4 +58,5 @@ attributes #1 = { nounwind }
 !9 = !{!7, !8, i64 0}
 !10 = !{!4, !4, i64 0}
 !11 = !{!3, !4, i64 0}
-!12 = !{!5, !5, i64 0}
+!12 = !{i64 0, i64 4, !13}
+!13 = !{!8, !8, i64 0}

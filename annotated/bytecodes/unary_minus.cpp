@@ -40,7 +40,7 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
 
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), input, input, UnaryMinusMetamethodCallContinuation);
+        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), input, input, UnaryMinusMetamethodCallContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))
@@ -50,7 +50,7 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
         ThrowError("Invalid type for unary minus");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));

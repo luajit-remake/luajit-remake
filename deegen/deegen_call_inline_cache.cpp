@@ -2541,7 +2541,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, jitAddr /*newDest*/, insertIcCcModeBB);
 
         CallInst* targetFnObject = CreateCallToDeegenCommonSnippet(module.get(), "GetFuncObjAsU64FromTValue", { targetTv }, insertIcCcModeBB);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject));
+        ReleaseAssert(llvm_value_has_type<uint64_t>(targetFnObject)); // TODO: translate targetFnObject into a vaild pointer
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetFnObject }, insertIcCcModeBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);

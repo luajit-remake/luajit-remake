@@ -333,10 +333,11 @@ void JitCallInlineCacheEntry::Destroy(VM* vm)
     vm->DeallocateSpdsRegionObject(this);
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, uint64_t tvU64, uint8_t* transitedToCCMode /*out*/)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::DirectCall);
+    TValue tv = TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(tvU64)));
     assert(tv.Is<tFunction>());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
@@ -457,14 +458,15 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     return entry->GetJitRegionStart();
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, uint64_t tvU64)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
+    TValue tv = TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(tvU64)));
     assert(tv.Is<tFunction>());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
-    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* targetEc = TranslateToRawPointer(TCGet(tv.As<tFunction>()->m_executable).As());
 
 #ifndef NDEBUG
     // In debug mode, validate that assorted information of the linked list is as expected
@@ -474,7 +476,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
         SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
         while (!linkListNode.IsInvalidPtr())
         {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(linkListNode.AsPtr());
             assert(entry->GetIcTraitKind() == dcIcTraitKind + 1);
             assert(!entry->GetIcTrait()->m_isDirectCallMode);
 

@@ -180,7 +180,7 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))
@@ -190,7 +190,7 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
         ThrowError("Invalid types for concat");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
@@ -220,7 +220,7 @@ static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))
@@ -230,7 +230,7 @@ static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
         ThrowError("Invalid types for concat");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));

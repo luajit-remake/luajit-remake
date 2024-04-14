@@ -5,7 +5,7 @@
 
 static FunctionObject* DeegenSnippet_CreateNewClosureFromCodeBlock(CodeBlock* codeblockOfClosureToCreate, CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, size_t selfStackFrameOrdinal)
 {
-    return TranslateToRawPointer(FunctionObject::CreateAndFillUpvalues(codeblockOfClosureToCreate, coroCtx, reinterpret_cast<TValue*>(stackBase), TranslateToRawPointer(StackFrameHeader::Get(stackBase)->m_func), selfStackFrameOrdinal).As());
+    return TranslateToRawPointer(FunctionObject::CreateAndFillUpvalues(codeblockOfClosureToCreate, coroCtx, reinterpret_cast<TValue*>(stackBase), StackFrameHeader::Get(stackBase)->m_func, selfStackFrameOrdinal).As());
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("CreateNewClosureFromCodeBlock", DeegenSnippet_CreateNewClosureFromCodeBlock)

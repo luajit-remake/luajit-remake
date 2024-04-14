@@ -1,18 +1,18 @@
 #include "deegen_api.h"
 
-HeapPtr<FunctionObject> GetCallee(TValue lhs, TValue rhs);
+FunctionObject* GetCallee(TValue lhs, TValue rhs);
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue rhs)
 {
     if (lhs.Is<tFunction>())
     {
-        MakeCall(lhs.As<tFunction>(), lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
+        MakeCall(TranslateToRawPointer(lhs.As<tFunction>()), lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }
     else if (rhs.Is<tFunction>())
     {
-        MakeTailCall(rhs.As<tFunction>(), rhs, lhs);
+        MakeTailCall(TranslateToRawPointer(rhs.As<tFunction>()), rhs, lhs);
     }
     else
     {
@@ -26,7 +26,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue* vbegin, size
 {
     if (vbegin->Is<tFunction>())
     {
-        MakeInPlaceCall(vbegin->As<tFunction>(), vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
+        MakeInPlaceCall(TranslateToRawPointer(vbegin->As<tFunction>()), vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }

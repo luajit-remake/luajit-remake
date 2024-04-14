@@ -1090,7 +1090,7 @@ public:
     // The function corresponding to this stack frame
     // Must be first element: this is expected by a lot of places
     //
-    HeapPtr<FunctionObject> m_func;
+    FunctionObject* m_func;
     // The address of the caller stack frame (points to the END of the stack frame header)
     //
     void* m_caller;

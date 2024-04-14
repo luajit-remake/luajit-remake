@@ -42,7 +42,7 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(lowestAvailableVMStackAddress);
     hdr->m_caller = nullptr;
     hdr->m_retAddr = reinterpret_cast<void*>(deegen_internal_use_only_exit_vm_epilogue);
-    hdr->m_func = func;
+    hdr->m_func = TranslateToRawPointer(func);
     hdr->m_callerBytecodePtr = 0;
     hdr->m_numVariadicArguments = 0;
     uint64_t* stackBase = reinterpret_cast<uint64_t*>(hdr + 1);
@@ -52,7 +52,6 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     }
     HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(func->m_executable).As());
     void* ghcFn = cbHeapPtr->m_bestEntryPoint;
-    VM* vm = VM_GetActiveVMForCurrentThread();
-    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, TranslateToRawPointer(vm, cbHeapPtr));
+    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, TranslateToRawPointer(cbHeapPtr));
     return std::make_pair(result.m_retStart, result.m_numRets);
 }

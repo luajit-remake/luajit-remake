@@ -13,7 +13,7 @@ deegen_enter_vm_from_c_impl:
 	#   arg 1 (%rsi): the GHC-calling-conv callee
 	#   arg 2 (%rdx): stackBase
 	#   arg 3 (%rcx): numArgs
-	#   arg 4 (%r8): cbHeapPtr
+	#   arg 4 (%r8): cb
 	#
 	# The GHC calling convention callee expects:
 	#   dst 0 (%r13): CoroutineCtx
@@ -53,7 +53,7 @@ deegen_enter_vm_from_c_impl:
 	#
 	movq	%rcx, %r12
 	
-	# Move cbHeapPtr (%r8)
+	# Move cb (%r8)
 	#
 	movq	%r8, %rbx
 	

@@ -286,7 +286,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         // it as is fow now.
         //
         TValue* callFrameBegin = GetStackBase() + stackFrameSize;
-        callFrameBegin[0] = TValue::CreatePointer(handler);
+        reinterpret_cast<void**>(callFrameBegin)[0] = TranslateToRawPointer(handler.As());
         callFrameBegin[x_numSlotsForStackFrameHeader] = errorObject;
         MakeInPlaceCall(callFrameBegin + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallErrorReturn));
     }
@@ -353,14 +353,14 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
     TValue* callStart = stackbase + 2;
     if (likely(calleeInput.Is<tFunction>()))
     {
-        callStart[0] = calleeInput;
+        reinterpret_cast<uint64_t*>(callStart)[0] = reinterpret_cast<uint64_t>(TranslateToRawPointer(calleeInput.As<tFunction>()));
         MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(calleeInput);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(calleeInput);
     if (likely(callTarget != nullptr))
     {
-        callStart[0] = TValue::Create<tFunction>(callTarget);
+        reinterpret_cast<uint64_t*>(callStart)[0] = reinterpret_cast<uint64_t>(callTarget);
         callStart[x_numSlotsForStackFrameHeader] = calleeInput;
         MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
     }
@@ -383,7 +383,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
         TValue baseDotError = VM_GetLibFunctionObject<VM::LibFn::BaseError>();
         assert(baseDotError.Is<tFunction>());
 
-        callStart[0] = baseDotError;
+        StorePtrToCallframe(callStart, TranslateToRawPointer(baseDotError.As<tFunction>()));
         callStart[x_numSlotsForStackFrameHeader] = MakeErrorMessageForUnableToCall(calleeInput);
 
         MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
@@ -429,11 +429,11 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     if (likely(calleeInput.Is<tFunction>()))
     {
         memmove(callFrameBegin + x_numSlotsForStackFrameHeader, stackbase + 1 /*inputArgsBegin*/, sizeof(TValue) * numCalleeArgs);
-        callFrameBegin[0] = calleeInput;
+        reinterpret_cast<void**>(callFrameBegin)[0] = TranslateToRawPointer(calleeInput.As<tFunction>());
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(calleeInput);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(calleeInput);
         if (unlikely(callTarget == nullptr))
         {
             // The function is not callable, we should return false + 'unable to call' error msg
@@ -443,7 +443,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
 
         memmove(callFrameBegin + x_numSlotsForStackFrameHeader + 1, stackbase + 1 /*inputArgsBegin*/, sizeof(TValue) * numCalleeArgs);
         callFrameBegin[x_numSlotsForStackFrameHeader] = calleeInput;
-        callFrameBegin[0] = TValue::Create<tFunction>(callTarget);
+        StorePtrToCallframe(callFrameBegin, callTarget);
         numCalleeArgs++;
     }
 

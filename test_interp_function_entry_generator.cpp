@@ -124,7 +124,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     StackFrameHeader* rootSfh = reinterpret_cast<StackFrameHeader*>(stack);
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
-    rootSfh->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(1000000345);
+    rootSfh->m_func = TranslateToRawPointer(reinterpret_cast<HeapPtr<FunctionObject>>(1000000345));
     rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* previousFrameEnd = reinterpret_cast<uint64_t*>(rootSfh + 1);
@@ -132,7 +132,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(previousFrameEnd);
     hdr->m_caller = rootSfh + 1;
     hdr->m_retAddr = reinterpret_cast<void*>(22345678987654322ULL);
-    hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(12345678987654321ULL);
+    hdr->m_func = reinterpret_cast<FunctionObject*>(12345678987654321ULL);
     hdr->m_callerBytecodePtr.m_value = 50;
     hdr->m_numVariadicArguments = 0;
 

@@ -243,10 +243,10 @@ do_metamethod_call:
         {
             if (likely(metamethod.Is<tFunction>()))
             {
-                MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
             }
 
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(metamethod));
@@ -260,10 +260,10 @@ do_metamethod_call_lt_for_le:
             //
             if (likely(metamethod.Is<tFunction>()))
             {
-                MakeCall(metamethod.As<tFunction>(), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
+                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
             }
 
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(metamethod));

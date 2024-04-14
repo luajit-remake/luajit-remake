@@ -89,10 +89,10 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 do_metamethod_call:
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(metamethod.As<tFunction>(), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
+            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
         }
 
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));

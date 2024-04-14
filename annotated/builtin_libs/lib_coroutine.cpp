@@ -84,12 +84,12 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_init)
     // So we can simply execute a InPlaceCall here.
     //
     assert(start == GetStackBase() + x_numSlotsForStackFrameHeader);
-    assert(GetStackBase()[0].Is<tFunction>());
+    assert(TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(GetStackBase()[0].m_value))).Is<tFunction>());
     MakeInPlaceCall(start, numArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(coro_finish));
 }
 
 static CoroutineRuntimeContext* WARN_UNUSED ALWAYS_INLINE CreateNewCoroutine(UserHeapPointer<TableObject> globalObject,
-                                                                             HeapPtr<FunctionObject> entryFn)
+                                                                             FunctionObject* entryFn)
 {
     // We set up the initial stack for the new coroutine like the following:
     //     [ dummyHdr ] [ nextHdr ]
@@ -134,7 +134,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_create)
         ThrowError("bad argument #1 to 'create' (Lua function expected)");
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
+    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
     Return(TValue::Create<tThread>(TranslateToHeapPtr(newCoro)));
 }
 
@@ -289,9 +289,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
 //
 DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 {
-    HeapPtr<FunctionObject> func = GetStackFrameHeader()->m_func;
+    FunctionObject* func = GetStackFrameHeader()->m_func;
     assert(func->m_numUpvalues == 1);
-    TValue uv = TCGet(func->m_upvalues[0]);
+    TValue uv = func->m_upvalues[0];
     assert(uv.Is<tThread>());
     CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(uv.As<tThread>());
 
@@ -356,7 +356,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
         ThrowError("bad argument #1 to 'wrap' (Lua function expected)");
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
+    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapPtr<FunctionObject> wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
     TValue uv = TValue::Create<tThread>(TranslateToHeapPtr(newCoro));
