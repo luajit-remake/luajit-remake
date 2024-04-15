@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common_utils.h"
-#include "heap_ptr_utils.h"
 
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Value.h"
@@ -67,14 +66,7 @@ inline llvm::Type* WARN_UNUSED llvm_type_of(llvm::LLVMContext& ctx)
     else
     {
         static_assert(std::is_pointer_v<T>, "unhandled type");
-        if constexpr(IsHeapPtrType<T>::value)
-        {
-            return PointerType::get(ctx, CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR);
-        }
-        else
-        {
-            return PointerType::getUnqual(ctx);
-        }
+        return PointerType::getUnqual(ctx);
     }
 }
 
