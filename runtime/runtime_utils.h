@@ -314,7 +314,7 @@ public:
     static JitCallInlineCacheEntry* WARN_UNUSED Create(VM* vm,
                                                        ExecutableCode* targetExecutableCode,
                                                        SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
-                                                       HeapPtr<void> entity,
+                                                       void* entity,
                                                        size_t icTraitKind);
 
     // Note that this function removes the IC from the doubly-linked list (anchored at the CodeBlock) as needed,

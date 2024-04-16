@@ -289,7 +289,7 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
 JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
                                                                      ExecutableCode* targetExecutableCode,
                                                                      SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
-                                                                     HeapPtr<void> entity,
+                                                                     void* entity,
                                                                      size_t icTraitKind)
 {
     JitCallInlineCacheEntry* entry = vm->AllocateFromSpdsRegionUninitialized<JitCallInlineCacheEntry>();
@@ -420,7 +420,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         JitCallInlineCacheEntry* newEntry = JitCallInlineCacheEntry::Create(vm,
                                                                             targetEc,
                                                                             TCGet(m_linkedListHead) /*callSiteNextNode*/,
-                                                                            tv.As<tFunction>(),
+                                                                            TranslateToRawPointer(tv.As<tFunction>()),
                                                                             dcIcTraitKind);
         TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
 
@@ -447,7 +447,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
                                                                      targetEc,
                                                                      SpdsPtr<JitCallInlineCacheEntry> { 0 } /*callSiteNextNode*/,
-                                                                     TranslateToHeapPtr(targetEc),
+                                                                     targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
     TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
     m_mode = (m_numEntries > 1) ? Mode::ClosureCallWithMoreThanOneTargetObserved : Mode::ClosureCall;
@@ -501,7 +501,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
     JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
                                                                      targetEc,
                                                                      TCGet(m_linkedListHead) /*callSiteNextNode*/,
-                                                                     TranslateToHeapPtr(targetEc),
+                                                                     targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
     TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
     m_numEntries++;
