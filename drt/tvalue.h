@@ -258,6 +258,12 @@ struct TValue
         return result;
     }
 
+    template<typename T>
+    static TValue WARN_UNUSED CreatePointer(T* ptr)
+    {
+        return CreatePointer(TranslateToHeapPtr(ptr));
+    }
+
     static constexpr TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
     {
         TValue result { miv.m_value ^ x_mivTag };

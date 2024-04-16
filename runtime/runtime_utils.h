@@ -740,10 +740,10 @@ class FunctionObject;
 class Upvalue
 {
 public:
-    static HeapPtr<Upvalue> WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, TValue* dst, bool isImmutable)
+    static Upvalue* WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, TValue* dst, bool isImmutable)
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
-        HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
+        Upvalue* r = TranslateToRawPointer(vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>());
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
         r->m_ptr = dst;
@@ -753,26 +753,25 @@ public:
         return r;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED CreateClosed(VM* vm, TValue val)
+    static Upvalue* WARN_UNUSED CreateClosed(VM* vm, TValue val)
     {
-        HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
-        Upvalue* raw = TranslateToRawPointer(vm, r);
+        Upvalue* raw = TranslateToRawPointer(vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>());
         UserHeapGcObjectHeader::Populate(raw);
         raw->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
         raw->m_ptr = &raw->m_tv;
         raw->m_tv = val;
         raw->m_isClosed = true;
         raw->m_isImmutable = true;
-        return r;
+        return raw;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
+    static Upvalue* WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
     {
         if (rc->m_upvalueList.m_value == 0 || rc->m_upvalueList.As()->m_ptr < dst)
         {
             // Edge case: the open upvalue list is empty, or the upvalue shall be inserted as the first element in the list
             //
-            HeapPtr<Upvalue> newNode = CreateUpvalueImpl(rc->m_upvalueList /*prev*/, dst, isImmutable);
+            Upvalue* newNode = CreateUpvalueImpl(rc->m_upvalueList /*prev*/, dst, isImmutable);
             rc->m_upvalueList = newNode;
             WriteBarrier(rc);
             return newNode;
@@ -781,7 +780,7 @@ public:
         {
             // Invariant: after the loop, the node shall be inserted between 'cur' and 'prev'
             //
-            HeapPtr<Upvalue> cur = rc->m_upvalueList.As();
+            Upvalue* cur = TranslateToRawPointer(rc->m_upvalueList.As());
             TValue* curVal = cur->m_ptr;
             UserHeapPointer<Upvalue> prev;
             while (true)
@@ -795,7 +794,7 @@ public:
                     return cur;
                 }
 
-                prev = TCGet(cur->m_prev);
+                prev = cur->m_prev;
                 if (prev.m_value == 0)
                 {
                     // 'cur' is the last node, so we found the insertion location
@@ -813,7 +812,7 @@ public:
                     break;
                 }
 
-                cur = prev.As();
+                cur = TranslateToRawPointer(prev.As());
                 curVal = prevVal;
             }
 
@@ -821,8 +820,8 @@ public:
             assert(prev == TCGet(cur->m_prev));
             assert(dst < curVal);
             assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
-            HeapPtr<Upvalue> newNode = CreateUpvalueImpl(prev, dst, isImmutable);
-            TCSet(cur->m_prev, UserHeapPointer<Upvalue>(newNode));
+            Upvalue* newNode = CreateUpvalueImpl(prev, dst, isImmutable);
+            cur->m_prev = UserHeapPointer<Upvalue>(newNode);
             WriteBarrier(cur);
             return newNode;
         }

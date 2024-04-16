@@ -211,7 +211,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             }
             else
             {
-                HeapPtr<Upvalue> uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
+                Upvalue* uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
                 uv = TValue::CreatePointer(uvPtr);
             }
         }
