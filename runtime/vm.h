@@ -697,9 +697,9 @@ public:
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len);
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromRawString(const void* str, uint32_t len);
 
-    HeapPtr<HeapString> WARN_UNUSED CreateStringObjectFromRawCString(const char* str)
+    HeapString* WARN_UNUSED CreateStringObjectFromRawCString(const char* str)
     {
-        return CreateStringObjectFromRawString(str, static_cast<uint32_t>(strlen(str))).As();
+        return TranslateToRawPointer(CreateStringObjectFromRawString(str, static_cast<uint32_t>(strlen(str))).As());
     }
 
     // Create a string by concatenating n copies of 'str'

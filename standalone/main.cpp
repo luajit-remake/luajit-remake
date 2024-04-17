@@ -37,7 +37,7 @@ static void LaunchScript(int argc, char** argv)
     //
     for (int i = 0; i < argc; i++)
     {
-        TValue opt = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(argv[i]));
+        TValue opt = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(argv[i])));
         TableObject::RawPutByValIntegerIndex(arg, i - 1 /*index*/, opt);
     }
 

@@ -226,7 +226,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 {
     CreateGlobalObjectHelper h(vm);
 
-    vm->m_emptyString = vm->CreateStringObjectFromRawCString("");
+    vm->m_emptyString = TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(""));
 
     HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
     h.InsertField(globalObject, "_G", TValue::Create<tTable>(globalObject));

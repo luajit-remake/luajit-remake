@@ -207,11 +207,11 @@ not_coroutine_object_or_not_resumable:
         assert(!status.IsResumable());
         if (status.IsDead())
         {
-            Return(TValue::Create<tBool>(false), TValue::Create<tString>(vm->CreateStringObjectFromRawCString("cannot resume dead coroutine")));
+            Return(TValue::Create<tBool>(false), TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("cannot resume dead coroutine"))));
         }
         else
         {
-            Return(TValue::Create<tBool>(false), TValue::Create<tString>(vm->CreateStringObjectFromRawCString("cannot resume non-suspended coroutine")));
+            Return(TValue::Create<tBool>(false), TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("cannot resume non-suspended coroutine"))));
         }
     }
 not_coroutine_object:
@@ -267,22 +267,22 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
     if (TranslateToHeapPtr(currentCoro) == coro)
     {
         assert(!status.IsDead() && !status.IsResumable());
-        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("running")));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("running"))));
     }
 
     if (status.IsResumable())
     {
         assert(!status.IsDead());
-        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("suspended")));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("suspended"))));
     }
 
     if (status.IsDead())
     {
         assert(!status.IsResumable());
-        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("dead")));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("dead"))));
     }
 
-    Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("normal")));
+    Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("normal"))));
 }
 
 // Internal function that implements the function created by 'coroutine.wrap'
