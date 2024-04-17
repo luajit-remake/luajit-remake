@@ -667,7 +667,7 @@ static void TestDfgFrontendWithRandomCallIcInfo(VM* vm, std::vector<std::string>
             targetIcSite->m_mode = JitCallInlineCacheSite::Mode::ClosureCall;
             ReleaseAssert(targetIcSite->m_numEntries == 0);
             CodeBlock* targetCb = allUcbs[static_cast<size_t>(rand()) % allUcbs.size()]->m_defaultCodeBlock;
-            std::ignore = targetIcSite->InsertInClosureCallMode(0 /*fakeDcIcTraitKind*/, reinterpret_cast<uint64_t>(TranslateToRawPointer(FunctionObject::Create(vm, targetCb).As())));
+            std::ignore = targetIcSite->InsertInClosureCallMode(0 /*fakeDcIcTraitKind*/, TranslateToRawPointer(FunctionObject::Create(vm, targetCb).As()));
 
             ReleaseAssert(targetIcSite->m_numEntries == 1);
         }

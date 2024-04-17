@@ -333,12 +333,11 @@ void JitCallInlineCacheEntry::Destroy(VM* vm)
     vm->DeallocateSpdsRegionObject(this);
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, uint64_t tvU64, uint8_t* transitedToCCMode /*out*/)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, FunctionObject* func, uint8_t* transitedToCCMode /*out*/)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::DirectCall);
-    TValue tv = TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(tvU64)));
-    assert(tv.Is<tFunction>());
+    assert(reinterpret_cast<UserHeapGcObjectHeader*>(func)->m_type == HeapEntityType::Function);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
 
@@ -346,11 +345,11 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     //
     uint16_t bloomFilterMask;
     {
-        uint64_t hashValue64 = HashPrimitiveTypes(tv.As<tFunction>()->m_executable.m_value);
+        uint64_t hashValue64 = HashPrimitiveTypes(func->m_executable.m_value);
         bloomFilterMask = static_cast<uint16_t>((1 << (hashValue64 & 15)) | (1 << ((hashValue64 >> 8) & 15)));
     }
 
-    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* targetEc = TranslateToRawPointer(func->m_executable.As());
 
     // Figure out if we shall transition to closure call mode, we do this when we notice that
     // the passed-in call target has the same ExecutableCode as an existing cached target
@@ -363,7 +362,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         //
         assert(!linkListNode.IsInvalidPtr());
         do {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            JitCallInlineCacheEntry* entry = TranslateToRawPointer(linkListNode.AsPtr());
             assert(entry->GetIcTraitKind() == dcIcTraitKind);
             if (entry->GetTargetExecutableCodeKnowingDirectCall(vm) == targetEc)
             {
@@ -390,7 +389,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
             // We should never reach here if the IC ought to hit
             //
             assert(entry->m_entity.IsUserHeapPointer());
-            assert(entry->m_entity.As() != tv.As<tFunction>());
+            assert(entry->m_entity.As() != TranslateToHeapPtr(func));
 
             // All the ExecutableCode in the IC list should be distinct
             //
@@ -420,7 +419,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         JitCallInlineCacheEntry* newEntry = JitCallInlineCacheEntry::Create(vm,
                                                                             targetEc,
                                                                             TCGet(m_linkedListHead) /*callSiteNextNode*/,
-                                                                            TranslateToRawPointer(tv.As<tFunction>()),
+                                                                            func,
                                                                             dcIcTraitKind);
         TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
 
@@ -458,15 +457,14 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     return entry->GetJitRegionStart();
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, uint64_t tvU64)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, FunctionObject* func)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
-    TValue tv = TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(tvU64)));
-    assert(tv.Is<tFunction>());
+    assert(reinterpret_cast<UserHeapGcObjectHeader*>(func)->m_type == HeapEntityType::Function);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
-    ExecutableCode* targetEc = TranslateToRawPointer(TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* targetEc = TranslateToRawPointer(func->m_executable.As());
 
 #ifndef NDEBUG
     // In debug mode, validate that assorted information of the linked list is as expected

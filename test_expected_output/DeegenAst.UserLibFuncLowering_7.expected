@@ -22,18 +22,17 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   store i32 0, ptr %20, align 8, !tbaa !10
   %21 = getelementptr i8, ptr %1, i64 28
   store i32 0, ptr %21, align 4, !tbaa !11
-  %22 = load i64, ptr %1, align 8
-  %23 = inttoptr i64 %22 to ptr
-  %24 = load i32, ptr %23, align 4, !tbaa !12
-  %25 = zext i32 %24 to i64
-  %26 = inttoptr i64 %25 to ptr addrspace(256)
-  %27 = getelementptr inbounds %0, ptr addrspace(256) %26, i64 0, i32 4
-  %28 = load ptr, ptr addrspace(256) %27, align 8, !tbaa !14
-  %29 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !22
-  %30 = ptrtoint ptr %29 to i64
-  %31 = add i64 %30, %25
-  %32 = inttoptr i64 %31 to ptr
-  musttail call ghccc void %28(ptr %0, ptr nonnull %17, ptr null, ptr %32, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %22 = load ptr, ptr %1, align 8
+  %23 = load i32, ptr %22, align 4, !tbaa !12
+  %24 = zext i32 %23 to i64
+  %25 = inttoptr i64 %24 to ptr addrspace(256)
+  %26 = getelementptr inbounds %0, ptr addrspace(256) %25, i64 0, i32 4
+  %27 = load ptr, ptr addrspace(256) %26, align 8, !tbaa !14
+  %28 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !22
+  %29 = ptrtoint ptr %28 to i64
+  %30 = add i64 %29, %24
+  %31 = inttoptr i64 %30 to ptr
+  musttail call ghccc void %27(ptr %0, ptr nonnull %17, ptr null, ptr %31, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 

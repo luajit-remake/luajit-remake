@@ -3,10 +3,9 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static std::pair<ExecutableCode*, void*> DeegenSnippet_GetCalleeEntryPoint(uint64_t target)
+static std::pair<ExecutableCode*, void*> DeegenSnippet_GetCalleeEntryPoint(FunctionObject *target)
 {
-    FunctionObject* o = reinterpret_cast<FunctionObject*>(target);
-    HeapPtr<ExecutableCode> ec = o->m_executable.As();
+    HeapPtr<ExecutableCode> ec = target->m_executable.As();
     void* entrypoint = ec->m_bestEntryPoint;
     return std::make_pair(TranslateToRawPointer(ec), entrypoint);
 }
