@@ -518,7 +518,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_rep)
     int64_t numCopies = static_cast<int64_t>(numCopiesDbl);
     if (unlikely(numCopies <= 0))
     {
-        Return(TValue::Create<tString>(vm->m_emptyString));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
     }
 
     HeapPtr<HeapString> res = vm->CreateStringObjectFromConcatenationOfSameString(inputStr, static_cast<uint32_t>(inputStrLen), static_cast<size_t>(numCopies)).As();
@@ -541,7 +541,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_reverse)
     VM* vm = VM::GetActiveVMForCurrentThread();
     if (length == 0)
     {
-        Return(TValue::Create<tString>(vm->m_emptyString));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
     }
 
     SimpleTempStringStream ss;
@@ -650,7 +650,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
 
     if (unlikely(lb > ub))
     {
-        Return(TValue::Create<tString>(vm->m_emptyString));
+        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
     }
     else
     {

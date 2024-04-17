@@ -170,7 +170,7 @@ typedef struct LexState {
   void *rdata;		/* Reader callback data. */
   BCLine linenumber;	/* Input line counter. */
   BCLine lastline;	/* Line of last token. */
-  HeapPtr<HeapString> chunkname;	/* Current chunk name (interned string). */
+  HeapString* chunkname;	/* Current chunk name (interned string). */
   const char *chunkarg;	/* Chunk name argument. */
   const char *mode;	/* Allow loading bytecode (b) and/or source text (t). */
   std::vector<VarInfo> vstack;	/* Stack for names and extents of local variables. */

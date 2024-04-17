@@ -43,7 +43,7 @@ static void LaunchScript(int argc, char** argv)
 
     {
         UserHeapPointer<void> strArg = vm->CreateStringObjectFromRawCString("arg");
-        HeapPtr<TableObject> globalObj = vm->GetRootGlobalObject();
+        HeapPtr<TableObject> globalObj = TranslateToHeapPtr(vm->GetRootGlobalObject());
         PutByIdICInfo info;
         TableObject::PreparePutByIdForGlobalObject(globalObj, strArg, info);
         TableObject::PutById(globalObj, strArg, TValue::Create<tTable>(arg), info);

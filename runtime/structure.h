@@ -2035,7 +2035,7 @@ end_setup:
     r->m_knownNonexistentMetamethods = m_knownNonexistentMetamethods;
     if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String)
     {
-        int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(key.As<HeapString>());
+        int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(TranslateToRawPointer(key.As<HeapString>()));
         if (unlikely(metamethodOrd != -1))
         {
             LuaMetamethodBitVectorT mask = static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << metamethodOrd);

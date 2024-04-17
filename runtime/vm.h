@@ -18,6 +18,12 @@ inline bool IsCompilerThread() { return t_threadKind == CompilerThread; }
 inline bool IsExecutionThread() { return t_threadKind == ExecutionThread; }
 inline bool IsGCThread() { return t_threadKind == GCThread; }
 
+template<typename T>
+inline T* VM_OffsetToPointer(intptr_t offset)
+{
+    return TranslateToRawPointer(reinterpret_cast<HeapPtr<T>>(offset));
+}
+
 #define METAMETHOD_NAME_LIST            \
     /* Enum Name,    String Name */     \
     (Call,           __call)            \
@@ -637,9 +643,9 @@ public:
                         m_spdsExecutionThreadFreeList[x_spdsAllocatableClassOrdinal<T>];
             if (likely(freelist.m_value != 0))
             {
-                HeapPtr<void> result = freelist.AsPtr();
-                freelist = TCGet(*reinterpret_cast<HeapPtr<SpdsPtr<void>>>(result));
-                return GetHeapPtrTranslator().TranslateToRawPtr<T>(reinterpret_cast<HeapPtr<T>>(result));
+                void* result = TranslateToRawPointer(freelist.AsPtr());
+                freelist = *reinterpret_cast<SpdsPtr<void>*>(result);
+                return reinterpret_cast<T*>(result);
             }
             else
             {
@@ -751,10 +757,10 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_rootCoroutine>;
         using T = typeof_member_t<&VM::m_rootCoroutine>;
-        return *reinterpret_cast<HeapPtr<T>>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
-    HeapPtr<TableObject> GetRootGlobalObject();
+    TableObject* GetRootGlobalObject();
 
     // The VM structure also stores several 'true' library functions that doesn't change even if the respective user-exposed
     // global value is overwritten.
@@ -821,7 +827,7 @@ public:
 
     // return -1 if not found, otherwise return the corresponding LuaMetamethodKind
     //
-    int WARN_UNUSED GetMetamethodOrdinalFromStringName(HeapPtr<HeapString> stringName)
+    int WARN_UNUSED GetMetamethodOrdinalFromStringName(HeapString* stringName)
     {
         int ord = GetLuaMetamethodOrdinalFromStringHash(stringName->m_hashHigh);
         if (likely(ord == -1))
@@ -840,7 +846,7 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_usrPRNG>;
         using T = typeof_member_t<&VM::m_usrPRNG>;
-        std::mt19937* res = *reinterpret_cast<HeapPtr<T>>(offset);
+        std::mt19937* res = *VM_OffsetToPointer<T>(offset);
         if (likely(res != nullptr))
         {
             return res;
@@ -853,16 +859,16 @@ public:
         return offsetof_member_v<&VM::m_stringNameForMetatableKind>;
     }
 
-    static HeapPtr<TValue> ALWAYS_INLINE VM_LibFnArrayAddr()
+    static TValue* ALWAYS_INLINE VM_LibFnArrayAddr()
     {
-        return reinterpret_cast<HeapPtr<TValue>>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
+        return VM_OffsetToPointer<TValue>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
     }
 
-    static HeapPtr<HeapString> ALWAYS_INLINE VM_GetEmptyString()
+    static HeapString* ALWAYS_INLINE VM_GetEmptyString()
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_emptyString>;
         using T = typeof_member_t<&VM::m_emptyString>;
-        return *reinterpret_cast<HeapPtr<T>>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
@@ -1128,7 +1134,7 @@ public:
 
     // The string ""
     //
-    HeapPtr<HeapString> m_emptyString;
+    HeapString* m_emptyString;
 
     // The string 'tostring'
     //
@@ -1149,20 +1155,20 @@ public:
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
 {
     constexpr size_t offset = VM::OffsetofSpecialKeyForBooleanIndex();
-    return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(v)]);
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(v)];
 }
 
 inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetamethodKind kind)
 {
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
-    return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(kind)];
 }
 
 template<VM::LibFn fn>
 inline TValue ALWAYS_INLINE VM_GetLibFunctionObject()
 {
     static_assert(fn != VM::LibFn::X_END_OF_ENUM);
-    HeapPtr<TValue> arrayStart = VM::VM_LibFnArrayAddr();
-    return TCGet(arrayStart[static_cast<size_t>(fn)]);
+    TValue* arrayStart = VM::VM_LibFnArrayAddr();
+    return arrayStart[static_cast<size_t>(fn)];
 }
 

@@ -80,7 +80,7 @@ private:
 
 inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
 {
-    HeapPtr<TableObject> globalObject = vm->GetRootGlobalObject();
+    HeapPtr<TableObject> globalObject = TranslateToHeapPtr(vm->GetRootGlobalObject());
     UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(name.c_str(), static_cast<uint32_t>(name.length()));
 
     GetByIdICInfo icInfo;
