@@ -589,8 +589,8 @@ public:
         ArrayType arrType = TCGet(self->m_arrayType);
         assert(arrType.HasSparseMap());
 #endif
-        HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
-        TValue res = TranslateToRawPointer(sparseMap)->GetByVal(idx);
+        ArraySparseMap* sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
+        TValue res = sparseMap->GetByVal(idx);
 #ifndef NDEBUG
         AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Int32, res.IsInt32());
         AssertImp(!res.IsNil() && arrType.ArrayKind() == ArrayType::Kind::Double, res.IsDouble());
@@ -1879,7 +1879,7 @@ public:
         {
             if (likely(m_butterfly->GetHeader()->HasSparseMap()))
             {
-                return TranslateToRawPointer(vm, m_butterfly->GetHeader()->GetSparseMap());
+                return m_butterfly->GetHeader()->GetSparseMap();
             }
             else
             {
@@ -2183,10 +2183,10 @@ public:
         if (hdr->HasSparseMap())
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
-            ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
+            ArraySparseMap* oldSparseMap = hdr->GetSparseMap();
             ArraySparseMap* newSparseMap = oldSparseMap->Clone(vm);
             hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
-            assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
+            assert(hdr->HasSparseMap() && hdr->GetSparseMap() == newSparseMap);
         }
 
         return butterflyPtr;
@@ -2585,7 +2585,7 @@ public:
             //
             if (unlikely(arrType.HasSparseMap()))
             {
-                ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
+                ArraySparseMap* sparseMap = butterfly->GetHeader()->GetSparseMap();
                 return GetTableLengthWithLuaSemanticsSlowPathSlowPath(sparseMap, arrayStorageCap);
             }
             else
@@ -2605,7 +2605,7 @@ public:
                 //
                 return 0;
             }
-            ArraySparseMap* sparseMap = TranslateToRawPointer(butterfly->GetHeader()->GetSparseMap());
+            ArraySparseMap* sparseMap = butterfly->GetHeader()->GetSparseMap();
             TValue val = sparseMap->GetByVal(1);
             if (val.IsNil())
             {
@@ -3002,7 +3002,7 @@ try_find_next_vector_entry:
         }
 
         assert(m_state == IteratorState::SparseMap);
-        sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
+        sparseMap = obj->m_butterfly->GetHeader()->GetSparseMap();
         m_sparseMapOrd++;
 
 try_find_next_sparse_map_entry:
@@ -3158,7 +3158,7 @@ get_next_from_sparse_map:
                 return true;
             }
 
-            ArraySparseMap* sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
+            ArraySparseMap* sparseMap = obj->m_butterfly->GetHeader()->GetSparseMap();
             uint32_t slot = sparseMap->GetHashSlotOrdinal(idx);
             if (slot == static_cast<uint32_t>(-1))
             {

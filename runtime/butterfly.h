@@ -54,10 +54,10 @@ public:
         return m_arrayLengthIfContinuous < - 1;
     }
 
-    HeapPtr<ArraySparseMap> GetSparseMap()
+    ArraySparseMap* GetSparseMap()
     {
         assert(HasSparseMap());
-        return GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As();
+        return TranslateToRawPointer(GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As());
     }
 
     // If == - 1, it means the vector part is not continuous
