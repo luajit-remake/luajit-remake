@@ -352,8 +352,8 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
     //
     TValue* sb = GetStackBase();
     VM* vm = VM::GetActiveVMForCurrentThread();
-    HeapPtr<TableObject> tab = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCap*/, 1 /*initialButterfly*/);
-    sb[2] = TValue::Create<tTable>(tab);
+    TableObject* tab = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCap*/, 1 /*initialButterfly*/);
+    sb[2] = TValue::Create<tTable>(TranslateToHeapPtr(tab));
     sb[3] = TValue::Create<tInt32>(0);
 
     TValue* callFrame = sb + 4;
@@ -475,7 +475,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
     {
         ThrowError("bad argument #1 to 'next' (table expected)");
     }
-    HeapPtr<TableObject> tableObj = tab.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(tab.As<tTable>());
 
     TValue key;
     if (GetNumArgs() >= 2)
@@ -966,7 +966,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
         ThrowError("bad argument #1 to 'rawset' (table expected)");
     }
 
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
 #if 0
     if (index.Is<tInt32>())

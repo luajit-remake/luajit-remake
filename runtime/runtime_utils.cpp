@@ -186,7 +186,7 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
 UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
-    HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
+    FunctionObject* r = TranslateToRawPointer(Create(VM::GetActiveVMForCurrentThread(), cb).As());
     assert(TranslateToRawPointer(parent->m_executable.As())->IsBytecodeFunction());
     assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(parent->m_executable.As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
@@ -202,7 +202,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             {
                 if (uvmt.m_slot == selfOrdinalInStackFrame)
                 {
-                    uv = TValue::Create<tFunction>(r);
+                    uv = TValue::Create<tFunction>(TranslateToHeapPtr(r));
                 }
                 else
                 {

@@ -433,7 +433,7 @@ static LexToken lex_scan(LexState* ls, TValue* tv)
             TValue tvStr = lj_parse_keepstr(ls, ls->sb->Begin(), ls->sb->Len());
             *tv = tvStr;
             assert(tvStr.Is<tString>());
-            HeapPtr<HeapString> s = tvStr.As<tString>();
+            HeapString* s = TranslateToRawPointer(tvStr.As<tString>());
             if (HeapString::IsReservedWord(s) > 0) /* Reserved word? */
             {
                 return TK_OFS + HeapString::GetReservedWordOrdinal(s) + 1;
@@ -670,7 +670,7 @@ void lj_lex_init(VM* vm)
     uint32_t i;
     for (i = 0; i < TK_RESERVED; i++)
     {
-        HeapPtr<HeapString> s = TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(tokennames[i]));
+        HeapString* s = vm->CreateStringObjectFromRawCString(tokennames[i]);
         HeapString::SetReservedWord(s, i /*reservedWordOrd*/);
     }
 }
@@ -902,10 +902,10 @@ ParseResult WARN_UNUSED ParseLuaScriptFromFile(CoroutineRuntimeContext* ctx, con
         constexpr size_t errorMsgBufLen = 1000;
         char errorMsgBuf[errorMsgBufLen + 1];
         snprintf(errorMsgBuf, errorMsgBufLen, "Failed to open file '%s', error %d (%s)", fileName, err, strerror(err));
-        HeapPtr<HeapString> msg = TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf));
+        HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf);
         return {
             .m_scriptModule = nullptr,
-            .errMsg = TValue::Create<tString>(msg)
+            .errMsg = TValue::Create<tString>(TranslateToHeapPtr(msg))
         };
     }
 

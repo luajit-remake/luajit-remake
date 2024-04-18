@@ -174,7 +174,7 @@ struct CreateGlobalObjectHelper
 {
     CreateGlobalObjectHelper(VM* vm_) : vm(vm_) { }
 
-    void InsertField(HeapPtr<TableObject> r, const char* propName, TValue value)
+    void InsertField(TableObject* r, const char* propName, TValue value)
     {
         UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(propName, static_cast<uint32_t>(strlen(propName)));
         PutByIdICInfo icInfo;
@@ -182,30 +182,30 @@ struct CreateGlobalObjectHelper
         TableObject::PutById(r, hs.As<void>(), value, icInfo);
     }
 
-    HeapPtr<FunctionObject> CreateCFunc(void* func)
+    FunctionObject* CreateCFunc(void* func)
     {
-        return FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func)).As();
+        return TranslateToRawPointer(FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func)).As());
     }
 
-    HeapPtr<FunctionObject> InsertCFunc(HeapPtr<TableObject> r, const char* propName, void* func)
+    FunctionObject* InsertCFunc(TableObject* r, const char* propName, void* func)
     {
-        HeapPtr<FunctionObject> funcObj = CreateCFunc(func);
-        InsertField(r, propName, TValue::Create<tFunction>(funcObj));
-        return funcObj;
+        FunctionObject* funcObj = CreateCFunc(func);
+        InsertField(r, propName, TValue::Create<tFunction>(TranslateToHeapPtr(funcObj)));
+        return TranslateToRawPointer(funcObj);
     }
 
-    HeapPtr<HeapString> InsertString(HeapPtr<TableObject> r, const char* propName, const char* stringValue)
+    HeapString* InsertString(TableObject* r, const char* propName, const char* stringValue)
     {
         UserHeapPointer<HeapString> o = vm->CreateStringObjectFromRawString(stringValue, static_cast<uint32_t>(strlen(stringValue)));
         InsertField(r, propName, TValue::CreatePointer(o));
-        return o.As();
+        return TranslateToRawPointer(o.As());
     }
 
-    HeapPtr<TableObject> InsertObject(HeapPtr<TableObject> r, const char* propName, uint32_t inlineCapacity)
+    TableObject* InsertObject(TableObject* r, const char* propName, uint32_t inlineCapacity)
     {
         UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, inlineCapacity, 0 /*initialButterflyArrayPartCapacity*/);
         InsertField(r, propName, TValue::CreatePointer(o));
-        return o.As();
+        return TranslateToRawPointer(o.As());
     }
 
     VM* vm;
@@ -216,9 +216,9 @@ DEEGEN_FORWARD_DECLARE_LIB_FUNC(base_ipairs_iterator);
 DEEGEN_FORWARD_DECLARE_LIB_FUNC(io_lines_iter);
 
 #define INSERT_LIBFN(libName, fnName)                                               \
-    [[maybe_unused]] HeapPtr<FunctionObject> libfn_ ## libName ##_ ## fnName =      \
+    [[maybe_unused]] FunctionObject* libfn_ ## libName ##_ ## fnName =      \
         h.InsertCFunc(                                                              \
-            libobj_ ## libName /*object*/,                                          \
+            TranslateToRawPointer(libobj_ ## libName) /*object*/,                                          \
             PP_STRINGIFY(fnName) /*propName*/,                                      \
             DEEGEN_CODE_POINTER_FOR_LIB_FUNC(libName ## _ ## fnName) /*value*/);
 
@@ -228,30 +228,30 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
 
     vm->m_emptyString = vm->CreateStringObjectFromRawCString("");
 
-    HeapPtr<TableObject> globalObject = TableObject::CreateEmptyGlobalObject(vm);
-    h.InsertField(globalObject, "_G", TValue::Create<tTable>(globalObject));
+    TableObject* globalObject = TableObject::CreateEmptyGlobalObject(vm);
+    h.InsertField(globalObject, "_G", TValue::Create<tTable>(TranslateToHeapPtr(globalObject)));
     h.InsertString(globalObject, "_VERSION", "Lua 5.1");
 
     lj_lex_init(vm);
 
     // Insert the base library functions into the global object
     //
-    HeapPtr<TableObject> libobj_base = globalObject;
+    TableObject* libobj_base = globalObject;
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (base), (LUA_LIB_BASE_FUNCTION_LIST))
 
-    vm->InitializeLibFn<VM::LibFn::BaseError>(TValue::Create<tFunction>(libfn_base_error));
-    vm->InitializeLibFn<VM::LibFn::BaseNext>(TValue::Create<tFunction>(libfn_base_next));
-    vm->InitializeLibFn<VM::LibFn::BaseIPairsIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_ipairs_iterator))));
-    vm->InitializeLibFn<VM::LibFn::BaseToString>(TValue::Create<tFunction>(libfn_base_tostring));
-    vm->InitializeLibFn<VM::LibFn::BaseLoad>(TValue::Create<tFunction>(libfn_base_load));
-    vm->InitializeLibFn<VM::LibFn::BaseNextValidationOk>(TValue::Create<tTable>(TableObject::CreateEmptyTableObject(vm, 0U /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/)));
+    vm->InitializeLibFn<VM::LibFn::BaseError>(TValue::Create<tFunction>(TranslateToHeapPtr(libfn_base_error)));
+    vm->InitializeLibFn<VM::LibFn::BaseNext>(TValue::Create<tFunction>(TranslateToHeapPtr(libfn_base_next)));
+    vm->InitializeLibFn<VM::LibFn::BaseIPairsIter>(TValue::Create<tFunction>(TranslateToHeapPtr(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(base_ipairs_iterator)))));
+    vm->InitializeLibFn<VM::LibFn::BaseToString>(TValue::Create<tFunction>(TranslateToHeapPtr(libfn_base_tostring)));
+    vm->InitializeLibFn<VM::LibFn::BaseLoad>(TValue::Create<tFunction>(TranslateToHeapPtr(libfn_base_load)));
+    vm->InitializeLibFn<VM::LibFn::BaseNextValidationOk>(TValue::Create<tTable>(TranslateToHeapPtr(TableObject::CreateEmptyTableObject(vm, 0U /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/))));
     vm->m_stringNameForToStringMetamethod = vm->CreateStringObjectFromRawCString("__tostring");
     vm->m_toStringString = vm->CreateStringObjectFromRawCString("tostring");
 
     // Initialize coroutine library
     // The coroutine library has no non-function fields
     //
-    HeapPtr<TableObject> libobj_coroutine = h.InsertObject(globalObject, "coroutine", x_num_functions_in_lib_coroutine);
+    TableObject* libobj_coroutine = h.InsertObject(globalObject, "coroutine", x_num_functions_in_lib_coroutine);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (coroutine), (LUA_LIB_COROUTINE_FUNCTION_LIST))
 
     vm->InitializeLibFnProto<VM::LibFnProto::CoroutineWrapCall>(ExecutableCode::CreateCFunction(vm, DEEGEN_CODE_POINTER_FOR_LIB_FUNC(coroutine_wrap_call)));
@@ -259,14 +259,14 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     // Initialize debug library
     // The debug library has no non-function fields
     //
-    HeapPtr<TableObject> libobj_debug = h.InsertObject(globalObject, "debug", x_num_functions_in_lib_debug);
+    TableObject* libobj_debug = h.InsertObject(globalObject, "debug", x_num_functions_in_lib_debug);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (debug), (LUA_LIB_DEBUG_FUNCTION_LIST))
 
     // Initialize io library
     // The io library has 3 non-function fields: stdin, stdout, stderr
     // TODO: we need to implement these fields.
     //
-    HeapPtr<TableObject> libobj_io = h.InsertObject(globalObject, "io", x_num_functions_in_lib_io + 3);
+    TableObject* libobj_io = h.InsertObject(globalObject, "io", x_num_functions_in_lib_io + 3);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (io), (LUA_LIB_IO_FUNCTION_LIST))
 
     // Initialize math library
@@ -274,26 +274,26 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     // Additionally, it has 1 field for compatibility: math.mod = math.fmod
     //
     constexpr bool x_enable_lua_compat_math_mod = true;
-    HeapPtr<TableObject> libobj_math = h.InsertObject(globalObject, "math", x_num_functions_in_lib_math + 2 + (x_enable_lua_compat_math_mod ? 1 : 0));
+    TableObject* libobj_math = h.InsertObject(globalObject, "math", x_num_functions_in_lib_math + 2 + (x_enable_lua_compat_math_mod ? 1 : 0));
     h.InsertField(libobj_math, "pi", TValue::Create<tDouble>(std::numbers::pi));
     h.InsertField(libobj_math, "huge", TValue::Create<tDouble>(HUGE_VAL));
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (math), (LUA_LIB_MATH_FUNCTION_LIST))
     if (x_enable_lua_compat_math_mod)
     {
-        h.InsertField(libobj_math, "mod", TValue::Create<tFunction>(libfn_math_fmod));
+        h.InsertField(libobj_math, "mod", TValue::Create<tFunction>(TranslateToHeapPtr(libfn_math_fmod)));
     }
 
     // Initialize os library
     // The os library has no non-function fields
     //
-    HeapPtr<TableObject> libobj_os = h.InsertObject(globalObject, "os", x_num_functions_in_lib_os);
+    TableObject* libobj_os = h.InsertObject(globalObject, "os", x_num_functions_in_lib_os);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (os), (LUA_LIB_OS_FUNCTION_LIST))
 
     // Initialize package library
     // The package library has 6 non-function fields: cpath, loaded, loaders, path, preload, config
     // TODO: we need to implement these fields.
     //
-    HeapPtr<TableObject> libobj_package = h.InsertObject(globalObject, "package", x_num_functions_in_lib_package + 6);
+    TableObject* libobj_package = h.InsertObject(globalObject, "package", x_num_functions_in_lib_package + 6);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (package), (LUA_LIB_PACKAGE_FUNCTION_LIST))
 
     // Initialize string library
@@ -301,19 +301,19 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     // Additionally, it has 1 field for compatibility: string.gfind = string.find
     //
     constexpr bool x_enable_lua_compat_string_gfind = true;
-    HeapPtr<TableObject> libobj_string = h.InsertObject(globalObject, "string", x_num_functions_in_lib_string + (x_enable_lua_compat_string_gfind ? 1 : 0));
+    TableObject* libobj_string = h.InsertObject(globalObject, "string", x_num_functions_in_lib_string + (x_enable_lua_compat_string_gfind ? 1 : 0));
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (string), (LUA_LIB_STRING_FUNCTION_LIST))
     if (x_enable_lua_compat_string_gfind)
     {
-        h.InsertField(libobj_string, "gfind", TValue::Create<tFunction>(libfn_string_find));
+        h.InsertField(libobj_string, "gfind", TValue::Create<tFunction>(TranslateToHeapPtr(libfn_string_find)));
     }
 
     // According to Lua standard, we need to set a metatable for strings where the __index field points to the string table,
     // so that string functions can be used in object-oriented style, e.g., string.byte(s, i) can be written as s:byte(i).
     //
     {
-        HeapPtr<TableObject> string_type_metatable = TableObject::CreateEmptyTableObject(vm, 1 /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/);
-        h.InsertField(string_type_metatable, "__index", TValue::Create<tTable>(libobj_string));
+        TableObject* string_type_metatable = TableObject::CreateEmptyTableObject(vm, 1 /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/);
+        h.InsertField(string_type_metatable, "__index", TValue::Create<tTable>(TranslateToHeapPtr(libobj_string)));
         vm->m_metatableForString = string_type_metatable;
         vm->m_initialHiddenClassOfMetatableForString = TCGet(string_type_metatable->m_hiddenClass);
     }
@@ -321,9 +321,9 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
     // Initialize table library
     // The table library has no non-function fields
     //
-    HeapPtr<TableObject> libobj_table = h.InsertObject(globalObject, "table", x_num_functions_in_lib_table);
+    TableObject* libobj_table = h.InsertObject(globalObject, "table", x_num_functions_in_lib_table);
     PP_FOR_EACH_CARTESIAN_PRODUCT(INSERT_LIBFN, (table), (LUA_LIB_TABLE_FUNCTION_LIST))
-    vm->InitializeLibFn<VM::LibFn::IoLinesIter>(TValue::Create<tFunction>(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(io_lines_iter))));
+    vm->InitializeLibFn<VM::LibFn::IoLinesIter>(TValue::Create<tFunction>(TranslateToHeapPtr(h.CreateCFunc(DEEGEN_CODE_POINTER_FOR_LIB_FUNC(io_lines_iter)))));
 
     return globalObject;
 }

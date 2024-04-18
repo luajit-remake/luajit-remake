@@ -1135,23 +1135,20 @@ public:
     }
 
     template<bool isGrowNamedStorage>
-    static void GrowButterflyKnowingNamedStorageCapacity(HeapPtr<TableObject> tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
+    static void GrowButterflyKnowingNamedStorageCapacity(TableObject* tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
     {
-        TableObject* raw = TranslateToRawPointer(tableObj);
-        raw->GrowButterflyKnowingNamedStorageCapacity<isGrowNamedStorage>(oldNamedStorageCapacity, newCapacity);
+        tableObj->GrowButterflyKnowingNamedStorageCapacity<isGrowNamedStorage>(oldNamedStorageCapacity, newCapacity);
     }
 
-    static void __attribute__((__preserve_most__)) NO_INLINE GrowButterflyNamedStorage_RT(HeapPtr<TableObject> tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
+    static void __attribute__((__preserve_most__)) NO_INLINE GrowButterflyNamedStorage_RT(TableObject* tableObj, uint32_t oldNamedStorageCapacity, uint32_t newCapacity)
     {
-        TableObject* raw = TranslateToRawPointer(tableObj);
-        [[clang::always_inline]] raw->GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(oldNamedStorageCapacity, newCapacity);
+        [[clang::always_inline]] tableObj->GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(oldNamedStorageCapacity, newCapacity);
     }
 
     template<bool isGrowNamedStorage>
-    static void GrowButterfly(HeapPtr<TableObject> tableObj, uint32_t newCapacity)
+    static void GrowButterfly(TableObject* tableObj, uint32_t newCapacity)
     {
-        TableObject* raw = TranslateToRawPointer(tableObj);
-        raw->GrowButterfly<isGrowNamedStorage>(newCapacity);
+        tableObj->GrowButterfly<isGrowNamedStorage>(newCapacity);
     }
 
     void PutByIdTransitionToDictionaryImpl(VM* vm, UserHeapPointer<void> prop, TValue newValue)
@@ -1199,8 +1196,7 @@ public:
         rawSelf->PutByIdTransitionToDictionaryImpl(vm, propertyName, newValue);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void ALWAYS_INLINE PutById(T self, UserHeapPointer<void> propertyName, TValue newValue, PutByIdICInfo icInfo)
+    static void ALWAYS_INLINE PutById(TableObject* self, UserHeapPointer<void> propertyName, TValue newValue, PutByIdICInfo icInfo)
     {
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode)
         {
@@ -2093,7 +2089,7 @@ public:
         return r;
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObjectImpl(VM* vm, Structure* emptyStructure, uint8_t inlineCapacity, uint32_t initialButterflyArrayPartCapacity)
+    static TableObject* WARN_UNUSED CreateEmptyTableObjectImpl(VM* vm, Structure* emptyStructure, uint8_t inlineCapacity, uint32_t initialButterflyArrayPartCapacity)
     {
         assert(emptyStructure->m_numSlots == 0);
         assert(emptyStructure->m_metatable == 0);
@@ -2117,22 +2113,22 @@ public:
         {
             TCSet(r->m_inlineStorage[i], nilVal);
         }
-        return r;
+        return TranslateToRawPointer(r);
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
+    static TableObject* WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
     {
         return CreateEmptyTableObjectImpl(vm, emptyStructure, emptyStructure->m_inlineNamedStorageCapacity, initialButterflyArrayPartCapacity);
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObject(VM* vm, uint32_t inlineCapcity, uint32_t initialButterflyArrayPartCapacity)
+    static TableObject* WARN_UNUSED CreateEmptyTableObject(VM* vm, uint32_t inlineCapcity, uint32_t initialButterflyArrayPartCapacity)
     {
         SystemHeapPointer<Structure> initialStructure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcity);
         UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, initialStructure.As()), initialButterflyArrayPartCapacity);
-        return o.As();
+        return TranslateToRawPointer(o.As());
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED CreateEmptyGlobalObject(VM* vm)
+    static TableObject* WARN_UNUSED CreateEmptyGlobalObject(VM* vm)
     {
         uint8_t inlineCapacity = Structure::x_maxNumSlots;
         CacheableDictionary* hc = CacheableDictionary::CreateEmptyDictionary(vm, 128 /*anticipatedNumSlots*/, inlineCapacity, true /*shouldNeverTransitToUncacheableDictionary*/);
@@ -2144,7 +2140,7 @@ public:
         {
             TCSet(r->m_inlineStorage[i], nilVal);
         }
-        return r;
+        return TranslateToRawPointer(r);
     }
 
     Butterfly* WARN_UNUSED CloneButterfly(uint32_t butterflyNamedStorageCapacity)
@@ -2838,7 +2834,7 @@ struct TableObjectIterator
         : m_namedPropertyOrd(0), m_state(IteratorState::Uninitialized)
     { }
 
-    KeyValuePair WARN_UNUSED Advance(HeapPtr<TableObject> obj)
+    KeyValuePair WARN_UNUSED Advance(TableObject* obj)
     {
         HeapEntityType hcType;
         HeapPtr<Structure> structure;
@@ -3040,7 +3036,7 @@ finished_iteration:
     // have been deleted! But in other cases where the key doesn't exist, this function can exhibit undefined behavior (we
     // will try to throw out an error, but this is not guaranteed).
     //
-    static bool WARN_UNUSED GetNextFromKey(HeapPtr<TableObject> obj, TValue key, KeyValuePair& out /*out*/)
+    static bool WARN_UNUSED GetNextFromKey(TableObject* obj, TValue key, KeyValuePair& out /*out*/)
     {
         if (key.IsNil())
         {

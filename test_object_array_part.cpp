@@ -72,7 +72,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 }
                             };
 
-                            HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                            TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                             for (uint32_t i = 0; i < numNamedProps; i++)
                             {
@@ -83,7 +83,7 @@ TEST(ObjectArrayPart, PutFirstElement)
 
                             if (hasButterfly && obj->m_butterfly == nullptr)
                             {
-                                TranslateToRawPointer(obj)->GrowButterfly<false /*isGrowNamedStorage*/>(0);
+                                obj->GrowButterfly<false /*isGrowNamedStorage*/>(0);
                             }
 
                             if (!hasButterfly)
@@ -408,7 +408,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 continue;
                             }
 
-                            HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                            TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                             for (uint32_t i = 0; i < numNamedProps; i++)
                             {
@@ -423,8 +423,8 @@ TEST(ObjectArrayPart, ContinuousArray)
 
                             auto validateEverything = [&](size_t expectedContinuousLen)
                             {
-                                ArrayType arrType = TCGet(obj->m_arrayType);
-                                SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                                ArrayType arrType = obj->m_arrayType;
+                                SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
                                 if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                                 {
                                     ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
@@ -739,7 +739,7 @@ TEST(ObjectArrayPart, RandomTest)
         }
 
         Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
-        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initialButterflyCap);
+        TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initialButterflyCap);
 
         std::unordered_map<int64_t, TValue> namedPropMap;
         std::unordered_map<double, TValue> arrayPropMap;
@@ -969,7 +969,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
             {
                 for (bool putNamedPropsBeforeArray : { false, true })
                 {
-                    HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                     if (putNamedPropsBeforeArray)
                     {

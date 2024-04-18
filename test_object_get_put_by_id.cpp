@@ -14,7 +14,7 @@ TEST(ObjectGetPutById, Sanity)
     uint32_t numTestCases = x_isDebugBuild ? 100 : 500;    // total # of objects
     uint32_t numProps = 253;    // props per object
 
-    auto checkProperty = [&](HeapPtr<TableObject> obj, UserHeapPointer<HeapString> prop, bool expectExist, uint32_t expectedAbsoluteOrd, int32_t expectedVal)
+    auto checkProperty = [&](TableObject* obj, UserHeapPointer<HeapString> prop, bool expectExist, uint32_t expectedAbsoluteOrd, int32_t expectedVal)
     {
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(obj, prop, icInfo /*out*/);
@@ -50,11 +50,11 @@ TEST(ObjectGetPutById, Sanity)
 
     Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), static_cast<uint8_t>(inlineCapacity));
     std::vector<std::vector<UserHeapPointer<HeapString>>> allProps;
-    std::vector<HeapPtr<TableObject>> allObjects;
+    std::vector<TableObject*> allObjects;
     for (uint32_t testCase = 0; testCase < numTestCases; testCase++)
     {
         uint32_t initArrayPartSize = static_cast<uint32_t>(rand() % 5);
-        HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
         // Sanity check the array part is initialized correctly
         //
         if (initArrayPartSize == 0)
@@ -198,7 +198,7 @@ TEST(ObjectGetPutById, Sanity)
     {
         for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
         {
-            HeapPtr<TableObject> obj = allObjects[testcase];
+            TableObject* obj = allObjects[testcase];
             std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
             ReleaseAssert(propList.size() == numProps);
 
@@ -229,7 +229,7 @@ TEST(ObjectGetPutById, Sanity)
     //
     for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
     {
-        HeapPtr<TableObject> obj = allObjects[testcase];
+        TableObject* obj = allObjects[testcase];
         std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
 
         for (uint32_t i = 0; i < numProps; i++)
@@ -263,11 +263,11 @@ TEST(ObjectGetPutById, Sanity)
     // Finally, just to sanity check that the Structures are working, redo all the PutById from empty objects,
     // and validate the resulting structure is the same
     //
-    std::vector<HeapPtr<TableObject>> newObjectList;
+    std::vector<TableObject*> newObjectList;
     for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
     {
         uint32_t initArrayPartSize = allObjects[testcase]->m_butterfly->GetHeader()->m_arrayStorageCapacity;
-        HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
 
         std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
 
@@ -303,7 +303,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
         const uint32_t maxArrayPartSize = 5;
         uint32_t initArrayPartSize = static_cast<uint32_t>(rand()) % maxArrayPartSize;
         uint32_t initArrayPartFillSize = static_cast<uint32_t>(rand()) % (initArrayPartSize + 1);
-        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
 
         std::unordered_map<int64_t, TValue> expected;
         TValue arrayExpected[maxArrayPartSize + 2];
@@ -405,7 +405,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
     const uint32_t numStrings = 500;
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
     Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 8 /*inlineCapacity*/);
-    HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, 0 /*initArraySize*/);
+    TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, 0 /*initArraySize*/);
     for (uint32_t i = 0; i < numStrings - 1; i++)
     {
         UserHeapPointer<HeapString> propToAdd = strings[i];

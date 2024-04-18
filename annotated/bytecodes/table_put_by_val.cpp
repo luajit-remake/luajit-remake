@@ -16,10 +16,9 @@ static void NO_RETURN HandleInt64IndexNoMetamethodSlowPathPut(TValue base, TValu
     assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* raw = TranslateToRawPointer(vm, tableObj);
-    raw->PutByIntegerIndexSlow(vm, index, valueToPut);
+    tableObj->PutByIntegerIndexSlow(vm, index, valueToPut);
     Return();
 }
 
@@ -47,7 +46,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
 
                 if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
                 {
@@ -88,7 +87,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
 
                     // Now, we know we need to invoke the metamethod
                     //
-                    base = TValue::Create<tTable>(tableObj);
+                    base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
                     continue;
                 }
 
@@ -223,7 +222,7 @@ double_index_handle_metamethod:
         while (true)
         {
             assert(base.Is<tTable>());
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(tableObj, key, icInfo /*out*/);
@@ -359,7 +358,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
     {
         if (likely(base.Is<tHeapEntity>()))
         {
-            HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+            TableObject* tableObj = TranslateToRawPointer(reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>()));
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(tableObj->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();

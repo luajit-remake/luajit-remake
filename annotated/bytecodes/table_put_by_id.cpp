@@ -29,7 +29,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
 
@@ -38,7 +38,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
                     metamethod = GetNewIndexMetamethodFromTableObject(tableObj);
                     if (!metamethod.Is<tNil>())
                     {
-                        base = TValue::Create<tTable>(tableObj);
+                        base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
                         continue;
                     }
                 }
@@ -83,29 +83,29 @@ enum class TablePutByIdIcResultKind
 namespace PutByIdICHelper
 {
 
-static void ALWAYS_INLINE StoreValueIntoTableObject(HeapPtr<TableObject> obj, PutByIdICInfo::ICKind kind, int32_t slot, TValue valueToPut)
+static void ALWAYS_INLINE StoreValueIntoTableObject(TableObject* obj, PutByIdICInfo::ICKind kind, int32_t slot, TValue valueToPut)
 {
     if (kind == PutByIdICInfo::ICKind::InlinedStorage)
     {
-        TCSet(obj->m_inlineStorage[slot], valueToPut);
+        obj->m_inlineStorage[slot] = valueToPut;
     }
     else
     {
         assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
-        TCSet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)), valueToPut);
+        *(obj->m_butterfly->GetNamedPropertyAddr(slot)) = valueToPut;
     }
 }
 
-static TValue ALWAYS_INLINE GetOldValueFromTableObject(HeapPtr<TableObject> obj, PutByIdICInfo::ICKind kind, int32_t slot)
+static TValue ALWAYS_INLINE GetOldValueFromTableObject(TableObject* obj, PutByIdICInfo::ICKind kind, int32_t slot)
 {
     if (kind == PutByIdICInfo::ICKind::InlinedStorage)
     {
-        return TCGet(obj->m_inlineStorage[slot]);
+        return obj->m_inlineStorage[slot];
     }
     else
     {
         assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
-        return TCGet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)));
+        return *(obj->m_butterfly->GetNamedPropertyAddr(slot));
     }
 }
 
@@ -118,7 +118,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
 
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* tableObj = TranslateToRawPointer(reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>()));
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(tableObj->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();

@@ -28,7 +28,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
 
@@ -37,7 +37,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
                     metamethod = GetNewIndexMetamethodFromTableObject(tableObj);
                     if (!metamethod.Is<tNil>())
                     {
-                        base = TValue::Create<tTable>(tableObj);
+                        base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
                         continue;
                     }
                 }
@@ -108,7 +108,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                     TValue oldValue = TCGet(base->m_inlineStorage[c_slot]);
                     if (unlikely(oldValue.Is<tNil>()))
                     {
-                        TValue mm = GetNewIndexMetamethodFromTableObject(TranslateToHeapPtr(base));
+                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
                         if (unlikely(!mm.Is<tNil>()))
                         {
                             return std::make_pair(mm, true /*hasMetamethod*/);
@@ -126,7 +126,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                     TValue oldValue = TCGet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)));
                     if (unlikely(oldValue.Is<tNil>()))
                     {
-                        TValue mm = GetNewIndexMetamethodFromTableObject(TranslateToHeapPtr(base));
+                        TValue mm = GetNewIndexMetamethodFromTableObject(base);
                         if (unlikely(!mm.Is<tNil>()))
                         {
                             return std::make_pair(mm, true /*hasMetamethod*/);

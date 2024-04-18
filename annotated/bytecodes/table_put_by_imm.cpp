@@ -26,7 +26,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
 
                 if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
                 {
@@ -67,7 +67,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
 
                     // Now, we know we need to invoke the metamethod
                     //
-                    base = TValue::Create<tTable>(tableObj);
+                    base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
                     continue;
                 }
 
@@ -124,7 +124,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
 {
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* tableObj = TranslateToRawPointer(reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>()));
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(tableObj->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
         ic->FuseICIntoInterpreterOpcode();

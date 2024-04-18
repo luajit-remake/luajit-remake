@@ -3434,7 +3434,7 @@ nonconst:
         VM* vm = VM::GetActiveVMForCurrentThread();
         // TODO: we need to anchor this table
         //
-        HeapPtr<TableObject> tab = TableObject::CreateEmptyTableObject(vm, numPropertyPartKeys /*inlineCapacity*/, initButterflyArrayPartCapacity);
+        TableObject* tab = TableObject::CreateEmptyTableObject(vm, numPropertyPartKeys /*inlineCapacity*/, initButterflyArrayPartCapacity);
 
         if (x_debug_dump_table_info)
         {
@@ -3501,7 +3501,7 @@ nonconst:
             }
         }
 
-        fs->bcbase[pc].inst = BCINS_AD(BC_TDUP, freg-1, TValue::Create<tTable>(tab));
+        fs->bcbase[pc].inst = BCINS_AD(BC_TDUP, freg-1, TValue::Create<tTable>(TranslateToHeapPtr(tab)));
     }
 
     lex_match(ls, '}', '{', line);

@@ -7,7 +7,7 @@ static void NO_RETURN TableNewImpl(uint8_t inlineStorageSizeStepping, uint16_t a
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
     SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForSteppingKnowingAlreadyBuilt(vm, inlineStorageSizeStepping);
-    HeapPtr<TableObject> obj;
+    TableObject* obj;
     // We use the 'impl' version and pass in inlineCapacity directly so that Clang can do
     // constant propagation for specialized 'inlineStorageSizeStepping' values
     //
@@ -16,7 +16,7 @@ static void NO_RETURN TableNewImpl(uint8_t inlineStorageSizeStepping, uint16_t a
         TranslateToRawPointer(vm, structure.As()),
         internal::x_inlineStorageSizeForSteppingArray[inlineStorageSizeStepping] /*inlineCapacity*/,
         arrayPartSizeHint);
-    Return(TValue::Create<tTable>(obj));
+    Return(TValue::Create<tTable>(TranslateToHeapPtr(obj)));
 }
 
 DEEGEN_DEFINE_BYTECODE(TableNew)

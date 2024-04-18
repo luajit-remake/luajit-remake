@@ -477,22 +477,19 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static void SetReservedWord(T self, uint8_t reservedId)
+    static void SetReservedWord(HeapString* self, uint8_t reservedId)
     {
         assert(reservedId + 1 <= 63);
         uint8_t arrTy = ArrayType::x_invalidArrayType + reservedId + 1;
         TCSet(self->m_invalidArrayType, arrTy);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static bool WARN_UNUSED IsReservedWord(T self)
+    static bool WARN_UNUSED IsReservedWord(HeapString* self)
     {
         return self->m_invalidArrayType != ArrayType::x_invalidArrayType;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static uint8_t WARN_UNUSED GetReservedWordOrdinal(T self)
+    static uint8_t WARN_UNUSED GetReservedWordOrdinal(HeapString* self)
     {
         assert(IsReservedWord(self));
         assert(self->m_invalidArrayType > ArrayType::x_invalidArrayType);
@@ -1091,7 +1088,6 @@ private:
     uint32_t m_hashTableSizeMask;
     uint32_t m_elementCount;
     // use GeneralHeapPointer because it's 4 bytes
-    // All pointers are actually always HeapPtr<HeapString>
     //
     GeneralHeapPointer<HeapString>* m_hashTable;
 

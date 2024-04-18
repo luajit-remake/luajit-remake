@@ -340,7 +340,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     // TODO: if we have more than x_maxSlot keys, we'd better make it CacheableDictionary right now
                     //
                     SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcitySize);
-                    HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), initalArraySize);
+                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), initalArraySize);
 
                     // Now, insert all the string properties in alphabetic order
                     //
