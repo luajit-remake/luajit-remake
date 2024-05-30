@@ -67,26 +67,26 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
     {
         // Consider metamethod call
         //
-        HeapPtr<TableObject> lhsMetatable;
+        TableObject* lhsMetatable;
         {
-            HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
                 goto not_equal;
             }
-            lhsMetatable = gmr.m_result.As<TableObject>();
+            lhsMetatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         }
 
-        HeapPtr<TableObject> rhsMetatable;
+        TableObject* rhsMetatable;
         {
-            HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(rhs.As<tTable>());
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
                 goto not_equal;
             }
-            rhsMetatable = gmr.m_result.As<TableObject>();
+            rhsMetatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         }
 
         TValue metamethod = GetMetamethodFromMetatableForComparisonOperation<true /*supportsQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Eq);

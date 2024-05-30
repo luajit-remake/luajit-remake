@@ -42,7 +42,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
                         goto no_metamethod;
                     }
 
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
                     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         goto no_metamethod;

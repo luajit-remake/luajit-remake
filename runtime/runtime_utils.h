@@ -190,7 +190,7 @@ public:
 
     static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction(VM* vm, void* fn)
     {
-        HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
+        ExecutableCode* e = TranslateToRawPointer(vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>());
         SystemHeapGcObjectHeader::Populate(e);
         e->m_executableCodeKind = Kind::CFunction;
         e->m_hasVariadicArguments = true;
@@ -513,7 +513,7 @@ namespace DeegenBytecodeBuilder { class BytecodeBuilder; }
 class UnlinkedCodeBlock : public SystemHeapGcObjectHeader
 {
 public:
-    static UnlinkedCodeBlock* WARN_UNUSED Create(VM* vm, HeapPtr<TableObject> globalObject)
+    static UnlinkedCodeBlock* WARN_UNUSED Create(VM* vm, TableObject* globalObject)
     {
         size_t sizeToAllocate = RoundUpToMultipleOf<8>(GetTrailingArrayOffset() + x_num_bytecode_metadata_struct_kinds_ * sizeof(uint16_t));
         uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
@@ -896,7 +896,7 @@ public:
     {
         size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(TValue) * numUpvalues;
         sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
-        HeapPtr<FunctionObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>();
+        FunctionObject* r = TranslateToRawPointer(vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>());
         UserHeapGcObjectHeader::Populate(r);
 
         r->m_numUpvalues = numUpvalues;
@@ -1168,8 +1168,9 @@ public:
 
 };
 
-inline TValue WARN_UNUSED GetMetamethodFromMetatable(HeapPtr<TableObject> metatable, LuaMetamethodKind mtKind)
+inline TValue WARN_UNUSED GetMetamethodFromMetatable(TableObject* metatable2, LuaMetamethodKind mtKind)
 {
+    HeapPtr<TableObject> metatable = TranslateToHeapPtr(metatable2);
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
     return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -1180,7 +1181,7 @@ inline TValue WARN_UNUSED GetMetamethodForValue(TValue value, LuaMetamethodKind 
     UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
     if (metatableMaybeNull.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
         return GetMetamethodFromMetatable(metatable, mtKind);
     }
     else
@@ -1430,7 +1431,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
 //     For Lua 5.2+, the restriction "both have the same type and both share the same metamethod" is removed.
 //
 template<bool supportsQuicklyRuleOutMetamethod>
-TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<TableObject> lhsMetatable, HeapPtr<TableObject> rhsMetatable, LuaMetamethodKind mtKind)
+TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(TableObject* lhsMetatable, TableObject* rhsMetatable, LuaMetamethodKind mtKind)
 {
     TValue lhsMetamethod;
     {
@@ -1509,7 +1510,7 @@ inline TValue WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) GetNewInd
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (unlikely(gmr.m_result.m_value != 0))
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
         {
             return GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);

@@ -21,7 +21,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_ind
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);

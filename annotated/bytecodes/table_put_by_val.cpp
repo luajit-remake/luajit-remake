@@ -62,7 +62,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
                         goto no_metamethod;
                     }
 
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
                     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         goto no_metamethod;
@@ -125,7 +125,7 @@ static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE Ch
         return std::make_pair(TValue(), false);
     }
 
-    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
     {
         return std::make_pair(TValue(), false);
@@ -233,7 +233,7 @@ double_index_handle_metamethod:
                 TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
                 if (gmr.m_result.m_value != 0)
                 {
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
                     if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);

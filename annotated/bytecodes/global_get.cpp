@@ -20,7 +20,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, HeapPtr<Tabl
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
         if (!metamethod.Is<tNil>())
         {

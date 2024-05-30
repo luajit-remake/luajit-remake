@@ -301,7 +301,7 @@ static bool LuaLibCheckStringHasNoExoticLtMetamethod(VM* vm)
         return true;
     }
 
-    HeapPtr<TableObject> mt = vm->m_metatableForString.As<TableObject>();
+    TableObject* mt = TranslateToRawPointer(vm->m_metatableForString.As<TableObject>());
     assert(mt->m_type == HeapEntityType::Table);
     if (mt->m_hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value)
     {
@@ -851,26 +851,26 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
 
         if (lhs.Is<tTable>())
         {
-            HeapPtr<TableObject> lhsMetatable;
+            TableObject* lhsMetatable;
             {
-                HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                 if (result.m_result.m_value == 0)
                 {
                     return LessThanComparisonResult::Error;
                 }
-                lhsMetatable = result.m_result.As<TableObject>();
+                lhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
             }
 
-            HeapPtr<TableObject> rhsMetatable;
+            TableObject *rhsMetatable;
             {
-                HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(rhs.As<tTable>());
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                 if (result.m_result.m_value == 0)
                 {
                     return LessThanComparisonResult::Error;
                 }
-                rhsMetatable = result.m_result.As<TableObject>();
+                rhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
             }
 
             metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Lt);

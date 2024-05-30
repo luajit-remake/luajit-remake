@@ -3187,7 +3187,7 @@ static void fs_fixup_ret(FuncState *fs)
 static UnlinkedCodeBlock* fs_finish(LexState *ls, BCLine /*line*/)
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
-    UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, ls->L->m_globalObject.As());
+    UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, TranslateToRawPointer(ls->L->m_globalObject.As()));
 
     FuncState *fs = ls->fs;
 

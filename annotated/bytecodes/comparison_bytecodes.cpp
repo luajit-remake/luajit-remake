@@ -156,26 +156,26 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
 
             if (lhs.Is<tTable>())
             {
-                HeapPtr<TableObject> lhsMetatable;
+                TableObject* lhsMetatable;
                 {
-                    HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+                    TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
                         goto fail;
                     }
-                    lhsMetatable = result.m_result.As<TableObject>();
+                    lhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
                 }
 
-                HeapPtr<TableObject> rhsMetatable;
+                TableObject* rhsMetatable;
                 {
-                    HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+                    TableObject* tableObj = TranslateToRawPointer(rhs.As<tTable>());
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
                         goto fail;
                     }
-                    rhsMetatable = result.m_result.As<TableObject>();
+                    rhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
                 }
 
                 metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, GetMetamethodKind<opKind>());

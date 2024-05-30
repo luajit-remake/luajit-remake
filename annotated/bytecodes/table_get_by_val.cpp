@@ -14,7 +14,7 @@ static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromT
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);

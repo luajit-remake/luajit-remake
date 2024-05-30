@@ -2469,9 +2469,9 @@ public:
     // If returns true, it is guaranteed that field 'mtKind' doesn't exist if 'self'
     // If returns false, however, there is no guarantee on anything.
     //
-    static bool WARN_UNUSED TryQuicklyRuleOutMetamethod(HeapPtr<TableObject> self, LuaMetamethodKind mtKind)
+    static bool WARN_UNUSED TryQuicklyRuleOutMetamethod(TableObject* self, LuaMetamethodKind mtKind)
     {
-        SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
+        SystemHeapPointer<void> hc = self->m_hiddenClass;
         if (likely(hc.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure))
         {
             return hc.As<Structure>()->m_knownNonexistentMetamethods & (static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << static_cast<size_t>(mtKind)));

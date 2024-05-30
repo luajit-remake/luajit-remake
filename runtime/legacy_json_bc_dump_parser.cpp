@@ -150,7 +150,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
     TestAssert(module["FunctionPrototypes"].size() > 0);
     for (auto& j : module["FunctionPrototypes"])
     {
-        UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, globalObject.As());
+        UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, TranslateToRawPointer(globalObject.As()));
 
         ucb->m_numFixedArguments = JSONCheckedGet<uint32_t>(j, "NumFixedParams");
         ucb->m_hasVariadicArguments = JSONCheckedGet<bool>(j, "TakesVarArg");
