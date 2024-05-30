@@ -926,11 +926,11 @@ public:
 
     // DEVNOTE: C library function must not use this function.
     //
-    static bool ALWAYS_INLINE IsUpvalueImmutable(HeapPtr<FunctionObject> self, size_t ord)
+    static bool ALWAYS_INLINE IsUpvalueImmutable(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
-        assert(TranslateToRawPointer(TCGet(self->m_executable).As())->IsBytecodeFunction());
-        HeapPtr<CodeBlock> cb = static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As());
+        assert(TranslateToRawPointer(self->m_executable.As())->IsBytecodeFunction());
+        CodeBlock* cb = TranslateToRawPointer(static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As()));
         assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
         assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
         return cb->m_owner->m_upvalueInfo[ord].m_isImmutable;
@@ -940,24 +940,24 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static HeapPtr<Upvalue> ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
+    static Upvalue* ALWAYS_INLINE GetMutableUpvaluePtr(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         assert(!IsUpvalueImmutable(self, ord));
-        TValue tv = TCGet(self->m_upvalues[ord]);
+        TValue tv = self->m_upvalues[ord];
         assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
-        return tv.AsPointer().As<Upvalue>();
+        return TranslateToRawPointer(tv.AsPointer().As<Upvalue>());
     }
 
     // Get the value of an immutable upvalue
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static TValue ALWAYS_INLINE GetImmutableUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue ALWAYS_INLINE GetImmutableUpvalueValue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         assert(IsUpvalueImmutable(self, ord));
-        TValue tv = TCGet(self->m_upvalues[ord]);
+        TValue tv = self->m_upvalues[ord];
         assert(!(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue));
         return tv;
     }
@@ -967,7 +967,7 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static TValue ALWAYS_INLINE GetUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue ALWAYS_INLINE GetUpvalueValue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         if (IsUpvalueImmutable(self, ord))
@@ -976,7 +976,7 @@ public:
         }
         else
         {
-            HeapPtr<Upvalue> uv = GetMutableUpvaluePtr(self, ord);
+            Upvalue* uv = GetMutableUpvaluePtr(self, ord);
             return *uv->m_ptr;
         }
     }
