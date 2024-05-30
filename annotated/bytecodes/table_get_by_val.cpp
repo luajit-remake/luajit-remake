@@ -9,7 +9,7 @@ static void NO_RETURN TableGetByValMetamethodCallContinuation(TValue /*base*/, T
     Return(GetReturnValue(0));
 }
 
-static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromTableObject(HeapPtr<TableObject> tableObj)
+static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromTableObject(TableObject* tableObj)
 {
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (gmr.m_result.m_value != 0)
@@ -39,7 +39,7 @@ static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
     {
         // The invariant here is 'base' is table 'tableObj', 'base[index]' is nil, and we should check its metatable
         //
-        auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
+        auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
 
         if (likely(!hasMetamethod))
         {
@@ -98,7 +98,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
 
                 if (likely(!hasMetamethod))
                 {
@@ -166,7 +166,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
 
                 if (likely(!hasMetamethod))
                 {
@@ -233,7 +233,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
 
                 if (likely(!hasMetamethod))
                 {

@@ -31,8 +31,7 @@ public:
 
     static ArraySparseMap* WARN_UNUSED AllocateEmptyArraySparseMap(VM* vm)
     {
-        HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
-        ArraySparseMap* r = TranslateToRawPointer(vm, hp);
+        ArraySparseMap* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>());
         ConstructInPlace(r);
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass = ArraySparseMap::x_hiddenClassForArraySparseMap;
@@ -46,8 +45,7 @@ public:
 
     ArraySparseMap* WARN_UNUSED Clone(VM* vm)
     {
-        HeapPtr<ArraySparseMap> hp = vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>();
-        ArraySparseMap* r = TranslateToRawPointer(vm, hp);
+        ArraySparseMap* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(sizeof(ArraySparseMap)).AsNoAssert<ArraySparseMap>());
         ConstructInPlace(r);
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass = ArraySparseMap::x_hiddenClassForArraySparseMap;
@@ -734,11 +732,11 @@ public:
         __builtin_unreachable();
     }
 
-    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PreparePutByIdForCacheableDictionary(T self, HeapPtr<CacheableDictionary> dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    template<typename U>
+    static void PreparePutByIdForCacheableDictionary(TableObject* self, CacheableDictionary* dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
-        assert(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
-        assert(TCGet(self->m_hiddenClass).template As<CacheableDictionary>() == dict);
+        assert(self->m_hiddenClass.template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        assert(self->m_hiddenClass.template As<CacheableDictionary>() == dict);
         CacheableDictionary::PutByIdResult res;
         if constexpr(std::is_same_v<U, HeapString>)
         {
@@ -792,7 +790,7 @@ public:
     }
 
     template<typename U>
-    static void PreparePutByIdForStructure(HeapPtr<Structure> structure, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    static void PreparePutByIdForStructure(Structure* structure, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
         icInfo.m_isInlineCacheable = true;
         icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
@@ -855,8 +853,8 @@ public:
         }
     }
 
-    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PreparePutById(T self, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    template<typename U>
+    static void PreparePutById(TableObject* self, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
@@ -866,12 +864,12 @@ public:
 
         if (likely(ty == HeapEntityType::Structure))
         {
-            HeapPtr<Structure> structure = hiddenClass.As<Structure>();
+            Structure* structure = TranslateToRawPointer(hiddenClass.As<Structure>());
             PreparePutByIdForStructure(structure, propertyName, icInfo /*out*/);
         }
         else if (ty == HeapEntityType::CacheableDictionary)
         {
-            HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
+            CacheableDictionary* dict = TranslateToRawPointer(hiddenClass.As<CacheableDictionary>());
             PreparePutByIdForCacheableDictionary(self, dict, propertyName, icInfo /*out*/);
         }
         else
@@ -886,20 +884,19 @@ public:
     // Specialized PutById for global object
     // Global object is guaranteed to be a CacheableDictionary so we can remove a branch
     //
-    template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PreparePutByIdForGlobalObject(T self, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
+    template<typename U>
+    static void PreparePutByIdForGlobalObject(TableObject* self, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
         SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
         assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
 
-        HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
+        CacheableDictionary* dict = TranslateToRawPointer(hiddenClass.As<CacheableDictionary>());
         PreparePutByIdForCacheableDictionary(self, dict, propertyName, icInfo /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED PutByIdNeedToCheckMetatable(T self, PutByIdICInfo icInfo)
+    static bool WARN_UNUSED PutByIdNeedToCheckMetatable(TableObject* self, PutByIdICInfo icInfo)
     {
         if (likely(!icInfo.m_mayHaveMetatable))
         {
@@ -927,8 +924,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue WARN_UNUSED GetValueForSlot(T self, uint32_t slotOrd, uint8_t inlineStorageCapacity)
+    static TValue WARN_UNUSED GetValueForSlot(TableObject* self, uint32_t slotOrd, uint8_t inlineStorageCapacity)
     {
         if (slotOrd < inlineStorageCapacity)
         {
@@ -1168,8 +1164,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PutByIdTransitionToDictionary(T self, UserHeapPointer<void> propertyName, TValue newValue)
+    static void PutByIdTransitionToDictionary(TableObject* self, UserHeapPointer<void> propertyName, TValue newValue)
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
         TableObject* rawSelf = TranslateToRawPointer(vm, self);
@@ -1206,13 +1201,12 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void PreparePutByIntegerIndex(T self, int64_t index, TValue value, PutByIntegerIndexICInfo& icInfo /*out*/)
+    static void PreparePutByIntegerIndex(TableObject* self, int64_t index, TValue value, PutByIntegerIndexICInfo& icInfo /*out*/)
     {
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
-        AssertImp(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
-                  arrType.m_asValue == TCGet(self->m_hiddenClass).template As<Structure>()->m_arrayType.m_asValue);
+        AssertImp(self->m_hiddenClass.template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
+                  arrType.m_asValue == self->m_hiddenClass.template As<Structure>()->m_arrayType.m_asValue);
 
         auto setForceSlowPath = [&icInfo]() ALWAYS_INLINE
         {
@@ -1241,11 +1235,11 @@ public:
                 newArrType.SetIsContinuous(true);
 
                 VM* vm = VM::GetActiveVMForCurrentThread();
-                icInfo.m_hiddenClass = TCGet(self->m_hiddenClass);
+                icInfo.m_hiddenClass = self->m_hiddenClass;
                 HeapEntityType ty = icInfo.m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
                 if (ty == HeapEntityType::Structure)
                 {
-                    Structure* structure = TranslateToRawPointer(vm, icInfo.m_hiddenClass.As<Structure>());
+                    Structure* structure = TranslateToRawPointer(icInfo.m_hiddenClass.As<Structure>());
                     Structure* newStructure = structure->UpdateArrayType(vm, newArrType);
                     icInfo.m_newHiddenClass = newStructure;
                 }
@@ -1394,8 +1388,7 @@ public:
         return true;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_ContinuousArray(T self, int64_t index, TValue value)
+    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_ContinuousArray(TableObject* self, int64_t index, TValue value)
     {
         // For the continuous case, a nil value should always fail the value check above
         //
@@ -1427,8 +1420,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_InBoundPut(T self, int64_t index, TValue value)
+    static bool WARN_UNUSED ALWAYS_INLINE TryPutByIntegerIndexFastPath_InBoundPut(TableObject* self, int64_t index, TValue value)
     {
         Butterfly* butterfly = self->m_butterfly;
         if (likely(butterfly->GetHeader()->IndexFitsInVectorCapacity(index)))
@@ -1446,8 +1438,7 @@ public:
 
     // Return false if need to fallback to slow path
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED TryPutByIntegerIndexFast(T self, int64_t index, TValue value, PutByIntegerIndexICInfo icInfo)
+    static bool WARN_UNUSED TryPutByIntegerIndexFast(TableObject* self, int64_t index, TValue value, PutByIntegerIndexICInfo icInfo)
     {
         if (!CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(value, icInfo.m_valueCheckKind))
         {
@@ -1483,9 +1474,9 @@ public:
             {
                 *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = value;
                 butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                assert(TCGet(self->m_hiddenClass).m_value == icInfo.m_hiddenClass.m_value);
-                TCSet(self->m_arrayType, icInfo.m_newArrayType);
-                TCSet(self->m_hiddenClass, icInfo.m_newHiddenClass);
+                assert(self->m_hiddenClass.m_value == icInfo.m_hiddenClass.m_value);
+                self->m_arrayType = icInfo.m_newArrayType;
+                self->m_hiddenClass = icInfo.m_newHiddenClass;
                 return true;
             }
             else
@@ -1818,7 +1809,7 @@ public:
             assert(hiddenClassType == HeapEntityType::Structure || hiddenClassType == HeapEntityType::CacheableDictionary || hiddenClassType == HeapEntityType::UncacheableDictionary);
             if (hiddenClassType == HeapEntityType::Structure)
             {
-                Structure* structure = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>());
+                Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
                 Structure* newStructure = structure->UpdateArrayType(vm, newArrayType);
                 m_hiddenClass = newStructure;
                 m_arrayType = newArrayType;
@@ -1926,7 +1917,7 @@ public:
             assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
             if (ty == HeapEntityType::Structure)
             {
-                m_hiddenClass = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>())->UpdateArrayType(vm, newArrayType);
+                m_hiddenClass = TranslateToRawPointer(m_hiddenClass.As<Structure>())->UpdateArrayType(vm, newArrayType);
                 m_arrayType = newArrayType;
             }
             else
@@ -1936,8 +1927,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED TryPutByValIntegerIndexFastNoIC(T self, int64_t index, TValue value)
+    static bool WARN_UNUSED TryPutByValIntegerIndexFastNoIC(TableObject* self, int64_t index, TValue value)
     {
         ArrayType arrType = TCGet(self->m_arrayType);
         AssertImp(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
@@ -2024,8 +2014,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void RawPutByValIntegerIndex(T self, int64_t index, TValue value)
+    static void RawPutByValIntegerIndex(TableObject* self, int64_t index, TValue value)
     {
         if (unlikely(!TableObject::TryPutByValIntegerIndexFastNoIC(self, index, value)))
         {
@@ -2035,8 +2024,7 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void RawPutByValDoubleIndex(T self, double index, TValue value)
+    static void RawPutByValDoubleIndex(TableObject* self, double index, TValue value)
     {
         assert(!IsNaN(index));
         int64_t idx64;
@@ -2047,8 +2035,7 @@ public:
         else
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
-            TableObject* obj = TranslateToRawPointer(vm, self);
-            obj->PutIndexIntoSparseMap(vm, false /*isVectorQualifyingIndex*/, index, value);
+            self->PutIndexIntoSparseMap(vm, false /*isVectorQualifyingIndex*/, index, value);
         }
     }
 
@@ -2061,12 +2048,12 @@ public:
 
     // Does NOT set m_hiddenClass and m_butterfly, and does NOT fill nils to the inline storage!
     //
-    static HeapPtr<TableObject> WARN_UNUSED AllocateObjectImpl(VM* vm, uint8_t inlineCapacity)
+    static TableObject* WARN_UNUSED AllocateObjectImpl(VM* vm, uint8_t inlineCapacity)
     {
         uint32_t allocationSize = ComputeObjectAllocationSize(inlineCapacity);
-        HeapPtr<TableObject> r = vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>();
+        TableObject* r = TranslateToRawPointer(vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>());
         UserHeapGcObjectHeader::Populate(r);
-        TCSet(r->m_arrayType, ArrayType::GetInitialArrayType());
+        r->m_arrayType = ArrayType::GetInitialArrayType();
         return r;
     }
 
@@ -2078,23 +2065,23 @@ public:
         assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
 
         assert(inlineCapacity == emptyStructure->m_inlineNamedStorageCapacity);
-        HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
-        TCSet(r->m_hiddenClass, SystemHeapPointer<void> { emptyStructure });
+        TableObject* r = AllocateObjectImpl(vm, inlineCapacity);
+        r->m_hiddenClass = SystemHeapPointer<void> { emptyStructure };
         // Initialize the butterfly storage
         //
         r->m_butterfly = nullptr;
         if (initialButterflyArrayPartCapacity > 0)
         {
-            TranslateToRawPointer(vm, r)->GrowButterflyFromNull<false /*isGrowNamedStorage*/>(initialButterflyArrayPartCapacity);
+            r->GrowButterflyFromNull<false /*isGrowNamedStorage*/>(initialButterflyArrayPartCapacity);
         }
         // Initialize the inline storage
         //
         TValue nilVal = TValue::Nil();
         for (size_t i = 0; i < inlineCapacity; i++)
         {
-            TCSet(r->m_inlineStorage[i], nilVal);
+            r->m_inlineStorage[i] = nilVal;
         }
-        return TranslateToRawPointer(r);
+        return r;
     }
 
     static TableObject* WARN_UNUSED CreateEmptyTableObject(VM* vm, Structure* emptyStructure, uint32_t initialButterflyArrayPartCapacity)
@@ -2113,15 +2100,15 @@ public:
     {
         uint8_t inlineCapacity = Structure::x_maxNumSlots;
         CacheableDictionary* hc = CacheableDictionary::CreateEmptyDictionary(vm, 128 /*anticipatedNumSlots*/, inlineCapacity, true /*shouldNeverTransitToUncacheableDictionary*/);
-        HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
-        TCSet(r->m_hiddenClass, SystemHeapPointer<void> { hc });
+        TableObject* r = AllocateObjectImpl(vm, inlineCapacity);
+        r->m_hiddenClass = SystemHeapPointer<void> { hc };
         r->m_butterfly = nullptr;
         TValue nilVal = TValue::Nil();
         for (size_t i = 0; i < inlineCapacity; i++)
         {
-            TCSet(r->m_inlineStorage[i], nilVal);
+            r->m_inlineStorage[i] = nilVal;
         }
-        return TranslateToRawPointer(r);
+        return r;
     }
 
     Butterfly* WARN_UNUSED CloneButterfly(uint32_t butterflyNamedStorageCapacity)
@@ -2169,7 +2156,7 @@ public:
         return butterflyPtr;
     }
 
-    HeapPtr<TableObject> WARN_UNUSED ShallowCloneTableObject(VM* vm)
+    TableObject* WARN_UNUSED ShallowCloneTableObject(VM* vm)
     {
         HeapEntityType ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
         assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
@@ -2210,7 +2197,7 @@ public:
         {
             r->m_butterfly = CloneButterfly(butterflyNamedStorageCapacity);
         }
-        return TranslateToHeapPtr(r);
+        return r;
     }
 
     // Specialized CloneButterfly for TableDup, which leverages the statically known information for better code.
@@ -2247,7 +2234,7 @@ public:
     // (2) The table has no array sparse map and the butterfly named storage has zero capacity
     // (3) 'inlineCapacityStepping' and 'hasButterfly' accurately reflects the info in the table
     //
-    HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE ShallowCloneTableObjectForTableDup(VM* vm, uint8_t inlineCapacityStepping, bool hasButterfly)
+    TableObject* WARN_UNUSED ALWAYS_INLINE ShallowCloneTableObjectForTableDup(VM* vm, uint8_t inlineCapacityStepping, bool hasButterfly)
     {
         assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
         [[maybe_unused]] Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
@@ -2256,8 +2243,7 @@ public:
         assert(structure->m_butterflyNamedStorageCapacity == 0);
 
         uint32_t allocationSize = ComputeObjectAllocationSize(inlineCapacity);
-        HeapPtr<TableObject> hr = vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>();
-        TableObject* r = TranslateToRawPointer(vm, hr);
+        TableObject* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>());
         // We can simply copy everything, except that we need to fix up the GC state
         // and the butterfly pointer (which needs to be cloned) manually afterwards
         //
@@ -2271,7 +2257,7 @@ public:
         {
             assert(r->m_butterfly == nullptr);
         }
-        return hr;
+        return r;
     }
 
     struct GetMetatableResult
@@ -2284,10 +2270,9 @@ public:
         bool m_isCacheable;
     };
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static GetMetatableResult GetMetatable(T self)
+    static GetMetatableResult GetMetatable(TableObject* self)
     {
-        SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
+        SystemHeapPointer<void> hc = self->m_hiddenClass;
         HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
         assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
@@ -2517,9 +2502,9 @@ public:
         return lb;
     }
 
-    static uint32_t WARN_UNUSED NO_INLINE GetTableLengthWithLuaSemanticsSlowPath(HeapPtr<TableObject> self)
+    static uint32_t WARN_UNUSED NO_INLINE GetTableLengthWithLuaSemanticsSlowPath(TableObject* self)
     {
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
         Butterfly* butterfly = self->m_butterfly;
         TValue* tv = reinterpret_cast<TValue*>(butterfly);
         uint32_t arrayStorageCap = butterfly->GetHeader()->m_arrayStorageCapacity;
@@ -2600,7 +2585,7 @@ public:
     // The definition is any non-negative integer index n such that value for index 'n' is non-nil but value for index 'n+1' is nil,
     // or if index '1' is nil, the length is 0
     //
-    static std::pair<bool /*success*/, uint32_t /*length*/> WARN_UNUSED ALWAYS_INLINE TryGetTableLengthWithLuaSemanticsFastPath(HeapPtr<TableObject> self)
+    static std::pair<bool /*success*/, uint32_t /*length*/> WARN_UNUSED ALWAYS_INLINE TryGetTableLengthWithLuaSemanticsFastPath(TableObject* self)
     {
         static_assert(ArrayGrowthPolicy::x_arrayBaseOrd == 1, "this function currently only works under lua semantics");
         ArrayType arrType = TCGet(self->m_arrayType);
@@ -2626,14 +2611,14 @@ public:
 
     static uint32_t WARN_UNUSED GetTableLengthWithLuaSemantics(TableObject* self)
     {
-        auto [success, len] = TryGetTableLengthWithLuaSemanticsFastPath(TranslateToHeapPtr(self));
+        auto [success, len] = TryGetTableLengthWithLuaSemanticsFastPath(self);
         if (likely(success))
         {
             return len;
         }
         else
         {
-            return GetTableLengthWithLuaSemanticsSlowPath(TranslateToHeapPtr(self));
+            return GetTableLengthWithLuaSemanticsSlowPath(self);
         }
     }
 
@@ -2659,7 +2644,7 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
 
         if (likely(ty == HeapEntityType::Table))
         {
-            HeapPtr<TableObject> tableObj = value.AsPointer<TableObject>().As();
+            TableObject* tableObj = TranslateToRawPointer(value.AsPointer<TableObject>().As());
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return result.m_result;
         }
@@ -2742,7 +2727,7 @@ inline FunctionObject* WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(TValue va
 
         if (likely(ty == HeapEntityType::Table))
         {
-            HeapPtr<TableObject> tableObj = value.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(value.As<tTable>());
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             return GetCallMetamethodFromMetatableImpl(result.m_result);
         }

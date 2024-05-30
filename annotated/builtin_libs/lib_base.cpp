@@ -284,7 +284,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
 
         TValue* sb = GetStackBase();
         assert(sb[2].Is<tTable>());
-        HeapPtr<TableObject> tab = sb[2].As<tTable>();
+        TableObject* tab = TranslateToRawPointer(sb[2].As<tTable>());
         assert(sb[3].Is<tInt32>());
         int32_t ord = sb[3].As<tInt32>();
         assert(ord >= 0);
@@ -633,7 +633,7 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
     }
 
     assert(ty == HeapEntityType::Table);
-    HeapPtr<TableObject> tableObj = tv.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(tv.As<tTable>());
     UserHeapPointer<void> mt = TableObject::GetMetatable(tableObj).m_result;
     if (unlikely(mt.m_value != 0))
     {

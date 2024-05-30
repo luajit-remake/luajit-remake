@@ -11,7 +11,7 @@ static void NO_RETURN TableVariadicPutBySeqImpl(TValue base, TValue tvIndex)
     // 'base' is guaranteed to be a table object, as this opcode only shows up in a table initializer expression.
     //
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
     // Since this opcode only shows up in a table initializer expression, 'base' must have no metatable.
     // For now we simply use a naive loop of PutByIntegerVal: this isn't performance sensitive after all, so just stay simple for now

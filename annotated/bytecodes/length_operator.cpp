@@ -51,7 +51,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
 static void NO_RETURN LengthOperatorTableLengthSlowPath(TValue input)
 {
     assert(input.Is<tTable>());
-    uint32_t length = TableObject::GetTableLengthWithLuaSemanticsSlowPath(input.As<tTable>());
+    uint32_t length = TableObject::GetTableLengthWithLuaSemanticsSlowPath(TranslateToRawPointer(input.As<tTable>()));
     Return(TValue::Create<tDouble>(length));
 }
 
@@ -68,7 +68,7 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
         // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
         // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
         //
-        HeapPtr<TableObject> s = input.As<tTable>();
+        TableObject* s = TranslateToRawPointer(input.As<tTable>());
         auto [success, result] = TableObject::TryGetTableLengthWithLuaSemanticsFastPath(s);
         if (likely(success))
         {

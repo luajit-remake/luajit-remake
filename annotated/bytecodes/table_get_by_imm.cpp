@@ -18,7 +18,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
 static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
 {
     assert(base.Is<tTable>());
-    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(TranslateToRawPointer(base.As<tTable>()));
     if (gmr.m_result.m_value != 0)
     {
         TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());

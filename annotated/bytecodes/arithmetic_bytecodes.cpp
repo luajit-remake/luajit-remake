@@ -49,7 +49,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 
         if (likely(lhs.Is<tTable>()))
         {
-            HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             if (result.m_result.m_value != 0)
             {
