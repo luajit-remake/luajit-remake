@@ -34,12 +34,12 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
 static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base)
 {
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
     while (true)
     {
         // The invariant here is 'base' is table 'tableObj', 'base[index]' is nil, and we should check its metatable
         //
-        auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+        auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
 
         if (likely(!hasMetamethod))
         {
@@ -66,7 +66,7 @@ static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         int64_t index = static_cast<int64_t>(idxDbl);
         assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
-        tableObj = base.As<tTable>();
+        tableObj = TranslateToRawPointer(base.As<tTable>());
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -129,7 +129,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
                 TValue result;
                 if (unlikely(IsNaN(idx)))
@@ -166,7 +166,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
 
                 if (likely(!hasMetamethod))
                 {
@@ -304,7 +304,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
         // tvIndex is a double that represents a int64_t value
         //
         assert(base.Is<tTable>());
-        HeapPtr<TableObject> tableObj = base.As<tTable>();
+        TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -343,7 +343,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
     {
         if (likely(base.Is<tHeapEntity>()))
         {
-            HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+            TableObject* heapEntity = reinterpret_cast<TableObject*>(TranslateToRawPointer(base.As<tHeapEntity>()));
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();

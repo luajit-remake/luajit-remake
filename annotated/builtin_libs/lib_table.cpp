@@ -21,7 +21,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
     {
         ThrowError("bad argument #1 to 'concat' (table expected)");
     }
-    HeapPtr<TableObject> tab = GetArg(0).As<tTable>();
+    TableObject* tab = TranslateToRawPointer(GetArg(0).As<tTable>());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
 
@@ -325,7 +325,7 @@ static void LuaLibTableSortDoubleContinuousArrayNoMM(TValue* arr, size_t n)
     std::sort(arrDbl + 1, arrDbl + n + 1);
 }
 
-static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab, size_t n)
+static void LuaLibTableSortDoubleNonContinuousArrayNoMM(TableObject* tab, size_t n)
 {
     constexpr size_t internalBufSize = 500;
     double buf[internalBufSize];
@@ -394,7 +394,7 @@ static void LuaLibTableSortStringContinuousArrayNoMM(TValue* arr, size_t n)
     std::stable_sort(arr + 1, arr + n + 1, LuaLibTableSortStringComparator);
 }
 
-static void LuaLibTableSortStringNonContinuousArrayNoMM(HeapPtr<TableObject> tab, size_t n)
+static void LuaLibTableSortStringNonContinuousArrayNoMM(TableObject* tab, size_t n)
 {
     constexpr size_t internalBufSize = 500;
     TValue buf[internalBufSize];
@@ -510,7 +510,7 @@ struct QuickSortStateMachine
     //
     static constexpr int32_t x_limit_for_ins_sort = 8;
 
-    static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, HeapPtr<TableObject> tableObj, int32_t n)
+    static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, TableObject* tableObj, int32_t n)
     {
         assert(n >= 2);
         GetByIntegerIndexICInfo info;
@@ -566,7 +566,7 @@ struct QuickSortStateMachine
         assert(stackBase[4].Is<tInt32>());
         assert(stackBase[5].Is<tInt32>());
         assert(stackBase[6].Is<tInt32>() && 0 <= stackBase[6].As<tInt32>() && stackBase[6].As<tInt32>() <= 2);
-        HeapPtr<TableObject> tableObj = stackBase[0].As<tTable>();
+        TableObject* tableObj = TranslateToRawPointer(stackBase[0].As<tTable>());
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
         return QuickSortStateMachine {
@@ -816,7 +816,7 @@ private:
 
 public:
     TValue* sb;
-    HeapPtr<TableObject> tab;
+    TableObject* tab;
     TValue pivot;
     int32_t h;
     int32_t i;
@@ -1048,7 +1048,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
     {
         ThrowError("bad argument #1 to 'sort' (table expected)");
     }
-    HeapPtr<TableObject> tab = GetArg(0).As<tTable>();
+    TableObject* tab = TranslateToRawPointer(GetArg(0).As<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
 
     if (numArgs > 1)

@@ -427,10 +427,9 @@ public:
         return result;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static void ALWAYS_INLINE PrepareGetByIntegerIndex(T self, GetByIntegerIndexICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIntegerIndex(TableObject* self, GetByIntegerIndexICInfo& icInfo /*out*/)
     {
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
 
         icInfo.m_mayHaveMetatable = arrType.MayHaveMetatable();
         icInfo.m_icKind = ComputeGetByIntegerIndexIcKindFromArrayType(arrType);
@@ -2643,16 +2642,16 @@ public:
         }
     }
 
-    static uint32_t WARN_UNUSED GetTableLengthWithLuaSemantics(HeapPtr<TableObject> self)
+    static uint32_t WARN_UNUSED GetTableLengthWithLuaSemantics(TableObject* self)
     {
-        auto [success, len] = TryGetTableLengthWithLuaSemanticsFastPath(self);
+        auto [success, len] = TryGetTableLengthWithLuaSemanticsFastPath(TranslateToHeapPtr(self));
         if (likely(success))
         {
             return len;
         }
         else
         {
-            return GetTableLengthWithLuaSemanticsSlowPath(self);
+            return GetTableLengthWithLuaSemanticsSlowPath(TranslateToHeapPtr(self));
         }
     }
 

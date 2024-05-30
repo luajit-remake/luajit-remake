@@ -192,7 +192,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_ipairs_iterator)
     {
         ThrowError("bad argument #1 to 'ipairs iterator' (table expected)");
     }
-    HeapPtr<TableObject> tableObj = arg1.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(arg1.As<tTable>());
     TValue arg2 = GetArg(1);
     if (unlikely(!arg2.Is<tDouble>()))
     {
@@ -884,7 +884,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawget)
         ThrowError("bad argument #1 to 'rawget' (table expected)");
     }
 
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
     TValue result;
 
 #if 0
@@ -1473,7 +1473,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_unpack)
     {
         ThrowError("bad argument #1 to 'unpack' (table expected)");
     }
-    HeapPtr<TableObject> tableObj = tvList.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(tvList.As<tTable>());
 
     int64_t lb;
     if (numArgs == 1)
