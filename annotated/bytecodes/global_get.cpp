@@ -15,7 +15,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_tvIndex*/, TValue base
 
 // At this point, we know that 'rawget(base, index)' is nil and 'base' might have a metatable
 //
-static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, HeapPtr<TableObject> base)
+static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, TableObject* base)
 {
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
     if (gmr.m_result.m_value != 0)
@@ -24,7 +24,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, HeapPtr<Tabl
         TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
         if (!metamethod.Is<tNil>())
         {
-            EnterSlowPath<HandleMetatableSlowPath>(TValue::Create<tTable>(base), metamethod);
+            EnterSlowPath<HandleMetatableSlowPath>(TValue::Create<tTable>(TranslateToHeapPtr(base)), metamethod);
         }
     }
     Return(TValue::Create<tNil>());
@@ -51,7 +51,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
             {
                 assert(tvIndex.Is<tString>());
                 HeapPtr<HeapString> index = tvIndex.As<tString>();
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -122,7 +122,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         Return(result);
     }
 
-    EnterSlowPath<CheckMetatableSlowPath>(TranslateToHeapPtr(base));
+    EnterSlowPath<CheckMetatableSlowPath>(base);
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalGet)

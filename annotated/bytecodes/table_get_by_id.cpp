@@ -70,7 +70,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
     assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
 
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
     TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -98,7 +98,7 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
     //
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* heapEntity = reinterpret_cast<TableObject*>(TranslateToRawPointer(base.As<tHeapEntity>()));
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();

@@ -18,7 +18,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
         ThrowError("Invalid types for length");
     }
 
-    HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+    TableObject* metatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len), icInfo /*out*/);
     TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len).As<void>(), icInfo);

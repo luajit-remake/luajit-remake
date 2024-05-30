@@ -89,7 +89,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo);
@@ -98,7 +98,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
 
                 if (likely(!hasMetamethod))
                 {
@@ -208,7 +208,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
                 TValue result;
                 if (specialKey.m_value == 0)
@@ -233,7 +233,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     Return(result);
                 }
 
-                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(tableObj);
+                auto [hasMetamethod, metamethod] = GetIndexMetamethodFromTableObject(TranslateToHeapPtr(tableObj));
 
                 if (likely(!hasMetamethod))
                 {

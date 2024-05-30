@@ -1168,9 +1168,8 @@ public:
 
 };
 
-inline TValue WARN_UNUSED GetMetamethodFromMetatable(TableObject* metatable2, LuaMetamethodKind mtKind)
+inline TValue WARN_UNUSED GetMetamethodFromMetatable(TableObject* metatable, LuaMetamethodKind mtKind)
 {
-    HeapPtr<TableObject> metatable = TranslateToHeapPtr(metatable2);
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
     return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -1398,7 +1397,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
         UserHeapPointer<void> lhsMetatableMaybeNull = GetMetatableForValue(lhs);
         if (lhsMetatableMaybeNull.m_value != 0)
         {
-            HeapPtr<TableObject> metatable = lhsMetatableMaybeNull.As<TableObject>();
+            TableObject* metatable = TranslateToRawPointer(lhsMetatableMaybeNull.As<TableObject>());
             GetByIdICInfo icInfo;
             TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
             TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -1416,7 +1415,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
             return TValue::Nil();
         }
 
-        HeapPtr<TableObject> metatable = rhsMetatableMaybeNull.As<TableObject>();
+        TableObject* metatable = TranslateToRawPointer(rhsMetatableMaybeNull.As<TableObject>());
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
         return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);

@@ -111,9 +111,9 @@ no_metamethod:
     }
 }
 
-static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(HeapPtr<TableObject> tableObj, double indexDouble)
+static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(TableObject* tableObj, double indexDouble)
 {
-    ArrayType arrType = TCGet(tableObj->m_arrayType);
+    ArrayType arrType = tableObj->m_arrayType;
     if (likely(!arrType.MayHaveMetatable()))
     {
         return std::make_pair(TValue(), false);
@@ -169,7 +169,7 @@ static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/,
         while (true)
         {
             assert(base.Is<tTable>());
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
 
             auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(tableObj, indexDouble);
             if (likely(!hasMetamethod))

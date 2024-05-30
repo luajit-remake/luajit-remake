@@ -163,14 +163,14 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
     }
     else
     {
-        HeapPtr<TableObject> tableObj = metatableMaybeNull.As<TableObject>();
+        TableObject* tableObj = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
         UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(tableObj, prop, icInfo /*out*/);
         TValue result = TableObject::GetById(tableObj, prop.As<void>(), icInfo);
         if (result.Is<tNil>())
         {
-            Return(TValue::Create<tTable>(tableObj));
+            Return(TValue::Create<tTable>(TranslateToHeapPtr(tableObj)));
         }
         else
         {
@@ -532,7 +532,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pairs)
     Return(VM_GetLibFunctionObject<VM::LibFn::BaseNext>(), input, TValue::Create<tNil>());
 }
 
-static std::pair<bool, TValue> WARN_UNUSED IsGlobalToStringFunctionUnchanged(VM* vm, HeapPtr<TableObject> globalObject)
+static std::pair<bool, TValue> WARN_UNUSED IsGlobalToStringFunctionUnchanged(VM* vm, TableObject* globalObject)
 {
     GetByIdICInfo info;
     TableObject::PrepareGetByIdForGlobalObject(globalObject, vm->m_toStringString, info /*out*/);
@@ -775,7 +775,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_print)
 
     size_t cur = 0;
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, currentCoro->m_globalObject.As());
+    auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, TranslateToRawPointer(currentCoro->m_globalObject.As()));
     auto toStringFnU64 = reinterpret_cast<uint64_t>(TranslateToRawPointer(toStringFn.As<tFunction>()));
     if (unlikely(!isToStringUnchanged))
     {
@@ -1140,7 +1140,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
     UserHeapPointer<void> metatableMaybeNull = TableObject::GetMetatable(obj).m_result;
     if (metatableMaybeNull.m_value != 0)
     {
-        HeapPtr<TableObject> existingMetatable = metatableMaybeNull.As<TableObject>();
+        TableObject* existingMetatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
         UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
@@ -1360,7 +1360,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
         Return(LuaDefaultStringifyValue(vm, value));
     }
 
-    HeapPtr<TableObject> metatable = mt.As<TableObject>();
+    TableObject* metatable = TranslateToRawPointer(mt.As<TableObject>());
     assert(metatable->m_type == HeapEntityType::Table);
     GetByIdICInfo info;
     TableObject::PrepareGetById(metatable, vm->m_stringNameForToStringMetamethod, info /*out*/);

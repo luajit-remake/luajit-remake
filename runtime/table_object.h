@@ -438,11 +438,10 @@ public:
 
     // Returns isSuccess = false if 'idx' does not fit in the vector storage
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static std::pair<TValue, bool /*isSuccess*/> WARN_UNUSED ALWAYS_INLINE TryAccessIndexInVectorStorage(T self, int64_t idx)
+    static std::pair<TValue, bool /*isSuccess*/> WARN_UNUSED ALWAYS_INLINE TryAccessIndexInVectorStorage(TableObject* self, int64_t idx)
     {
 #ifndef NDEBUG
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
 #endif
         assert(arrType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
         if (likely(self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
@@ -459,11 +458,10 @@ public:
         return std::make_pair(TValue(), false /*isSuccess*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static bool WARN_UNUSED ALWAYS_INLINE CheckIndexFitsInContinuousArray(T self, int64_t idx)
+    static bool WARN_UNUSED ALWAYS_INLINE CheckIndexFitsInContinuousArray(TableObject* self, int64_t idx)
     {
 #ifndef NDEBUG
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
 #endif
         assert(arrType.IsContinuous());
         if (likely(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
@@ -486,11 +484,10 @@ public:
         return false;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByIntegerIndex(T self, int64_t idx, GetByIntegerIndexICInfo icInfo)
+    static TValue GetByIntegerIndex(TableObject* self, int64_t idx, GetByIntegerIndexICInfo icInfo)
     {
 #ifndef NDEBUG
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
 #endif
 
         if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::NoArrayPart)
@@ -545,14 +542,12 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByInt32Val(T self, int32_t idx, GetByIntegerIndexICInfo icInfo)
+    static TValue GetByInt32Val(TableObject* self, int32_t idx, GetByIntegerIndexICInfo icInfo)
     {
         return GetByIntegerIndex(self, idx, icInfo);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue GetByDoubleVal(T self, double idx, GetByIntegerIndexICInfo icInfo)
+    static TValue GetByDoubleVal(TableObject* self, double idx, GetByIntegerIndexICInfo icInfo)
     {
         // This function expects that 'idx' is not NaN
         //
@@ -581,11 +576,10 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue __attribute__((__preserve_most__)) NO_INLINE QueryArraySparseMap(T self, double idx)
+    static TValue __attribute__((__preserve_most__)) NO_INLINE QueryArraySparseMap(TableObject* self, double idx)
     {
 #ifndef NDEBUG
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
         assert(arrType.HasSparseMap());
 #endif
         ArraySparseMap* sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
@@ -708,11 +702,6 @@ public:
         return PrepareGetByIdImpl(self->m_hiddenClass, propertyName, icInfo /*out*/);
     }
 
-    template<typename U>
-    static void PrepareGetById(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
-    {
-        return PrepareGetByIdImpl(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
-    }
 
     // Specialized GetById for global object
     // Global object is guaranteed to be a CacheableDictionary so we can remove a branch
@@ -723,14 +712,7 @@ public:
         return PrepareGetByIdImplForCacheableDictionary(self->m_hiddenClass, propertyName, icInfo /*out*/);
     }
 
-    template<typename U>
-    static void PrepareGetByIdForGlobalObject(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
-    {
-        return PrepareGetByIdImplForCacheableDictionary(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
-    }
-
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
-    static TValue WARN_UNUSED ALWAYS_INLINE GetById(T self, UserHeapPointer<void> /*propertyName*/, GetByIdICInfo icInfo)
+    static TValue WARN_UNUSED ALWAYS_INLINE GetById(TableObject* self, UserHeapPointer<void> /*propertyName*/, GetByIdICInfo icInfo)
     {
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNil || icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable)
         {
@@ -739,7 +721,7 @@ public:
 
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::InlinedStorage)
         {
-            return TCGet(self->m_inlineStorage[icInfo.m_slot]);
+            return self->m_inlineStorage[icInfo.m_slot];
         }
 
         if (icInfo.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)
@@ -2725,7 +2707,7 @@ inline FunctionObject* GetCallMetamethodFromMetatableImpl(UserHeapPointer<void> 
         return nullptr;
     }
     assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
-    HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+    TableObject* metatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
     TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
