@@ -1485,11 +1485,11 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 TestAssert(opdata.size() == 2);
                 TValue tv = objCst(opdata[1]);
                 TestAssert(tv.Is<tTable>());
-                HeapPtr<TableObject> tab = tv.As<tTable>();
+                TableObject* tab = TranslateToRawPointer(tv.As<tTable>());
                 bool usedSpecializedTableDup = false;
-                if (TCGet(tab->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
+                if (tab->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                 {
-                    HeapPtr<Structure> structure = TCGet(tab->m_hiddenClass).As<Structure>();
+                    Structure* structure = TranslateToRawPointer(tab->m_hiddenClass.As<Structure>());
                     if (structure->m_butterflyNamedStorageCapacity == 0 && !TCGet(tab->m_arrayType).HasSparseMap())
                     {
                         uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;

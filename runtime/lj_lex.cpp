@@ -827,7 +827,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, const char*
 
 struct LuaStringArrayReaderState
 {
-    HeapPtr<TableObject> m_tab;
+    TableObject* m_tab;
     uint32_t m_cur;
     uint32_t m_length;
 };
@@ -850,7 +850,7 @@ static const char* Parser_LuaStringArrayReader(CoroutineRuntimeContext* /*ctx*/,
     return reinterpret_cast<const char*>(s->m_string);
 }
 
-ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, HeapPtr<TableObject> tab, uint32_t length)
+ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, TableObject* tab, uint32_t length)
 {
 #ifndef NDEBUG
     for (uint32_t i = 1; i <= length; i++)

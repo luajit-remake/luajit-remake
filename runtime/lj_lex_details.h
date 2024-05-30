@@ -95,7 +95,7 @@ typedef struct BCInsLine {
 
 /* Info for local variables. Only used during bytecode generation. */
 typedef struct VarInfo {
-  HeapPtr<HeapString> name;		/* Local variable name or goto/label name. */
+  HeapString* name;	/* Local variable name or goto/label name. */
   BCPos startpc;	/* First point where the local variable is active. */
   BCPos endpc;		/* First point where the local variable is dead. */
   uint8_t slot;		/* Variable slot. */

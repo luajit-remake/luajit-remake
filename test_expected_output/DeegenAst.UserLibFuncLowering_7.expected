@@ -25,14 +25,13 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   %22 = load ptr, ptr %1, align 8
   %23 = load i32, ptr %22, align 4, !tbaa !12
   %24 = zext i32 %23 to i64
-  %25 = inttoptr i64 %24 to ptr addrspace(256)
-  %26 = getelementptr inbounds %0, ptr addrspace(256) %25, i64 0, i32 4
-  %27 = load ptr, ptr addrspace(256) %26, align 8, !tbaa !14
-  %28 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !22
-  %29 = ptrtoint ptr %28 to i64
-  %30 = add i64 %29, %24
-  %31 = inttoptr i64 %30 to ptr
-  musttail call ghccc void %27(ptr %0, ptr nonnull %17, ptr null, ptr %31, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %25 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !14
+  %26 = ptrtoint ptr %25 to i64
+  %27 = add i64 %26, %24
+  %28 = inttoptr i64 %27 to ptr
+  %29 = getelementptr inbounds %0, ptr %28, i64 0, i32 4
+  %30 = load ptr, ptr %29, align 8, !tbaa !15
+  musttail call ghccc void %30(ptr %0, ptr nonnull %17, ptr null, ptr %28, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -56,12 +55,12 @@ attributes #1 = { nounwind }
 !11 = !{!3, !8, i64 28}
 !12 = !{!13, !8, i64 0}
 !13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
-!14 = !{!15, !4, i64 8}
-!15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !19, i64 2, !20, i64 3, !8, i64 4, !4, i64 8, !21, i64 16}
-!16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}
-!17 = !{!"_ZTS14HeapEntityType", !5, i64 0}
-!18 = !{!"_ZTS11GcCellState", !5, i64 0}
-!19 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
-!20 = !{!"bool", !5, i64 0}
-!21 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}
-!22 = !{!4, !4, i64 0}
+!14 = !{!4, !4, i64 0}
+!15 = !{!16, !4, i64 8}
+!16 = !{!"_ZTS14ExecutableCode", !17, i64 0, !20, i64 2, !21, i64 3, !8, i64 4, !4, i64 8, !22, i64 16}
+!17 = !{!"_ZTS24SystemHeapGcObjectHeader", !18, i64 0, !19, i64 1}
+!18 = !{!"_ZTS14HeapEntityType", !5, i64 0}
+!19 = !{!"_ZTS11GcCellState", !5, i64 0}
+!20 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
+!21 = !{!"bool", !5, i64 0}
+!22 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}

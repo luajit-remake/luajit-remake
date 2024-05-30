@@ -21,19 +21,19 @@ define dso_local ghccc void @__deegen_interpreter_op_test6_0_retcont_0(ptr %0, p
   %23 = inttoptr i64 %22 to ptr
   %24 = getelementptr inbounds %0, ptr %16, i64 -1
   %25 = load ptr, ptr %24, align 8, !tbaa !11
-  %.sroa.0.0.copyload.i.i = load i32, ptr %25, align 4, !tbaa.struct !12
-  %26 = zext i32 %.sroa.0.0.copyload.i.i to i64
-  %27 = add i64 %26, %21
-  %28 = inttoptr i64 %27 to ptr
-  %29 = tail call noundef ptr @_Z2d1v() #2
-  %30 = load i64, ptr %retStart, align 8
-  store i64 %30, ptr %29, align 8
-  %31 = getelementptr inbounds i8, ptr %23, i64 6
-  %32 = load i16, ptr %31, align 1
-  %33 = zext i16 %32 to i64
-  %34 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %33
-  %35 = load ptr, ptr %34, align 8
-  musttail call ghccc void %35(ptr %0, ptr %16, ptr nonnull %31, ptr %28, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
+  %26 = load i32, ptr %25, align 4, !tbaa !12
+  %27 = zext i32 %26 to i64
+  %28 = add i64 %27, %21
+  %29 = inttoptr i64 %28 to ptr
+  %30 = tail call noundef ptr @_Z2d1v() #2
+  %31 = load i64, ptr %retStart, align 8
+  store i64 %31, ptr %30, align 8
+  %32 = getelementptr inbounds i8, ptr %23, i64 6
+  %33 = load i16, ptr %32, align 1
+  %34 = zext i16 %33 to i64
+  %35 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %34
+  %36 = load ptr, ptr %35, align 8
+  musttail call ghccc void %36(ptr %0, ptr %16, ptr nonnull %32, ptr %29, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
   ret void
 }
 
@@ -58,5 +58,5 @@ attributes #2 = { nounwind }
 !9 = !{!7, !8, i64 0}
 !10 = !{!4, !4, i64 0}
 !11 = !{!3, !4, i64 0}
-!12 = !{i64 0, i64 4, !13}
-!13 = !{!8, !8, i64 0}
+!12 = !{!13, !8, i64 0}
+!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}

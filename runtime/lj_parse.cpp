@@ -308,7 +308,7 @@ typedef struct ExpDesc {
             uint32_t aux;	/* Secondary info. */
         } s;
         TValue nval;	/* Number value. */
-        HeapPtr<HeapString> sval;	/* String value. */
+        HeapString* sval;	/* String value. */
     } u;
     ExpKind k;
     BCPos t;		/* True condition jump list. */
@@ -370,7 +370,7 @@ typedef struct FuncScope {
 #define FSCOPE_UPVAL		0x08	/* Upvalue in scope. */
 #define FSCOPE_NOCLOSE		0x10	/* Do not close upvalues. */
 
-#define NAME_BREAK		(reinterpret_cast<HeapPtr<HeapString>>(1))
+#define NAME_BREAK		(reinterpret_cast<HeapString*>(1))
 
 #define PROTO_CHILD		0x01	/* Has child prototypes. */
 #define PROTO_VARARG		0x02	/* Vararg function. */
@@ -511,8 +511,8 @@ static TValue WARN_UNUSED const_str(ExpDesc *e)
     // TODO: we need to keep the object alive
     //
     assert((expr_isstrk(e) || e->k == VGLOBAL) && "bad usage");
-    HeapPtr<HeapString> str = e->u.sval;
-    return TValue::Create<tString>(str);
+    HeapString* str = e->u.sval;
+    return TValue::Create<tString>(TranslateToHeapPtr(str));
 }
 
 /* Anchor string constant to avoid GC. */
@@ -1650,12 +1650,12 @@ static void lex_match(LexState *ls, LexToken what, LexToken /*who*/, BCLine line
 }
 
 /* Check for string token. */
-static HeapPtr<HeapString> lex_str(LexState *ls)
+static HeapString* lex_str(LexState *ls)
 {
     if (ls->tok != TK_name && (LJ_52 || ls->tok != TK_goto))
         err_token(ls, TK_name);
     assert(ls->tokval.Is<tString>());
-    HeapPtr<HeapString> s = ls->tokval.As<tString>();
+    HeapString* s = TranslateToRawPointer(ls->tokval.As<tString>());
     lj_lex_next(ls);
     return s;
 }
@@ -1671,7 +1671,7 @@ VarInfo& var_get(LexState* ls, FuncState* fs, size_t i)
 }
 
 /* Define a new local variable. */
-static void var_new(LexState *ls, BCReg n, HeapPtr<HeapString> name)
+static void var_new(LexState *ls, BCReg n, HeapString* name)
 {
     FuncState *fs = ls->fs;
     MSize vtop = ls->vstack.size();
@@ -1683,12 +1683,12 @@ static void var_new(LexState *ls, BCReg n, HeapPtr<HeapString> name)
 
 static void var_new_lit(LexState *ls, BCReg n, const char* lit)
 {
-    var_new(ls, n, lj_parse_keepstr(ls, lit, strlen(lit)).As<tString>());
+    var_new(ls, n, TranslateToRawPointer(lj_parse_keepstr(ls, lit, strlen(lit)).As<tString>()));
 }
 
 static void var_new_fixed(LexState *ls, BCReg n, size_t vn)
 {
-    var_new(ls, n, reinterpret_cast<HeapPtr<HeapString>>(vn));
+    var_new(ls, n, reinterpret_cast<HeapString*>(vn));
 }
 
 /* Add local variables. */
@@ -1714,7 +1714,7 @@ static void var_remove(LexState *ls, BCReg tolevel)
 }
 
 /* Lookup local variable name. */
-static BCReg var_lookup_local(FuncState *fs, HeapPtr<HeapString> n)
+static BCReg var_lookup_local(FuncState *fs, HeapString* n)
 {
     int i;
     for (i = fs->nactvar-1; i >= 0; i--) {
@@ -1744,7 +1744,7 @@ static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
 static void fscope_uvmark(FuncState *fs, BCReg level);
 
 /* Recursively lookup variables in enclosing functions. */
-static MSize var_lookup_(FuncState *fs, HeapPtr<HeapString> name, ExpDesc *e, int first)
+static MSize var_lookup_(FuncState *fs, HeapString* name, ExpDesc *e, int first)
 {
     if (fs) {
         BCReg reg = var_lookup_local(fs, name);
@@ -1775,7 +1775,7 @@ var_lookup_((ls)->fs, lex_str(ls), (e), 1)
 /* -- Goto an label handling ---------------------------------------------- */
 
 /* Add a new goto or label. */
-static MSize gola_new(LexState *ls, HeapPtr<HeapString> name, uint8_t info, BCPos pc)
+static MSize gola_new(LexState *ls, HeapString* name, uint8_t info, BCPos pc)
 {
     FuncState *fs = ls->fs;
     MSize vtop = ls->vstack.size();
@@ -1845,7 +1845,7 @@ static void gola_fixup(LexState *ls, FuncScope *bl)
     VarInfo *v = ls->vstack.data() + bl->vstart;
     VarInfo *ve = ls->vstack.data() + ls->vstack.size();
     for (; v < ve; v++) {
-        HeapPtr<HeapString> name = v->name;
+        HeapString* name = v->name;
         if (name != nullptr) {  /* Only consider remaining valid gotos/labels. */
             if (gola_islabel(v)) {
                 VarInfo *vg;
@@ -1876,7 +1876,7 @@ static void gola_fixup(LexState *ls, FuncScope *bl)
 }
 
 /* Find existing label. */
-static VarInfo *gola_findlabel(LexState *ls, HeapPtr<HeapString> name)
+static VarInfo *gola_findlabel(LexState *ls, HeapString* name)
 {
     VarInfo *v = ls->vstack.data() + ls->fs->bl->vstart;
     VarInfo *ve = ls->vstack.data() + ls->vstack.size();
@@ -3304,7 +3304,7 @@ static void expr_kvalue(FuncState * /*fs*/, TValue *v, ExpDesc *e)
     if (e->k <= VKTRUE) {
         *v = const_pri(e);
     } else if (e->k == VKSTR) {
-        *v = TValue::Create<tString>(e->u.sval);
+        *v = TValue::Create<tString>(TranslateToHeapPtr(e->u.sval));
     } else {
         TValue val = *expr_numtv(e);
         assert(val.Is<tInt32>() || val.Is<tDouble>());
@@ -3645,7 +3645,7 @@ static void parse_args(LexState *ls, ExpDesc *e)
         expr_table(ls, &args);
     } else if (ls->tok == TK_string) {
         expr_init(&args, VKSTR, 0);
-        args.u.sval = ls->tokval.As<tString>();
+        args.u.sval = TranslateToRawPointer(ls->tokval.As<tString>());
         lj_lex_next(ls);
     } else {
         err_syntax(ls, LJ_ERR_XFUNARG);
@@ -3717,7 +3717,7 @@ static void expr_simple(LexState *ls, ExpDesc *v)
     case TK_string:
         expr_init(v, VKSTR, 0);
         assert(ls->tokval.Is<tString>());
-        v->u.sval = ls->tokval.As<tString>();
+        v->u.sval = TranslateToRawPointer(ls->tokval.As<tString>());
         break;
     case TK_nil:
         expr_init(v, VKNIL, 0);
@@ -4092,7 +4092,7 @@ static void parse_break(LexState *ls)
 static void parse_goto(LexState *ls)
 {
     FuncState *fs = ls->fs;
-    HeapPtr<HeapString> name = lex_str(ls);
+    HeapString* name = lex_str(ls);
     VarInfo *vl = gola_findlabel(ls, name);
     if (vl)  /* Treat backwards goto within same scope like a loop. */
         std::ignore = bcemit_AJ(fs, BC_LOOP, vl->slot, -1);  /* No BC range check. */
@@ -4104,7 +4104,7 @@ static void parse_goto(LexState *ls)
 static void parse_label(LexState *ls)
 {
     FuncState *fs = ls->fs;
-    HeapPtr<HeapString> name;
+    HeapString* name;
     MSize idx;
     fs->lasttarget = fs->pc;
     fs->bl->flags |= FSCOPE_GOLA;
@@ -4203,7 +4203,7 @@ enum {
 };
 
 /* Parse numeric 'for'. */
-static void parse_for_num(LexState *ls, HeapPtr<HeapString> varname, BCLine line)
+static void parse_for_num(LexState *ls, HeapString* varname, BCLine line)
 {
     FuncState *fs = ls->fs;
     BCReg base = fs->freereg;
@@ -4247,7 +4247,7 @@ static void parse_for_num(LexState *ls, HeapPtr<HeapString> varname, BCLine line
 static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
 {
     BCIns ins = fs->bcbase[pc].inst;
-    HeapPtr<HeapString> name;
+    HeapString* name;
     switch (bc_op(ins)) {
     case BC_MOV:
         name = var_get(ls, fs, bc_d(ins)).name;
@@ -4259,7 +4259,7 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
     {
         TValue cst = bc_cst(ins);
         assert(cst.Is<tString>());
-        name = cst.As<tString>();
+        name = TranslateToRawPointer(cst.As<tString>());
         break;
     }
     default:
@@ -4279,7 +4279,7 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
 }
 
 /* Parse 'for' iterator. */
-static void parse_for_iter(LexState *ls, HeapPtr<HeapString> indexname)
+static void parse_for_iter(LexState *ls, HeapString* indexname)
 {
     FuncState *fs = ls->fs;
     ExpDesc e;
@@ -4324,7 +4324,7 @@ static void parse_for_iter(LexState *ls, HeapPtr<HeapString> indexname)
 static void parse_for(LexState *ls, BCLine line)
 {
     FuncState *fs = ls->fs;
-    HeapPtr<HeapString> varname;
+    HeapString* varname;
     FuncScope bl;
     fscope_begin(fs, &bl, FSCOPE_LOOP);
     lj_lex_next(ls);  /* Skip 'for'. */

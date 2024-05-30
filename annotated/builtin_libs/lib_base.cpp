@@ -309,7 +309,7 @@ iter_end:
     {
         TValue* sb = GetStackBase();
         assert(sb[2].Is<tTable>());
-        HeapPtr<TableObject> tab = sb[2].As<tTable>();
+        TableObject* tab = TranslateToRawPointer(sb[2].As<tTable>());
         assert(sb[3].Is<tInt32>());
         int32_t len = sb[3].As<tInt32>();
         assert(len >= 0);

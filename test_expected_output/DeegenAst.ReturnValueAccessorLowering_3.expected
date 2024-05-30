@@ -21,31 +21,31 @@ define dso_local ghccc void @__deegen_interpreter_op_test3_0_retcont_0(ptr %0, p
   %23 = inttoptr i64 %22 to ptr
   %24 = getelementptr inbounds %0, ptr %16, i64 -1
   %25 = load ptr, ptr %24, align 8, !tbaa !11
-  %.sroa.0.0.copyload.i.i = load i32, ptr %25, align 4, !tbaa.struct !12
-  %26 = getelementptr inbounds i8, ptr %23, i64 2
-  %27 = load i32, ptr %26, align 1
-  %28 = icmp ugt i64 %numRet, 10
-  br i1 %28, label %29, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+  %26 = load i32, ptr %25, align 4, !tbaa !12
+  %27 = getelementptr inbounds i8, ptr %23, i64 2
+  %28 = load i32, ptr %27, align 1
+  %29 = icmp ugt i64 %numRet, 10
+  br i1 %29, label %30, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-29:                                               ; preds = %14
-  %30 = getelementptr inbounds i64, ptr %retStart, i64 10
-  %31 = load i64, ptr %30, align 8, !tbaa !14
+30:                                               ; preds = %14
+  %31 = getelementptr inbounds i64, ptr %retStart, i64 10
+  %32 = load i64, ptr %31, align 8, !tbaa !14
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %29, %14
-  %.0.reg2mem.0.i = phi i64 [ %31, %29 ], [ %7, %14 ]
-  %outputSlot = zext i32 %27 to i64
-  %32 = zext i32 %.sroa.0.0.copyload.i.i to i64
-  %33 = add i64 %32, %21
-  %34 = inttoptr i64 %33 to ptr
-  %35 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %.0.reg2mem.0.i, ptr %35, align 8
-  %36 = getelementptr inbounds i8, ptr %23, i64 10
-  %37 = load i16, ptr %36, align 1
-  %38 = zext i16 %37 to i64
-  %39 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %38
-  %40 = load ptr, ptr %39, align 8
-  musttail call ghccc void %40(ptr %0, ptr nonnull %16, ptr nonnull %36, ptr %34, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
+__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %30, %14
+  %.0.reg2mem.0.i = phi i64 [ %32, %30 ], [ %7, %14 ]
+  %outputSlot = zext i32 %28 to i64
+  %33 = zext i32 %26 to i64
+  %34 = add i64 %33, %21
+  %35 = inttoptr i64 %34 to ptr
+  %36 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
+  store i64 %.0.reg2mem.0.i, ptr %36, align 8
+  %37 = getelementptr inbounds i8, ptr %23, i64 10
+  %38 = load i16, ptr %37, align 1
+  %39 = zext i16 %38 to i64
+  %40 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %39
+  %41 = load ptr, ptr %40, align 8
+  musttail call ghccc void %41(ptr %0, ptr nonnull %16, ptr nonnull %37, ptr %35, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -67,7 +67,7 @@ attributes #1 = { nounwind }
 !9 = !{!7, !8, i64 0}
 !10 = !{!4, !4, i64 0}
 !11 = !{!3, !4, i64 0}
-!12 = !{i64 0, i64 4, !13}
-!13 = !{!8, !8, i64 0}
+!12 = !{!13, !8, i64 0}
+!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
 !14 = !{!15, !15, i64 0}
 !15 = !{!"long", !5, i64 0}

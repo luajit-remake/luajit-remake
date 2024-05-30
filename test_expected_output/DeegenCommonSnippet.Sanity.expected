@@ -6,20 +6,20 @@ target triple = "x86_64-unknown-linux-gnu"
 %0 = type { ptr, ptr, ptr, %1, i32 }
 %1 = type { i32 }
 
-; Function Attrs: mustprogress nofree nosync nounwind readonly willreturn uwtable
+; Function Attrs: mustprogress nofree norecurse nosync nounwind readonly willreturn uwtable
 define dso_local noundef ptr @__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase(ptr nocapture noundef readonly %0) #0 {
   %2 = getelementptr inbounds %0, ptr %0, i64 -1
   %3 = load ptr, ptr %2, align 8, !tbaa !2
-  %.sroa.0.0.copyload.i = load i32, ptr %3, align 4, !tbaa.struct !9
-  %4 = zext i32 %.sroa.0.0.copyload.i to i64
-  %5 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
-  %6 = ptrtoint ptr %5 to i64
-  %7 = add i64 %6, %4
-  %8 = inttoptr i64 %7 to ptr
-  ret ptr %8
+  %4 = load i32, ptr %3, align 4, !tbaa !9
+  %5 = zext i32 %4 to i64
+  %6 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !11
+  %7 = ptrtoint ptr %6 to i64
+  %8 = add i64 %7, %5
+  %9 = inttoptr i64 %8 to ptr
+  ret ptr %9
 }
 
-attributes #0 = { mustprogress nofree nosync nounwind readonly willreturn uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #0 = { mustprogress nofree norecurse nosync nounwind readonly willreturn uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
@@ -33,6 +33,6 @@ attributes #0 = { mustprogress nofree nosync nounwind readonly willreturn uwtabl
 !6 = !{!"Simple C++ TBAA"}
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
-!9 = !{i64 0, i64 4, !10}
-!10 = !{!8, !8, i64 0}
+!9 = !{!10, !8, i64 0}
+!10 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
 !11 = !{!4, !4, i64 0}
