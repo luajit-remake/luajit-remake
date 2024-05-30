@@ -11,8 +11,8 @@ static void DeegenSnippet_UpdateInterpreterCallIcDoublyLink(ExecutableCode* call
         UnalignedStore<int32_t>(next, diff);
     }
 
-    HeapPtr<ExecutableCode::InterpreterCallIcAnchor> cbAnchor = TranslateToHeapPtr(&calleeCb->m_interpreterCallIcList);
-    HeapPtr<uint8_t> cbAnchorNext = reinterpret_cast<HeapPtr<uint8_t>>(cbAnchor) - cbAnchor->m_nextOffset;
+    ExecutableCode::InterpreterCallIcAnchor* cbAnchor = &calleeCb->m_interpreterCallIcList;
+    uint8_t* cbAnchorNext = reinterpret_cast<uint8_t*>(cbAnchor) - cbAnchor->m_nextOffset;
 
     SystemHeapPointer<uint8_t> cbAnchorU8 { cbAnchor };
     SystemHeapPointer<uint8_t> doublyLinkU8 { doublyLink };

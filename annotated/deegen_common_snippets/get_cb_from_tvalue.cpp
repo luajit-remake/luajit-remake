@@ -5,9 +5,9 @@
 
 static ExecutableCode* DeegenSnippet_GetCbFromTValueFuncObj(TValue tv)
 {
-    HeapPtr<FunctionObject> o = tv.As<tFunction>();
-    HeapPtr<ExecutableCode> ec = TCGet(o->m_executable).As();
-    return TranslateToRawPointer(VM_GetActiveVMForCurrentThread(), ec);
+    FunctionObject* o = TranslateToRawPointer(tv.As<tFunction>());
+    ExecutableCode* ec = TranslateToRawPointer(o->m_executable.As());
+    return ec;
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetCbFromTValueFuncObj", DeegenSnippet_GetCbFromTValueFuncObj)
