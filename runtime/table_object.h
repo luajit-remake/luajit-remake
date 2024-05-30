@@ -2809,11 +2809,11 @@ struct TableObjectIterator
 
         if (unlikely(m_state == IteratorState::Uninitialized))
         {
-            hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            hcType = obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
             if (hcType == HeapEntityType::Structure)
             {
-                structure = TCGet(obj->m_hiddenClass).As<Structure>();
+                structure = obj->m_hiddenClass.As<Structure>();
                 if (unlikely(structure->m_numSlots == 0))
                 {
                     goto try_start_iterating_vector_storage;
@@ -2824,7 +2824,7 @@ struct TableObjectIterator
             }
             else if (hcType == HeapEntityType::CacheableDictionary)
             {
-                cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                cacheableDict = obj->m_hiddenClass.As<CacheableDictionary>();
                 m_state = IteratorState::NamedProperty;
                 m_namedPropertyOrd = 0;
                 goto try_find_and_get_cd_prop;
@@ -2839,12 +2839,12 @@ struct TableObjectIterator
 
         if (m_state == IteratorState::NamedProperty)
         {
-            hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            hcType = obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
 
             if (likely(hcType == HeapEntityType::Structure))
             {
-                structure = TCGet(obj->m_hiddenClass).As<Structure>();
+                structure = obj->m_hiddenClass.As<Structure>();
 
 try_get_next_structure_prop:
                 TValue value;
@@ -3033,7 +3033,7 @@ finished_iteration:
             UserHeapPointer<void> prop = key.AsPointer();
             if (hcType == HeapEntityType::Structure)
             {
-                HeapPtr<Structure> structure = TCGet(obj->m_hiddenClass).As<Structure>();
+                HeapPtr<Structure> structure = obj->m_hiddenClass.As<Structure>();
                 uint32_t slotOrd;
                 bool found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, prop, slotOrd /*out*/);
                 if (!found)
