@@ -3,6 +3,9 @@
 
 TEST(NaNBoxing, Correctness)
 {
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
     // test int
     //
     for (int testcase = 0; testcase < 100000; testcase++)

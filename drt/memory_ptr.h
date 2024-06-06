@@ -115,25 +115,25 @@ struct UserHeapPointer
     {
         static_assert(TypeMayLiveInUserHeap<T>);
         assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
-        assert(As<U>() == value);
+        assert(As<U>() == TranslateToRawPointer(value));
     }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     UserHeapPointer(U* value)
         : UserHeapPointer(TranslateToHeapPtr(value))
     {
-        assert(TranslateToRawPointer(As<U>()) == value);
+        assert(As<U>() == value);
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
+    U* WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(m_value);
+        return TranslateToRawPointer(reinterpret_cast<HeapPtr<U>>(m_value));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
+    U* WARN_UNUSED As() const
     {
         static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
                       std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||

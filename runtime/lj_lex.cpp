@@ -779,10 +779,10 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* coroCtx, lua_Rea
 
         check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "\n"));
 
-        HeapPtr<HeapString> msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
+        HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
         return {
             .m_scriptModule = nullptr,
-            .errMsg = TValue::Create<tString>(msg)
+            .errMsg = TValue::Create<tString>(TranslateToHeapPtr(msg))
         };
     }
 }

@@ -34,7 +34,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_assert)
         {
             char buf[x_default_tostring_buffersize_double];
             uint32_t msgLen = static_cast<uint32_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(buf, msg.As<tDouble>()) - buf);
-            TValue errObj = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, msgLen).As());
+            TValue errObj = TValue::Create<tString>(TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, msgLen).As()));
             ThrowError(errObj);
         }
         else
@@ -304,7 +304,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
     }
 
 iter_end:
-    HeapPtr<FunctionObject> entryPoint;
+    FunctionObject* entryPoint;
 
     {
         TValue* sb = GetStackBase();
@@ -322,7 +322,7 @@ iter_end:
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
 
-    Return(TValue::Create<tFunction>(entryPoint));
+    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
 }
 
 // base.load -- https://www.lua.org/manual/5.1/manual.html#pdf-load
@@ -387,7 +387,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
     GET_ARG_AS_STRING(loadfile, 1, fileNamePtr, fileNameLen);
     std::ignore = fileNameLen;
 
-    HeapPtr<FunctionObject> entryPoint;
+    FunctionObject* entryPoint;
     {
         ParseResult res = ParseLuaScriptFromFile(GetCurrentCoroutine(), fileNamePtr);
         if (res.m_scriptModule.get() == nullptr)
@@ -396,7 +396,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
         }
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
-    Return(TValue::Create<tFunction>(entryPoint));
+    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
 }
 
 // base.loadstring -- https://www.lua.org/manual/5.1/manual.html#pdf-loadstring
@@ -415,7 +415,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadstring)
     }
     GET_ARG_AS_STRING(loadstring, 1, ptr, len);
 
-    HeapPtr<FunctionObject> entryPoint;
+    FunctionObject* entryPoint;
 
     {
         ParseResult res = ParseLuaScript(GetCurrentCoroutine(), ptr, len);
@@ -426,7 +426,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadstring)
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
 
-    Return(TValue::Create<tFunction>(entryPoint));
+    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
 }
 
 // base.module -- https://www.lua.org/manual/5.1/manual.html#pdf-module
@@ -547,9 +547,9 @@ static bool WARN_UNUSED HasNoExoticToStringMetamethodForStringType(VM* vm)
     {
         return true;
     }
-    HeapPtr<TableObject> tab = vm->m_metatableForString.As<TableObject>();
+    TableObject* tab = vm->m_metatableForString.As<TableObject>();
     assert(tab->m_type == HeapEntityType::Table);
-    SystemHeapPointer<void> hiddenClass = TCGet(tab->m_hiddenClass);
+    SystemHeapPointer<void> hiddenClass = tab->m_hiddenClass;
     return hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value;
 }
 

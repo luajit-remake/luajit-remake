@@ -166,14 +166,14 @@ struct StructureKeyHashHelper
 {
     static uint32_t GetHashValueForStringKey(UserHeapPointer<HeapString> stringKey)
     {
-        HeapPtr<HeapString> s = stringKey.As<HeapString>();
+        HeapString* s = stringKey.As<HeapString>();
         assert(s->m_type == HeapEntityType::String);
         return s->m_hashLow;
     }
 
     static uint32_t GetHashValueForMaybeNonStringKey(UserHeapPointer<void> key)
     {
-        HeapPtr<UserHeapGcObjectHeader> hdr = key.As<UserHeapGcObjectHeader>();
+        UserHeapGcObjectHeader* hdr = key.As<UserHeapGcObjectHeader>();
         if (hdr->m_type == HeapEntityType::String)
         {
             return GetHashValueForStringKey(UserHeapPointer<HeapString>(key.As()));
@@ -1415,7 +1415,7 @@ public:
         size_t slot = propHash & htMask;
         while (m_hashTable[slot].m_key.m_value != 0)
         {
-            assert(m_hashTable[slot].m_key.As() != prop.As());
+            assert(TranslateToRawPointer(m_hashTable[slot].m_key.As()) != prop.As());
             slot = (slot + 1) & htMask;
         }
         m_hashTable[slot].m_key = prop.As();

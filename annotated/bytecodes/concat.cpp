@@ -24,14 +24,14 @@ inline HeapPtr<HeapString> WARN_UNUSED StringifyDoubleToStringObject(double valu
 {
     char buf[x_default_tostring_buffersize_double];
     char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, value);
-    return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As();
+    return TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As());
 }
 
 inline HeapPtr<HeapString> WARN_UNUSED StringifyInt32ToStringObject(int32_t value)
 {
     char buf[x_default_tostring_buffersize_int];
     char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, value);
-    return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As();
+    return TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As());
 }
 
 inline std::optional<HeapPtr<HeapString>> WARN_UNUSED TryGetStringOrConvertNumberToString(TValue value)
@@ -93,7 +93,7 @@ inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* bas
         TValue tmp[2];
         tmp[0] = TValue::Create<tString>(lhs.value());
         tmp[1] = TValue::Create<tString>(curString);
-        curString = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromConcatenation(tmp, 2 /*len*/).As();
+        curString = TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromConcatenation(tmp, 2 /*len*/).As());
         curValue = TValue::Create<tString>(curString);
     }
 
@@ -142,7 +142,7 @@ inline std::pair<bool, TValue> WARN_UNUSED NO_INLINE TryConcatFastPath(TValue* b
             }
         }
 
-        TValue result = TValue::Create<tString>(vm->CreateStringObjectFromConcatenation(base, num).As());
+        TValue result = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromConcatenation(base, num).As()));
         return std::make_pair(true, result);
     }
     else

@@ -354,10 +354,9 @@ bool WARN_UNUSED VM::InitializeVMStringManager()
         };
 
         size_t allocationLength = HeapString::ComputeAllocationLengthForString(slah.m_length);
-        HeapPtrTranslator translator = GetHeapPtrTranslator();
         UserHeapPointer<void> uhp = AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
 
-        HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
+        HeapString* ptr = uhp.AsNoAssert<HeapString>();
 
         ptr->PopulateHeader(slah);
         // Copy the trailing '\0' as well
@@ -444,10 +443,9 @@ HeapString* WARN_UNUSED ALWAYS_INLINE MaterializeMultiPieceString(VM* vm, Iterat
     VM_FAIL_IF(!IntegerCanBeRepresentedIn<uint32_t>(allocationLength),
                "Cannot create a string longer than 4GB (attempted length: %llu bytes).", static_cast<unsigned long long>(allocationLength));
 
-    HeapPtrTranslator translator = vm->GetHeapPtrTranslator();
     UserHeapPointer<void> uhp = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
 
-    HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
+    HeapString* ptr = uhp.AsNoAssert<HeapString>();
     ptr->PopulateHeader(slah);
 
     uint8_t* curDst = ptr->m_string;
@@ -610,7 +608,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
         std::pair<const uint8_t*, uint32_t> GetAndAdvance()
         {
             assert(m_cur < m_end);
-            HeapString* e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
+            HeapString* e = m_cur->AsPointer().As<HeapString>();
             m_cur++;
             return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
         }
@@ -687,12 +685,12 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
             if (m_isFirst)
             {
                 m_isFirst = false;
-                e = m_translator.TranslateToRawPtr(m_firstString.As<HeapString>());
+                e = m_firstString.As<HeapString>();
             }
             else
             {
                 assert(m_cur < m_end);
-                e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
+                e = m_cur->AsPointer().As<HeapString>();
                 m_cur++;
             }
             return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);

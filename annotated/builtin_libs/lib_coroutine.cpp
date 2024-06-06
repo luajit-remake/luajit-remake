@@ -358,10 +358,10 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
-    HeapPtr<FunctionObject> wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
+    FunctionObject* wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
     TValue uv = TValue::Create<tThread>(TranslateToHeapPtr(newCoro));
     TCSet(wrap->m_upvalues[0], uv);
-    Return(TValue::Create<tFunction>(wrap));
+    Return(TValue::Create<tFunction>(TranslateToHeapPtr(wrap)));
 }
 
 // coroutine.yield -- https://www.lua.org/manual/5.1/manual.html#pdf-coroutine.yield

@@ -506,7 +506,7 @@ inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
                                                                                                                                 \
         static HeapPtr<PtrType> decode(TValue v)                                                                                \
         {                                                                                                                       \
-            return v.AsPointer<PtrType>().As();                                                                                 \
+            return TranslateToHeapPtr(v.AsPointer<PtrType>().As());                                                                                 \
         }                                                                                                                       \
     };
 
@@ -533,7 +533,7 @@ struct tHeapEntity
 
     static HeapPtr<UserHeapGcObjectHeader> decode(TValue v)
     {
-        return v.AsPointer().As<UserHeapGcObjectHeader>();
+        return TranslateToHeapPtr(v.AsPointer().As<UserHeapGcObjectHeader>());
     }
 };
 

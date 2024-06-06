@@ -246,7 +246,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
 
     // Now, concat everything
     //
-    HeapPtr<HeapString> result = vm->CreateStringObjectFromConcatenation(strings, numItems).As();
+    HeapString* result = vm->CreateStringObjectFromConcatenation(strings, numItems).As();
 
     if (strings != internalStringBuffer)
     {
@@ -254,7 +254,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
     }
     tempBufferForStringifiedNumber.Destroy();
 
-    Return(TValue::Create<tString>(result));
+    Return(TValue::Create<tString>(TranslateToHeapPtr(result)));
 }
 
 // table.insert -- https://www.lua.org/manual/5.1/manual.html#pdf-table.insert

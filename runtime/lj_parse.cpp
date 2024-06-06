@@ -521,8 +521,8 @@ TValue lj_parse_keepstr(LexState* /*ls*/, const char *str, size_t len)
     // TODO: we need to keep the object alive
     //
     VM* vm = VM::GetActiveVMForCurrentThread();
-    HeapPtr<HeapString> s = vm->CreateStringObjectFromRawString(str, len).As();
-    return TValue::Create<tString>(s);
+    HeapString* s = vm->CreateStringObjectFromRawString(str, len).As();
+    return TValue::Create<tString>(TranslateToHeapPtr(s));
 }
 
 #define BCMAX_A		0x7fff

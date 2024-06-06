@@ -1329,7 +1329,7 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
     }
     else if (lhs.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
+        HeapString* stringObj = lhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
@@ -1352,7 +1352,7 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
     }
     else if (rhs.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
+        HeapString* stringObj = rhs.AsPointer<HeapString>().As();
         StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {

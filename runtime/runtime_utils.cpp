@@ -180,7 +180,7 @@ void CodeBlock::UpdateBestEntryPoint(void* newEntryPoint)
 std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModule* module)
 {
     CoroutineRuntimeContext* rc = GetRootCoroutine();
-    return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
+    return DeegenEnterVMFromC(rc, TranslateToHeapPtr(module->m_defaultEntryPoint.As()), rc->m_stackBegin);
 }
 
 UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame)

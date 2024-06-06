@@ -415,12 +415,12 @@ void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
     VM* vm = VM::GetActiveVMForCurrentThread();
     // TODO: when we make some more assertions in SetMetatable, we will need to make them more real
     //
-    HeapPtr<TableObject> t1 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(t1);
-    HeapPtr<TableObject> t2 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(t2);
-    HeapPtr<TableObject> t3 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(t3);
+    TableObject* t1 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t1));
+    TableObject* t2 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t2));
+    TableObject* t3 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
+    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t3));
 
     for (size_t i = 0; i < numNodes; i++)
     {
