@@ -118,7 +118,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
 
     if (likely(base.Is<tHeapEntity>()))
     {
-        TableObject* tableObj = TranslateToRawPointer(reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>()));
+        TableObject* tableObj = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(tableObj->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();

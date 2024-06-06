@@ -531,9 +531,9 @@ struct tHeapEntity
         return TValue::CreatePointer(UserHeapPointer<UserHeapGcObjectHeader> { v });
     }
 
-    static HeapPtr<UserHeapGcObjectHeader> decode(TValue v)
+    static UserHeapGcObjectHeader* decode(TValue v)
     {
-        return TranslateToHeapPtr(v.AsPointer().As<UserHeapGcObjectHeader>());
+        return v.AsPointer().As<UserHeapGcObjectHeader>();
     }
 };
 
