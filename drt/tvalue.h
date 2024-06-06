@@ -526,7 +526,7 @@ struct tHeapEntity
         return v.IsPointer();
     }
 
-    static TValue encode(HeapPtr<UserHeapGcObjectHeader> v)
+    static TValue encode(UserHeapGcObjectHeader* v)
     {
         return TValue::CreatePointer(UserHeapPointer<UserHeapGcObjectHeader> { v });
     }

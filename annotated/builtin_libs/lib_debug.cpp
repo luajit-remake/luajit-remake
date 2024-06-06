@@ -89,7 +89,7 @@ DEEGEN_DEFINE_LIB_FUNC(debug_getmetatable)
     }
     else
     {
-        Return(TValue::Create<tHeapEntity>(TranslateToHeapPtr(metatableMaybeNull.As<UserHeapGcObjectHeader>())));
+        Return(TValue::Create<tHeapEntity>(metatableMaybeNull.As<UserHeapGcObjectHeader>()));
     }
 }
 
