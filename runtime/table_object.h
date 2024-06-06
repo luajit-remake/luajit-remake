@@ -736,7 +736,7 @@ public:
     static void PreparePutByIdForCacheableDictionary(TableObject* self, CacheableDictionary* dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
         assert(self->m_hiddenClass.template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
-        assert(self->m_hiddenClass.template As<CacheableDictionary>() == dict);
+        assert(self->m_hiddenClass.template As<CacheableDictionary>() == TranslateToHeapPtr(dict));
         CacheableDictionary::PutByIdResult res;
         if constexpr(std::is_same_v<U, HeapString>)
         {
