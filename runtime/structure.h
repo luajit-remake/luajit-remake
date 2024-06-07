@@ -106,8 +106,7 @@ public:
         return m_numElementsInHashTable >= m_hashTableMask / 2 + 1;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureTransitionTable>>>
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> WARN_UNUSED Find(T self, int32_t key, bool& found)
+    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureTransitionTable*> WARN_UNUSED Find(StructureTransitionTable* self, int32_t key, bool& found)
     {
         assert(key != x_key_invalid && key != x_key_deleted);
         uint32_t hashMask = self->m_hashTableMask;
@@ -208,35 +207,31 @@ public:
         return offsetof_member_v<&StructureAnchorHashTable::m_blockPointers>;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
-    static GeneralHeapPointer<void> GetPropertyNameAtSlot(T self, uint8_t ordinal)
+    static GeneralHeapPointer<void> GetPropertyNameAtSlot(StructureAnchorHashTable* self, uint8_t ordinal)
     {
         assert(ordinal < self->m_numBlocks * x_hiddenClassBlockSize);
         uint8_t blockOrd = ordinal >> x_log2_hiddenClassBlockSize;
         uint8_t offset = ordinal & static_cast<uint8_t>(x_hiddenClassBlockSize - 1);
-        SystemHeapPointer<GeneralHeapPointer<void>> p = TCGet(self->m_blockPointers[blockOrd]);
-        return TCGet(p.As()[offset]);
+        SystemHeapPointer<GeneralHeapPointer<void>> p = self->m_blockPointers[blockOrd];
+        return p.As()[offset];
     }
 
     static StructureAnchorHashTable* WARN_UNUSED Create(VM* vm, Structure* shc);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> GetHashTableBegin(T self)
+    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureAnchorHashTable*> GetHashTableBegin(StructureAnchorHashTable* self)
     {
         uint32_t hashTableSize = GetHashTableSizeFromHashTableMask(self->m_hashTableMask);
         return GetHashTableEnd(self) - hashTableSize;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> GetHashTableEnd(T self)
+    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureAnchorHashTable*> GetHashTableEnd(StructureAnchorHashTable* self)
     {
         return ReinterpretCastPreservingAddressSpace<HashTableEntry*>(self);
     }
 
     void CloneHashTableTo(HashTableEntry* htStart, uint32_t htSize);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(T self, GeneralHeapPointer<void> key, uint32_t hashValue, uint32_t& result /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(StructureAnchorHashTable* self, GeneralHeapPointer<void> key, uint32_t hashValue, uint32_t& result /*out*/)
     {
         int64_t hashTableMask = static_cast<int64_t>(self->m_hashTableMask);
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
@@ -413,15 +408,13 @@ public:
     };
     static_assert(sizeof(InlineHashTableEntry) == 2);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, T> GetInlineHashTableBegin(T self)
+    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, Structure*> GetInlineHashTableBegin(Structure* self)
     {
         uint32_t hashTableSize = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask);
         return GetInlineHashTableEnd(self) - hashTableSize;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, T> GetInlineHashTableEnd(T self)
+    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, Structure*> GetInlineHashTableEnd(Structure* self)
     {
         return ReinterpretCastPreservingAddressSpace<InlineHashTableEntry*>(self);
     }
@@ -433,19 +426,17 @@ public:
         return v;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static GeneralHeapPointer<void> GetLastAddedKey(T self)
+    static GeneralHeapPointer<void> GetLastAddedKey(Structure* self)
     {
         assert(self->m_parentEdgeTransitionKind == TransitionKind::AddProperty ||
                self->m_parentEdgeTransitionKind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
         assert(self->m_numSlots > 0);
         uint8_t nonFullBlockLen = ComputeNonFullBlockLength(self->m_numSlots);
         assert(nonFullBlockLen > 0);
-        return TCGet(self->m_values[nonFullBlockLen - 1]);
+        return self->m_values[nonFullBlockLen - 1];
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static UserHeapPointer<void> WARN_UNUSED GetKeyForSlotOrdinal(T self, uint8_t slotOrdinal)
+    static UserHeapPointer<void> WARN_UNUSED GetKeyForSlotOrdinal(Structure* self, uint8_t slotOrdinal)
     {
         assert(slotOrdinal < self->m_numSlots);
 
@@ -460,7 +451,7 @@ public:
         {
             uint8_t ord = slotOrdinal - lim;
             assert(ord < x_hiddenClassBlockSize);
-            return TCGet(self->m_values[ord]).As();
+            return self->m_values[ord].As();
         }
         else
         {
@@ -469,7 +460,7 @@ public:
             assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
             assert(HasFinalFullBlockPointer(self->m_numSlots));
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
-            return TCGet(u.As()[ord]).As();
+            return u.As()[ord].As();
         }
     }
 
@@ -537,10 +528,9 @@ public:
     //
     Structure* WARN_UNUSED UpdateArrayType(VM* vm, ArrayType newArrayType);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED IsAnchorTableContainsFinalBlock(T self)
+    static bool WARN_UNUSED IsAnchorTableContainsFinalBlock(Structure* self)
     {
-        SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
+        SystemHeapPointer<StructureAnchorHashTable> p = self->m_anchorHashTable;
         if (p.m_value == 0)
         {
             return false;
@@ -618,30 +608,26 @@ public:
     //
     static Structure* WARN_UNUSED CreateInitialStructure(VM* vm, uint8_t initialInlineCapacity);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(T self);
+    static SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED BuildNewAnchorTableIfNecessary(Structure* self);
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> stringKey, uint32_t& result /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(Structure* self, UserHeapPointer<HeapString> stringKey, uint32_t& result /*out*/)
     {
         return GetSlotOrdinalFromPropertyNameAndHash(self, stringKey.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(stringKey), result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(T self, UserHeapPointer<void> key, uint32_t& result /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(Structure* self, UserHeapPointer<void> key, uint32_t& result /*out*/)
     {
         return GetSlotOrdinalFromPropertyNameAndHash(self, key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(T self, UserHeapPointer<void> key, uint32_t hashvalue, uint32_t& result /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromPropertyNameAndHash(Structure* self, UserHeapPointer<void> key, uint32_t hashvalue, uint32_t& result /*out*/)
     {
         GeneralHeapPointer<void> keyG = GeneralHeapPointer<void> { key.As<void>() };
         if (QueryInlineHashTable(self, keyG, static_cast<uint16_t>(hashvalue), result /*out*/))
         {
             return true;
         }
-        SystemHeapPointer<StructureAnchorHashTable> anchorHt = TCGet(self->m_anchorHashTable);
+        SystemHeapPointer<StructureAnchorHashTable> anchorHt = self->m_anchorHashTable;
         if (likely(anchorHt.m_value == 0))
         {
             return false;
@@ -1778,8 +1764,7 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
     }
 }
 
-template<typename T, typename>
-SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildNewAnchorTableIfNecessary(T self)
+inline SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildNewAnchorTableIfNecessary(Structure* self)
 {
     assert(self->m_nonFullBlockLen == x_hiddenClassBlockSize);
     assert(self->m_numSlots > 0 && self->m_numSlots % x_hiddenClassBlockSize == 0);
