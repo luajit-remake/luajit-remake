@@ -15,7 +15,6 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_return_value_at_specified_ordinal.cpp
   store_first_k_return_values_padding_nil.cpp
   store_return_values_as_variadic_results.cpp
-  simple_translate_to_raw_pointer.cpp
   populate_nil_to_unprovided_params.cpp
   get_num_fixed_params_from_code_block.cpp
   fixup_stack_frame_for_variadic_arg_function.cpp
