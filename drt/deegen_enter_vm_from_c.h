@@ -50,8 +50,8 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     {
         memcpy(stackBase, args, sizeof(TValue) * numArgs);
     }
-    HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(func->m_executable).As());
-    void* ghcFn = cbHeapPtr->m_bestEntryPoint;
-    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, TranslateToRawPointer(cbHeapPtr));
+    CodeBlock* cb = static_cast<CodeBlock*>(TCGet(func->m_executable).As());
+    void* ghcFn = cb->m_bestEntryPoint;
+    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, cb);
     return std::make_pair(result.m_retStart, result.m_numRets);
 }

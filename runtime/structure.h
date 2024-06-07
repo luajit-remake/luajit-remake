@@ -94,10 +94,10 @@ public:
         r->m_numElementsInHashTable = 1;
         memset(r->m_hashTable, 0, sizeof(HashTableEntry) * x_initialHashTableSize);
         bool found;
-        HeapPtr<HashTableEntry> e = Find(SystemHeapPointer<StructureTransitionTable>(r).As(), key, found /*out*/);
+        HashTableEntry* e = Find(SystemHeapPointer<StructureTransitionTable>(r).As(), key, found /*out*/);
         assert(!found);
-        TCSet(e->m_key, key);
-        TCSet(e->m_value, value);
+        e->m_key = key;
+        e->m_value = value;
         return r;
     }
 
@@ -833,8 +833,8 @@ public:
         }
         else if (likely(m_transitionTable.IsType<Structure>()))
         {
-            HeapPtr<Structure> onlyChild = m_transitionTable.As<Structure>();
-            assert(TCGet(onlyChild->m_parent) == SystemHeapPointer<Structure>(this));
+            Structure* onlyChild = m_transitionTable.As<Structure>();
+            assert(onlyChild->m_parent == SystemHeapPointer<Structure>(this));
             int32_t keyForOnlyChild = GetParentEdgeTransitionKey(onlyChild);
             if (keyForOnlyChild == transitionKey)
             {
@@ -1112,7 +1112,7 @@ class StructureIterator
 public:
     StructureIterator(SystemHeapPointer<Structure> hc)
     {
-        HeapPtr<Structure> hiddenClass = hc.As();
+        Structure* hiddenClass = hc.As();
         assert(hiddenClass->m_type == HeapEntityType::Structure);
         SystemHeapPointer<StructureAnchorHashTable> aht = TCGet(hiddenClass->m_anchorHashTable);
 
@@ -1123,9 +1123,9 @@ public:
 
         if (aht.m_value != 0)
         {
-            HeapPtr<StructureAnchorHashTable> anchorHashTable = aht.As();
+            StructureAnchorHashTable* anchorHashTable = aht.As();
             assert(anchorHashTable->m_numBlocks > 0);
-            m_curPtr = TCGet(anchorHashTable->m_blockPointers[0]);
+            m_curPtr = anchorHashTable->m_blockPointers[0];
             m_anchorTableMaxOrd = anchorHashTable->m_numTotalSlots;
         }
         else
@@ -1170,7 +1170,7 @@ public:
         {
             if (m_ord < m_maxOrd)
             {
-                HeapPtr<Structure> hiddenClass = m_hiddenClass.As<Structure>();
+                Structure* hiddenClass = m_hiddenClass.As<Structure>();
                 if (m_ord == m_anchorTableMaxOrd)
                 {
                     if (Structure::HasFinalFullBlockPointer(m_maxOrd) &&
@@ -1193,8 +1193,8 @@ public:
                 }
                 else
                 {
-                    HeapPtr<StructureAnchorHashTable> anchorTable = m_anchorTable.As<StructureAnchorHashTable>();
-                    m_curPtr = TCGet(anchorTable->m_blockPointers[m_ord >> x_log2_hiddenClassBlockSize]);
+                    StructureAnchorHashTable* anchorTable = m_anchorTable.As<StructureAnchorHashTable>();
+                    m_curPtr = anchorTable->m_blockPointers[m_ord >> x_log2_hiddenClassBlockSize];
                 }
             }
         }
@@ -1499,14 +1499,14 @@ public:
     // Query the hash table slot for a property
     // This weird function is only used by the Lua 'next' slow path
     //
-    static uint32_t WARN_UNUSED GetHashTableSlotNumberForProperty(HeapPtr<CacheableDictionary> self, UserHeapPointer<void> prop)
+    static uint32_t WARN_UNUSED GetHashTableSlotNumberForProperty(CacheableDictionary* self, UserHeapPointer<void> prop)
     {
         size_t hashMask = self->m_hashTableMask;
         size_t slot = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop) & hashMask;
         GeneralHeapPointer<void> gprop = prop.As();
         while (true)
         {
-            GeneralHeapPointer<void> key = TCGet(self->m_hashTable[slot].m_key);
+            GeneralHeapPointer<void> key = self->m_hashTable[slot].m_key;
             if (key.m_value == 0)
             {
                 return static_cast<uint32_t>(-1);
@@ -1754,10 +1754,10 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
         assert(htMask < 0);
         for (uint8_t blockOrd = 0; blockOrd < m_numBlocks; blockOrd++)
         {
-            HeapPtr<GeneralHeapPointer<void>> p = m_blockPointers[blockOrd].As();
+            GeneralHeapPointer<void>* p = m_blockPointers[blockOrd].As();
             for (uint8_t offset = 0; offset < x_hiddenClassBlockSize; offset++)
             {
-                GeneralHeapPointer<void> e = TCGet(p[offset]);
+                GeneralHeapPointer<void> e = p[offset];
                 UserHeapPointer<void> eu { e.As() };
                 uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
@@ -1909,13 +1909,13 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
             SystemHeapPointer<StructureAnchorHashTable> updatedAnchor;
             if (hasFinalBlockPointer)
             {
-                HeapPtr<Structure> anchorClass = GetHiddenClassOfFullBlockPointer(this).As<Structure>();
+                Structure* anchorClass = GetHiddenClassOfFullBlockPointer(this).As<Structure>();
                 assert(anchorClass->m_numSlots > 0 && anchorClass->m_numSlots % x_hiddenClassBlockSize == 0);
                 assert(anchorClass->m_numSlots == m_numSlots - m_nonFullBlockLen);
                 if (IsAnchorTableContainsFinalBlock(anchorClass))
                 {
                     useUpdatedAnchor = true;
-                    updatedAnchor = TCGet(anchorClass->m_anchorHashTable);
+                    updatedAnchor = anchorClass->m_anchorHashTable;
                 }
             }
             if (!useUpdatedAnchor)
@@ -2014,7 +2014,7 @@ end_setup:
 
     // Populate the header
     //
-    InlineHashTableEntry* htBegin = vm->GetHeapPtrTranslator().TranslateToRawPtr(objectAddressStart.As<InlineHashTableEntry>());
+    InlineHashTableEntry* htBegin = objectAddressStart.As<InlineHashTableEntry>();
     InlineHashTableEntry* htEnd = htBegin + htSize;
     Structure* r = reinterpret_cast<Structure*>(htEnd);
 
@@ -2162,7 +2162,7 @@ end_setup:
         DEBUG_ONLY(uint32_t elementsInserted = 0;)
         if (inlineHashTableMustContainFinalBlock)
         {
-            HeapPtr<GeneralHeapPointer<void>> p = GetFinalFullBlockPointer(r).As();
+            GeneralHeapPointer<void>* p = GetFinalFullBlockPointer(r).As();
             for (int8_t i = -static_cast<int8_t>(x_hiddenClassBlockSize); i < 0; i++)
             {
                 GeneralHeapPointer<void> e = TCGet(p[i]);
@@ -2322,7 +2322,7 @@ inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t 
 
     // Populate the structure
     //
-    InlineHashTableEntry* htBegin = vm->GetHeapPtrTranslator().TranslateToRawPtr(objectAddressStart.As<InlineHashTableEntry>());
+    InlineHashTableEntry* htBegin = objectAddressStart.As<InlineHashTableEntry>();
     InlineHashTableEntry* htEnd = htBegin + htSize;
     Structure* r = reinterpret_cast<Structure*>(htEnd);
 

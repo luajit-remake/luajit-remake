@@ -188,7 +188,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     UnlinkedCodeBlock* ucb = cb->m_owner;
     FunctionObject* r = TranslateToRawPointer(Create(VM::GetActiveVMForCurrentThread(), cb).As());
     assert(TranslateToRawPointer(parent->m_executable.As())->IsBytecodeFunction());
-    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(parent->m_executable.As())->m_owner);
+    assert(cb->m_owner->m_parent == static_cast<CodeBlock*>(parent->m_executable.As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
     UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
     for (uint32_t ord = 0; ord < numUpvalues; ord++)

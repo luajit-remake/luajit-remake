@@ -594,7 +594,7 @@ public:
     {
         assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
 
-        HeapPtr<Structure> structure = hiddenClass.As<Structure>();
+        Structure* structure = hiddenClass.As<Structure>();
         icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
         uint32_t inlineStorageCapacity = structure->m_inlineNamedStorageCapacity;
 
@@ -633,7 +633,7 @@ public:
     {
         assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
 
-        HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
+        CacheableDictionary* dict = hiddenClass.As<CacheableDictionary>();
         icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
         uint32_t inlineStorageCapacity = dict->m_inlineNamedStorageCapacity;
 
@@ -736,7 +736,7 @@ public:
     static void PreparePutByIdForCacheableDictionary(TableObject* self, CacheableDictionary* dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
         assert(self->m_hiddenClass.template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
-        assert(self->m_hiddenClass.template As<CacheableDictionary>() == TranslateToHeapPtr(dict));
+        assert(self->m_hiddenClass.template As<CacheableDictionary>() == dict);
         CacheableDictionary::PutByIdResult res;
         if constexpr(std::is_same_v<U, HeapString>)
         {
@@ -2278,7 +2278,7 @@ public:
 
         if (likely(ty == HeapEntityType::Structure))
         {
-            HeapPtr<Structure> structure = hc.As<Structure>();
+            Structure* structure = hc.As<Structure>();
             if (Structure::HasNoMetatable(structure))
             {
                 // Any object with this structure is guaranteed to have no metatable
@@ -2309,9 +2309,9 @@ public:
         }
         else if (ty == HeapEntityType::CacheableDictionary)
         {
-            HeapPtr<CacheableDictionary> cd = hc.As<CacheableDictionary>();
+            CacheableDictionary* cd = hc.As<CacheableDictionary>();
             return GetMetatableResult {
-                .m_result = TCGet(cd->m_metatable),
+                .m_result = cd->m_metatable,
                 .m_isCacheable = true
             };
         }
@@ -2803,8 +2803,8 @@ struct TableObjectIterator
     KeyValuePair WARN_UNUSED Advance(TableObject* obj)
     {
         HeapEntityType hcType;
-        HeapPtr<Structure> structure;
-        HeapPtr<CacheableDictionary> cacheableDict;
+        Structure* structure;
+        CacheableDictionary* cacheableDict;
         ArraySparseMap* sparseMap;
 
         if (unlikely(m_state == IteratorState::Uninitialized))
@@ -3033,7 +3033,7 @@ finished_iteration:
             UserHeapPointer<void> prop = key.AsPointer();
             if (hcType == HeapEntityType::Structure)
             {
-                HeapPtr<Structure> structure = obj->m_hiddenClass.As<Structure>();
+                Structure* structure = obj->m_hiddenClass.As<Structure>();
                 uint32_t slotOrd;
                 bool found = Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, prop, slotOrd /*out*/);
                 if (!found)
@@ -3049,7 +3049,7 @@ finished_iteration:
             }
             else if (hcType == HeapEntityType::CacheableDictionary)
             {
-                HeapPtr<CacheableDictionary> cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                CacheableDictionary* cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
                 uint32_t hashTableSlot = CacheableDictionary::GetHashTableSlotNumberForProperty(cacheableDict, prop);
                 if (hashTableSlot == static_cast<uint32_t>(-1))
                 {

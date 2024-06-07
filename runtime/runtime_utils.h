@@ -930,7 +930,7 @@ public:
     {
         assert(ord < self->m_numUpvalues);
         assert(TranslateToRawPointer(self->m_executable.As())->IsBytecodeFunction());
-        CodeBlock* cb = TranslateToRawPointer(static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As()));
+        CodeBlock* cb = static_cast<CodeBlock*>(TCGet(self->m_executable).As());
         assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
         assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
         return cb->m_owner->m_upvalueInfo[ord].m_isImmutable;

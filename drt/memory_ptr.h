@@ -188,18 +188,18 @@ struct SystemHeapPointer
     SystemHeapPointer(HeapPtr<U> value)
         : SystemHeapPointer(SafeIntegerCast<uint32_t>(reinterpret_cast<intptr_t>(value)))
     {
-        assert(As<U>() == value);
+        assert(As<U>() == TranslateToRawPointer(value));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
+    U* WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInSystemHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(static_cast<uint64_t>(m_value));
+        return TranslateToRawPointer(reinterpret_cast<HeapPtr<U>>(static_cast<uint64_t>(m_value)));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
+    U* WARN_UNUSED As() const
     {
         static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
                       std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
@@ -280,7 +280,7 @@ public:
     }
 
     template<typename T>
-    HeapPtr<T> As()
+    T* As()
     {
         assert(IsType<T>());
         return SystemHeapPointer<T> { m_value ^ x_tagFor<T> }.As();

@@ -2689,7 +2689,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             bool usedSpecializedTableDup = false;
             if (TCGet(tab->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
             {
-                HeapPtr<Structure> structure = TCGet(tab->m_hiddenClass).As<Structure>();
+                Structure* structure = TCGet(tab->m_hiddenClass).As<Structure>();
                 if (structure->m_butterflyNamedStorageCapacity == 0 && !TCGet(tab->m_arrayType).HasSparseMap())
                 {
                     uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;
