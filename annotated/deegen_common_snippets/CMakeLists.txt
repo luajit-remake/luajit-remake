@@ -59,7 +59,6 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   osr_entry_into_baseline_jit.cpp
   get_baseline_codeblock_from_stack_base.cpp
   get_end_of_call_frame_from_baseline_codeblock.cpp
-  get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
   get_cb_from_u32.cpp
