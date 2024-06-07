@@ -635,8 +635,7 @@ public:
         return StructureAnchorHashTable::GetSlotOrdinalFromPropertyNameAndHash(anchorHt.As(), keyG, hashvalue, result /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED QueryInlineHashTable(T self, GeneralHeapPointer<void> key, uint16_t hashvalue, uint32_t& result /*out*/)
+    static bool WARN_UNUSED QueryInlineHashTable(Structure* self, GeneralHeapPointer<void> key, uint16_t hashvalue, uint32_t& result /*out*/)
     {
         int64_t hashMask = ~ZeroExtendTo<int64_t>(self->m_inlineHashTableMask);
         assert(hashMask < 0);
@@ -675,21 +674,18 @@ public:
         return numSlots >= x_hiddenClassBlockSize && numSlots % x_hiddenClassBlockSize != 0;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static ReinterpretCastPreservingAddressSpaceType<SystemHeapPointer<GeneralHeapPointer<void>>*, T> GetFinalFullBlockPointerAddress(T self)
+    static ReinterpretCastPreservingAddressSpaceType<SystemHeapPointer<GeneralHeapPointer<void>>*, Structure*> GetFinalFullBlockPointerAddress(Structure* self)
     {
         assert(HasFinalFullBlockPointer(self->m_numSlots));
         return ReinterpretCastPreservingAddressSpace<SystemHeapPointer<GeneralHeapPointer<void>>*>(self->m_values + self->m_nonFullBlockLen);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static SystemHeapPointer<GeneralHeapPointer<void>> GetFinalFullBlockPointer(T self)
+    static SystemHeapPointer<GeneralHeapPointer<void>> GetFinalFullBlockPointer(Structure* self)
     {
-        return TCGet(*GetFinalFullBlockPointerAddress(self));
+        return *GetFinalFullBlockPointerAddress(self);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static SystemHeapPointer<Structure> GetHiddenClassOfFullBlockPointer(T self)
+    static SystemHeapPointer<Structure> GetHiddenClassOfFullBlockPointer(Structure* self)
     {
         // The full block pointer points at one past the end of the block
         //
@@ -706,15 +702,14 @@ public:
         return SystemHeapPointer<Structure> { addr };
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static GeneralHeapPointer<void> GetPropertyNameFromInlineHashTableOrdinal(T self, int8_t ordinal)
+    static GeneralHeapPointer<void> GetPropertyNameFromInlineHashTableOrdinal(Structure* self, int8_t ordinal)
     {
         if (ordinal >= 0)
         {
             // A non-negative offset denote the offset into the non-full block
             //
             assert(ordinal < self->m_nonFullBlockLen);
-            return TCGet(self->m_values[ordinal]);
+            return self->m_values[ordinal];
         }
         else
         {
@@ -724,12 +719,11 @@ public:
             assert(HasFinalFullBlockPointer(self->m_numSlots));
             assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal);
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
-            return TCGet(u.As()[ordinal]);
+            return u.As()[ordinal];
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static uint32_t GetPropertySlotFromInlineHashTableOrdinal(T self, int8_t ordinal)
+    static uint32_t GetPropertySlotFromInlineHashTableOrdinal(Structure* self, int8_t ordinal)
     {
         assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal && ordinal < self->m_nonFullBlockLen);
         AssertImp(ordinal < 0, HasFinalFullBlockPointer(self->m_numSlots));
@@ -750,8 +744,7 @@ public:
 
     // Get the key that transitioned from parent to self
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static int32_t WARN_UNUSED GetParentEdgeTransitionKey(T self)
+    static int32_t WARN_UNUSED GetParentEdgeTransitionKey(Structure* self)
     {
         assert(self->m_parentEdgeTransitionKind != TransitionKind::BadTransitionKind);
 
@@ -931,40 +924,34 @@ public:
         return QueryTransitionTableAndInsertOrUpsertImpl<false /*isInsert*/>(vm, transitionKey, upsertStructureFunc);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED IsPolyMetatable(T self)
+    static bool WARN_UNUSED IsPolyMetatable(Structure* self)
     {
         return self->m_metatable > 0;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED HasNoMetatable(T self)
+    static bool WARN_UNUSED HasNoMetatable(Structure* self)
     {
         return self->m_metatable == 0;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED HasMonomorphicMetatable(T self)
+    static bool WARN_UNUSED HasMonomorphicMetatable(Structure* self)
     {
         return self->m_metatable < 0;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static uint32_t WARN_UNUSED GetPolyMetatableSlot(T self)
+    static uint32_t WARN_UNUSED GetPolyMetatableSlot(Structure* self)
     {
         assert(IsPolyMetatable(self));
         return static_cast<uint32_t>(self->m_metatable - 1);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static HeapPtr<TableObject> WARN_UNUSED GetMonomorphicMetatable(T self)
+    static HeapPtr<TableObject> WARN_UNUSED GetMonomorphicMetatable(Structure* self)
     {
         assert(HasMonomorphicMetatable(self));
         return GeneralHeapPointer<TableObject>(self->m_metatable).As();
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
-    static bool WARN_UNUSED IsSlotUsedByPolyMetatable(T self, uint32_t slot)
+    static bool WARN_UNUSED IsSlotUsedByPolyMetatable(Structure* self, uint32_t slot)
     {
         return self->m_metatable == static_cast<int32_t>(slot) + 1;
     }
@@ -1285,8 +1272,7 @@ public:
         bool m_shouldGrowButterfly;
     };
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static uint32_t WARN_UNUSED GetInitOrNextButterflyCapacity(T self)
+    static uint32_t WARN_UNUSED GetInitOrNextButterflyCapacity(CacheableDictionary* self)
     {
         if (self->m_butterflyNamedStorageCapacity == 0)
         {
@@ -1413,15 +1399,14 @@ public:
     // If returned true, the caller should check if the CacheableDictionary should transit to UncacheableDictionary
     // due to the table containing too many elements but the values of most of them are nil
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static bool WARN_UNUSED ResizeIfNeeded(T self)
+    static bool WARN_UNUSED ResizeIfNeeded(CacheableDictionary* self)
     {
         if (likely(self->m_slotCount * 2 < self->m_hashTableMask))
         {
             return false;
         }
 
-        TranslateToRawPointer(self)->ResizeImpl();
+        self->ResizeImpl();
         return true;
     }
 
@@ -1459,15 +1444,14 @@ public:
     // Query the slot for a property
     // Return false if the property is not found, the 'hashSlot' output can be used for insertion
     //
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static bool WARN_UNUSED ALWAYS_INLINE GetSlotOrdinalFromPropertyImpl(T self, UserHeapPointer<void> prop, uint32_t propHash, size_t& slotForInsertion /*out*/, uint32_t& slotOrdinal /*out*/)
+    static bool WARN_UNUSED ALWAYS_INLINE GetSlotOrdinalFromPropertyImpl(CacheableDictionary* self, UserHeapPointer<void> prop, uint32_t propHash, size_t& slotForInsertion /*out*/, uint32_t& slotOrdinal /*out*/)
     {
         size_t hashMask = self->m_hashTableMask;
         size_t slot = propHash & hashMask;
         GeneralHeapPointer<void> gprop = prop.As();
         while (true)
         {
-            GeneralHeapPointer<void> key = TCGet(self->m_hashTable[slot].m_key);
+            GeneralHeapPointer<void> key = self->m_hashTable[slot].m_key;
             if (key.m_value == 0)
             {
                 slotForInsertion = slot;
@@ -1505,15 +1489,13 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(T self, UserHeapPointer<HeapString> prop, uint32_t& slotOrdinal /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromStringProperty(CacheableDictionary* self, UserHeapPointer<HeapString> prop, uint32_t& slotOrdinal /*out*/)
     {
         size_t slotForInsertionUnused;
         return GetSlotOrdinalFromPropertyImpl(self, prop.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(prop), slotForInsertionUnused /*out*/, slotOrdinal /*out*/);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(T self, UserHeapPointer<void> prop, uint32_t& slotOrdinal /*out*/)
+    static bool WARN_UNUSED GetSlotOrdinalFromMaybeNonStringProperty(CacheableDictionary* self, UserHeapPointer<void> prop, uint32_t& slotOrdinal /*out*/)
     {
         size_t slotForInsertionUnused;
         return GetSlotOrdinalFromPropertyImpl(self, prop, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop), slotForInsertionUnused /*out*/, slotOrdinal /*out*/);
@@ -1527,8 +1509,7 @@ public:
         bool m_shouldCheckForTransitionToUncacheableDictionary;
     };
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static void ALWAYS_INLINE PreparePutPropertyImpl(T self, UserHeapPointer<void> prop, uint32_t propHash, PutByIdResult& result /*out*/)
+    static void ALWAYS_INLINE PreparePutPropertyImpl(CacheableDictionary* self, UserHeapPointer<void> prop, uint32_t propHash, PutByIdResult& result /*out*/)
     {
         size_t slotForInsertion;
         if (GetSlotOrdinalFromPropertyImpl(self, prop, propHash, slotForInsertion /*out*/, result.m_slot /*out*/))
@@ -1554,20 +1535,18 @@ public:
 
         // insert into hash table
         //
-        TCSet(self->m_hashTable[slotForInsertion].m_key, GeneralHeapPointer<void>(prop.As()));
+        self->m_hashTable[slotForInsertion].m_key = GeneralHeapPointer<void>(prop.As());
         self->m_hashTable[slotForInsertion].m_slot = result.m_slot;
         self->m_slotCount++;
         result.m_shouldCheckForTransitionToUncacheableDictionary = ResizeIfNeeded(self);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static void PreparePutById(T self, UserHeapPointer<HeapString> prop, PutByIdResult& result /*out*/)
+    static void PreparePutById(CacheableDictionary* self, UserHeapPointer<HeapString> prop, PutByIdResult& result /*out*/)
     {
         PreparePutPropertyImpl(self, prop.As<void>(), StructureKeyHashHelper::GetHashValueForStringKey(prop), result);
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CacheableDictionary>>>
-    static void PreparePutByMaybeNonStringKey(T self, UserHeapPointer<void> prop, PutByIdResult& result /*out*/)
+    static void PreparePutByMaybeNonStringKey(CacheableDictionary* self, UserHeapPointer<void> prop, PutByIdResult& result /*out*/)
     {
         PreparePutPropertyImpl(self, prop, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(prop), result);
     }
