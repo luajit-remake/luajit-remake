@@ -34,7 +34,7 @@ void DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(DeegenBytecodeImplC
 }
 
 static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecodeImplCreator* ifi,
-                                                             llvm::Value* functionObject,
+                                                             llvm::Value* functionObject, // HEAPPTR
                                                              llvm::Value*& calleeCb /*out*/,
                                                              llvm::Value*& codePointer /*out*/,
                                                              llvm::Instruction* insertBefore)
@@ -251,9 +251,7 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
     //
     Value* icMissCalleeCb = nullptr;
     Value* icMissCodePtr = nullptr;
-    Value* fo64 = ifi->CallDeegenCommonSnippet("GetFuncObjAsU64FromTValue", { tv }, updateIcBBEnd /*insertBefore*/);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(fo64));
-    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, fo64, icMissCalleeCb /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
+    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, tv, icMissCalleeCb /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
     ReleaseAssert(icMissCalleeCb != nullptr);
     ReleaseAssert(icMissCodePtr != nullptr);
 
