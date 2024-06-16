@@ -2904,7 +2904,7 @@ try_find_and_get_cd_prop:
                         if (!value.IsNil())
                         {
                             return KeyValuePair {
-                                .m_key = TValue::CreatePointer(UserHeapPointer<void>(entry.m_key.As())),
+                                .m_key = TValue::CreatePointer(UserHeapPointer<void>(TranslateToRawPointer(entry.m_key.As()))),
                                 .m_value = value
                             };
                         }

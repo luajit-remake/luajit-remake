@@ -15,7 +15,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
     //
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
     while (true)
     {
         assert(!metamethod.Is<tNil>());
@@ -64,7 +64,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
 static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
     TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();

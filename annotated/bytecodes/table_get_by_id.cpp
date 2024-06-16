@@ -68,7 +68,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
     }
 
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
 
     TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
     GetByIdICInfo icInfo;
@@ -91,7 +91,7 @@ enum class TableGetByIdIcResultKind
 static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
 
     // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
     // As long as we know it's a heap entity, we can get its hidden class which the IC caches on.

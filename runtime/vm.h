@@ -603,7 +603,7 @@ public:
         {
             BumpUserHeap();
         }
-        return UserHeapPointer<void> { reinterpret_cast<HeapPtr<void>>(m_userHeapCurPtr) };
+        return UserHeapPointer<void> { TranslateToRawPointer(reinterpret_cast<HeapPtr<void>>(m_userHeapCurPtr)) };
     }
 
     // Allocate a chunk of memory from the system heap

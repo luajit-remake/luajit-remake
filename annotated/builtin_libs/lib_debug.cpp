@@ -201,7 +201,7 @@ DEEGEN_DEFINE_LIB_FUNC(debug_setmetatable)
             TableObject* obj = TranslateToRawPointer(vm, value.As<tTable>());
             if (!mt.Is<tNil>())
             {
-                obj->SetMetatable(vm, mt.As<tTable>());
+                obj->SetMetatable(vm, TranslateToRawPointer(mt.As<tTable>()));
             }
             else
             {

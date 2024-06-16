@@ -96,7 +96,7 @@ TEST(NaNBoxing, Correctness)
             v &= ~7U;
 
             int64_t ptr = static_cast<int64_t>(0xFFFFFFFE00000000ULL + static_cast<uint32_t>(v));
-            UserHeapPointer<void> value { reinterpret_cast<HeapPtr<void>>(ptr) };
+            UserHeapPointer<void> value { TranslateToRawPointer(reinterpret_cast<HeapPtr<void>>(ptr)) };
 
             TValue r = TValue::CreatePointer(value);
             ReleaseAssert(!r.IsInt32());

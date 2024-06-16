@@ -50,7 +50,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
             else if (mmType == HeapEntityType::Table)
             {
                 assert(tvIndex.Is<tString>());
-                HeapPtr<HeapString> index = tvIndex.As<tString>();
+                HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
                 TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
@@ -80,7 +80,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
 static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
     TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();

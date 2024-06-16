@@ -443,7 +443,7 @@ public:
         SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
         if (p.m_value != 0 && slotOrdinal < p.As()->m_numTotalSlots)
         {
-            return StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As();
+            return TranslateToRawPointer(StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As());
         }
 
         uint8_t lim = self->m_numSlots - self->m_nonFullBlockLen;
@@ -451,7 +451,7 @@ public:
         {
             uint8_t ord = slotOrdinal - lim;
             assert(ord < x_hiddenClassBlockSize);
-            return self->m_values[ord].As();
+            return TranslateToRawPointer(self->m_values[ord].As());
         }
         else
         {
@@ -460,7 +460,7 @@ public:
             assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
             assert(HasFinalFullBlockPointer(self->m_numSlots));
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
-            return u.As()[ord].As();
+            return TranslateToRawPointer(u.As()[ord].As());
         }
     }
 
@@ -945,10 +945,10 @@ public:
         return static_cast<uint32_t>(self->m_metatable - 1);
     }
 
-    static HeapPtr<TableObject> WARN_UNUSED GetMonomorphicMetatable(Structure* self)
+    static TableObject* WARN_UNUSED GetMonomorphicMetatable(Structure* self)
     {
         assert(HasMonomorphicMetatable(self));
-        return GeneralHeapPointer<TableObject>(self->m_metatable).As();
+        return TranslateToRawPointer(GeneralHeapPointer<TableObject>(self->m_metatable).As());
     }
 
     static bool WARN_UNUSED IsSlotUsedByPolyMetatable(Structure* self, uint32_t slot)
@@ -1315,7 +1315,7 @@ public:
         }
         else
         {
-            r->m_metatable = GeneralHeapPointer<void>(structure->m_metatable).As();
+            r->m_metatable = TranslateToRawPointer(GeneralHeapPointer<void>(structure->m_metatable).As());
         }
 
         result.m_dictionary = r;
@@ -1350,7 +1350,7 @@ public:
         StructureIterator iterator(structure);
         while (iterator.HasMore())
         {
-            UserHeapPointer<void> key = iterator.GetCurrentKey().As();
+            UserHeapPointer<void> key = TranslateToRawPointer(iterator.GetCurrentKey().As());
             uint32_t keySlot = iterator.GetCurrentSlotOrdinal();
             iterator.Advance();
 
@@ -1429,7 +1429,7 @@ public:
         {
             if (curEntry->m_key.m_value != 0)
             {
-                UserHeapPointer<void> key = curEntry->m_key.As();
+                UserHeapPointer<void> key = TranslateToRawPointer(curEntry->m_key.As());
                 uint32_t keySlot = curEntry->m_slot;
                 InsertNonExistentPropertyForInitOrResize(key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), keySlot);
                 DEBUG_ONLY(cnt++;)
@@ -1621,7 +1621,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
     for (uint32_t i = 0; i < x_hiddenClassBlockSize; i++)
     {
         GeneralHeapPointer<void> e  = shc->m_values[i];
-        UserHeapPointer<void> eu { e.As<void>() };
+        UserHeapPointer<void> eu { TranslateToRawPointer(e.As<void>()) };
         uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
@@ -1658,7 +1658,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
         for (uint8_t i = 0; i < r->m_numTotalSlots; i++)
         {
             GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, i);
-            UserHeapPointer<void> key { p.As() };
+            UserHeapPointer<void> key { TranslateToRawPointer(p.As()) };
             ReleaseAssert(!elementSet.count(key.m_value));
             elementSet.insert(key.m_value);
             elementCount++;
@@ -1681,7 +1681,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
             if (e.m_ordinal != x_hashTableEmptyValue)
             {
                 GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, e.m_ordinal);
-                UserHeapPointer<void> key { p.As() };
+                UserHeapPointer<void> key { TranslateToRawPointer(p.As()) };
                 ReleaseAssert(elementSet.count(key.m_value));
                 ReleaseAssert(!elementSetHt.count(key.m_value));
                 elementSetHt.insert(key.m_value);
@@ -1723,7 +1723,7 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
             for (uint8_t offset = 0; offset < x_hiddenClassBlockSize; offset++)
             {
                 GeneralHeapPointer<void> e = p[offset];
-                UserHeapPointer<void> eu { e.As() };
+                UserHeapPointer<void> eu { TranslateToRawPointer(e.As()) };
                 uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
                 uint8_t checkHash = static_cast<uint8_t>(hashValue);
@@ -2130,7 +2130,7 @@ end_setup:
             for (int8_t i = -static_cast<int8_t>(x_hiddenClassBlockSize); i < 0; i++)
             {
                 GeneralHeapPointer<void> e = TCGet(p[i]);
-                insertNonExistentElementIntoInlineHashTable(e.As(), i /*ordinalOfElement*/);
+                insertNonExistentElementIntoInlineHashTable(TranslateToRawPointer(e.As()), i /*ordinalOfElement*/);
                 DEBUG_ONLY(elementsInserted++;)
             }
         }
@@ -2147,7 +2147,7 @@ end_setup:
             for (size_t i = 0; i < len; i++)
             {
                 GeneralHeapPointer<void> e = r->m_values[i];
-                insertNonExistentElementIntoInlineHashTable(e.As(), static_cast<int8_t>(i) /*ordinalOfElement*/);
+                insertNonExistentElementIntoInlineHashTable(TranslateToRawPointer(e.As()), static_cast<int8_t>(i) /*ordinalOfElement*/);
                 DEBUG_ONLY(elementsInserted++;)
             }
         }
@@ -2164,7 +2164,7 @@ end_setup:
         while (iterator.HasMore())
         {
             GeneralHeapPointer<void> keyG = iterator.GetCurrentKey();
-            UserHeapPointer<void> keyToLookup { keyG.As() };
+            UserHeapPointer<void> keyToLookup { TranslateToRawPointer(keyG.As()) };
             uint8_t slot = iterator.GetCurrentSlotOrdinal();
             iterator.Advance();
 
@@ -2220,7 +2220,7 @@ end_setup:
             if (e.m_ordinal != x_inlineHashTableEmptyValue)
             {
                 GeneralHeapPointer<void> keyG = GetPropertyNameFromInlineHashTableOrdinal(r, e.m_ordinal);
-                UserHeapPointer<void> keyToLookup { keyG.As() };
+                UserHeapPointer<void> keyToLookup { TranslateToRawPointer(keyG.As()) };
 
                 ReleaseAssert(!inlineHtElementSet.count(keyToLookup.m_value));
                 inlineHtElementSet.insert(keyToLookup.m_value);

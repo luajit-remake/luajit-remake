@@ -109,18 +109,18 @@ struct UserHeapPointer
 {
     UserHeapPointer() : m_value(0) { }
 
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
+    /*template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     UserHeapPointer(HeapPtr<U> value)
         : m_value(reinterpret_cast<intptr_t>(value))
     {
         static_assert(TypeMayLiveInUserHeap<T>);
         assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
         assert(As<U>() == TranslateToRawPointer(value));
-    }
+    }*/
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     UserHeapPointer(U* value)
-        : UserHeapPointer(TranslateToHeapPtr(value))
+        : m_value(reinterpret_cast<intptr_t>(TranslateToHeapPtr(value)))
     {
         assert(As<U>() == value);
     }
@@ -492,7 +492,7 @@ public:
     template<typename T>
     UserHeapPointer<T> WARN_UNUSED TranslateToUserHeapPtr(T* ptr) const
     {
-        return UserHeapPointer<T> { TranslateToHeapPtr(ptr) };
+        return UserHeapPointer<T> { ptr };
     }
 
     template<typename T>

@@ -1153,7 +1153,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
 
     if (!mt.Is<tNil>())
     {
-        obj->SetMetatable(vm, mt.As<tTable>());
+        obj->SetMetatable(vm, TranslateToRawPointer(mt.As<tTable>()));
     }
     else
     {
