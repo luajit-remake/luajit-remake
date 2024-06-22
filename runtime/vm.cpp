@@ -555,21 +555,20 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::InsertMultiPieceString(Iterator iter
                 }
             }
 
-            HeapPtr<HeapString> s = ptr.As<HeapString>();
+            HeapString* s = ptr.As<HeapString>();
             if (s->m_hashHigh != expectedHashHigh || s->m_hashLow != expectedHashLow || s->m_length != length)
             {
                 goto next_slot;
             }
 
-            HeapString* rawPtr = translator.TranslateToRawPtr(s);
-            if (!CompareMultiPieceStringEqual(iterator, rawPtr))
+            if (!CompareMultiPieceStringEqual(iterator, s))
             {
                 goto next_slot;
             }
 
             // We found the string
             //
-            return translator.TranslateToUserHeapPtr(rawPtr);
+            return translator.TranslateToUserHeapPtr(s);
         }
 next_slot:
         slot = (slot + 1) & m_hashTableSizeMask;

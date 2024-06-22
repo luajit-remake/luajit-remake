@@ -647,7 +647,7 @@ public:
             else
             {
                 SpdsPtr<T> result = GetSpdsAllocForCurrentThread().template Alloc<T, true /*collectedByFreeList*/>();
-                return GetHeapPtrTranslator().TranslateToRawPtr<T>(result.AsPtr());
+                return result.AsPtr();
             }
         }
         else

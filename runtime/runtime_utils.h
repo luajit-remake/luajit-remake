@@ -1033,7 +1033,7 @@ inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableC
     else
     {
         assert(m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
-        ec = TranslateToRawPointer(vm, m_entity.As<ExecutableCode>());
+        ec = m_entity.As<ExecutableCode>();
     }
     AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
     return ec;

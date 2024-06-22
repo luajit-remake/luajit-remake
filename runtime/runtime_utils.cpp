@@ -389,7 +389,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
             // We should never reach here if the IC ought to hit
             //
             assert(entry->m_entity.IsUserHeapPointer());
-            assert(entry->m_entity.As() != TranslateToHeapPtr(func));
+            assert(entry->m_entity.As() != func);
 
             // All the ExecutableCode in the IC list should be distinct
             //

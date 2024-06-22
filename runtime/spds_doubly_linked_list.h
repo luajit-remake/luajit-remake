@@ -86,7 +86,7 @@ public:
         AssertIsSpdsPointer(p);
 
         SpdsOrSystemHeapPtr<Node> head = m_anchor.m_nextNode;
-        p->m_prevNode = TranslateToHeapPtr(&m_anchor);
+        p->m_prevNode = &m_anchor;
         p->m_nextNode = head;
         TCSet(head->m_prevNode, SpdsOrSystemHeapPtr<Node> { p });
         m_anchor.m_nextNode = SpdsOrSystemHeapPtr<Node> { p };
