@@ -27,20 +27,17 @@ inline void NO_RETURN WriteBarrierSlowPath(void* /*obj*/, uint8_t* /*cellState*/
     ReleaseAssert(false && "unimplemented");
 }
 
-template<size_t cellStateOffset, typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, uint8_t>>>
-void NO_INLINE WriteBarrierSlowPathEnter(T ptr)
+template<size_t cellStateOffset>
+void NO_INLINE WriteBarrierSlowPathEnter(uint8_t* ptr)
 {
-    uint8_t* raw = TranslateToRawPointer(ptr);
-    WriteBarrierSlowPath(raw, raw + cellStateOffset);
+    WriteBarrierSlowPath(ptr, ptr + cellStateOffset);
 }
 
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>, uint8_t*, void>(uint8_t* ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>, HeapPtr<uint8_t>, void>(HeapPtr<uint8_t> ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>, uint8_t*, void>(uint8_t* ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>, HeapPtr<uint8_t>, void>(HeapPtr<uint8_t> ptr);
+template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>>(uint8_t* ptr);
+template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>>(uint8_t* ptr);
 
-template<size_t cellStateOffset, typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, uint8_t>>>
-void ALWAYS_INLINE WriteBarrierImpl(T ptr)
+template<size_t cellStateOffset>
+void ALWAYS_INLINE WriteBarrierImpl(uint8_t* ptr)
 {
     uint8_t cellState = ptr[cellStateOffset];
     constexpr uint8_t blackThreshold = 0;
