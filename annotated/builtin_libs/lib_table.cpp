@@ -369,14 +369,13 @@ static void LuaLibTableSortDoubleNonContinuousArrayNoMM(TableObject* tab, size_t
 static bool LuaLibTableSortStringComparator(TValue lhs, TValue rhs)
 {
     assert(lhs.Is<tString>() && rhs.Is<tString>());
-    HeapPtr<HeapString> lstr = lhs.As<tString>();
-    HeapPtr<HeapString> rstr = rhs.As<tString>();
+    HeapString* lstr = lhs.As<tString>();
+    HeapString* rstr = rhs.As<tString>();
     if (lstr == rstr)
     {
         return false;
     }
-    VM* vm = VM::GetActiveVMForCurrentThread();
-    int cmpRes = TranslateToRawPointer(vm, lstr)->Compare(TranslateToRawPointer(vm, rstr));
+    int cmpRes = lstr->Compare(rstr);
     return cmpRes < 0;
 }
 
@@ -1062,7 +1061,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
         {
             ThrowError("bad argument #2 to 'sort' (function expected)");
         }
-        HeapPtr<FunctionObject> func = GetArg(1).As<tFunction>();
+        FunctionObject* func = GetArg(1).As<tFunction>();
 
         size_t n = TableObject::GetTableLengthWithLuaSemantics(tab);
         if (n < 2)

@@ -18,8 +18,8 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
 
     if (input.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = input.As<tString>();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = input.As<tString>();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             double result = -ssr.d;

@@ -18,8 +18,8 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   br i1 %5, label %6, label %11
 
 6:                                                ; preds = %2
-  %7 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0) #8
-  %8 = call noundef ptr @_Z21TranslateToRawPointerIPU5AS25614FunctionObjectEN15remove_heap_ptrIT_E4typeES4_(ptr addrspace(256) noundef %7)
+  %7 = call noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0) #8
+  %8 = call noundef ptr @_Z21TranslateToRawPointerIP14FunctionObjectEN15remove_heap_ptrIT_E4typeES3_(ptr noundef %7)
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3) #9
   %9 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %3) #9
   %10 = ptrtoint ptr %8 to i64
@@ -31,8 +31,8 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   br i1 %12, label %13, label %17
 
 13:                                               ; preds = %11
-  %14 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1) #8
-  %15 = call noundef ptr @_Z21TranslateToRawPointerIPU5AS25614FunctionObjectEN15remove_heap_ptrIT_E4typeES4_(ptr addrspace(256) noundef %14)
+  %14 = call noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1) #8
+  %15 = call noundef ptr @_Z21TranslateToRawPointerIP14FunctionObjectEN15remove_heap_ptrIT_E4typeES3_(ptr noundef %14)
   %16 = ptrtoint ptr %15 to i64
   call void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1 false, i1 false, i1 true, i64 %16, ptr null, i64 0, i64 %1, i64 %0)
   unreachable
@@ -47,7 +47,7 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
 }
 
 ; Function Attrs: mustprogress nounwind uwtable
-declare dso_local noundef ptr @_Z21TranslateToRawPointerIPU5AS25614FunctionObjectEN15remove_heap_ptrIT_E4typeES4_(ptr addrspace(256) noundef) local_unnamed_addr #2
+declare dso_local noundef ptr @_Z21TranslateToRawPointerIP14FunctionObjectEN15remove_heap_ptrIT_E4typeES3_(ptr noundef) local_unnamed_addr #2
 
 ; Function Attrs: argmemonly mustprogress nocallback nofree nosync nounwind willreturn
 declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) #3
@@ -61,7 +61,7 @@ declare dso_local noundef ptr @_Z9GetCallee6TValueS_(i64, i64) local_unnamed_add
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #4 align 2
 
 ; Function Attrs: mustprogress nounwind readnone willreturn uwtable
-declare dso_local noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64) local_unnamed_addr #0
+declare dso_local noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64) local_unnamed_addr #0
 
 ; Function Attrs: inlinehint nounwind uwtable
 declare dso_local void @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m"(i64, i64, ptr noundef, i64 noundef) #6 align 2

@@ -1072,7 +1072,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_select)
     bool isCountSelector = false;
     if (likely(selector.Is<tString>()))
     {
-        HeapPtr<HeapString> str = selector.As<tString>();
+        HeapString* str = selector.As<tString>();
         if (likely(str->m_length == 1 && str->m_string[0] == static_cast<uint8_t>('#')))
         {
             isCountSelector = true;

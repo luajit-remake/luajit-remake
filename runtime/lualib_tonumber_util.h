@@ -16,8 +16,8 @@ inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE LuaLib_ToNumber
 
     if (val.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = val.As<tString>();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = val.As<tString>();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             return std::make_pair(true /*success*/, ssr.d);

@@ -59,7 +59,7 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
 {
     if (input.Is<tString>())
     {
-        HeapPtr<HeapString> s = input.As<tString>();
+        HeapString* s = input.As<tString>();
         Return(TValue::Create<tDouble>(s->m_length));
     }
 

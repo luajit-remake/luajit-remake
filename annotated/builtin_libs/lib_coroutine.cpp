@@ -134,7 +134,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_create)
         ThrowError("bad argument #1 to 'create' (Lua function expected)");
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
+    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
     Return(TValue::Create<tThread>(newCoro));
 }
 
@@ -258,13 +258,13 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
         ThrowError("bad argument #1 to 'status' (coroutine expected)");
     }
 
-    HeapPtr<CoroutineRuntimeContext> coro = arg.As<tThread>();
-    CoroutineStatus status = TCGet(coro->m_coroutineStatus);
+    CoroutineRuntimeContext* coro = arg.As<tThread>();
+    CoroutineStatus status = coro->m_coroutineStatus;
     assert(status.IsCoroutineObject());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    if (TranslateToHeapPtr(currentCoro) == coro)
+    if (currentCoro == coro)
     {
         assert(!status.IsDead() && !status.IsResumable());
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("running")));

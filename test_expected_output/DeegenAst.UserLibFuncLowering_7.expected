@@ -25,18 +25,18 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   %22 = load i64, ptr %1, align 8
   %23 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !12
   %24 = ptrtoint ptr %23 to i64
-  %reass.add.i.i.i.i = shl i64 %24, 1
-  %25 = add i64 %reass.add.i.i.i.i, %22
+  %25 = add i64 %22, %24
   %26 = shl i64 %25, 29
   %27 = ashr exact i64 %26, 29
-  %28 = inttoptr i64 %27 to ptr addrspace(256)
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %28, align 4, !tbaa !13
-  %29 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %30 = add i64 %29, %24
-  %31 = inttoptr i64 %30 to ptr
-  %32 = getelementptr inbounds %0, ptr %31, i64 0, i32 4
-  %33 = load ptr, ptr %32, align 8, !tbaa !14
-  musttail call ghccc void %33(ptr %0, ptr nonnull %17, ptr null, ptr %31, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %28 = add i64 %27, %24
+  %29 = inttoptr i64 %28 to ptr
+  %.sroa.0.0.copyload.i1.i = load i32, ptr %29, align 4, !tbaa.struct !13
+  %30 = zext i32 %.sroa.0.0.copyload.i1.i to i64
+  %31 = add i64 %30, %24
+  %32 = inttoptr i64 %31 to ptr
+  %33 = getelementptr inbounds %0, ptr %32, i64 0, i32 4
+  %34 = load ptr, ptr %33, align 8, !tbaa !14
+  musttail call ghccc void %34(ptr %0, ptr nonnull %17, ptr null, ptr %32, i64 %4, ptr undef, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -59,7 +59,7 @@ attributes #1 = { nounwind }
 !10 = !{!8, !8, i64 0}
 !11 = !{!3, !8, i64 28}
 !12 = !{!4, !4, i64 0}
-!13 = !{!5, !5, i64 0}
+!13 = !{i64 0, i64 4, !10}
 !14 = !{!15, !4, i64 8}
 !15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !19, i64 2, !20, i64 3, !8, i64 4, !4, i64 8, !21, i64 16}
 !16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}

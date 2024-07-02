@@ -105,10 +105,9 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, int16_t /*index*
 static void NO_RETURN HandleNoMetamethodSlowPathPut(TValue base, int16_t index, TValue valueToPut)
 {
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = base.As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* raw = TranslateToRawPointer(vm, tableObj);
-    raw->PutByIntegerIndexSlow(vm, index, valueToPut);
+    tableObj->PutByIntegerIndexSlow(vm, index, valueToPut);
     Return();
 }
 
