@@ -16,7 +16,7 @@ static void NO_RETURN TableNewImpl(uint8_t inlineStorageSizeStepping, uint16_t a
         TranslateToRawPointer(vm, structure.As()),
         internal::x_inlineStorageSizeForSteppingArray[inlineStorageSizeStepping] /*inlineCapacity*/,
         arrayPartSizeHint);
-    Return(TValue::Create<tTable>(TranslateToHeapPtr(obj)));
+    Return(TValue::Create<tTable>(obj));
 }
 
 DEEGEN_DEFINE_BYTECODE(TableNew)

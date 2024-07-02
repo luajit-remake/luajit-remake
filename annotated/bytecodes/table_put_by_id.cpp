@@ -38,7 +38,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
                     metamethod = GetNewIndexMetamethodFromTableObject(tableObj);
                     if (!metamethod.Is<tNil>())
                     {
-                        base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
+                        base = TValue::Create<tTable>(tableObj);
                         continue;
                     }
                 }

@@ -6,7 +6,7 @@
 static TValue DeegenSnippet_BoxFunctionObjectToTValue(uint64_t func64)
 {
     HeapPtr<FunctionObject> func = reinterpret_cast<HeapPtr<FunctionObject>>(func64);
-    return TValue::Create<tFunction>(func);
+    return TValue::Create<tFunction>(TranslateToRawPointer(func));
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("BoxFunctionObjectToTValue", DeegenSnippet_BoxFunctionObjectToTValue)

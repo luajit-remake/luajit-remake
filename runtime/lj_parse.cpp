@@ -512,7 +512,7 @@ static TValue WARN_UNUSED const_str(ExpDesc *e)
     //
     assert((expr_isstrk(e) || e->k == VGLOBAL) && "bad usage");
     HeapString* str = e->u.sval;
-    return TValue::Create<tString>(TranslateToHeapPtr(str));
+    return TValue::Create<tString>(str);
 }
 
 /* Anchor string constant to avoid GC. */
@@ -522,7 +522,7 @@ TValue lj_parse_keepstr(LexState* /*ls*/, const char *str, size_t len)
     //
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapString* s = vm->CreateStringObjectFromRawString(str, len).As();
-    return TValue::Create<tString>(TranslateToHeapPtr(s));
+    return TValue::Create<tString>(s);
 }
 
 #define BCMAX_A		0x7fff
@@ -3304,7 +3304,7 @@ static void expr_kvalue(FuncState * /*fs*/, TValue *v, ExpDesc *e)
     if (e->k <= VKTRUE) {
         *v = const_pri(e);
     } else if (e->k == VKSTR) {
-        *v = TValue::Create<tString>(TranslateToHeapPtr(e->u.sval));
+        *v = TValue::Create<tString>(e->u.sval);
     } else {
         TValue val = *expr_numtv(e);
         assert(val.Is<tInt32>() || val.Is<tDouble>());
@@ -3501,7 +3501,7 @@ nonconst:
             }
         }
 
-        fs->bcbase[pc].inst = BCINS_AD(BC_TDUP, freg-1, TValue::Create<tTable>(TranslateToHeapPtr(tab)));
+        fs->bcbase[pc].inst = BCINS_AD(BC_TDUP, freg-1, TValue::Create<tTable>(tab));
     }
 
     lex_match(ls, '}', '{', line);

@@ -24,7 +24,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, TableObject*
         TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
         if (!metamethod.Is<tNil>())
         {
-            EnterSlowPath<HandleMetatableSlowPath>(TValue::Create<tTable>(TranslateToHeapPtr(base)), metamethod);
+            EnterSlowPath<HandleMetatableSlowPath>(TValue::Create<tTable>(base), metamethod);
         }
     }
     Return(TValue::Create<tNil>());

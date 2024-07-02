@@ -86,7 +86,7 @@ static size_t WARN_UNUSED TryReadLineOnce(FILE* fp, char* buf, size_t limit)
     return static_cast<size_t>(-1);
 }
 
-static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* firstChunk, size_t firstChunkLen)
+static HeapString* NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* firstChunk, size_t firstChunkLen)
 {
     // Just use a vector for simplicity now
     //
@@ -131,7 +131,7 @@ static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* f
         delete [] ptr;
     }
 
-    return TranslateToHeapPtr(result);
+    return result;
 }
 
 DEEGEN_DEFINE_LIB_FUNC(io_lines_iter)
@@ -147,9 +147,9 @@ DEEGEN_DEFINE_LIB_FUNC(io_lines_iter)
     if (len != static_cast<size_t>(-1))
     {
         assert(len < x_internalBufferSize);
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawString(internalBuf, static_cast<uint32_t>(len)).As())));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(internalBuf, static_cast<uint32_t>(len)).As()));
     }
-    HeapPtr<HeapString> result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);
+    HeapString* result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);
     Return(TValue::Create<tString>(result));
 }
 

@@ -34,7 +34,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_assert)
         {
             char buf[x_default_tostring_buffersize_double];
             uint32_t msgLen = static_cast<uint32_t>(StringifyDoubleUsingDefaultLuaFormattingOptions(buf, msg.As<tDouble>()) - buf);
-            TValue errObj = TValue::Create<tString>(TranslateToHeapPtr(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, msgLen).As()));
+            TValue errObj = TValue::Create<tString>(VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, msgLen).As());
             ThrowError(errObj);
         }
         else
@@ -170,7 +170,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
         TValue result = TableObject::GetById(tableObj, prop.As<void>(), icInfo);
         if (result.Is<tNil>())
         {
-            Return(TValue::Create<tTable>(TranslateToHeapPtr(tableObj)));
+            Return(TValue::Create<tTable>(tableObj));
         }
         else
         {
@@ -261,17 +261,17 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
             {
                 char buf[x_default_tostring_buffersize_int];
                 StringifyInt32UsingDefaultLuaFormattingOptions(buf, v.As<tInt32>());
-                v = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(buf)));
+                v = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
             }
             else if (v.Is<tDouble>())
             {
                 char buf[x_default_tostring_buffersize_double];
                 StringifyDoubleUsingDefaultLuaFormattingOptions(buf, v.As<tDouble>());
-                v = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(buf)));
+                v = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
             }
             else
             {
-                TValue errMsg = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("reader function must return a string")));
+                TValue errMsg = TValue::Create<tString>(vm->CreateStringObjectFromRawCString("reader function must return a string"));
                 Return(TValue::Create<tNil>(), errMsg);
             }
         }
@@ -290,7 +290,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
         assert(ord >= 0);
         if (ord >= 1000000)
         {
-            TValue errMsg = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("'load' returned too many (>1000000) code pieces")));
+            TValue errMsg = TValue::Create<tString>(vm->CreateStringObjectFromRawCString("'load' returned too many (>1000000) code pieces"));
             Return(TValue::Create<tNil>(), errMsg);
         }
         ord++;
@@ -322,7 +322,7 @@ iter_end:
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
 
-    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
+    Return(TValue::Create<tFunction>(entryPoint));
 }
 
 // base.load -- https://www.lua.org/manual/5.1/manual.html#pdf-load
@@ -353,7 +353,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
     TValue* sb = GetStackBase();
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* tab = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCap*/, 1 /*initialButterfly*/);
-    sb[2] = TValue::Create<tTable>(TranslateToHeapPtr(tab));
+    sb[2] = TValue::Create<tTable>(tab);
     sb[3] = TValue::Create<tInt32>(0);
 
     TValue* callFrame = sb + 4;
@@ -396,7 +396,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
         }
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
-    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
+    Return(TValue::Create<tFunction>(entryPoint));
 }
 
 // base.loadstring -- https://www.lua.org/manual/5.1/manual.html#pdf-loadstring
@@ -426,7 +426,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadstring)
         entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
 
-    Return(TValue::Create<tFunction>(TranslateToHeapPtr(entryPoint)));
+    Return(TValue::Create<tFunction>(entryPoint));
 }
 
 // base.module -- https://www.lua.org/manual/5.1/manual.html#pdf-module
@@ -1268,25 +1268,25 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
         double dbl = value.AsDouble();
         char buf[x_default_tostring_buffersize_double];
         StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
-        return TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(buf)));
+        return TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
     }
     else if (value.Is<tMIV>())
     {
         MiscImmediateValue miv = value.AsMIV();
         if (miv.IsNil())
         {
-            return TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("nil")));
+            return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("nil"));
         }
         else
         {
             assert(miv.IsBoolean());
             if (miv.GetBooleanValue())
             {
-                return TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("true")));
+                return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("true"));
             }
             else
             {
-                return TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("false")));
+                return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("false"));
             }
         }
     }
@@ -1321,7 +1321,7 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
             __builtin_unreachable();
         }
 
-        return TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(buf)));
+        return TValue::Create<tString>(vm->CreateStringObjectFromRawCString(buf));
     }
 }
 
@@ -1408,15 +1408,15 @@ DEEGEN_DEFINE_LIB_FUNC(base_type)
     TValue arg = GetArg(0);
     if (arg.Is<tNil>())
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("nil"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("nil")));
     }
     else if (arg.Is<tBool>())
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("boolean"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("boolean")));
     }
     else if (arg.Is<tDouble>())
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("number"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("number")));
     }
     else
     {
@@ -1426,23 +1426,23 @@ DEEGEN_DEFINE_LIB_FUNC(base_type)
         {
         case HeapEntityType::Table:
         {
-            Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("table"))));
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("table")));
         }
         case HeapEntityType::Function:
         {
-            Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("function"))));
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("function")));
         }
         case HeapEntityType::String:
         {
-            Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("string"))));
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("string")));
         }
         case HeapEntityType::Thread:
         {
-            Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("thread"))));
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("thread")));
         }
         case HeapEntityType::Userdata:
         {
-            Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("userdata"))));
+            Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("userdata")));
         }
         default:
         {

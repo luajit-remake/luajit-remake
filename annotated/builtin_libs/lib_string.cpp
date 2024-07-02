@@ -136,7 +136,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
 
     HeapString* res = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(ptr, static_cast<uint32_t>(numArgs) /*len*/).As();
     ss.Destroy();
-    Return(TValue::Create<tString>(TranslateToHeapPtr(res)));
+    Return(TValue::Create<tString>(res));
 }
 
 // string.dump -- https://www.lua.org/manual/5.1/manual.html#pdf-string.dump
@@ -202,7 +202,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_format)
     {
         HeapString* s = vm->CreateStringObjectFromRawString(ss.m_bufferBegin, static_cast<uint32_t>(ss.m_bufferCur - ss.m_bufferBegin)).As();
         ss.Destroy();
-        Return(TValue::Create<tString>(TranslateToHeapPtr(s)));
+        Return(TValue::Create<tString>(s));
     }
 
     ss.Destroy();
@@ -478,7 +478,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_lower)
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapString* res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
     ss.Destroy();
-    Return(TValue::Create<tString>(TranslateToHeapPtr(res)));
+    Return(TValue::Create<tString>(res));
 }
 
 // string.match -- https://www.lua.org/manual/5.1/manual.html#pdf-string.match
@@ -518,11 +518,11 @@ DEEGEN_DEFINE_LIB_FUNC(string_rep)
     int64_t numCopies = static_cast<int64_t>(numCopiesDbl);
     if (unlikely(numCopies <= 0))
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
 
     HeapString* res = vm->CreateStringObjectFromConcatenationOfSameString(inputStr, static_cast<uint32_t>(inputStrLen), static_cast<size_t>(numCopies)).As();
-    Return(TValue::Create<tString>(TranslateToHeapPtr(res)));
+    Return(TValue::Create<tString>(res));
 }
 
 // string.reverse -- https://www.lua.org/manual/5.1/manual.html#pdf-string.reverse
@@ -541,7 +541,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_reverse)
     VM* vm = VM::GetActiveVMForCurrentThread();
     if (length == 0)
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
 
     SimpleTempStringStream ss;
@@ -589,7 +589,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_reverse)
 
     HeapString* res = vm->CreateStringObjectFromRawString(out, static_cast<uint32_t>(length)).As();
     ss.Destroy();
-    Return(TValue::Create<tString>(TranslateToHeapPtr(res)));
+    Return(TValue::Create<tString>(res));
 }
 
 // string.sub -- https://www.lua.org/manual/5.1/manual.html#pdf-string.sub
@@ -650,11 +650,11 @@ DEEGEN_DEFINE_LIB_FUNC(string_sub)
 
     if (unlikely(lb > ub))
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
     else
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawString(ptr + lb - 1, static_cast<uint32_t>(ub - lb + 1)).As())));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(ptr + lb - 1, static_cast<uint32_t>(ub - lb + 1)).As()));
     }
 }
 
@@ -682,7 +682,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_upper)
     VM* vm = VM::GetActiveVMForCurrentThread();
     HeapString* res = vm->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(length)).As();
     ss.Destroy();
-    Return(TValue::Create<tString>(TranslateToHeapPtr(res)));
+    Return(TValue::Create<tString>(res));
 }
 
 DEEGEN_END_LIB_FUNC_DEFINITIONS

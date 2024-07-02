@@ -37,7 +37,7 @@ static void LaunchScript(int argc, char** argv)
     //
     for (int i = 0; i < argc; i++)
     {
-        TValue opt = TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString(argv[i])));
+        TValue opt = TValue::Create<tString>(vm->CreateStringObjectFromRawCString(argv[i]));
         TableObject::RawPutByValIntegerIndex(arg, i - 1 /*index*/, opt);
     }
 
@@ -46,7 +46,7 @@ static void LaunchScript(int argc, char** argv)
         TableObject* globalObj = vm->GetRootGlobalObject();
         PutByIdICInfo info;
         TableObject::PreparePutByIdForGlobalObject(globalObj, strArg, info);
-        TableObject::PutById(globalObj, strArg, TValue::Create<tTable>(TranslateToHeapPtr(arg)), info);
+        TableObject::PutById(globalObj, strArg, TValue::Create<tTable>(arg), info);
     }
 
     const char* scriptFilename = argv[1];

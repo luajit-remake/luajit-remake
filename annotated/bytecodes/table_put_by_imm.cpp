@@ -67,7 +67,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
 
                     // Now, we know we need to invoke the metamethod
                     //
-                    base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
+                    base = TValue::Create<tTable>(tableObj);
                     continue;
                 }
 

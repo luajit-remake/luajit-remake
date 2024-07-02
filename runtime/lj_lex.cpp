@@ -782,7 +782,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* coroCtx, lua_Rea
         HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
         return {
             .m_scriptModule = nullptr,
-            .errMsg = TValue::Create<tString>(TranslateToHeapPtr(msg))
+            .errMsg = TValue::Create<tString>(msg)
         };
     }
 }
@@ -905,7 +905,7 @@ ParseResult WARN_UNUSED ParseLuaScriptFromFile(CoroutineRuntimeContext* ctx, con
         HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf);
         return {
             .m_scriptModule = nullptr,
-            .errMsg = TValue::Create<tString>(TranslateToHeapPtr(msg))
+            .errMsg = TValue::Create<tString>(msg)
         };
     }
 

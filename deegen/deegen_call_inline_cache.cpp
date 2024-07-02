@@ -23,8 +23,7 @@ void DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(DeegenBytecodeImplC
                                                              llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    Value* functionObjectPtr = new IntToPtrInst(functionObject, llvm_type_of<void*>(functionObject->getContext()), "", insertBefore);
-    Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { functionObjectPtr }, insertBefore);
+    Value* codeBlockAndEntryPoint = ifi->CallDeegenCommonSnippet("GetCalleeEntryPoint", { functionObject }, insertBefore);
     ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 
     calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertBefore);
@@ -2228,7 +2227,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
             llvm_type_of<uint64_t>(ctx),        // slowPathDataOffset
             llvm_type_of<void*>(ctx),           // slowPathAddr for this stencil
             llvm_type_of<void*>(ctx),           // dataSecAddr for this stencil
-            llvm_type_of<uint64_t>(ctx)            // target pointer as u64
+            llvm_type_of<uint64_t>(ctx)         // target pointer as tv
         },
         false /*isVarArg*/);
 
@@ -2253,7 +2252,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     Value* slowPathAddrOfOwningStencil = fn->getArg(3);
     Value* dataSecAddrOfOwningStencil = fn->getArg(4);
-    Value* targetU64 = fn->getArg(5);
+    Value* tv = fn->getArg(5);
 
     Value* fastPathAddrOfOwningBytecode = slowPathDataLayout->m_jitAddr.EmitGetValueLogic(slowPathData, entryBB);
     Value* fastPathAddrOfOwningStencil = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathAddrOfOwningBytecode,
@@ -2305,9 +2304,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     };
 
     {
-        ReleaseAssert(llvm_value_has_type<uint64_t>(targetU64));
-        Value* targetPtr = new IntToPtrInst(targetU64, llvm_type_of<void*>(ctx), "", skipIcCreationBB);
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetPtr }, skipIcCreationBB);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, skipIcCreationBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", skipIcCreationBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", skipIcCreationBB);
@@ -2376,7 +2374,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         args.push_back(icMissAddr);
         args.push_back(calleeCbU32);
         args.push_back(codePtr);
-        args.push_back(targetU64);
+        args.push_back(tv);
         args.push_back(condBrDestU64);
         for (Value* val : bytecodeOperandArgs)
         {
@@ -2410,9 +2408,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     // For direct-call mode, we want to call InsertInDirectCallMode
     //
     {
-        Value* targetPtr = new IntToPtrInst(targetU64, llvm_type_of<void*>(ctx), "", dcBB);
         CallInst* dcJitAddr = CreateCallToDeegenCommonSnippet(module.get(), "CreateNewJitCallIcForDirectCallModeSite",
-                                                              { icSite, dcIcTraitOrd, targetPtr, transitedToCCModeAlloca }, dcBB);
+                                                              { icSite, dcIcTraitOrd, tv, transitedToCCModeAlloca }, dcBB);
         ReleaseAssert(llvm_value_has_type<void*>(dcJitAddr));
 
         new StoreInst(dcJitAddr, jitAddrAlloca, dcBB);
@@ -2432,7 +2429,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
         X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, dcJitAddr /*newDest*/, insertIcDcModeBB);
 
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetPtr }, insertIcDcModeBB);
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, insertIcDcModeBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcDcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcDcModeBB);
@@ -2516,9 +2513,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     // When we reach 'prepareInsertIcCcModeBB', we know we start in clousure call mode, and hasn't inserted IC entry yet
     //
     {
-        Value* targetPtr = new IntToPtrInst(targetU64, llvm_type_of<void*>(ctx), "", prepareInsertIcCcModeBB);
         CallInst* ccJitAddr = CreateCallToDeegenCommonSnippet(module.get(), "CreateNewJitCallIcForClosureCallModeSite",
-                                                              { icSite, dcIcTraitOrd, targetPtr }, prepareInsertIcCcModeBB);
+                                                              { icSite, dcIcTraitOrd, tv }, prepareInsertIcCcModeBB);
         ReleaseAssert(llvm_value_has_type<void*>(ccJitAddr));
 
         new StoreInst(ccJitAddr, jitAddrAlloca, prepareInsertIcCcModeBB);
@@ -2538,8 +2534,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
         X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, jitAddr /*newDest*/, insertIcCcModeBB);
 
-        Value* targetPtr = new IntToPtrInst(targetU64, llvm_type_of<void*>(ctx), "", insertIcCcModeBB);
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { targetPtr }, insertIcCcModeBB);
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, insertIcCcModeBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcCcModeBB);

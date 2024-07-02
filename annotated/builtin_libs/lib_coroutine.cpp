@@ -84,7 +84,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_init)
     // So we can simply execute a InPlaceCall here.
     //
     assert(start == GetStackBase() + x_numSlotsForStackFrameHeader);
-    assert(TValue::CreatePointer(TranslateToHeapPtr(reinterpret_cast<void*>(GetStackBase()[0].m_value))).Is<tFunction>());
+    assert(TValue::CreatePointer(reinterpret_cast<void*>(GetStackBase()[0].m_value)).Is<tFunction>());
     MakeInPlaceCall(start, numArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(coro_finish));
 }
 
@@ -135,7 +135,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_create)
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
-    Return(TValue::Create<tThread>(TranslateToHeapPtr(newCoro)));
+    Return(TValue::Create<tThread>(newCoro));
 }
 
 // coroutine.resume -- https://www.lua.org/manual/5.1/manual.html#pdf-coroutine.resume
@@ -207,11 +207,11 @@ not_coroutine_object_or_not_resumable:
         assert(!status.IsResumable());
         if (status.IsDead())
         {
-            Return(TValue::Create<tBool>(false), TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("cannot resume dead coroutine"))));
+            Return(TValue::Create<tBool>(false), TValue::Create<tString>(vm->CreateStringObjectFromRawCString("cannot resume dead coroutine")));
         }
         else
         {
-            Return(TValue::Create<tBool>(false), TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("cannot resume non-suspended coroutine"))));
+            Return(TValue::Create<tBool>(false), TValue::Create<tString>(vm->CreateStringObjectFromRawCString("cannot resume non-suspended coroutine")));
         }
     }
 not_coroutine_object:
@@ -233,7 +233,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_running)
     }
     else
     {
-        Return(TValue::Create<tThread>(TranslateToHeapPtr(currentCoro)));
+        Return(TValue::Create<tThread>(currentCoro));
     }
 }
 
@@ -267,22 +267,22 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
     if (TranslateToHeapPtr(currentCoro) == coro)
     {
         assert(!status.IsDead() && !status.IsResumable());
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("running"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("running")));
     }
 
     if (status.IsResumable())
     {
         assert(!status.IsDead());
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("suspended"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("suspended")));
     }
 
     if (status.IsDead())
     {
         assert(!status.IsResumable());
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("dead"))));
+        Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("dead")));
     }
 
-    Return(TValue::Create<tString>(TranslateToHeapPtr(vm->CreateStringObjectFromRawCString("normal"))));
+    Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("normal")));
 }
 
 // Internal function that implements the function created by 'coroutine.wrap'
@@ -359,9 +359,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
     FunctionObject* wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
-    TValue uv = TValue::Create<tThread>(TranslateToHeapPtr(newCoro));
+    TValue uv = TValue::Create<tThread>(newCoro);
     TCSet(wrap->m_upvalues[0], uv);
-    Return(TValue::Create<tFunction>(TranslateToHeapPtr(wrap)));
+    Return(TValue::Create<tFunction>(wrap));
 }
 
 // coroutine.yield -- https://www.lua.org/manual/5.1/manual.html#pdf-coroutine.yield

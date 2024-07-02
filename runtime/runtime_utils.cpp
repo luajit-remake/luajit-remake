@@ -202,7 +202,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             {
                 if (uvmt.m_slot == selfOrdinalInStackFrame)
                 {
-                    uv = TValue::Create<tFunction>(TranslateToHeapPtr(r));
+                    uv = TValue::Create<tFunction>(r);
                 }
                 else
                 {

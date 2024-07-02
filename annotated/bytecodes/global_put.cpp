@@ -37,7 +37,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
                     metamethod = GetNewIndexMetamethodFromTableObject(tableObj);
                     if (!metamethod.Is<tNil>())
                     {
-                        base = TValue::Create<tTable>(TranslateToHeapPtr(tableObj));
+                        base = TValue::Create<tTable>(tableObj);
                         continue;
                     }
                 }
@@ -145,7 +145,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
     }
 
     assert(!metamethod.Is<tNil>());
-    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(TranslateToHeapPtr(base)), valueToPut, metamethod);
+    EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), valueToPut, metamethod);
 }
 
 DEEGEN_DEFINE_BYTECODE(GlobalPut)

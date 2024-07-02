@@ -10,7 +10,7 @@ static void NO_RETURN NewClosureImpl(TValue tvucb)
     UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(tvucb.m_value);
     CodeBlock* cb = ucb->GetCodeBlock(GetFEnvGlobalObject());
     FunctionObject* func = CreateNewClosure(cb, GetOutputBytecodeSlotOrdinal());
-    Return(TValue::Create<tFunction>(TranslateToHeapPtr(func)));
+    Return(TValue::Create<tFunction>(func));
 }
 
 DEEGEN_DEFINE_BYTECODE(NewClosure)

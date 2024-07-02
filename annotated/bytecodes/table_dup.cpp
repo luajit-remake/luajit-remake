@@ -9,7 +9,7 @@ static void NO_RETURN TableDupGeneralImpl(TValue src)
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
     TableObject* newObject = obj->ShallowCloneTableObject(vm);
-    Return(TValue::Create<tTable>(TranslateToHeapPtr(newObject)));
+    Return(TValue::Create<tTable>(newObject));
 }
 
 // TableDupGeneral gracefully handles all the edge cases, but is a bit slow.
@@ -34,7 +34,7 @@ static void NO_RETURN TableDupSpecializedImpl(TValue src, uint8_t inlineCapacity
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
     TableObject* newObject = obj->ShallowCloneTableObjectForTableDup(vm, inlineCapacityStepping, static_cast<bool>(hasButterfly));
-    Return(TValue::Create<tTable>(TranslateToHeapPtr(newObject)));
+    Return(TValue::Create<tTable>(newObject));
 }
 
 DEEGEN_DEFINE_BYTECODE(TableDup)

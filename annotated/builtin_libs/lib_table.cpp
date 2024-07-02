@@ -91,7 +91,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
 
     if (start > end)
     {
-        Return(TValue::Create<tString>(TranslateToHeapPtr(vm->m_emptyString)));
+        Return(TValue::Create<tString>(vm->m_emptyString));
     }
 
     // Try to avoid temp buffer allocation if possible
@@ -254,7 +254,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
     }
     tempBufferForStringifiedNumber.Destroy();
 
-    Return(TValue::Create<tString>(TranslateToHeapPtr(result)));
+    Return(TValue::Create<tString>(result));
 }
 
 // table.insert -- https://www.lua.org/manual/5.1/manual.html#pdf-table.insert

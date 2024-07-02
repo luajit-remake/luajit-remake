@@ -3,9 +3,9 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(uint64_t ptrU64)
+static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(TValue tv)
 {
-    FunctionObject* o = reinterpret_cast<FunctionObject*>(ptrU64);
+    FunctionObject* o = TranslateToRawPointer(tv.As<tFunction>());
     SystemHeapPointer<ExecutableCode> ec = o->m_executable;
     return ec.m_value;
 }

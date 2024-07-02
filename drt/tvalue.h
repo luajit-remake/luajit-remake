@@ -499,14 +499,15 @@ inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
             return v.IsPointer() && DeegenImpl_TValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                   \
         }                                                                                                                       \
                                                                                                                                 \
-        static TValue encode(HeapPtr<PtrType> o)                                                                                \
+                                                                                                                                \
+        static TValue encode(PtrType* o)                                                                                        \
         {                                                                                                                       \
             return TValue::CreatePointer(o);                                                                                    \
         }                                                                                                                       \
                                                                                                                                 \
         static HeapPtr<PtrType> decode(TValue v)                                                                                \
         {                                                                                                                       \
-            return TranslateToHeapPtr(v.AsPointer<PtrType>().As());                                                                                 \
+            return TranslateToHeapPtr(v.AsPointer<PtrType>().As());                                                             \
         }                                                                                                                       \
     };
 
