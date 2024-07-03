@@ -373,13 +373,6 @@ struct SpdsPtr
         return VM_OffsetToPointer<T>(static_cast<uintptr_t>(m_value));
     }
 
-    template<typename Enable = T, typename = std::enable_if_t<std::is_same_v<Enable, T> && !std::is_same_v<T, void>>>
-    HeapRef<Enable> WARN_UNUSED operator*() const
-    {
-        static_assert(std::is_same_v<Enable, T>);
-        return *AsPtr();
-    }
-
     T* WARN_UNUSED operator->() const
     {
         return AsPtr();
@@ -416,13 +409,6 @@ struct SpdsOrSystemHeapPtr
     {
         assert(!IsInvalidPtr());
         return VM_OffsetToPointer<T>(static_cast<uintptr_t>(m_value));
-    }
-
-    template<typename Enable = T, typename = std::enable_if_t<std::is_same_v<Enable, T> && !std::is_same_v<T, void>>>
-    HeapRef<Enable> WARN_UNUSED operator*() const
-    {
-        static_assert(std::is_same_v<Enable, T>);
-        return *AsPtr();
     }
 
     T* WARN_UNUSED operator->() const

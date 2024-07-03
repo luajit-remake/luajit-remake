@@ -16,17 +16,11 @@ using ConstRestrictPtr = RestrictPtr<const T>;
 template<typename T>
 using HeapPtr = T __attribute__((address_space(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR))) *;
 
-template<typename T>
-using HeapRef = T __attribute__((address_space(CLANG_ADDRESS_SPACE_IDENTIFIER_FOR_HEAP_PTR))) &;
-
 template<typename P, typename T>
 inline constexpr bool IsPtrOrHeapPtr = std::is_same_v<P, T*> || std::is_same_v<P, HeapPtr<T>>;
 
 template<typename T> struct IsHeapPtrType : std::false_type { };
 template<typename T> struct IsHeapPtrType<HeapPtr<T>> : std::true_type { };
-
-template<typename T> struct IsHeapRefType : std::false_type { };
-template<typename T> struct IsHeapRefType<HeapRef<T>> : std::true_type { };
 
 template<typename DstPtr, typename SrcPtr>
 struct ReinterpretCastPreservingAddressSpaceTypeImpl
@@ -94,12 +88,6 @@ struct remove_heap_ref
 {
     static_assert(std::is_lvalue_reference_v<T>);
     using type = T;
-};
-
-template<typename T>
-struct remove_heap_ref<HeapRef<T>>
-{
-    using type = T&;
 };
 
 template<typename T>
@@ -219,31 +207,10 @@ remove_packed_t<T> WARN_UNUSED ALWAYS_INLINE TCGet(T& obj)
 }
 
 template<typename T>
-remove_packed_t<T> WARN_UNUSED ALWAYS_INLINE TCGet(HeapRef<T> obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    if constexpr(is_packed_class_v<T>)
-    {
-        return UnalignedLoad<remove_packed_t<T>>(obj.m_storage);
-    }
-    else
-    {
-        return UnalignedLoad<T>(&obj);
-    }
-}
-
-template<typename T>
 void ALWAYS_INLINE TCSet(T& target, T obj)
 {
     static_assert(std::is_trivially_copyable_v<T>);
     target = obj;
-}
-
-template<typename T>
-void ALWAYS_INLINE TCSet(HeapRef<T> target, T obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    UnalignedStore<T>(&target, obj);
 }
 
 // Overloads for Packed classes
@@ -254,10 +221,4 @@ void ALWAYS_INLINE TCSet(Packed<T>& target, T obj)
     static_assert(std::is_trivially_copyable_v<T>);
     UnalignedStore<T>(target.m_storage, obj);
 
-}
-template<typename T>
-void ALWAYS_INLINE TCSet(HeapRef<Packed<T>> target, T obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    UnalignedStore<T>(target.m_storage, obj);
 }
