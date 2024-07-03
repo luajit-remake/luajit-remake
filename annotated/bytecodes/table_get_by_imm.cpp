@@ -18,10 +18,10 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
 static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
 {
     assert(base.Is<tTable>());
-    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(TranslateToRawPointer(base.As<tTable>()));
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
-        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -57,7 +57,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
     //
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, TValue::Create<tDouble>(index), TableGetByImmMetamethodCallContinuation);
+        MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), TableGetByImmMetamethodCallContinuation);
     }
 
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -69,7 +69,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
         EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
     }
 
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
     GetByIntegerIndexICInfo icInfo;
     TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
     TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -91,7 +91,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
 {
     if (likely(base.Is<tHeapEntity>()))
     {
-        TableObject* heapEntity = reinterpret_cast<TableObject*>(TranslateToRawPointer(base.As<tHeapEntity>()));
+        TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
         ic->FuseICIntoInterpreterOpcode();

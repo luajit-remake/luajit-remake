@@ -305,7 +305,7 @@ public:
     {
         TestAssert(IsDirectCall());
         TestAssert(m_functionObject == nullptr && func != nullptr);
-        TestAssert(TranslateToRawPointer(func->m_executable.As()) == GetCodeBlock());
+        TestAssert(func->m_executable.As() == GetCodeBlock());
         m_functionObject = func;
     }
 

@@ -100,7 +100,7 @@ public:
 
         Iterator& operator++()
         {
-            m_ptr = TranslateToRawPointer(m_vm, m_ptr->m_nextNode.AsPtr());
+            m_ptr = m_ptr->m_nextNode.AsPtr();
             return *this;
         }
 
@@ -113,7 +113,7 @@ public:
 
     struct Elements
     {
-        Iterator begin() const { return Iterator(m_vm, TranslateToRawPointer(m_vm, m_anchorPtr->m_nextNode.AsPtr())); }
+        Iterator begin() const { return Iterator(m_vm, m_anchorPtr->m_nextNode.AsPtr()); }
         Iterator end() const { return Iterator(m_vm, m_anchorPtr); }
 
         VM* m_vm;
@@ -124,7 +124,7 @@ public:
     static Elements elements(T self)
     {
         VM* vm = VM_GetActiveVMForCurrentThread();
-        return { .m_vm = vm, .m_anchorPtr = TranslateToRawPointer(vm, &(self->m_anchor)) };
+        return { .m_vm = vm, .m_anchorPtr = &(self->m_anchor) };
     }
 
     Elements elements()

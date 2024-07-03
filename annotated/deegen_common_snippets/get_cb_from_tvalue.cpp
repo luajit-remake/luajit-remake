@@ -5,8 +5,8 @@
 
 static ExecutableCode* DeegenSnippet_GetCbFromTValueFuncObj(TValue tv)
 {
-    FunctionObject* o = TranslateToRawPointer(tv.As<tFunction>());
-    ExecutableCode* ec = TranslateToRawPointer(o->m_executable.As());
+    FunctionObject* o = tv.As<tFunction>();
+    ExecutableCode* ec = o->m_executable.As();
     return ec;
 }
 

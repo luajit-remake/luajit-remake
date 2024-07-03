@@ -6,13 +6,13 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue r
 {
     if (lhs.Is<tFunction>())
     {
-        MakeCall(TranslateToRawPointer(lhs.As<tFunction>()), lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
+        MakeCall(lhs.As<tFunction>(), lhs, rhs, +[](TValue /*lhs*/, TValue /*rhs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }
     else if (rhs.Is<tFunction>())
     {
-        MakeTailCall(TranslateToRawPointer(rhs.As<tFunction>()), rhs, lhs);
+        MakeTailCall(rhs.As<tFunction>(), rhs, lhs);
     }
     else
     {
@@ -26,7 +26,7 @@ __attribute__((__used__)) extern "C" void NO_RETURN testfn2(TValue* vbegin, size
 {
     if (vbegin->Is<tFunction>())
     {
-        MakeInPlaceCall(TranslateToRawPointer(vbegin->As<tFunction>()), vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
+        MakeInPlaceCall(vbegin->As<tFunction>(), vbegin, numArgs, +[](TValue* /*vbegin*/, size_t /*numArgs*/, TValue* res, size_t /*numRes*/) {
             Return(*res);
         });
     }

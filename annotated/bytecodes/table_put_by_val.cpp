@@ -16,7 +16,7 @@ static void NO_RETURN HandleInt64IndexNoMetamethodSlowPathPut(TValue base, TValu
     assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     assert(base.Is<tTable>());
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
     tableObj->PutByIntegerIndexSlow(vm, index, valueToPut);
     Return();
@@ -42,11 +42,11 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
-                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
+                TableObject* tableObj = metamethod.As<tTable>();
 
                 if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
                 {
@@ -62,7 +62,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
                         goto no_metamethod;
                     }
 
-                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+                    TableObject* metatable = gmr.m_result.As<TableObject>();
                     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         goto no_metamethod;
@@ -125,7 +125,7 @@ static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE Ch
         return std::make_pair(TValue(), false);
     }
 
-    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+    TableObject* metatable = gmr.m_result.As<TableObject>();
     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
     {
         return std::make_pair(TValue(), false);
@@ -169,7 +169,7 @@ static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/,
         while (true)
         {
             assert(base.Is<tTable>());
-            TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+            TableObject* tableObj = base.As<tTable>();
 
             auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(tableObj, indexDouble);
             if (likely(!hasMetamethod))
@@ -182,7 +182,7 @@ double_index_handle_metamethod:
             assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
 
             // Recurse on 'metamethod[index]'
@@ -222,7 +222,7 @@ double_index_handle_metamethod:
         while (true)
         {
             assert(base.Is<tTable>());
-            TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+            TableObject* tableObj = base.As<tTable>();
 
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(tableObj, key, icInfo /*out*/);
@@ -233,7 +233,7 @@ double_index_handle_metamethod:
                 TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
                 if (gmr.m_result.m_value != 0)
                 {
-                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+                    TableObject* metatable = gmr.m_result.As<TableObject>();
                     if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
@@ -252,7 +252,7 @@ property_index_handle_metamethod:
             assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
             }
 
             // Recurse on 'metamethod[index]'
@@ -288,7 +288,7 @@ static void NO_RETURN HandleNotTableObjectNotInt64IndexSlowPath(TValue /*bc_base
 
         if (metamethod.Is<tFunction>())
         {
-            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
         }
 
         base = metamethod;

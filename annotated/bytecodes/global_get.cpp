@@ -20,7 +20,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, TableObject*
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
     if (gmr.m_result.m_value != 0)
     {
-        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
         if (!metamethod.Is<tNil>())
         {
@@ -45,13 +45,13 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, GlobalGetMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, GlobalGetMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
                 assert(tvIndex.Is<tString>());
-                HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
-                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
+                HeapString* index = tvIndex.As<tString>();
+                TableObject* tableObj = metamethod.As<tTable>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -80,7 +80,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
 static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
     TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();

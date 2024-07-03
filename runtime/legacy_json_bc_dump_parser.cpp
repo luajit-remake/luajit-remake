@@ -150,7 +150,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
     TestAssert(module["FunctionPrototypes"].size() > 0);
     for (auto& j : module["FunctionPrototypes"])
     {
-        UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, TranslateToRawPointer(globalObject.As()));
+        UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, globalObject.As());
 
         ucb->m_numFixedArguments = JSONCheckedGet<uint32_t>(j, "NumFixedParams");
         ucb->m_hasVariadicArguments = JSONCheckedGet<bool>(j, "TakesVarArg");
@@ -340,7 +340,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     // TODO: if we have more than x_maxSlot keys, we'd better make it CacheableDictionary right now
                     //
                     SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcitySize);
-                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), initalArraySize);
+                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, structure.As(), initalArraySize);
 
                     // Now, insert all the string properties in alphabetic order
                     //
@@ -1485,12 +1485,12 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 TestAssert(opdata.size() == 2);
                 TValue tv = objCst(opdata[1]);
                 TestAssert(tv.Is<tTable>());
-                TableObject* tab = TranslateToRawPointer(tv.As<tTable>());
+                TableObject* tab = tv.As<tTable>();
                 bool usedSpecializedTableDup = false;
                 if (tab->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                 {
-                    Structure* structure = TranslateToRawPointer(tab->m_hiddenClass.As<Structure>());
-                    if (structure->m_butterflyNamedStorageCapacity == 0 && !TCGet(tab->m_arrayType).HasSparseMap())
+                    Structure* structure = tab->m_hiddenClass.As<Structure>();
+                    if (structure->m_butterflyNamedStorageCapacity == 0 && !tab->m_arrayType.HasSparseMap())
                     {
                         uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;
                         uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);

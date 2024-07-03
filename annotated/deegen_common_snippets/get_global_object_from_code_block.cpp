@@ -5,7 +5,7 @@
 
 static TableObject* DeegenSnippet_GetGlobalObjectFromCodeBlock(CodeBlock* cb)
 {
-    return TranslateToRawPointer(cb->m_globalObject.As());
+    return cb->m_globalObject.As();
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("GetGlobalObjectFromCodeBlock", DeegenSnippet_GetGlobalObjectFromCodeBlock)

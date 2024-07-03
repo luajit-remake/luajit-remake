@@ -14,7 +14,7 @@ static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromT
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (gmr.m_result.m_value != 0)
     {
-        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -34,7 +34,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
 static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base)
 {
     assert(base.Is<tTable>());
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
     while (true)
     {
         // The invariant here is 'base' is table 'tableObj', 'base[index]' is nil, and we should check its metatable
@@ -50,7 +50,7 @@ static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -66,7 +66,7 @@ static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValu
         int64_t index = static_cast<int64_t>(idxDbl);
         assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
-        tableObj = TranslateToRawPointer(base.As<tTable>());
+        tableObj = base.As<tTable>();
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -89,7 +89,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+                TableObject* tableObj = base.As<tTable>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo);
@@ -109,7 +109,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -129,7 +129,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+                TableObject* tableObj = base.As<tTable>();
 
                 TValue result;
                 if (unlikely(IsNaN(idx)))
@@ -177,7 +177,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -208,7 +208,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+                TableObject* tableObj = base.As<tTable>();
 
                 TValue result;
                 if (specialKey.m_value == 0)
@@ -244,7 +244,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                 //
                 if (likely(metamethod.Is<tFunction>()))
                 {
-                    MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
+                    MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
                 }
 
                 // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -284,7 +284,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
         //
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByValMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByValMetamethodCallContinuation);
         }
 
         // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -304,7 +304,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
         // tvIndex is a double that represents a int64_t value
         //
         assert(base.Is<tTable>());
-        TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+        TableObject* tableObj = base.As<tTable>();
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -343,7 +343,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
     {
         if (likely(base.Is<tHeapEntity>()))
         {
-            TableObject* heapEntity = reinterpret_cast<TableObject*>(TranslateToRawPointer(base.As<tHeapEntity>()));
+            TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();

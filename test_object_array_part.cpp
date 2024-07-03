@@ -143,7 +143,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 else
                                 {
                                     ReleaseAssert(!fastPathSuccess);
-                                    TranslateToRawPointer(vm, obj)->PutByIntegerIndexSlow(vm, putLocation, value);
+                                    obj->PutByIntegerIndexSlow(vm, putLocation, value);
                                 }
                             }
 
@@ -267,14 +267,14 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 TableObject::PreparePutByIntegerIndex(obj, index2, value, icInfo /*out*/);
                                 bool fastPathSuccess = TableObject::TryPutByIntegerIndexFast(obj, index2, value, icInfo);
                                 ReleaseAssert(!fastPathSuccess);
-                                TranslateToRawPointer(vm, obj)->PutByIntegerIndexSlow(vm, index2, value);
+                                obj->PutByIntegerIndexSlow(vm, index2, value);
                             }
 
                             // Check the array type is as expected
                             //
                             {
-                                ArrayType arrType = TCGet(obj->m_arrayType);
-                                ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                ArrayType arrType = obj->m_arrayType;
+                                ReleaseAssert(arrType.m_asValue == obj->m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
 
                                 if (ArrayGrowthPolicy::x_alwaysVectorCutoff < putLocation && putLocation <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
                                 {

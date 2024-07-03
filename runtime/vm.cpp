@@ -298,7 +298,7 @@ bool WARN_UNUSED VM::InitializeVMGlobalData()
     {
         m_stringNameForMetatableKind[i] = CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
         assert(m_stringNameForMetatableKind[i].As()->m_hashHigh == x_luaMetamethodHashes[i]);
-        assert(GetMetamethodOrdinalFromStringName(TranslateToRawPointer(m_stringNameForMetatableKind[i].As())) == static_cast<int>(i));
+        assert(GetMetamethodOrdinalFromStringName(m_stringNameForMetatableKind[i].As()) == static_cast<int>(i));
     }
 
     for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
@@ -842,5 +842,5 @@ void VM::CreateRootCoroutine()
 
 TableObject* VM::GetRootGlobalObject()
 {
-    return TranslateToRawPointer(m_rootCoroutine->m_globalObject.As());
+    return m_rootCoroutine->m_globalObject.As();
 }

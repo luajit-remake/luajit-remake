@@ -44,7 +44,7 @@ static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, uint16_t
 
     if (likely(func.Is<tFunction>()))
     {
-        FunctionObject* callee = TranslateToRawPointer(func.As<tFunction>());
+        FunctionObject* callee = func.As<tFunction>();
         if constexpr(passVariadicRes)
         {
             MakeInPlaceCallPassingVariadicRes(callee, argStart, numArgs, CallOperationReturnContinuation<storeVariadicRes>);

@@ -95,7 +95,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
-    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
+    CodeBlock* calleeCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
 
     calleeCb->m_numUpvalues = 0;
@@ -124,7 +124,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     StackFrameHeader* rootSfh = reinterpret_cast<StackFrameHeader*>(stack);
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
-    rootSfh->m_func = TranslateToRawPointer(reinterpret_cast<HeapPtr<FunctionObject>>(1000000345));
+    rootSfh->m_func = OffsetToPtr<FunctionObject>(1000000345);
     rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* previousFrameEnd = reinterpret_cast<uint64_t*>(rootSfh + 1);

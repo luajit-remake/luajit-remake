@@ -291,7 +291,7 @@ DEEGEN_DEFINE_LIB_FUNC(io_write)
         }
         else if (val.Is<tString>())
         {
-            HeapString* hs = TranslateToRawPointer(vm, val.As<tString>());
+            HeapString* hs = val.As<tString>();
             size_t written = fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
             if (unlikely(hs->m_length != written)) { success = false; break; }
         }

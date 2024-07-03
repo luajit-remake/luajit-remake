@@ -22,11 +22,11 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, TValue::Create<tDouble>(index), valueToPut, TablePutByImmMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, TValue::Create<tDouble>(index), valueToPut, TablePutByImmMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
-                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
+                TableObject* tableObj = metamethod.As<tTable>();
 
                 if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
                 {
@@ -42,7 +42,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
                         goto no_metamethod;
                     }
 
-                    TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+                    TableObject* metatable = gmr.m_result.As<TableObject>();
                     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         goto no_metamethod;

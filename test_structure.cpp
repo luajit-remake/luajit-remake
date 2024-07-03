@@ -126,7 +126,7 @@ void CheckIsAsExpected(TestContext& ctx, size_t cur, Structure* specifiedStructu
     //
     for (auto it : ctx.m_tree.m_expectedContents[cur])
     {
-        UserHeapPointer<void> key = TranslateToRawPointer(reinterpret_cast<HeapPtr<void>>(it.first));
+        UserHeapPointer<void> key = OffsetToPtr<void>(static_cast<uintptr_t>(it.first));
         uint32_t slot;
         ReleaseAssert(Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, key, slot /*out*/) == true);
         ReleaseAssert(slot == it.second);
@@ -240,7 +240,7 @@ void PostTraversalCheck(TestContext& ctx, size_t numNodes)
         Structure* structure = ctx.m_structures[i];
         for (auto it : ctx.m_tree.m_expectedTransitions[i])
         {
-            UserHeapPointer<void> key = TranslateToRawPointer(reinterpret_cast<HeapPtr<void>>(it.first));
+            UserHeapPointer<void> key = OffsetToPtr<void>(static_cast<uintptr_t>(it.first));
             Structure* expectedTarget = ctx.m_structures[it.second];
 
             Structure::AddNewPropertyResult result;
@@ -267,7 +267,7 @@ void PostTraversalCheck(TestContext& ctx, size_t numNodes)
             ReleaseAssert(structure->m_inlineHashTableMask <= x_hiddenClassBlockSize * 4);
             if (structure->m_anchorHashTable.m_value != 0)
             {
-                StructureAnchorHashTable* anchor = TranslateToRawPointer(structure->m_anchorHashTable.As());
+                StructureAnchorHashTable* anchor = structure->m_anchorHashTable.As();
                 if (recorded.count(anchor))
                 {
                     continue;
@@ -416,11 +416,11 @@ void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
     // TODO: when we make some more assertions in SetMetatable, we will need to make them more real
     //
     TableObject* t1 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t1));
+    UserHeapGcObjectHeader::Populate(t1);
     TableObject* t2 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t2));
+    UserHeapGcObjectHeader::Populate(t2);
     TableObject* t3 = vm->AllocFromUserHeap(sizeof(TableObject)).AsNoAssert<TableObject>();
-    UserHeapGcObjectHeader::Populate(TranslateToHeapPtr(t3));
+    UserHeapGcObjectHeader::Populate(t3);
 
     for (size_t i = 0; i < numNodes; i++)
     {
@@ -428,7 +428,7 @@ void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
         Structure::AddMetatableResult result;
         structure->SetMetatable(vm, t1, result /*out*/);
         ReleaseAssert(result.m_shouldInsertMetatable == false);
-        Structure* n1 = TranslateToRawPointer(vm, result.m_newStructure.As());
+        Structure* n1 = result.m_newStructure.As();
         ReleaseAssert(n1 != structure);
         ReleaseAssert(n1->m_parent == structure);
         ReleaseAssert(n1->m_parentEdgeTransitionKind == Structure::TransitionKind::AddMetaTable);
@@ -455,7 +455,7 @@ void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
         ReleaseAssert(result2.m_slotOrdinal == ctx.m_tree.m_expectedContents[i].size());
         ReleaseAssert(result2.m_shouldGrowButterfly == (ctx.m_tree.m_expectedContents[i].size() == structure->m_inlineNamedStorageCapacity + structure->m_butterflyNamedStorageCapacity));
 
-        Structure* n2 = TranslateToRawPointer(vm, result2.m_newStructure.As());
+        Structure* n2 = result2.m_newStructure.As();
         ReleaseAssert(n2 != structure);
         ReleaseAssert(n2->m_parent == structure);
         if (result2.m_shouldGrowButterfly)
@@ -501,28 +501,28 @@ void DoMetatableTestOnTree(TestContext& ctx, size_t numNodes)
             Structure::AddMetatableResult result4;
             n1->SetMetatable(vm, t1, result4 /*out*/);
             ReleaseAssert(result4.m_shouldInsertMetatable == false);
-            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == n1);
+            ReleaseAssert(result4.m_newStructure.As() == n1);
         }
 
         {
             Structure::RemoveMetatableResult result4;
             structure->RemoveMetatable(vm, result4 /*out*/);
             ReleaseAssert(result4.m_shouldInsertMetatable == false);
-            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == structure);
+            ReleaseAssert(result4.m_newStructure.As() == structure);
         }
 
         {
             Structure::RemoveMetatableResult result4;
             n1->RemoveMetatable(vm, result4 /*out*/);
             ReleaseAssert(result4.m_shouldInsertMetatable == false);
-            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == structure);
+            ReleaseAssert(result4.m_newStructure.As() == structure);
         }
 
         {
             Structure::RemoveMetatableResult result4;
             n2->RemoveMetatable(vm, result4 /*out*/);
             ReleaseAssert(result4.m_shouldInsertMetatable == true);
-            ReleaseAssert(TranslateToRawPointer(result4.m_newStructure.As()) == n2);
+            ReleaseAssert(result4.m_newStructure.As() == n2);
         }
     }
 }

@@ -139,8 +139,8 @@ struct DfgBuildBasicBlockContext
         }
         else if (m_inlinedCallFrame->IsDirectCall())
         {
-            HeapPtr<FunctionObject> fo = TranslateToHeapPtr(m_inlinedCallFrame->GetDirectCallFunctionObject());
-            return m_graph->GetUnboxedConstant(reinterpret_cast<uint64_t>(fo));
+            FunctionObject* fo = m_inlinedCallFrame->GetDirectCallFunctionObject();
+            return m_graph->GetUnboxedConstant(static_cast<uint64_t>(PtrToOffset(fo)));
         }
         else
         {

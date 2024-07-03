@@ -87,7 +87,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_dofile_read_stdin_continuation)
 
     assert(r1.Is<tFunction>());
     TValue* callFrame = GetStackBase();
-    reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(r1.As<tFunction>());
+    reinterpret_cast<void**>(callFrame)[0] = r1.As<tFunction>();
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
 }
 
@@ -106,7 +106,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_dofile)
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
         TValue* callframe = GetStackBase();
-        StorePtrToCallframe(callframe, TranslateToRawPointer(vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>()));
+        StorePtrToCallframe(callframe, vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>());
         callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
         MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_read_stdin_continuation));
     }
@@ -121,7 +121,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_dofile)
         {
             ThrowError(res.errMsg);
         }
-        entryPoint = TranslateToRawPointer(res.m_scriptModule->m_defaultEntryPoint.As());
+        entryPoint = res.m_scriptModule->m_defaultEntryPoint.As();
     }
 
     TValue* callFrame = GetStackBase();
@@ -163,7 +163,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
     }
     else
     {
-        TableObject* tableObj = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
+        TableObject* tableObj = metatableMaybeNull.As<TableObject>();
         UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(tableObj, prop, icInfo /*out*/);
@@ -192,7 +192,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_ipairs_iterator)
     {
         ThrowError("bad argument #1 to 'ipairs iterator' (table expected)");
     }
-    TableObject* tableObj = TranslateToRawPointer(arg1.As<tTable>());
+    TableObject* tableObj = arg1.As<tTable>();
     TValue arg2 = GetArg(1);
     if (unlikely(!arg2.Is<tDouble>()))
     {
@@ -284,7 +284,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
 
         TValue* sb = GetStackBase();
         assert(sb[2].Is<tTable>());
-        TableObject* tab = TranslateToRawPointer(sb[2].As<tTable>());
+        TableObject* tab = sb[2].As<tTable>();
         assert(sb[3].Is<tInt32>());
         int32_t ord = sb[3].As<tInt32>();
         assert(ord >= 0);
@@ -299,7 +299,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
 
         TValue* callFrame = sb + 4;
         assert(sb[0].Is<tFunction>());
-        StorePtrToCallframe(callFrame, TranslateToRawPointer(sb[0].As<tFunction>()));
+        StorePtrToCallframe(callFrame, sb[0].As<tFunction>());
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
     }
 
@@ -309,7 +309,7 @@ iter_end:
     {
         TValue* sb = GetStackBase();
         assert(sb[2].Is<tTable>());
-        TableObject* tab = TranslateToRawPointer(sb[2].As<tTable>());
+        TableObject* tab = sb[2].As<tTable>();
         assert(sb[3].Is<tInt32>());
         int32_t len = sb[3].As<tInt32>();
         assert(len >= 0);
@@ -346,7 +346,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_load)
     {
         ThrowError("bad argument #1 to 'load' (function expected)");
     }
-    FunctionObject* func = TranslateToRawPointer(GetArg(0).As<tFunction>());
+    FunctionObject* func = GetArg(0).As<tFunction>();
 
     // Put all the string pieces into a table
     //
@@ -379,7 +379,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_loadfile)
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
         TValue* callframe = GetStackBase();
-        StorePtrToCallframe(callframe, TranslateToRawPointer(vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>()));
+        StorePtrToCallframe(callframe, vm->GetLibFn<VM::LibFn::BaseLoad>().As<tFunction>());
         callframe[x_numSlotsForStackFrameHeader] = vm->GetLibFn<VM::LibFn::IoLinesIter>();
         MakeInPlaceCall(callframe + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_loadfile_continuation));
     }
@@ -475,7 +475,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
     {
         ThrowError("bad argument #1 to 'next' (table expected)");
     }
-    TableObject* tableObj = TranslateToRawPointer(tab.As<tTable>());
+    TableObject* tableObj = tab.As<tTable>();
 
     TValue key;
     if (GetNumArgs() >= 2)
@@ -596,7 +596,7 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
 
     assert(tv.Is<tHeapEntity>());
     HeapEntityType ty = tv.GetHeapEntityType();
-    void* p = TranslateToRawPointer(vm, tv.As<tHeapEntity>());
+    void* p = tv.As<tHeapEntity>();
     if (ty == HeapEntityType::String)
     {
         HeapString* hs = reinterpret_cast<HeapString*>(p);
@@ -633,7 +633,7 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
     }
 
     assert(ty == HeapEntityType::Table);
-    TableObject* tableObj = TranslateToRawPointer(tv.As<tTable>());
+    TableObject* tableObj = tv.As<tTable>();
     UserHeapPointer<void> mt = TableObject::GetMetatable(tableObj).m_result;
     if (unlikely(mt.m_value != 0))
     {
@@ -659,7 +659,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_print_continuation)
     //
     if (valueToPrint.Is<tString>())
     {
-        HeapString* hs = TranslateToRawPointer(vm, valueToPrint.As<tString>());
+        HeapString* hs = valueToPrint.As<tString>();
         fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
     }
     else if (valueToPrint.Is<tDouble>())
@@ -696,7 +696,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_print_continuation)
     // from the call frame. This is required to exhibit identical behavior as official Lua implementation.
     //
     TValue toStringFn = sb[numElementsToPrint + 1];
-    uint64_t toStringFnU64 = reinterpret_cast<uint64_t>(TranslateToRawPointer(toStringFn.As<tFunction>()));
+    uint64_t toStringFnU64 = reinterpret_cast<uint64_t>(toStringFn.As<tFunction>());
     if (unlikely(toStringFn.m_value != vm->GetLibFn<VM::LibFn::BaseToString>().m_value))
     {
         goto make_call_slowpath;
@@ -775,8 +775,8 @@ DEEGEN_DEFINE_LIB_FUNC(base_print)
 
     size_t cur = 0;
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, TranslateToRawPointer(currentCoro->m_globalObject.As()));
-    auto toStringFnU64 = reinterpret_cast<uint64_t>(TranslateToRawPointer(toStringFn.As<tFunction>()));
+    auto [isToStringUnchanged, toStringFn] = IsGlobalToStringFunctionUnchanged(vm, currentCoro->m_globalObject.As());
+    auto toStringFnU64 = reinterpret_cast<uint64_t>(toStringFn.As<tFunction>());
     if (unlikely(!isToStringUnchanged))
     {
         goto make_call_slowpath;
@@ -884,7 +884,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawget)
         ThrowError("bad argument #1 to 'rawget' (table expected)");
     }
 
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
     TValue result;
 
 #if 0
@@ -966,7 +966,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
         ThrowError("bad argument #1 to 'rawset' (table expected)");
     }
 
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
 
 #if 0
     if (index.Is<tInt32>())
@@ -1135,12 +1135,12 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
     }
 
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* obj = TranslateToRawPointer(vm, value.As<tTable>());
+    TableObject* obj = value.As<tTable>();
 
     UserHeapPointer<void> metatableMaybeNull = TableObject::GetMetatable(obj).m_result;
     if (metatableMaybeNull.m_value != 0)
     {
-        TableObject* existingMetatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
+        TableObject* existingMetatable = metatableMaybeNull.As<TableObject>();
         UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
@@ -1153,7 +1153,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
 
     if (!mt.Is<tNil>())
     {
-        obj->SetMetatable(vm, TranslateToRawPointer(mt.As<tTable>()));
+        obj->SetMetatable(vm, mt.As<tTable>());
     }
     else
     {
@@ -1247,7 +1247,7 @@ base_10_conversion:
         {
             ThrowError("bad argument #1 to 'tonumber' (string expected)");
         }
-        HeapString* str = TranslateToRawPointer(input.As<tString>());
+        HeapString* str = input.As<tString>();
         StrScanResult res = TryConvertStringWithBaseToDoubleWithLuaSemantics(baseValue, str->m_string);
         if (res.fmt == STRSCAN_ERROR)
         {
@@ -1298,7 +1298,7 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
             return value;
         }
 
-        UserHeapGcObjectHeader* p = TranslateToRawPointer(vm, value.As<tHeapEntity>());
+        UserHeapGcObjectHeader* p = value.As<tHeapEntity>();
         char buf[100];
         if (p->m_type == HeapEntityType::Function)
         {
@@ -1360,7 +1360,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
         Return(LuaDefaultStringifyValue(vm, value));
     }
 
-    TableObject* metatable = TranslateToRawPointer(mt.As<TableObject>());
+    TableObject* metatable = mt.As<TableObject>();
     assert(metatable->m_type == HeapEntityType::Table);
     GetByIdICInfo info;
     TableObject::PrepareGetById(metatable, vm->m_stringNameForToStringMetamethod, info /*out*/);
@@ -1374,7 +1374,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
     TValue* callFrame = GetStackBase();
     if (likely(metamethod.Is<tFunction>()))
     {
-        reinterpret_cast<void**>(callFrame)[0] = TranslateToRawPointer(metamethod.As<tFunction>());
+        reinterpret_cast<void**>(callFrame)[0] = metamethod.As<tFunction>();
         callFrame[x_numSlotsForStackFrameHeader] = value;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_tostring_continuation));
     }
@@ -1473,7 +1473,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_unpack)
     {
         ThrowError("bad argument #1 to 'unpack' (table expected)");
     }
-    TableObject* tableObj = TranslateToRawPointer(tvList.As<tTable>());
+    TableObject* tableObj = tvList.As<tTable>();
 
     int64_t lb;
     if (numArgs == 1)

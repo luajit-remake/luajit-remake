@@ -433,7 +433,7 @@ static LexToken lex_scan(LexState* ls, TValue* tv)
             TValue tvStr = lj_parse_keepstr(ls, ls->sb->Begin(), ls->sb->Len());
             *tv = tvStr;
             assert(tvStr.Is<tString>());
-            HeapString* s = TranslateToRawPointer(tvStr.As<tString>());
+            HeapString* s = tvStr.As<tString>();
             if (HeapString::IsReservedWord(s) > 0) /* Reserved word? */
             {
                 return TK_OFS + HeapString::GetReservedWordOrdinal(s) + 1;
@@ -845,7 +845,7 @@ static const char* Parser_LuaStringArrayReader(CoroutineRuntimeContext* /*ctx*/,
     TValue tv = TableObject::GetByIntegerIndex(state->m_tab, state->m_cur, info);
     state->m_cur++;
     assert(tv.Is<tString>());
-    HeapString* s = TranslateToRawPointer(tv.As<tString>());
+    HeapString* s = tv.As<tString>();
     *size = s->m_length;
     return reinterpret_cast<const char*>(s->m_string);
 }

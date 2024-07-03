@@ -33,11 +33,11 @@ static void NO_RETURN TailCallOperationImpl(TValue* base, uint16_t numArgs)
     {
         if constexpr(passVariadicRes)
         {
-            MakeInPlaceTailCallPassingVariadicRes(TranslateToRawPointer(func.As<tFunction>()), argStart, numArgs);
+            MakeInPlaceTailCallPassingVariadicRes(func.As<tFunction>(), argStart, numArgs);
         }
         else
         {
-            MakeInPlaceTailCall(TranslateToRawPointer(func.As<tFunction>()), argStart, numArgs);
+            MakeInPlaceTailCall(func.As<tFunction>(), argStart, numArgs);
         }
     }
     else

@@ -266,7 +266,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         // Set up the call frame
         //
         UserHeapPointer<FunctionObject> handler = errHandler.AsPointer<FunctionObject>();
-        ExecutableCode* throwingFuncEc = TranslateToRawPointer(TCGet(hdr->m_func->m_executable).As());
+        ExecutableCode* throwingFuncEc = hdr->m_func->m_executable.As();
         uint32_t stackFrameSize;
         if (throwingFuncEc->IsBytecodeFunction())
         {
@@ -286,7 +286,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         // it as is fow now.
         //
         TValue* callFrameBegin = GetStackBase() + stackFrameSize;
-        reinterpret_cast<void**>(callFrameBegin)[0] = TranslateToRawPointer(handler.As());
+        reinterpret_cast<void**>(callFrameBegin)[0] = handler.As();
         callFrameBegin[x_numSlotsForStackFrameHeader] = errorObject;
         MakeInPlaceCall(callFrameBegin + x_numSlotsForStackFrameHeader, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallErrorReturn));
     }
@@ -353,7 +353,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
     TValue* callStart = stackbase + 2;
     if (likely(calleeInput.Is<tFunction>()))
     {
-        reinterpret_cast<uint64_t*>(callStart)[0] = reinterpret_cast<uint64_t>(TranslateToRawPointer(calleeInput.As<tFunction>()));
+        reinterpret_cast<uint64_t*>(callStart)[0] = reinterpret_cast<uint64_t>(calleeInput.As<tFunction>());
         MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
     }
 
@@ -383,7 +383,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
         TValue baseDotError = VM_GetLibFunctionObject<VM::LibFn::BaseError>();
         assert(baseDotError.Is<tFunction>());
 
-        StorePtrToCallframe(callStart, TranslateToRawPointer(baseDotError.As<tFunction>()));
+        StorePtrToCallframe(callStart, baseDotError.As<tFunction>());
         callStart[x_numSlotsForStackFrameHeader] = MakeErrorMessageForUnableToCall(calleeInput);
 
         MakeInPlaceCall(callStart + x_numSlotsForStackFrameHeader /*argsBegin*/, 1 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(OnProtectedCallSuccessReturn));
@@ -429,7 +429,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_pcall)
     if (likely(calleeInput.Is<tFunction>()))
     {
         memmove(callFrameBegin + x_numSlotsForStackFrameHeader, stackbase + 1 /*inputArgsBegin*/, sizeof(TValue) * numCalleeArgs);
-        reinterpret_cast<void**>(callFrameBegin)[0] = TranslateToRawPointer(calleeInput.As<tFunction>());
+        reinterpret_cast<void**>(callFrameBegin)[0] = calleeInput.As<tFunction>();
     }
     else
     {

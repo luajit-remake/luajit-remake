@@ -83,7 +83,7 @@ inline bool WARN_UNUSED ALWAYS_INLINE LuaLib_TVDoubleViewToNumberSlow(double& tv
         TValue macro_tv = GetArg(oneIndexedArgOrd - 1);                                                                     \
         if (likely(macro_tv.Is<tString>()))                                                                                 \
         {                                                                                                                   \
-            strPtrVar = reinterpret_cast<char*>(TranslateToRawPointer(macro_tv.As<tString>()->m_string));                   \
+            strPtrVar = reinterpret_cast<char*>(macro_tv.As<tString>()->m_string);                   \
             strLenVar = macro_tv.As<tString>()->m_length;                                                                   \
         }                                                                                                                   \
         else if (macro_tv.Is<tDouble>())                                                                                    \

@@ -198,10 +198,10 @@ DEEGEN_DEFINE_LIB_FUNC(debug_setmetatable)
 
         if (ty == HeapEntityType::Table)
         {
-            TableObject* obj = TranslateToRawPointer(vm, value.As<tTable>());
+            TableObject* obj = value.As<tTable>();
             if (!mt.Is<tNil>())
             {
-                obj->SetMetatable(vm, TranslateToRawPointer(mt.As<tTable>()));
+                obj->SetMetatable(vm, mt.As<tTable>());
             }
             else
             {

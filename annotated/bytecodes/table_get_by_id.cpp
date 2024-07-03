@@ -18,10 +18,10 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tv
 static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_index*/, TValue base)
 {
     assert(base.Is<tTable>());
-    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(TranslateToRawPointer(base.As<tTable>()));
+    TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
-        TableObject* metatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -55,7 +55,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
     //
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, TableGetByIdMetamethodCallContinuation);
+        MakeCall(metamethod.As<tFunction>(), base, tvIndex, TableGetByIdMetamethodCallContinuation);
     }
 
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -68,9 +68,9 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
     }
 
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
 
-    TableObject* tableObj = TranslateToRawPointer(base.As<tTable>());
+    TableObject* tableObj = base.As<tTable>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
     TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -91,14 +91,14 @@ enum class TableGetByIdIcResultKind
 static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
 
     // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
     // As long as we know it's a heap entity, we can get its hidden class which the IC caches on.
     //
     if (likely(base.Is<tHeapEntity>()))
     {
-        TableObject* heapEntity = reinterpret_cast<TableObject*>(TranslateToRawPointer(base.As<tHeapEntity>()));
+        TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();

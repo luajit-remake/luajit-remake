@@ -341,7 +341,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                                 // TODO: unfortunately this is currently coupled with the guest language definition
                                 //
                                 assert(val.IsPointer());
-                                UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
+                                UserHeapGcObjectHeader* p = val.AsPointer<UserHeapGcObjectHeader>().As();
                                 if (p->m_type == HeapEntityType::String)
                                 {
                                     HeapString* hs = reinterpret_cast<HeapString*>(p);

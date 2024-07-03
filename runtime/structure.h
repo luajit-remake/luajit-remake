@@ -82,7 +82,7 @@ public:
     static StructureTransitionTable* AllocateUninitialized(VM* vm, uint32_t hashTableSize)
     {
         uint32_t allocationSize = ComputeAllocationSize(hashTableSize);
-        StructureTransitionTable* result = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(allocationSize).As<StructureTransitionTable>());
+        StructureTransitionTable* result = vm->AllocFromSystemHeap(allocationSize).As<StructureTransitionTable>();
         ConstructInPlace(result);
         return result;
     }
@@ -443,7 +443,7 @@ public:
         SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
         if (p.m_value != 0 && slotOrdinal < p.As()->m_numTotalSlots)
         {
-            return TranslateToRawPointer(StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As());
+            return StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As();
         }
 
         uint8_t lim = self->m_numSlots - self->m_nonFullBlockLen;
@@ -451,7 +451,7 @@ public:
         {
             uint8_t ord = slotOrdinal - lim;
             assert(ord < x_hiddenClassBlockSize);
-            return TranslateToRawPointer(self->m_values[ord].As());
+            return self->m_values[ord].As();
         }
         else
         {
@@ -460,7 +460,7 @@ public:
             assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
             assert(HasFinalFullBlockPointer(self->m_numSlots));
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
-            return TranslateToRawPointer(u.As()[ord].As());
+            return u.As()[ord].As();
         }
     }
 
@@ -819,7 +819,7 @@ public:
             {
                 // Found. For insert, just return. For upsert, call upsert function and update value
                 //
-                Structure* curStructure = TranslateToRawPointer(vm, onlyChild);
+                Structure* curStructure = onlyChild;
                 if constexpr(isInsert)
                 {
                     return curStructure;
@@ -849,7 +849,7 @@ public:
                 // InitializeOutlinedTransitionTable updates m_transitionTable, but just to make sure
                 //
                 assert(m_transitionTable.IsType<StructureTransitionTable>() &&
-                       TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>()) == newTable);
+                       m_transitionTable.As<StructureTransitionTable>() == newTable);
 
                 return newStructure;
             }
@@ -857,7 +857,7 @@ public:
         else
         {
             assert(m_transitionTable.IsType<StructureTransitionTable>());
-            StructureTransitionTable* table = TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>());
+            StructureTransitionTable* table = m_transitionTable.As<StructureTransitionTable>();
             bool found;
             StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(table, transitionKey, found /*out*/);
             if (!found)
@@ -882,8 +882,8 @@ public:
                 assert(e->m_key == transitionKey);
                 // Found. For insert, just return. For upsert, call upsert function and update value
                 //
-                Structure* curStructure = TranslateToRawPointer(vm, e->m_value.As());
-                assert(TranslateToRawPointer(vm, curStructure->m_parent.As()) == this);
+                Structure* curStructure = e->m_value.As();
+                assert(curStructure->m_parent.As() == this);
                 if constexpr(isInsert)
                 {
                     return curStructure;
@@ -948,7 +948,7 @@ public:
     static TableObject* WARN_UNUSED GetMonomorphicMetatable(Structure* self)
     {
         assert(HasMonomorphicMetatable(self));
-        return TranslateToRawPointer(GeneralHeapPointer<TableObject>(self->m_metatable).As());
+        return GeneralHeapPointer<TableObject>(self->m_metatable).As();
     }
 
     static bool WARN_UNUSED IsSlotUsedByPolyMetatable(Structure* self, uint32_t slot)
@@ -1213,7 +1213,7 @@ public:
     //
     static CacheableDictionary* WARN_UNUSED CreateEmptyDictionary(VM* vm, uint32_t anticipatedNumSlots, uint8_t inlineCapacity, bool shouldNeverTransitToUncacheableDictionary)
     {
-        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        CacheableDictionary* r = vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>();
         SystemHeapGcObjectHeader::Populate(r);
         r->m_shouldNeverTransitToUncacheableDictionary = shouldNeverTransitToUncacheableDictionary;
         r->m_inlineNamedStorageCapacity = inlineCapacity;
@@ -1232,7 +1232,7 @@ public:
     //
     CacheableDictionary* WARN_UNUSED RelocateForAddingOrRemovingMetatable(VM* vm)
     {
-        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        CacheableDictionary* r = vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>();
         // m_metatable field is intentionally not populated because it shall be populated by our caller
         //
         SystemHeapGcObjectHeader::Populate(r);
@@ -1250,7 +1250,7 @@ public:
 
     CacheableDictionary* WARN_UNUSED Clone(VM* vm)
     {
-        CacheableDictionary* r = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>());
+        CacheableDictionary* r = vm->AllocFromSystemHeap(sizeof(CacheableDictionary)).AsNoAssert<CacheableDictionary>();
         SystemHeapGcObjectHeader::Populate(r);
         r->m_shouldNeverTransitToUncacheableDictionary = m_shouldNeverTransitToUncacheableDictionary;
         r->m_inlineNamedStorageCapacity = m_inlineNamedStorageCapacity;
@@ -1315,7 +1315,7 @@ public:
         }
         else
         {
-            r->m_metatable = TranslateToRawPointer(GeneralHeapPointer<void>(structure->m_metatable).As());
+            r->m_metatable = GeneralHeapPointer<void>(structure->m_metatable).As();
         }
 
         result.m_dictionary = r;
@@ -1350,7 +1350,7 @@ public:
         StructureIterator iterator(structure);
         while (iterator.HasMore())
         {
-            UserHeapPointer<void> key = TranslateToRawPointer(iterator.GetCurrentKey().As());
+            UserHeapPointer<void> key = iterator.GetCurrentKey().As();
             uint32_t keySlot = iterator.GetCurrentSlotOrdinal();
             iterator.Advance();
 
@@ -1387,7 +1387,7 @@ public:
         size_t slot = propHash & htMask;
         while (m_hashTable[slot].m_key.m_value != 0)
         {
-            assert(TranslateToRawPointer(m_hashTable[slot].m_key.As()) != prop.As());
+            assert(m_hashTable[slot].m_key.As() != prop.As());
             slot = (slot + 1) & htMask;
         }
         m_hashTable[slot].m_key = prop.As();
@@ -1429,7 +1429,7 @@ public:
         {
             if (curEntry->m_key.m_value != 0)
             {
-                UserHeapPointer<void> key = TranslateToRawPointer(curEntry->m_key.As());
+                UserHeapPointer<void> key = curEntry->m_key.As();
                 uint32_t keySlot = curEntry->m_slot;
                 InsertNonExistentPropertyForInitOrResize(key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), keySlot);
                 DEBUG_ONLY(cnt++;)
@@ -1584,7 +1584,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
 
     // First, fill in the header
     //
-    HashTableEntry* hashTableStart = TranslateToRawPointer(vm, objectAddressStart.As<HashTableEntry>());
+    HashTableEntry* hashTableStart = objectAddressStart.As<HashTableEntry>();
     HashTableEntry* hashTableEnd = hashTableStart + hashTableSize;
     StructureAnchorHashTable* r = reinterpret_cast<StructureAnchorHashTable*>(hashTableEnd);
     ConstructInPlace(r);
@@ -1604,7 +1604,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
     {
         // Copy in the hash table
         //
-        StructureAnchorHashTable* oldAnchorTable = TranslateToRawPointer(vm, oldAnchorTableV.As<StructureAnchorHashTable>());
+        StructureAnchorHashTable* oldAnchorTable = oldAnchorTableV.As<StructureAnchorHashTable>();
         oldAnchorTable->CloneHashTableTo(hashTableStart, hashTableSize);
 
         // Copy in the block pointer list
@@ -1621,7 +1621,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
     for (uint32_t i = 0; i < x_hiddenClassBlockSize; i++)
     {
         GeneralHeapPointer<void> e  = shc->m_values[i];
-        UserHeapPointer<void> eu { TranslateToRawPointer(e.As<void>()) };
+        UserHeapPointer<void> eu { e.As<void>() };
         uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
@@ -1658,7 +1658,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
         for (uint8_t i = 0; i < r->m_numTotalSlots; i++)
         {
             GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, i);
-            UserHeapPointer<void> key { TranslateToRawPointer(p.As()) };
+            UserHeapPointer<void> key { p.As() };
             ReleaseAssert(!elementSet.count(key.m_value));
             elementSet.insert(key.m_value);
             elementCount++;
@@ -1681,7 +1681,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
             if (e.m_ordinal != x_hashTableEmptyValue)
             {
                 GeneralHeapPointer<void> p = StructureAnchorHashTable::GetPropertyNameAtSlot(r, e.m_ordinal);
-                UserHeapPointer<void> key { TranslateToRawPointer(p.As()) };
+                UserHeapPointer<void> key { p.As() };
                 ReleaseAssert(elementSet.count(key.m_value));
                 ReleaseAssert(!elementSetHt.count(key.m_value));
                 elementSetHt.insert(key.m_value);
@@ -1723,7 +1723,7 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
             for (uint8_t offset = 0; offset < x_hiddenClassBlockSize; offset++)
             {
                 GeneralHeapPointer<void> e = p[offset];
-                UserHeapPointer<void> eu { TranslateToRawPointer(e.As()) };
+                UserHeapPointer<void> eu { e.As() };
                 uint32_t hashValue = StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(eu);
 
                 uint8_t checkHash = static_cast<uint8_t>(hashValue);
@@ -1755,14 +1755,13 @@ inline SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildN
         // The updated anchor hash table has not been built, we need to build it now
         //
         VM* vm = VM::GetActiveVMForCurrentThread();
-        Structure* selfRaw = TranslateToRawPointer(vm, self);
-        StructureAnchorHashTable* newAnchorTable = StructureAnchorHashTable::Create(vm, selfRaw);
-        selfRaw->m_anchorHashTable = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(newAnchorTable);
-        anchorHt = selfRaw->m_anchorHashTable;
+        StructureAnchorHashTable* newAnchorTable = StructureAnchorHashTable::Create(vm, self);
+        self->m_anchorHashTable = vm->GetHeapPtrTranslator().TranslateToSystemHeapPtr(newAnchorTable);
+        anchorHt = self->m_anchorHashTable;
 
         // Once the updated anchor hash table is built, we don't need the inline hash table any more, empty it out
         //
-        InlineHashTableEntry* ht = GetInlineHashTableBegin(selfRaw);
+        InlineHashTableEntry* ht = GetInlineHashTableBegin(self);
         size_t htLengthBytes = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask) * sizeof(InlineHashTableEntry);
         memset(ht, x_inlineHashTableEmptyValue, htLengthBytes);
     }
@@ -1999,7 +1998,7 @@ end_setup:
     r->m_knownNonexistentMetamethods = m_knownNonexistentMetamethods;
     if (slotAdditionKind == SlotAdditionKind::AddSlotForProperty && key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String)
     {
-        int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(TranslateToRawPointer(key.As<HeapString>()));
+        int metamethodOrd = vm->GetMetamethodOrdinalFromStringName(key.As<HeapString>());
         if (unlikely(metamethodOrd != -1))
         {
             LuaMetamethodBitVectorT mask = static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << metamethodOrd);
@@ -2130,7 +2129,7 @@ end_setup:
             for (int8_t i = -static_cast<int8_t>(x_hiddenClassBlockSize); i < 0; i++)
             {
                 GeneralHeapPointer<void> e = TCGet(p[i]);
-                insertNonExistentElementIntoInlineHashTable(TranslateToRawPointer(e.As()), i /*ordinalOfElement*/);
+                insertNonExistentElementIntoInlineHashTable(e.As(), i /*ordinalOfElement*/);
                 DEBUG_ONLY(elementsInserted++;)
             }
         }
@@ -2147,7 +2146,7 @@ end_setup:
             for (size_t i = 0; i < len; i++)
             {
                 GeneralHeapPointer<void> e = r->m_values[i];
-                insertNonExistentElementIntoInlineHashTable(TranslateToRawPointer(e.As()), static_cast<int8_t>(i) /*ordinalOfElement*/);
+                insertNonExistentElementIntoInlineHashTable(e.As(), static_cast<int8_t>(i) /*ordinalOfElement*/);
                 DEBUG_ONLY(elementsInserted++;)
             }
         }
@@ -2164,7 +2163,7 @@ end_setup:
         while (iterator.HasMore())
         {
             GeneralHeapPointer<void> keyG = iterator.GetCurrentKey();
-            UserHeapPointer<void> keyToLookup { TranslateToRawPointer(keyG.As()) };
+            UserHeapPointer<void> keyToLookup { keyG.As() };
             uint8_t slot = iterator.GetCurrentSlotOrdinal();
             iterator.Advance();
 
@@ -2220,7 +2219,7 @@ end_setup:
             if (e.m_ordinal != x_inlineHashTableEmptyValue)
             {
                 GeneralHeapPointer<void> keyG = GetPropertyNameFromInlineHashTableOrdinal(r, e.m_ordinal);
-                UserHeapPointer<void> keyToLookup { TranslateToRawPointer(keyG.As()) };
+                UserHeapPointer<void> keyToLookup { keyG.As() };
 
                 ReleaseAssert(!inlineHtElementSet.count(keyToLookup.m_value));
                 inlineHtElementSet.insert(keyToLookup.m_value);
@@ -2412,7 +2411,7 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             }
         });
         assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        assert(transitionStructure->m_parent.As() == this);
     }
     else if (IsPolyMetatable(this))
     {
@@ -2446,7 +2445,7 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             // Our parent transit to us by adding a different metatable
             // so we should make parent's AddMetatable operation transit to PolyMetatable instead
             //
-            Structure* base = TranslateToRawPointer(vm, m_parent.As());
+            Structure* base = m_parent.As();
             transitionStructure = base->QueryTransitionTableAndUpsert(vm, transitionKey, [&](Structure* oldStructure) -> Structure* {
                 assert(oldStructure != nullptr);
                 if (oldStructure == this)
@@ -2462,7 +2461,7 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             });
             assert(IsPolyMetatable(transitionStructure));
             assert(base->QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == base);
+            assert(transitionStructure->m_parent.As() == base);
         }
         else
         {
@@ -2478,7 +2477,7 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             });
             assert(IsPolyMetatable(transitionStructure));
             assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+            assert(transitionStructure->m_parent.As() == this);
         }
     }
 
@@ -2518,7 +2517,7 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
         // since PolyMetatable may have involved a butterfly expansion. Just make things simple for now.
         //
         result.m_shouldInsertMetatable = false;
-        result.m_newStructure = TranslateToRawPointer(vm, m_parent.As());
+        result.m_newStructure = m_parent.As();
     }
     else if (IsPolyMetatable(this))
     {
@@ -2539,7 +2538,7 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
         });
         assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
 
-        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        assert(transitionStructure->m_parent.As() == this);
         assert(transitionStructure->m_metatable == 0);
         assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::RemoveMetaTable);
 
@@ -2563,7 +2562,7 @@ inline Structure* WARN_UNUSED Structure::UpdateArrayType(VM* vm, ArrayType newAr
     });
     assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
 
-    assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+    assert(transitionStructure->m_parent.As() == this);
     assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::UpdateArrayType);
     assert(transitionStructure->m_arrayType.m_asValue == newArrayType.m_asValue);
     return transitionStructure;

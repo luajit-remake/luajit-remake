@@ -184,28 +184,28 @@ struct CreateGlobalObjectHelper
 
     FunctionObject* CreateCFunc(void* func)
     {
-        return TranslateToRawPointer(FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func)).As());
+        return FunctionObject::CreateCFunc(vm, ExecutableCode::CreateCFunction(vm, func)).As();
     }
 
     FunctionObject* InsertCFunc(TableObject* r, const char* propName, void* func)
     {
         FunctionObject* funcObj = CreateCFunc(func);
         InsertField(r, propName, TValue::Create<tFunction>(funcObj));
-        return TranslateToRawPointer(funcObj);
+        return funcObj;
     }
 
     HeapString* InsertString(TableObject* r, const char* propName, const char* stringValue)
     {
         UserHeapPointer<HeapString> o = vm->CreateStringObjectFromRawString(stringValue, static_cast<uint32_t>(strlen(stringValue)));
         InsertField(r, propName, TValue::CreatePointer(o));
-        return TranslateToRawPointer(o.As());
+        return o.As();
     }
 
     TableObject* InsertObject(TableObject* r, const char* propName, uint32_t inlineCapacity)
     {
         UserHeapPointer<TableObject> o = TableObject::CreateEmptyTableObject(vm, inlineCapacity, 0 /*initialButterflyArrayPartCapacity*/);
         InsertField(r, propName, TValue::CreatePointer(o));
-        return TranslateToRawPointer(o.As());
+        return o.As();
     }
 
     VM* vm;
@@ -218,7 +218,7 @@ DEEGEN_FORWARD_DECLARE_LIB_FUNC(io_lines_iter);
 #define INSERT_LIBFN(libName, fnName)                                               \
     [[maybe_unused]] FunctionObject* libfn_ ## libName ##_ ## fnName =      \
         h.InsertCFunc(                                                              \
-            TranslateToRawPointer(libobj_ ## libName) /*object*/,                                          \
+            libobj_ ## libName /*object*/,                                          \
             PP_STRINGIFY(fnName) /*propName*/,                                      \
             DEEGEN_CODE_POINTER_FOR_LIB_FUNC(libName ## _ ## fnName) /*value*/);
 

@@ -38,7 +38,7 @@ inline std::optional<HeapString*> WARN_UNUSED TryGetStringOrConvertNumberToStrin
 {
     if (value.Is<tString>())
     {
-        return TranslateToRawPointer(value.As<tString>());
+        return value.As<tString>();
     }
     if (value.Is<tDouble>())
     {
@@ -180,7 +180,7 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))
@@ -220,7 +220,7 @@ static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
     TValue metamethod = GetMetamethodForBinaryArithmeticOperation(fsr.m_lhsValue, fsr.m_rhsValue, LuaMetamethodKind::Concat);
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
+        MakeCall(metamethod.As<tFunction>(), fsr.m_lhsValue, fsr.m_rhsValue, ConcatOnMetamethodReturnContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))

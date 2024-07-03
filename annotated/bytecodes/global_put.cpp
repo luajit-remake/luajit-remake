@@ -15,7 +15,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
     //
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
     while (true)
     {
         assert(!metamethod.Is<tNil>());
@@ -24,11 +24,11 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, GlobalPutMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, GlobalPutMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
-                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
+                TableObject* tableObj = metamethod.As<tTable>();
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
 
@@ -64,7 +64,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
 static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
     TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();

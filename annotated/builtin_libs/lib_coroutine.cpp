@@ -170,8 +170,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_resume)
     //
     {
         assert(arg.Is<tThread>());
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(vm, arg.As<tThread>());
+        CoroutineRuntimeContext* targetCoro = arg.As<tThread>();
 
         // Update coroutine status: the target coroutine becomes no longer resumable and has the current coroutine as parent
         //
@@ -293,7 +292,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
     assert(func->m_numUpvalues == 1);
     TValue uv = func->m_upvalues[0];
     assert(uv.Is<tThread>());
-    CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(uv.As<tThread>());
+    CoroutineRuntimeContext* targetCoro = uv.As<tThread>();
 
     // We are basically duplicating the logic in coroutine.resume here, because we do not want to make an
     // extra indirect call (which also happens to need to copy parameters) for performance reasons...
@@ -356,7 +355,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
         ThrowError("bad argument #1 to 'wrap' (Lua function expected)");
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, TranslateToRawPointer(arg.As<tFunction>()) /*entryFn*/);
+    CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
     FunctionObject* wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
     TValue uv = TValue::Create<tThread>(newCoro);

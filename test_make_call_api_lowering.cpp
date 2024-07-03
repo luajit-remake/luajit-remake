@@ -104,22 +104,22 @@ void TestModuleOneCase(llvm::Module* moduleIn,
         ReleaseAssert(module->getFunction(expectedRcName) != nullptr);
     }
 
-    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
+    CodeBlock* calleeCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
 
     calleeCb->m_bestEntryPoint = reinterpret_cast<void*>(ResultChecker);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
-    FunctionObject* calleefo = TranslateToRawPointer(FunctionObject::Create(vm, calleeCb).As());
+    FunctionObject* calleefo = FunctionObject::Create(vm, calleeCb).As();
 
-    CodeBlock* callerCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
+    CodeBlock* callerCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
     SystemHeapGcObjectHeader::Populate<ExecutableCode*>(callerCb);
     callerCb->m_bestEntryPoint = nullptr;
     callerCb->m_numUpvalues = 0;
     callerCb->m_stackFrameNumSlots = static_cast<uint32_t>(numLocals);
     uint8_t* curBytecode = callerCb->GetBytecodeStream() + 50;
-    FunctionObject* callerfo = TranslateToRawPointer(FunctionObject::Create(vm, callerCb).As());
+    FunctionObject* callerfo = FunctionObject::Create(vm, callerCb).As();
 
     std::unordered_map<Instruction*, Value*> replaceInstByValueMap;
     std::unordered_map<Instruction*, Instruction*> replaceInstByInstMap;
@@ -244,7 +244,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     StackFrameHeader* rootSfh = reinterpret_cast<StackFrameHeader*>(stack);
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
-    rootSfh->m_func = TranslateToRawPointer(reinterpret_cast<HeapPtr<FunctionObject>>(1000000345));
+    rootSfh->m_func = OffsetToPtr<FunctionObject>(1000000345);
     rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* callerStackBegin = reinterpret_cast<uint64_t*>(rootSfh + 1);

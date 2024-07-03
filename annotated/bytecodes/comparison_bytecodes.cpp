@@ -140,9 +140,8 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
 
             if (lhs.Is<tString>())
             {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                HeapString* lhsString = TranslateToRawPointer(vm, lhs.As<tString>());
-                HeapString* rhsString = TranslateToRawPointer(vm, rhs.As<tString>());
+                HeapString* lhsString = lhs.As<tString>();
+                HeapString* rhsString = rhs.As<tString>();
                 bool result = DoComparison<opKind>(lhsString, rhsString);
                 if constexpr(shouldBranch)
                 {
@@ -158,24 +157,24 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
             {
                 TableObject* lhsMetatable;
                 {
-                    TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
+                    TableObject* tableObj = lhs.As<tTable>();
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
                         goto fail;
                     }
-                    lhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
+                    lhsMetatable = result.m_result.As<TableObject>();
                 }
 
                 TableObject* rhsMetatable;
                 {
-                    TableObject* tableObj = TranslateToRawPointer(rhs.As<tTable>());
+                    TableObject* tableObj = rhs.As<tTable>();
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
                         goto fail;
                     }
-                    rhsMetatable = TranslateToRawPointer(result.m_result.As<TableObject>());
+                    rhsMetatable = result.m_result.As<TableObject>();
                 }
 
                 metamethod = GetMetamethodFromMetatableForComparisonOperation<false /*canQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, GetMetamethodKind<opKind>());
@@ -243,7 +242,7 @@ do_metamethod_call:
         {
             if (likely(metamethod.Is<tFunction>()))
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
+                MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
             }
 
             FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
@@ -260,7 +259,7 @@ do_metamethod_call_lt_for_le:
             //
             if (likely(metamethod.Is<tFunction>()))
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
+                MakeCall(metamethod.As<tFunction>(), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
             }
 
             FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);

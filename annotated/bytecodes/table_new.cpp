@@ -13,7 +13,7 @@ static void NO_RETURN TableNewImpl(uint8_t inlineStorageSizeStepping, uint16_t a
     //
     [[clang::always_inline]] obj = TableObject::CreateEmptyTableObjectImpl(
         vm,
-        TranslateToRawPointer(vm, structure.As()),
+        structure.As(),
         internal::x_inlineStorageSizeForSteppingArray[inlineStorageSizeStepping] /*inlineCapacity*/,
         arrayPartSizeHint);
     Return(TValue::Create<tTable>(obj));

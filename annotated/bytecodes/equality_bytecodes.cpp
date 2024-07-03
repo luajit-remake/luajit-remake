@@ -69,24 +69,24 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
         //
         TableObject* lhsMetatable;
         {
-            TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
+            TableObject* tableObj = lhs.As<tTable>();
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
                 goto not_equal;
             }
-            lhsMetatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+            lhsMetatable = gmr.m_result.As<TableObject>();
         }
 
         TableObject* rhsMetatable;
         {
-            TableObject* tableObj = TranslateToRawPointer(rhs.As<tTable>());
+            TableObject* tableObj = rhs.As<tTable>();
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
                 goto not_equal;
             }
-            rhsMetatable = TranslateToRawPointer(gmr.m_result.As<TableObject>());
+            rhsMetatable = gmr.m_result.As<TableObject>();
         }
 
         TValue metamethod = GetMetamethodFromMetatableForComparisonOperation<true /*supportsQuicklyRuleOutMM*/>(lhsMetatable, rhsMetatable, LuaMetamethodKind::Eq);
@@ -97,7 +97,7 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
 
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
+            MakeCall(metamethod.As<tFunction>(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
         }
 
         FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);

@@ -12,7 +12,7 @@ static void NO_RETURN TablePutByIdMetamethodCallContinuation(TValue /*base*/, TV
 static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TValue valueToPut, TValue metamethod)
 {
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
 
     // If 'metamethod' is a function, we should invoke the metamethod.
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -25,11 +25,11 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
             HeapEntityType mmType = metamethod.GetHeapEntityType();
             if (mmType == HeapEntityType::Function)
             {
-                MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), base, tvIndex, valueToPut, TablePutByIdMetamethodCallContinuation);
+                MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByIdMetamethodCallContinuation);
             }
             else if (mmType == HeapEntityType::Table)
             {
-                TableObject* tableObj = TranslateToRawPointer(metamethod.As<tTable>());
+                TableObject* tableObj = metamethod.As<tTable>();
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
 
@@ -114,7 +114,7 @@ static TValue ALWAYS_INLINE GetOldValueFromTableObject(TableObject* obj, PutById
 static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
-    HeapString* index = TranslateToRawPointer(tvIndex.As<tString>());
+    HeapString* index = tvIndex.As<tString>();
 
     if (likely(base.Is<tHeapEntity>()))
     {

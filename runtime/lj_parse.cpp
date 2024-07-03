@@ -1655,7 +1655,7 @@ static HeapString* lex_str(LexState *ls)
     if (ls->tok != TK_name && (LJ_52 || ls->tok != TK_goto))
         err_token(ls, TK_name);
     assert(ls->tokval.Is<tString>());
-    HeapString* s = TranslateToRawPointer(ls->tokval.As<tString>());
+    HeapString* s = ls->tokval.As<tString>();
     lj_lex_next(ls);
     return s;
 }
@@ -1683,7 +1683,7 @@ static void var_new(LexState *ls, BCReg n, HeapString* name)
 
 static void var_new_lit(LexState *ls, BCReg n, const char* lit)
 {
-    var_new(ls, n, TranslateToRawPointer(lj_parse_keepstr(ls, lit, strlen(lit)).As<tString>()));
+    var_new(ls, n, lj_parse_keepstr(ls, lit, strlen(lit)).As<tString>());
 }
 
 static void var_new_fixed(LexState *ls, BCReg n, size_t vn)
@@ -3187,7 +3187,7 @@ static void fs_fixup_ret(FuncState *fs)
 static UnlinkedCodeBlock* fs_finish(LexState *ls, BCLine /*line*/)
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
-    UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, TranslateToRawPointer(ls->L->m_globalObject.As()));
+    UnlinkedCodeBlock* ucb = UnlinkedCodeBlock::Create(vm, ls->L->m_globalObject.As());
 
     FuncState *fs = ls->fs;
 
@@ -3645,7 +3645,7 @@ static void parse_args(LexState *ls, ExpDesc *e)
         expr_table(ls, &args);
     } else if (ls->tok == TK_string) {
         expr_init(&args, VKSTR, 0);
-        args.u.sval = TranslateToRawPointer(ls->tokval.As<tString>());
+        args.u.sval = ls->tokval.As<tString>();
         lj_lex_next(ls);
     } else {
         err_syntax(ls, LJ_ERR_XFUNARG);
@@ -3717,7 +3717,7 @@ static void expr_simple(LexState *ls, ExpDesc *v)
     case TK_string:
         expr_init(v, VKSTR, 0);
         assert(ls->tokval.Is<tString>());
-        v->u.sval = TranslateToRawPointer(ls->tokval.As<tString>());
+        v->u.sval = ls->tokval.As<tString>();
         break;
     case TK_nil:
         expr_init(v, VKNIL, 0);
@@ -4259,7 +4259,7 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
     {
         TValue cst = bc_cst(ins);
         assert(cst.Is<tString>());
-        name = TranslateToRawPointer(cst.As<tString>());
+        name = cst.As<tString>();
         break;
     }
     default:

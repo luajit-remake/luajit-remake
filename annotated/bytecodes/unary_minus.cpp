@@ -33,14 +33,14 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
         ThrowError("Invalid types for unary minus");
     }
 
-    TableObject* metatable = TranslateToRawPointer(metatableMaybeNull.As<TableObject>());
+    TableObject* metatable = metatableMaybeNull.As<TableObject>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm), icInfo /*out*/);
     TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm).As<void>(), icInfo);
 
     if (likely(metamethod.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), input, input, UnaryMinusMetamethodCallContinuation);
+        MakeCall(metamethod.As<tFunction>(), input, input, UnaryMinusMetamethodCallContinuation);
     }
 
     if (unlikely(metamethod.Is<tNil>()))

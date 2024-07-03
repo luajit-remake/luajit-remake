@@ -5,8 +5,7 @@
 
 static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(TValue tv)
 {
-    FunctionObject* o = TranslateToRawPointer(tv.As<tFunction>());
-    SystemHeapPointer<ExecutableCode> ec = o->m_executable;
+    SystemHeapPointer<ExecutableCode> ec = tv.As<tFunction>()->m_executable;
     return ec.m_value;
 }
 

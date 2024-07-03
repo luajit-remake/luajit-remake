@@ -34,7 +34,7 @@ extern "C" void deegen_internal_use_only_exit_vm_epilogue(DeegenPreventMagicFunc
 //
 inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     CoroutineRuntimeContext* coroCtx,
-    HeapPtr<FunctionObject> func,
+    FunctionObject* func,
     TValue* lowestAvailableVMStackAddress,
     TValue* args = nullptr,
     size_t numArgs = 0)
@@ -42,7 +42,7 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(lowestAvailableVMStackAddress);
     hdr->m_caller = nullptr;
     hdr->m_retAddr = reinterpret_cast<void*>(deegen_internal_use_only_exit_vm_epilogue);
-    hdr->m_func = TranslateToRawPointer(func);
+    hdr->m_func = func;
     hdr->m_callerBytecodePtr = 0;
     hdr->m_numVariadicArguments = 0;
     uint64_t* stackBase = reinterpret_cast<uint64_t*>(hdr + 1);
@@ -50,7 +50,7 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     {
         memcpy(stackBase, args, sizeof(TValue) * numArgs);
     }
-    CodeBlock* cb = static_cast<CodeBlock*>(TCGet(func->m_executable).As());
+    CodeBlock* cb = static_cast<CodeBlock*>(func->m_executable.As());
     void* ghcFn = cb->m_bestEntryPoint;
     DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, cb);
     return std::make_pair(result.m_retStart, result.m_numRets);

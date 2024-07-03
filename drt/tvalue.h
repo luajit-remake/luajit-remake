@@ -215,7 +215,7 @@ struct TValue
     UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
         assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
-        return UserHeapPointer<T> { TranslateToRawPointer(reinterpret_cast<HeapPtr<T>>(m_value)) };
+        return UserHeapPointer<T> { OffsetToPtr<T>(m_value) };
     }
 
     constexpr MiscImmediateValue ALWAYS_INLINE AsMIV() const
@@ -250,18 +250,9 @@ struct TValue
     }
 
     template<typename T>
-    static TValue WARN_UNUSED CreatePointer(HeapPtr<T> ptr)
-    {
-        uint64_t val = reinterpret_cast<uint64_t>(ptr);
-        assert(val >= 0xFFFFFFFC00000000ULL);
-        TValue result { val };
-        return result;
-    }
-
-    template<typename T>
     static TValue WARN_UNUSED CreatePointer(T* ptr)
     {
-        return CreatePointer(TranslateToHeapPtr(ptr));
+        return CreatePointer(UserHeapPointer<T> { ptr });
     }
 
     static constexpr TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)

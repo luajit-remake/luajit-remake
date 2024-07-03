@@ -174,10 +174,9 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     //
     TestAssert(callSiteTarget->ObservedExactlyOneTarget());
     TestAssert(!TCGet(callSiteTarget->m_linkedListHead).IsInvalidPtr());
-    VM* vm = VM::GetActiveVMForCurrentThread();
-    JitCallInlineCacheEntry* callTarget = TranslateToRawPointer(vm, TCGet(callSiteTarget->m_linkedListHead).AsPtr());
+    JitCallInlineCacheEntry* callTarget = TCGet(callSiteTarget->m_linkedListHead).AsPtr();
     TestAssert(callTarget->m_callSiteNextNode.IsInvalidPtr());
-    ExecutableCode* calleeEc = callTarget->GetTargetExecutableCode(vm);
+    ExecutableCode* calleeEc = callTarget->GetTargetExecutableCode();
 
     if (!calleeEc->IsBytecodeFunction())
     {
@@ -673,7 +672,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     {
         TestAssert(callTarget->m_entity.IsUserHeapPointer());
         TestAssert(callTarget->m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
-        FunctionObject* targetFunctionObject = TranslateToRawPointer(vm, callTarget->m_entity.As<FunctionObject>());
+        FunctionObject* targetFunctionObject = callTarget->m_entity.As<FunctionObject>();
         newFrame->SetDirectCallFunctionObject(targetFunctionObject);
     }
 
@@ -853,7 +852,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     // Initialize the new call frame. As usual, we need to emit all the ShadowStores first and then SetLocals.
     //
     // Emit ShadowStore for the new stack frame header. Our protocol is:
-    //     hdr[0]: an unboxed HeapPtr<FunctionObject>, the function object of the call
+    //     hdr[0]: an unboxed Offset to FunctionObject, the function object of the call
     //     hdr[1]: an unboxed uint64_t, the number of variadic arguments
     //     hdr[2]: an unboxed void* pointer, the return address (points to baseline JIT code)
     //     hdr[3]: an unboxed uint64_t, the interpreter base slot number for the parent frame
@@ -864,7 +863,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         FunctionObject* fo = newFrame->GetDirectCallFunctionObject();
         // Note that the stack frame expects a HeapPtr<FunctionObject>, not FunctionObject*
         //
-        calleeFunctionObjectValue = m_graph->GetUnboxedConstant(reinterpret_cast<uint64_t>(TranslateToHeapPtr(fo)));
+        calleeFunctionObjectValue = m_graph->GetUnboxedConstant(static_cast<uint64_t>(PtrToOffset(fo)));
     }
     else
     {

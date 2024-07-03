@@ -5,7 +5,7 @@
 
 static std::pair<ExecutableCode*, void*> DeegenSnippet_GetCalleeEntryPoint(TValue tv)
 {
-    ExecutableCode* ec = TranslateToRawPointer(TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* ec = TCGet(tv.As<tFunction>()->m_executable).As();
     void* entrypoint = ec->m_bestEntryPoint;
     return std::make_pair(ec, entrypoint);
 }

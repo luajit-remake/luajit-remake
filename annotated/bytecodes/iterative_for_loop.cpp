@@ -38,7 +38,7 @@ static void NO_RETURN ForLoopIterImpl(TValue* base, uint16_t /*numRets*/)
     TValue callee = base[0];
     if (likely(callee.Is<tFunction>()))
     {
-        MakeCall(TranslateToRawPointer(callee.As<tFunction>()), base[1], base[2], ForLoopIterCallReturnContinuation);
+        MakeCall(callee.As<tFunction>(), base[1], base[2], ForLoopIterCallReturnContinuation);
     }
     else
     {

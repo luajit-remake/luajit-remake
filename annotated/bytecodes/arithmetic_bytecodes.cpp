@@ -49,11 +49,11 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 
         if (likely(lhs.Is<tTable>()))
         {
-            TableObject* tableObj = TranslateToRawPointer(lhs.As<tTable>());
+            TableObject* tableObj = lhs.As<tTable>();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             if (result.m_result.m_value != 0)
             {
-                TableObject* metatable = TranslateToRawPointer(result.m_result.As<TableObject>());
+                TableObject* metatable = result.m_result.As<TableObject>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(opKind), icInfo /*out*/);
                 metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(opKind).As<void>(), icInfo);
@@ -89,7 +89,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 do_metamethod_call:
         if (likely(metamethod.Is<tFunction>()))
         {
-            MakeCall(TranslateToRawPointer(metamethod.As<tFunction>()), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
+            MakeCall(metamethod.As<tFunction>(), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
         }
 
         FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
