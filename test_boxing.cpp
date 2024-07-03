@@ -96,7 +96,7 @@ TEST(NaNBoxing, Correctness)
             v &= ~7U;
 
             uintptr_t ptr = static_cast<uintptr_t>(0xFFFFFFFE00000000ULL + static_cast<uint32_t>(v));
-            UserHeapPointer<void> value { OffsetToPtr<void>(ptr) };
+            UserHeapPointer<void> value { VM_OffsetToPointer<void>(ptr) };
 
             TValue r = TValue::CreatePointer(value);
             ReleaseAssert(!r.IsInt32());

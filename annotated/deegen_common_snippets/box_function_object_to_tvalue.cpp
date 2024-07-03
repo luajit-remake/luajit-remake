@@ -5,7 +5,7 @@
 
 static TValue DeegenSnippet_BoxFunctionObjectToTValue(uint64_t func64)
 {
-    return TValue::Create<tFunction>(OffsetToPtr<FunctionObject>(func64));
+    return TValue::Create<tFunction>(VM_OffsetToPointer<FunctionObject>(func64));
 }
 
 DEFINE_DEEGEN_COMMON_SNIPPET("BoxFunctionObjectToTValue", DeegenSnippet_BoxFunctionObjectToTValue)

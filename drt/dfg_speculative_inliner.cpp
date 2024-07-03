@@ -863,7 +863,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         FunctionObject* fo = newFrame->GetDirectCallFunctionObject();
         // Note that the stack frame expects a HeapPtr<FunctionObject>, not FunctionObject*
         //
-        calleeFunctionObjectValue = m_graph->GetUnboxedConstant(static_cast<uint64_t>(PtrToOffset(fo)));
+        calleeFunctionObjectValue = m_graph->GetUnboxedConstant(static_cast<uint64_t>(VM_PointerToOffset(fo)));
     }
     else
     {

@@ -215,7 +215,7 @@ struct TValue
     UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
         assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
-        return UserHeapPointer<T> { OffsetToPtr<T>(m_value) };
+        return UserHeapPointer<T> { VM_OffsetToPointer<T>(m_value) };
     }
 
     constexpr MiscImmediateValue ALWAYS_INLINE AsMIV() const

@@ -140,7 +140,7 @@ struct DfgBuildBasicBlockContext
         else if (m_inlinedCallFrame->IsDirectCall())
         {
             FunctionObject* fo = m_inlinedCallFrame->GetDirectCallFunctionObject();
-            return m_graph->GetUnboxedConstant(static_cast<uint64_t>(PtrToOffset(fo)));
+            return m_graph->GetUnboxedConstant(static_cast<uint64_t>(VM_PointerToOffset(fo)));
         }
         else
         {

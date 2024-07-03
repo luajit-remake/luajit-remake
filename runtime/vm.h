@@ -513,7 +513,7 @@ public:
 
     HeapPtrTranslator GetHeapPtrTranslator() const
     {
-        return HeapPtrTranslator { VMBaseAddress() };
+        return HeapPtrTranslator { };
     }
 
     void SetUpSegmentationRegister()
@@ -597,7 +597,7 @@ public:
         {
             BumpUserHeap();
         }
-        return UserHeapPointer<void> { OffsetToPtr<void>(static_cast<uintptr_t>(m_userHeapCurPtr)) };
+        return UserHeapPointer<void> { VM_OffsetToPointer<void>(static_cast<uintptr_t>(m_userHeapCurPtr)) };
     }
 
     // Allocate a chunk of memory from the system heap
@@ -748,7 +748,7 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_rootCoroutine>;
         using T = typeof_member_t<&VM::m_rootCoroutine>;
-        return *OffsetToPtr<T>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
     TableObject* GetRootGlobalObject();
@@ -837,7 +837,7 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_usrPRNG>;
         using T = typeof_member_t<&VM::m_usrPRNG>;
-        std::mt19937* res = *OffsetToPtr<T>(offset);
+        std::mt19937* res = *VM_OffsetToPointer<T>(offset);
         if (likely(res != nullptr))
         {
             return res;
@@ -852,14 +852,14 @@ public:
 
     static TValue* ALWAYS_INLINE VM_LibFnArrayAddr()
     {
-        return OffsetToPtr<TValue>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
+        return VM_OffsetToPointer<TValue>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
     }
 
     static HeapString* ALWAYS_INLINE VM_GetEmptyString()
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_emptyString>;
         using T = typeof_member_t<&VM::m_emptyString>;
-        return *OffsetToPtr<T>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
@@ -1145,13 +1145,13 @@ public:
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
 {
     constexpr size_t offset = VM::OffsetofSpecialKeyForBooleanIndex();
-    return OffsetToPtr<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(v)];
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(v)];
 }
 
 inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetamethodKind kind)
 {
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
-    return OffsetToPtr<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(kind)];
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(kind)];
 }
 
 template<VM::LibFn fn>

@@ -126,7 +126,7 @@ void CheckIsAsExpected(TestContext& ctx, size_t cur, Structure* specifiedStructu
     //
     for (auto it : ctx.m_tree.m_expectedContents[cur])
     {
-        UserHeapPointer<void> key = OffsetToPtr<void>(static_cast<uintptr_t>(it.first));
+        UserHeapPointer<void> key = VM_OffsetToPointer<void>(static_cast<uintptr_t>(it.first));
         uint32_t slot;
         ReleaseAssert(Structure::GetSlotOrdinalFromMaybeNonStringProperty(structure, key, slot /*out*/) == true);
         ReleaseAssert(slot == it.second);
@@ -240,7 +240,7 @@ void PostTraversalCheck(TestContext& ctx, size_t numNodes)
         Structure* structure = ctx.m_structures[i];
         for (auto it : ctx.m_tree.m_expectedTransitions[i])
         {
-            UserHeapPointer<void> key = OffsetToPtr<void>(static_cast<uintptr_t>(it.first));
+            UserHeapPointer<void> key = VM_OffsetToPointer<void>(static_cast<uintptr_t>(it.first));
             Structure* expectedTarget = ctx.m_structures[it.second];
 
             Structure::AddNewPropertyResult result;
