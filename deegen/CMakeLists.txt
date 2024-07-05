@@ -56,6 +56,7 @@ add_library(deegen_utils
   deegen_analyze_read_locations.cpp
   deegen_jit_slow_path_data.cpp
   deegen_jit_impl_creator_base.cpp
+  deegen_ast_vm_base_pointer.cpp
 ) 
 
 # Build the main Futamura projection stage binary
