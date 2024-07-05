@@ -202,7 +202,7 @@ not_coroutine_object_or_not_resumable:
     if (arg.Is<tThread>())
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
-        CoroutineStatus status = TCGet(arg.As<tThread>()->m_coroutineStatus);
+        CoroutineStatus status = arg.As<tThread>()->m_coroutineStatus;
         assert(!status.IsResumable());
         if (status.IsDead())
         {
@@ -359,7 +359,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
     VM* vm = VM::GetActiveVMForCurrentThread();
     FunctionObject* wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
     TValue uv = TValue::Create<tThread>(newCoro);
-    TCSet(wrap->m_upvalues[0], uv);
+    wrap->m_upvalues[0] = uv;
     Return(TValue::Create<tFunction>(wrap));
 }
 

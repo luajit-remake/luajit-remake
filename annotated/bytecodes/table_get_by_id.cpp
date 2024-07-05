@@ -140,7 +140,7 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
                 return ic->Effect([heapEntity, c_slot, c_resKind] {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
                     IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                    TValue res = TCGet(heapEntity->m_inlineStorage[c_slot]);
+                    TValue res = heapEntity->m_inlineStorage[c_slot];
                     return std::make_pair(res, c_resKind);
                 });
             }

@@ -440,7 +440,7 @@ public:
     {
         assert(slotOrdinal < self->m_numSlots);
 
-        SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
+        SystemHeapPointer<StructureAnchorHashTable> p = self->m_anchorHashTable;
         if (p.m_value != 0 && slotOrdinal < p.As()->m_numTotalSlots)
         {
             return StructureAnchorHashTable::GetPropertyNameAtSlot(p.As(), slotOrdinal).As();
@@ -769,7 +769,7 @@ public:
         }
         case TransitionKind::UpdateArrayType:
         {
-            ArrayType arrayType = TCGet(self->m_arrayType);
+            ArrayType arrayType = self->m_arrayType;
             return StructureTransitionTable::x_key_change_array_type_tag | static_cast<int32_t>(arrayType.m_asValue);
         }
         case TransitionKind::BadTransitionKind:
@@ -1087,7 +1087,7 @@ public:
     {
         Structure* hiddenClass = hc.As();
         assert(hiddenClass->m_type == HeapEntityType::Structure);
-        SystemHeapPointer<StructureAnchorHashTable> aht = TCGet(hiddenClass->m_anchorHashTable);
+        SystemHeapPointer<StructureAnchorHashTable> aht = hiddenClass->m_anchorHashTable;
 
         m_hiddenClass = hc;
         m_anchorTable = aht;
@@ -1127,7 +1127,7 @@ public:
     GeneralHeapPointer<void> GetCurrentKey()
     {
         assert(m_ord < m_maxOrd);
-        return TCGet(*m_curPtr.As());
+        return *m_curPtr.As();
     }
 
     uint8_t GetCurrentSlotOrdinal()
@@ -1747,7 +1747,7 @@ inline SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildN
 {
     assert(self->m_nonFullBlockLen == x_hiddenClassBlockSize);
     assert(self->m_numSlots > 0 && self->m_numSlots % x_hiddenClassBlockSize == 0);
-    SystemHeapPointer<StructureAnchorHashTable> anchorHt = TCGet(self->m_anchorHashTable);
+    SystemHeapPointer<StructureAnchorHashTable> anchorHt = self->m_anchorHashTable;
     AssertIff(!IsAnchorTableContainsFinalBlock(self), anchorHt.m_value == 0 || anchorHt.As()->m_numTotalSlots != self->m_numSlots);
     if (!IsAnchorTableContainsFinalBlock(self))
     {
@@ -2128,7 +2128,7 @@ end_setup:
             GeneralHeapPointer<void>* p = GetFinalFullBlockPointer(r).As();
             for (int8_t i = -static_cast<int8_t>(x_hiddenClassBlockSize); i < 0; i++)
             {
-                GeneralHeapPointer<void> e = TCGet(p[i]);
+                GeneralHeapPointer<void> e = p[i];
                 insertNonExistentElementIntoInlineHashTable(e.As(), i /*ordinalOfElement*/);
                 DEBUG_ONLY(elementsInserted++;)
             }

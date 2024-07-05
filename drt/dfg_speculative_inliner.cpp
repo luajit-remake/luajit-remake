@@ -173,8 +173,8 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     // Figure out the call target
     //
     TestAssert(callSiteTarget->ObservedExactlyOneTarget());
-    TestAssert(!TCGet(callSiteTarget->m_linkedListHead).IsInvalidPtr());
-    JitCallInlineCacheEntry* callTarget = TCGet(callSiteTarget->m_linkedListHead).AsPtr();
+    TestAssert(!callSiteTarget->m_linkedListHead.IsInvalidPtr());
+    JitCallInlineCacheEntry* callTarget = callSiteTarget->m_linkedListHead.AsPtr();
     TestAssert(callTarget->m_callSiteNextNode.IsInvalidPtr());
     ExecutableCode* calleeEc = callTarget->GetTargetExecutableCode();
 

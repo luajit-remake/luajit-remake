@@ -105,7 +105,7 @@ TEST(ObjectGetPutById, Sanity)
                 ReleaseAssert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(i) - 1);
             }
-            if (i == TCGet(curObject->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity + TCGet(curObject->m_hiddenClass).As<Structure>()->m_inlineNamedStorageCapacity)
+            if (i == curObject->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity + curObject->m_hiddenClass.As<Structure>()->m_inlineNamedStorageCapacity)
             {
                 ReleaseAssert(icInfo.m_shouldGrowButterfly);
             }
@@ -113,7 +113,7 @@ TEST(ObjectGetPutById, Sanity)
             {
                 ReleaseAssert(!icInfo.m_shouldGrowButterfly);
             }
-            ReleaseAssert(TCGet(curObject->m_hiddenClass).As<Structure>() != icInfo.m_newStructure.As());
+            ReleaseAssert(curObject->m_hiddenClass.As<Structure>() != icInfo.m_newStructure.As());
 
             TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456)), icInfo);
 
@@ -204,7 +204,7 @@ TEST(ObjectGetPutById, Sanity)
 
             for (uint32_t i = 0; i < inlineCapacity; i++)
             {
-                TValue val = TCGet(obj->m_inlineStorage[i]);
+                TValue val = obj->m_inlineStorage[i];
                 ReleaseAssert(val.IsInt32());
                 ReleaseAssert(val.AsInt32() == static_cast<int32_t>(i + expectedBaseValue));
             }
@@ -283,7 +283,7 @@ TEST(ObjectGetPutById, Sanity)
 
         ReleaseAssert(curObject != allObjects[testcase]);
         ReleaseAssert(curObject->m_butterfly != allObjects[testcase]->m_butterfly);
-        ReleaseAssert(TCGet(curObject->m_hiddenClass) == TCGet(allObjects[testcase]->m_hiddenClass));
+        ReleaseAssert(curObject->m_hiddenClass == allObjects[testcase]->m_hiddenClass);
         allObjects[testcase] = curObject;
     }
 
@@ -418,7 +418,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
         UserHeapPointer<HeapString> propToTest = strings[numStrings - 1];
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(curObject, propToTest, icInfo /*out*/);
-        ReleaseAssert(TCGet(curObject->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        ReleaseAssert(curObject->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
         ReleaseAssert(icInfo.m_mayHaveMetatable == false);
         ReleaseAssert(icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
     }

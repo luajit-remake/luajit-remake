@@ -111,79 +111,8 @@ void UnalignedStore(void* ptr, T value)
     memcpy(ptr, &value, sizeof(T));
 }
 
-// Unfortunately memcpy cannot work on HeapPtr
-// But it seems like Clang still generates optimal code if we use a union
-//
-// DEVNOTE: This might be problematic with strict aliasing (since it seems like only 'memcpy' is
-// exempted from strict aliasing, not anything else).. hopefully this doesn't break...
-//
 template<typename T>
-T WARN_UNUSED ALWAYS_INLINE UnalignedLoad(HeapPtr<const void> ptr)
-{
-    static_assert(sizeof(unsigned char) == 1);
-    static_assert(std::is_trivially_copyable_v<T>);
-    union U {
-        U() {}
-        T obj;
-        unsigned char asBytes[sizeof(T)];
-    } u;
-
-    HeapPtr<const unsigned char> pu = reinterpret_cast<HeapPtr<const unsigned char>>(ptr);
-    for (size_t i = 0; i < sizeof(T); i++) u.asBytes[i] = pu[i];
-    return u.obj;
-}
-
-template<typename T>
-void ALWAYS_INLINE UnalignedStore(HeapPtr<void> ptr, T value)
-{
-    static_assert(sizeof(unsigned char) == 1);
-    static_assert(std::is_trivially_copyable_v<T>);
-    union U {
-        U() {}
-        T obj;
-        unsigned char asBytes[sizeof(T)];
-    } u;
-
-    u.obj = value;
-    HeapPtr<unsigned char> pu = reinterpret_cast<HeapPtr<unsigned char>>(ptr);
-    for (size_t i = 0; i < sizeof(T); i++) pu[i] = u.asBytes[i];
-}
-
-template<typename T>
-class Packed
-{
-public:
-    static_assert(std::is_trivially_copyable_v<T>);
-
-    Packed() : Packed(T { }) { }
-    Packed(const T& value) { UnalignedStore<T>(m_storage, value); }
-
-    uint8_t m_storage[sizeof(T)];
-};
-
-template<typename T>
-struct is_packed_class_impl : std::false_type { };
-
-template<typename T>
-struct is_packed_class_impl<Packed<T>> : std::true_type { };
-
-template<typename T>
-struct is_packed_class_impl<const Packed<T>> : std::true_type { };
-
-template<typename T>
-constexpr bool is_packed_class_v = is_packed_class_impl<T>::value;
-
-template<typename T>
-struct remove_packed_impl { using type = std::remove_const_t<T>; };
-
-template<typename T>
-struct remove_packed_impl<Packed<T>> { using type = T; };
-
-template<typename T>
-struct remove_packed_impl<const Packed<T>> { using type = T; };
-
-template<typename T>
-using remove_packed_t = typename remove_packed_impl<T>::type;
+using Packed = __attribute__((__packed__, __aligned__(1))) T;
 
 // A severe limitation with HeapPtr classes is that it cannot call member method (since C++ always assumes that the hidden 'this' pointer is
 // in the normal address space, but our HeapPtr is in the GS address space, which cannot be converted to normal address space automatically)
@@ -192,33 +121,10 @@ using remove_packed_t = typename remove_packed_impl<T>::type;
 //
 // This is what the 'TCGet' and 'TCSet' (TC stands for TriviallyCopyable) is for.
 //
-template<typename T>
-remove_packed_t<T> WARN_UNUSED ALWAYS_INLINE TCGet(T& obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    if constexpr(is_packed_class_v<T>)
-    {
-        return UnalignedLoad<remove_packed_t<T>>(obj.m_storage);
-    }
-    else
-    {
-        return obj;
-    }
-}
 
 template<typename T>
 void ALWAYS_INLINE TCSet(T& target, T obj)
 {
     static_assert(std::is_trivially_copyable_v<T>);
     target = obj;
-}
-
-// Overloads for Packed classes
-//
-template<typename T>
-void ALWAYS_INLINE TCSet(Packed<T>& target, T obj)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    UnalignedStore<T>(target.m_storage, obj);
-
 }

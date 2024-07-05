@@ -28,7 +28,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
             {
                 TableObject* tableObj = metamethod.As<tTable>();
 
-                if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
+                if (likely(!tableObj->m_arrayType.MayHaveMetatable()))
                 {
                     goto no_metamethod;
                 }
@@ -201,12 +201,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 Butterfly* butterfly = tableObj->m_butterfly;
                                 if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
                                 {
-                                    if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                    if (likely(tableObj->m_hiddenClass.m_value == c_expectedHiddenClass.m_value))
                                     {
                                         *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
                                         butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                                        TCSet(tableObj->m_arrayType, c_newArrayType);
-                                        TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                        tableObj->m_arrayType = c_newArrayType;
+                                        tableObj->m_hiddenClass = c_newHiddenClass;
                                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                                     }
                                 }
@@ -326,12 +326,12 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                                 Butterfly* butterfly = tableObj->m_butterfly;
                                 if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
                                 {
-                                    if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                    if (likely(tableObj->m_hiddenClass.m_value == c_expectedHiddenClass.m_value))
                                     {
                                         *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
                                         butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                                        TCSet(tableObj->m_arrayType, c_newArrayType);
-                                        TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                        tableObj->m_arrayType = c_newArrayType;
+                                        tableObj->m_hiddenClass = c_newHiddenClass;
                                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                                     }
                                 }

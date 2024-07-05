@@ -565,7 +565,7 @@ public:
         if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap ||
             icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap)
         {
-            assert(TCGet(self->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+            assert(self->m_arrayType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
             return QueryArraySparseMap(self, idx);
         }
         else
@@ -857,7 +857,7 @@ public:
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
-        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
+        SystemHeapPointer<void> hiddenClass = self->m_hiddenClass;
         HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
         assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
@@ -888,7 +888,7 @@ public:
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
-        SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
+        SystemHeapPointer<void> hiddenClass = self->m_hiddenClass;
         assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
 
         CacheableDictionary* dict = hiddenClass.As<CacheableDictionary>();
@@ -912,13 +912,13 @@ public:
         assert(icInfo.m_icKind != PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
         {
-            TValue val = TCGet(self->m_inlineStorage[icInfo.m_slot]);
+            TValue val = self->m_inlineStorage[icInfo.m_slot];
             return val.IsNil();
         }
         else
         {
             assert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
-            TValue val = TCGet(*self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot));
+            TValue val = *self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot);
             return val.IsNil();
         }
     }
@@ -927,7 +927,7 @@ public:
     {
         if (slotOrd < inlineStorageCapacity)
         {
-            return TCGet(self->m_inlineStorage[slotOrd]);
+            return self->m_inlineStorage[slotOrd];
         }
         else
         {
@@ -1927,9 +1927,9 @@ public:
 
     static bool WARN_UNUSED TryPutByValIntegerIndexFastNoIC(TableObject* self, int64_t index, TValue value)
     {
-        ArrayType arrType = TCGet(self->m_arrayType);
-        AssertImp(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
-                  arrType.m_asValue == TCGet(self->m_hiddenClass).template As<Structure>()->m_arrayType.m_asValue);
+        ArrayType arrType = self->m_arrayType;
+        AssertImp(self->m_hiddenClass.template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure,
+                  arrType.m_asValue == self->m_hiddenClass.template As<Structure>()->m_arrayType.m_asValue);
 
         if (arrType.IsContinuous())
         {
@@ -2353,7 +2353,7 @@ public:
                 }
             }
             m_hiddenClass = result.m_newStructure.As();
-            m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
+            m_arrayType = result.m_newStructure.As()->m_arrayType;
             assert(m_arrayType.MayHaveMetatable());
         }
         else if (ty == HeapEntityType::CacheableDictionary)
@@ -2405,7 +2405,7 @@ public:
                 }
             }
             m_hiddenClass = result.m_newStructure.As();
-            m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
+            m_arrayType = result.m_newStructure.As()->m_arrayType;
             AssertIff(m_arrayType.MayHaveMetatable(), Structure::IsPolyMetatable(result.m_newStructure.As()));
         }
         else if (ty == HeapEntityType::CacheableDictionary)
@@ -2586,7 +2586,7 @@ public:
     static std::pair<bool /*success*/, uint32_t /*length*/> WARN_UNUSED ALWAYS_INLINE TryGetTableLengthWithLuaSemanticsFastPath(TableObject* self)
     {
         static_assert(ArrayGrowthPolicy::x_arrayBaseOrd == 1, "this function currently only works under lua semantics");
-        ArrayType arrType = TCGet(self->m_arrayType);
+        ArrayType arrType = self->m_arrayType;
         if (likely(arrType.IsContinuous()))
         {
             // Fast path: the array is continuous
@@ -2887,7 +2887,7 @@ try_get_next_structure_prop:
             }
             else if (hcType == HeapEntityType::CacheableDictionary)
             {
-                cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                cacheableDict = obj->m_hiddenClass.As<CacheableDictionary>();
                 m_namedPropertyOrd++;
 
 try_find_and_get_cd_prop:
@@ -3026,7 +3026,7 @@ finished_iteration:
         {
             // Input key is a pointer, locate its slot ordinal and iterate from there
             //
-            HeapEntityType hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
+            HeapEntityType hcType = obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
             UserHeapPointer<void> prop = key.AsPointer();
             if (hcType == HeapEntityType::Structure)
@@ -3047,7 +3047,7 @@ finished_iteration:
             }
             else if (hcType == HeapEntityType::CacheableDictionary)
             {
-                CacheableDictionary* cacheableDict = TCGet(obj->m_hiddenClass).As<CacheableDictionary>();
+                CacheableDictionary* cacheableDict = obj->m_hiddenClass.As<CacheableDictionary>();
                 uint32_t hashTableSlot = CacheableDictionary::GetHashTableSlotNumberForProperty(cacheableDict, prop);
                 if (hashTableSlot == static_cast<uint32_t>(-1))
                 {

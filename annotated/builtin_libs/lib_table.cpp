@@ -1100,7 +1100,7 @@ no_usr_comparator:
         if (info.m_isContinuous)
         {
             TValue* arr = reinterpret_cast<TValue*>(tab->m_butterfly);
-            if (TCGet(tab->m_arrayType).ArrayKind() == ArrayType::Kind::Double)
+            if (tab->m_arrayType.ArrayKind() == ArrayType::Kind::Double)
             {
                 if (unlikely(vm->m_metatableForNumber.m_value != 0))
                 {

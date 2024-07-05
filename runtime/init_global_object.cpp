@@ -315,7 +315,7 @@ UserHeapPointer<TableObject> CreateGlobalObject(VM* vm)
         TableObject* string_type_metatable = TableObject::CreateEmptyTableObject(vm, 1 /*inlineCapacity*/, 0 /*initialButterflyArrayPartCapacity*/);
         h.InsertField(string_type_metatable, "__index", TValue::Create<tTable>(libobj_string));
         vm->m_metatableForString = string_type_metatable;
-        vm->m_initialHiddenClassOfMetatableForString = TCGet(string_type_metatable->m_hiddenClass);
+        vm->m_initialHiddenClassOfMetatableForString = string_type_metatable->m_hiddenClass;
     }
 
     // Initialize table library

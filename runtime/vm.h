@@ -475,7 +475,7 @@ public:
     {
         assert(reservedId + 1 <= 63);
         uint8_t arrTy = ArrayType::x_invalidArrayType + reservedId + 1;
-        TCSet(self->m_invalidArrayType, arrTy);
+        self->m_invalidArrayType = arrTy;
     }
 
     static bool WARN_UNUSED IsReservedWord(HeapString* self)

@@ -98,7 +98,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
             return ic->Effect([base, c_slot, c_mayHaveMt] {
                 IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
                 IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                return std::make_pair(TCGet(base->m_inlineStorage[c_slot]), c_mayHaveMt);
+                return std::make_pair(base->m_inlineStorage[c_slot], c_mayHaveMt);
             });
         }
         else if (c_info.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)

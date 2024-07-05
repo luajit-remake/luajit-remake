@@ -176,10 +176,10 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                             IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                             IcSpecifyCaptureAs2GBPointerNotNull(c_newStructure);
-                            assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-                            uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
+                            assert(tableObj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                            uint32_t oldButterflyNamedStorageCapacity = tableObj->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
                             TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
-                            TCSet(tableObj->m_hiddenClass, c_newStructure);
+                            tableObj->m_hiddenClass = c_newStructure;
                             PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                         });
@@ -190,7 +190,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                             IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                             IcSpecifyCaptureAs2GBPointerNotNull(c_newStructure);
-                            TCSet(tableObj->m_hiddenClass, c_newStructure);
+                            tableObj->m_hiddenClass = c_newStructure;
                             PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                         });
@@ -224,11 +224,11 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             return std::make_pair(mm, ResKind::HandleMetamethod);
                         }
 
-                        assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-                        uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
+                        assert(tableObj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                        uint32_t oldButterflyNamedStorageCapacity = tableObj->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
                         TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
 
-                        TCSet(tableObj->m_hiddenClass, c_newStructure);
+                        tableObj->m_hiddenClass = c_newStructure;
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                     });
@@ -245,7 +245,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                         {
                             return std::make_pair(mm, ResKind::HandleMetamethod);
                         }
-                        TCSet(tableObj->m_hiddenClass, c_newStructure);
+                        tableObj->m_hiddenClass = c_newStructure;
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                     });

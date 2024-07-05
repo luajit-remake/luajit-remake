@@ -153,7 +153,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    assert(heapEntity->m_arrayType.HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {
@@ -175,7 +175,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    assert(heapEntity->m_arrayType.HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {

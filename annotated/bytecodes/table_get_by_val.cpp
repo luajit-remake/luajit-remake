@@ -149,7 +149,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap ||
                         icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap)
                     {
-                        assert(TCGet(tableObj->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+                        assert(tableObj->m_arrayType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
                         result = TableObject::QueryArraySparseMap(tableObj, idx);
                     }
                     else
@@ -401,7 +401,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap: {
                     return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        assert(heapEntity->m_arrayType.HasSparseMap());
                         auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {
@@ -422,7 +422,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap: {
                     return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        assert(heapEntity->m_arrayType.HasSparseMap());
                         auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {

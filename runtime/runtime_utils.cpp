@@ -220,7 +220,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
         }
         AssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
-        TCSet(r->m_upvalues[ord], uv);
+        r->m_upvalues[ord] = uv;
     }
     return r;
 }
@@ -357,7 +357,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     bool shouldTransitToCCMode = false;
     if (unlikely((m_bloomFilter & bloomFilterMask) == bloomFilterMask))
     {
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         // if the IC site is empty, m_bloomFilter should be 0 and the above check shall never pass
         //
         assert(!linkListNode.IsInvalidPtr());
@@ -369,7 +369,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
                 shouldTransitToCCMode = true;
                 break;
             }
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         } while (!linkListNode.IsInvalidPtr());
     }
 
@@ -380,7 +380,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     {
         std::unordered_set<ExecutableCode*> checkUnique;
         bool goldDecision = false;
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         while (!linkListNode.IsInvalidPtr())
         {
             JitCallInlineCacheEntry* entry = linkListNode.AsPtr();
@@ -402,7 +402,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
                 goldDecision = true;
             }
 
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         }
         assert(checkUnique.size() == m_numEntries);
         assert(goldDecision == shouldTransitToCCMode);
@@ -418,7 +418,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
 
         JitCallInlineCacheEntry* newEntry = JitCallInlineCacheEntry::Create(vm,
                                                                             targetEc,
-                                                                            TCGet(m_linkedListHead) /*callSiteNextNode*/,
+                                                                            m_linkedListHead /*callSiteNextNode*/,
                                                                             func,
                                                                             dcIcTraitKind);
         TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
@@ -432,11 +432,11 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     {
         // Invalidate all existing ICs
         //
-        SpdsPtr<JitCallInlineCacheEntry> node = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> node = m_linkedListHead;
         assert(!node.IsInvalidPtr());
         do {
             JitCallInlineCacheEntry* entry = node.AsPtr();
-            node = TCGet(entry->m_callSiteNextNode);
+            node = entry->m_callSiteNextNode;
             entry->Destroy(vm);
         } while (!node.IsInvalidPtr());
     }
@@ -471,7 +471,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
     //
     {
         std::unordered_set<ExecutableCode*> checkUnique;
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         while (!linkListNode.IsInvalidPtr())
         {
             JitCallInlineCacheEntry* entry = linkListNode.AsPtr();
@@ -488,7 +488,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
             assert(!checkUnique.count(ec));
             checkUnique.insert(ec);
 
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         }
         assert(checkUnique.size() == m_numEntries);
     }
@@ -498,7 +498,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
     //
     JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
                                                                      targetEc,
-                                                                     TCGet(m_linkedListHead) /*callSiteNextNode*/,
+                                                                     m_linkedListHead /*callSiteNextNode*/,
                                                                      targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
     TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });

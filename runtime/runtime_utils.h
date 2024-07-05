@@ -746,7 +746,7 @@ public:
         r->m_ptr = dst;
         r->m_isClosed = false;
         r->m_isImmutable = isImmutable;
-        TCSet(r->m_prev, prev);
+        r->m_prev = prev;
         return r;
     }
 
@@ -814,7 +814,7 @@ public:
             }
 
             assert(curVal == cur->m_ptr);
-            assert(prev == TCGet(cur->m_prev));
+            assert(prev == cur->m_prev);
             assert(dst < curVal);
             assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
             Upvalue* newNode = CreateUpvalueImpl(prev, dst, isImmutable);
@@ -908,7 +908,7 @@ public:
         assert(numUpvalues <= std::numeric_limits<uint8_t>::max());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, static_cast<uint8_t>(numUpvalues));
         SystemHeapPointer<ExecutableCode> executable { static_cast<ExecutableCode*>(cb) };
-        TCSet(r.As()->m_executable, executable);
+        r.As()->m_executable = executable;
         return r;
     }
 
@@ -916,7 +916,7 @@ public:
     {
         assert(executable.As()->IsUserCFunction());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, numUpvalues);
-        TCSet(r.As()->m_executable, executable);
+        r.As()->m_executable = executable;
         return r;
     }
 
@@ -1024,7 +1024,7 @@ inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableC
     if (m_entity.IsUserHeapPointer())
     {
         assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
-        ec = TCGet(m_entity.As<FunctionObject>()->m_executable).As();
+        ec = m_entity.As<FunctionObject>()->m_executable.As();
     }
     else
     {

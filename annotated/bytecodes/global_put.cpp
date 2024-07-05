@@ -84,7 +84,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                 int32_t c_slot = c_info.m_slot;
                 return ic->Effect([base, valueToPut, c_slot] {
                     IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                    TCSet(base->m_inlineStorage[c_slot], valueToPut);
+                    base->m_inlineStorage[c_slot] = valueToPut;
                     return std::make_pair(TValue(), false /*hasMetamethod*/);
                 });
             }
@@ -93,7 +93,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                 int32_t c_slot = c_info.m_slot;
                 return ic->Effect([base, valueToPut, c_slot] {
                     IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, Butterfly::x_namedPropOrdinalRangeMax);
-                    TCSet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)), valueToPut);
+                    *(base->m_butterfly->GetNamedPropertyAddr(c_slot)) = valueToPut;
                     return std::make_pair(TValue(), false /*hasMetamethod*/);
                 });
             }
@@ -105,7 +105,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                 int32_t c_slot = c_info.m_slot;
                 return ic->Effect([base, valueToPut, c_slot] {
                     IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                    TValue oldValue = TCGet(base->m_inlineStorage[c_slot]);
+                    TValue oldValue = base->m_inlineStorage[c_slot];
                     if (unlikely(oldValue.Is<tNil>()))
                     {
                         TValue mm = GetNewIndexMetamethodFromTableObject(base);
@@ -114,7 +114,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                             return std::make_pair(mm, true /*hasMetamethod*/);
                         }
                     }
-                    TCSet(base->m_inlineStorage[c_slot], valueToPut);
+                    base->m_inlineStorage[c_slot] = valueToPut;
                     return std::make_pair(TValue(), false /*hasMetamethod*/);
                 });
             }
@@ -123,7 +123,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                 int32_t c_slot = c_info.m_slot;
                 return ic->Effect([base, valueToPut, c_slot] {
                     IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, Butterfly::x_namedPropOrdinalRangeMax);
-                    TValue oldValue = TCGet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)));
+                    TValue oldValue = *(base->m_butterfly->GetNamedPropertyAddr(c_slot));
                     if (unlikely(oldValue.Is<tNil>()))
                     {
                         TValue mm = GetNewIndexMetamethodFromTableObject(base);
@@ -132,7 +132,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
                             return std::make_pair(mm, true /*hasMetamethod*/);
                         }
                     }
-                    TCSet(*(base->m_butterfly->GetNamedPropertyAddr(c_slot)), valueToPut);
+                    *(base->m_butterfly->GetNamedPropertyAddr(c_slot)) = valueToPut;
                     return std::make_pair(TValue(), false /*hasMetamethod*/);
                 });
             }
