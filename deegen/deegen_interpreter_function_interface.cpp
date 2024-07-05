@@ -71,9 +71,9 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             llvm_type_of<uint64_t>(ctx),
 
             // R8
-            // unused
+            // VM base pointer
             //
-            llvm_type_of<uint64_t>(ctx),
+            llvm_type_of<void*>(ctx),
 
             // R9
             // unused
@@ -134,7 +134,7 @@ std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRLi
     // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
     // in the hope that it can reduce the likelihood of register shuffling when making C calls.
     //
-    return std::vector<uint64_t> { 8 /*R9*/, 7 /*R8*/, 5 /*RSI*/, 6 /*RDI*/ };
+    return std::vector<uint64_t> { 8 /*R9*/, 5 /*RSI*/, 6 /*RDI*/ };
 }
 
 std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath()
@@ -191,7 +191,7 @@ static llvm::CallInst* InterpreterFunctionCreateDispatchToBytecodeImpl(llvm::Val
             /*R14*/ func->getArg(4),
             /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
             /*RDI*/ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R8 */ func->getArg(7),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/
@@ -248,7 +248,7 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToReturnContinuation
             /*R14*/ func->getArg(4),
             /*RSI*/ retStart,
             /*RDI*/ numRets,
-            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R8 */ func->getArg(7),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/
@@ -298,7 +298,7 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value
             /*R14*/ func->getArg(4),
             /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
             /*RDI*/ isMustTail64,
-            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
+            /*R8 */ func->getArg(7),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/

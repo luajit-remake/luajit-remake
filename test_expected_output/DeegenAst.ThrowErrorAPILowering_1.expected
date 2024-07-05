@@ -15,7 +15,7 @@ target triple = "x86_64-unknown-linux-gnu"
 @.str.3 = private unnamed_addr constant [11 x i8] c"test error\00", align 1
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, ptr %stackBase, ptr %curBytecode, ptr %codeBlock, i64 %0, ptr nocapture readnone %1, i64 %2, i64 %3, i64 %4, i64 %5, double %6, double %7, double %8, double %9, double %10, double %11) local_unnamed_addr #0 section "deegen_interpreter_code_section_hot" {
+define dso_local ghccc void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, ptr %stackBase, ptr %curBytecode, ptr %codeBlock, i64 %0, ptr nocapture readnone %1, i64 %2, ptr %3, i64 %4, i64 %5, double %6, double %7, double %8, double %9, double %10, double %11) local_unnamed_addr #0 section "deegen_interpreter_code_section_hot" {
   %13 = getelementptr inbounds i8, ptr %codeBlock, i64 88
   %14 = ptrtoint ptr %curBytecode to i64
   %15 = ptrtoint ptr %13 to i64
@@ -25,12 +25,12 @@ define dso_local ghccc void @__deegen_interpreter_op_test1_0(ptr %coroutineCtx, 
   %.neg4.i = add i64 %.neg.i, %15
   %18 = add i64 %.neg4.i, %17
   store i64 %18, ptr %16, align 8, !tbaa !2
-  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr %coroutineCtx, ptr %stackBase, ptr nonnull @.str.3, ptr undef, i64 %0, ptr undef, i64 undef, i64 undef, i64 undef, i64 %5, double undef, double undef, double undef, double undef, double undef, double undef)
+  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr %coroutineCtx, ptr %stackBase, ptr nonnull @.str.3, ptr undef, i64 %0, ptr undef, i64 undef, ptr %3, i64 undef, i64 %5, double undef, double undef, double undef, double undef, double undef, double undef)
   ret void
 }
 
 ; Function Attrs: nounwind
-declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, i64, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
+declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowCStringErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, ptr, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
 
 attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }

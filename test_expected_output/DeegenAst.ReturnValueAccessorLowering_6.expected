@@ -9,7 +9,7 @@ target triple = "x86_64-unknown-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test6_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 section "deegen_interpreter_code_section_hot" {
+define dso_local ghccc void @__deegen_interpreter_op_test6_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, ptr %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 section "deegen_interpreter_code_section_hot" {
   %15 = getelementptr %0, ptr %1, i64 -1, i32 1
   %16 = load ptr, ptr %15, align 8, !tbaa !2
   %17 = getelementptr %0, ptr %1, i64 -1, i32 3
@@ -33,7 +33,7 @@ define dso_local ghccc void @__deegen_interpreter_op_test6_0_retcont_0(ptr %0, p
   %34 = zext i16 %33 to i64
   %35 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %34
   %36 = load ptr, ptr %35, align 8
-  musttail call ghccc void %36(ptr %0, ptr %16, ptr nonnull %32, ptr %29, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
+  musttail call ghccc void %36(ptr %0, ptr %16, ptr nonnull %32, ptr %29, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
   ret void
 }
 

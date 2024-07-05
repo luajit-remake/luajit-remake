@@ -14,6 +14,7 @@ deegen_enter_vm_from_c_impl:
 	#   arg 2 (%rdx): stackBase
 	#   arg 3 (%rcx): numArgs
 	#   arg 4 (%r8): cb
+	#   arg 5 (%r9): vmBasePointer
 	#
 	# The GHC calling convention callee expects:
 	#   dst 0 (%r13): CoroutineCtx
@@ -56,6 +57,10 @@ deegen_enter_vm_from_c_impl:
 	# Move cb (%r8)
 	#
 	movq	%r8, %rbx
+
+	# Move vmBasePointer (%r9)
+	#
+	movq    %r9, %r8
 	
 	# Set isMustTail64 (%rdi) to 0
 	# Note that %rdi is originally holding CoroutineCtx, so this must be done after moving it

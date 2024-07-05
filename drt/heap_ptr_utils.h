@@ -83,17 +83,7 @@ struct add_heap_ptr<HeapPtr<T>>
 template<typename T>
 using add_heap_ptr_t = typename add_heap_ptr<T>::type;
 
-template<typename T>
-struct remove_heap_ref
-{
-    static_assert(std::is_lvalue_reference_v<T>);
-    using type = T;
-};
-
-template<typename T>
-using remove_heap_ref_t = typename remove_heap_ref<T>::type;
-
-// Utility for accessing unaligned data, both normal pointer and HeapPtr
+// Utility for accessing unaligned data
 //
 template<typename T>
 T UnalignedLoad(const void* ptr)
