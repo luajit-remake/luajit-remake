@@ -516,11 +516,6 @@ public:
         return HeapPtrTranslator { };
     }
 
-    void SetUpSegmentationRegister()
-    {
-        X64_SetSegmentationRegister<X64SegmentationRegisterKind::GS>(VMBaseAddress());
-    }
-
     SpdsAllocImpl<VM, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
     {
         return SpdsAllocImpl<VM, true /*isTempAlloc*/>(this);

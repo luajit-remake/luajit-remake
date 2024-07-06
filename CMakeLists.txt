@@ -167,8 +167,6 @@ add_library(git_commit_hash_info
   "${GENERATED_FILES_DIR}/git_commit_hash.cpp"
 )
 
-add_subdirectory(common_utils)
-
 add_subdirectory(deegen)
 
 add_subdirectory(annotated)
@@ -222,7 +220,6 @@ set(UNIT_TEST_SRC
 
 set(UNIT_TEST_LINK_LIBRARIES
   gtest
-  common_utils
   runtime
   legacy_json_bc_dump_parser
   deegen_rt
@@ -282,7 +279,6 @@ add_executable(luajitr $<TARGET_OBJECTS:ljr_standalone>)
 target_link_libraries(luajitr PUBLIC
   -Wl,--start-group
   git_commit_hash_info
-  common_utils
   deegen_rt
   runtime
   deegen_fps_lib
@@ -296,7 +292,6 @@ add_executable(luajitr_detect_duplicate_symbols $<TARGET_OBJECTS:ljr_standalone>
 target_link_libraries(luajitr_detect_duplicate_symbols PUBLIC
   -Wl,--whole-archive
   git_commit_hash_info
-  common_utils
   deegen_rt
   runtime
   deegen_fps_lib

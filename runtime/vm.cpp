@@ -115,8 +115,6 @@ bool WARN_UNUSED VM::InitializeVMBase()
 
     m_self = reinterpret_cast<uintptr_t>(this);
 
-    SetUpSegmentationRegister();
-
     m_isEngineStartingTierBaselineJit = false;
     m_engineMaxTier = EngineMaxTier::Unrestricted;
 
@@ -390,8 +388,6 @@ void VM::CleanupVMStringManager()
 
 bool WARN_UNUSED VM::Initialize()
 {
-    static_assert(x_segmentRegisterSelfReferencingOffset == offsetof_member_v<&VM::m_self>);
-
     bool success = false;
     CHECK_LOG_ERROR(InitializeVMBase());
     CHECK_LOG_ERROR(InitializeVMStringManager());

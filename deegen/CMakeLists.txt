@@ -75,7 +75,6 @@ add_executable(fps
 
 target_link_libraries(fps PUBLIC
   -Wl,--start-group
-  common_utils
   deegen_utils
   deegen_common_snippet_ir
   -Wl,--end-group
