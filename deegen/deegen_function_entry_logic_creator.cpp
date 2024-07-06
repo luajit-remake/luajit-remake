@@ -10,6 +10,7 @@
 #include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_stencil_lowering_pass.h"
 #include "drt/baseline_jit_codegen_helper.h"
+#include "vm_base_pointer_optimization.h"
 
 namespace dast {
 
@@ -377,6 +378,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::Top);
     RunTagRegisterOptimizationPass(func);
+    RunVMBasePointerOptimizationPass(func);
 
     if (m_tier == DeegenEngineTier::Interpreter)
     {

@@ -13,6 +13,7 @@
 #include "deegen_ast_inline_cache.h"
 #include "deegen_ast_slow_path.h"
 #include "deegen_type_based_hcs_helper.h"
+#include "vm_base_pointer_optimization.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -408,6 +409,10 @@ void InterpreterBytecodeImplCreator::DoLowering()
     // Now, run the tag register optimization pass
     //
     RunTagRegisterOptimizationPass(m_wrapper);
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     // Run LLVM optimization pass
     //

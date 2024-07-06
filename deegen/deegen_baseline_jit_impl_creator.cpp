@@ -16,6 +16,7 @@
 #include "invoke_clang_helper.h"
 #include "llvm_override_option.h"
 #include "llvm/Linker/Linker.h"
+#include "vm_base_pointer_optimization.h"
 
 namespace dast {
 
@@ -106,6 +107,10 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     // Now, run the tag register optimization pass
     //
     RunTagRegisterOptimizationPass(m_wrapper);
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
