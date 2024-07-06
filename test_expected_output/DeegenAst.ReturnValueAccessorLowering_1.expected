@@ -15,28 +15,27 @@ define dso_local ghccc void @__deegen_interpreter_op_test1_0_retcont_0(ptr %0, p
   %17 = getelementptr %0, ptr %1, i64 -1, i32 3
   %18 = load i32, ptr %17, align 4, !tbaa !9
   %19 = zext i32 %18 to i64
-  %20 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %21 = ptrtoint ptr %20 to i64
-  %22 = add i64 %21, %19
-  %23 = inttoptr i64 %22 to ptr
-  %24 = getelementptr inbounds %0, ptr %16, i64 -1
-  %25 = load ptr, ptr %24, align 8, !tbaa !11
-  %26 = load i32, ptr %25, align 4, !tbaa !12
-  %27 = zext i32 %26 to i64
-  %28 = add i64 %27, %21
-  %29 = inttoptr i64 %28 to ptr
-  %30 = getelementptr inbounds i8, ptr %23, i64 2
-  %31 = load i32, ptr %30, align 1
-  %outputSlot = zext i32 %31 to i64
-  %32 = load i64, ptr %retStart, align 8
-  %33 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %32, ptr %33, align 8
-  %34 = getelementptr inbounds i8, ptr %23, i64 10
-  %35 = load i16, ptr %34, align 1
-  %36 = zext i16 %35 to i64
-  %37 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %36
-  %38 = load ptr, ptr %37, align 8
-  musttail call ghccc void %38(ptr %0, ptr %16, ptr nonnull %34, ptr %29, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %20 = ptrtoint ptr %5 to i64
+  %21 = add i64 %19, %20
+  %22 = inttoptr i64 %21 to ptr
+  %23 = getelementptr inbounds %0, ptr %16, i64 -1
+  %24 = load ptr, ptr %23, align 8, !tbaa !10
+  %25 = load i32, ptr %24, align 4, !tbaa !11
+  %26 = zext i32 %25 to i64
+  %27 = add i64 %26, %20
+  %28 = inttoptr i64 %27 to ptr
+  %29 = getelementptr inbounds i8, ptr %22, i64 2
+  %30 = load i32, ptr %29, align 1
+  %outputSlot = zext i32 %30 to i64
+  %31 = load i64, ptr %retStart, align 8
+  %32 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
+  store i64 %31, ptr %32, align 8
+  %33 = getelementptr inbounds i8, ptr %22, i64 10
+  %34 = load i16, ptr %33, align 1
+  %35 = zext i16 %34 to i64
+  %36 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %35
+  %37 = load ptr, ptr %36, align 8
+  musttail call ghccc void %37(ptr %0, ptr %16, ptr nonnull %33, ptr %28, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -56,7 +55,6 @@ attributes #1 = { nounwind }
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
 !9 = !{!7, !8, i64 0}
-!10 = !{!4, !4, i64 0}
-!11 = !{!3, !4, i64 0}
-!12 = !{!13, !8, i64 0}
-!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
+!10 = !{!3, !4, i64 0}
+!11 = !{!12, !8, i64 0}
+!12 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}

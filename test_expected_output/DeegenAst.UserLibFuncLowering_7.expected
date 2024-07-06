@@ -23,20 +23,19 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   %21 = getelementptr i8, ptr %1, i64 28
   store i32 0, ptr %21, align 4, !tbaa !11
   %22 = load i64, ptr %1, align 8
-  %23 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !12
-  %24 = ptrtoint ptr %23 to i64
-  %25 = add i64 %22, %24
-  %26 = shl i64 %25, 29
-  %27 = ashr exact i64 %26, 29
-  %28 = add i64 %27, %24
-  %29 = inttoptr i64 %28 to ptr
-  %30 = load i32, ptr %29, align 4, !tbaa !13
-  %31 = zext i32 %30 to i64
-  %32 = add i64 %31, %24
-  %33 = inttoptr i64 %32 to ptr
-  %34 = getelementptr inbounds %0, ptr %33, i64 0, i32 4
-  %35 = load ptr, ptr %34, align 8, !tbaa !15
-  musttail call ghccc void %35(ptr %0, ptr nonnull %17, ptr null, ptr %33, i64 %4, ptr undef, i64 0, ptr %7, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %23 = ptrtoint ptr %7 to i64
+  %24 = add i64 %22, %23
+  %25 = shl i64 %24, 29
+  %26 = ashr exact i64 %25, 29
+  %27 = add i64 %26, %23
+  %28 = inttoptr i64 %27 to ptr
+  %29 = load i32, ptr %28, align 4, !tbaa !12
+  %30 = zext i32 %29 to i64
+  %31 = add i64 %30, %23
+  %32 = inttoptr i64 %31 to ptr
+  %33 = getelementptr inbounds %0, ptr %32, i64 0, i32 4
+  %34 = load ptr, ptr %33, align 8, !tbaa !14
+  musttail call ghccc void %34(ptr %0, ptr nonnull %17, ptr null, ptr %32, i64 %4, ptr undef, i64 0, ptr %7, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
@@ -58,14 +57,13 @@ attributes #1 = { nounwind }
 !9 = !{!3, !4, i64 8}
 !10 = !{!8, !8, i64 0}
 !11 = !{!3, !8, i64 28}
-!12 = !{!4, !4, i64 0}
-!13 = !{!14, !8, i64 0}
-!14 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
-!15 = !{!16, !4, i64 8}
-!16 = !{!"_ZTS14ExecutableCode", !17, i64 0, !20, i64 2, !21, i64 3, !8, i64 4, !4, i64 8, !22, i64 16}
-!17 = !{!"_ZTS24SystemHeapGcObjectHeader", !18, i64 0, !19, i64 1}
-!18 = !{!"_ZTS14HeapEntityType", !5, i64 0}
-!19 = !{!"_ZTS11GcCellState", !5, i64 0}
-!20 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
-!21 = !{!"bool", !5, i64 0}
-!22 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}
+!12 = !{!13, !8, i64 0}
+!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
+!14 = !{!15, !4, i64 8}
+!15 = !{!"_ZTS14ExecutableCode", !16, i64 0, !19, i64 2, !20, i64 3, !8, i64 4, !4, i64 8, !21, i64 16}
+!16 = !{!"_ZTS24SystemHeapGcObjectHeader", !17, i64 0, !18, i64 1}
+!17 = !{!"_ZTS14HeapEntityType", !5, i64 0}
+!18 = !{!"_ZTS11GcCellState", !5, i64 0}
+!19 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
+!20 = !{!"bool", !5, i64 0}
+!21 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}

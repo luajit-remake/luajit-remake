@@ -16,6 +16,7 @@ enum MakeCallOption
 //
 extern "C" void NO_RETURN DeegenImpl_ReturnValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ReturnNone();
+// extern "C" void* WARN_UNUSED DeegenImpl_GetVMBasePointer();
 extern "C" void NO_RETURN DeegenImpl_ReturnValueAndBranch(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ReturnNoneAndBranch();
 extern "C" void NO_RETURN DeegenImpl_MakeCall_ReportContinuationAfterCall(void* handler, void* func);

@@ -175,4 +175,29 @@ void TagRegisterOptimizationPass::Run()
     }
 }
 
+void VMBasePointerOptimization(llvm::Function* func)
+{
+    using namespace llvm;
+
+    std::vector<CallInst*> remove_list;
+
+    for (Function::iterator b = func->begin(), be = func->end(); b != be; ++b) {
+        for (BasicBlock::iterator i = b->begin(), ie = b->end(); i != ie; ++i) {
+            CallInst* ci = dyn_cast<CallInst>(i);
+            if (!ci)
+                continue;
+            if (!ci->getCalledFunction())
+                continue;
+            if (ci->getCalledFunction()->getName() == "DeegenImpl_GetVMBasePointer") {
+                remove_list.push_back(ci);
+            }
+        }
+    }
+
+    for (CallInst* ci : remove_list) {
+        ci->replaceAllUsesWith(func->getArg(7));
+        ci->eraseFromParent();
+    }
+}
+
 }   // namespace dast

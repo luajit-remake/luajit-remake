@@ -15,38 +15,37 @@ define dso_local ghccc void @__deegen_interpreter_op_test4_0_retcont_0(ptr %0, p
   %17 = getelementptr %0, ptr %1, i64 -1, i32 3
   %18 = load i32, ptr %17, align 4, !tbaa !9
   %19 = zext i32 %18 to i64
-  %20 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %21 = ptrtoint ptr %20 to i64
-  %22 = add i64 %21, %19
-  %23 = inttoptr i64 %22 to ptr
-  %24 = getelementptr inbounds %0, ptr %16, i64 -1
-  %25 = load ptr, ptr %24, align 8, !tbaa !11
-  %26 = load i32, ptr %25, align 4, !tbaa !12
-  %27 = getelementptr inbounds i8, ptr %23, i64 2
-  %28 = load i32, ptr %27, align 1
-  %29 = tail call noundef i64 @_Z2a1v() #2
-  %30 = icmp ult i64 %29, %numRet
-  br i1 %30, label %31, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+  %20 = ptrtoint ptr %5 to i64
+  %21 = add i64 %19, %20
+  %22 = inttoptr i64 %21 to ptr
+  %23 = getelementptr inbounds %0, ptr %16, i64 -1
+  %24 = load ptr, ptr %23, align 8, !tbaa !10
+  %25 = load i32, ptr %24, align 4, !tbaa !11
+  %26 = getelementptr inbounds i8, ptr %22, i64 2
+  %27 = load i32, ptr %26, align 1
+  %28 = tail call noundef i64 @_Z2a1v() #2
+  %29 = icmp ult i64 %28, %numRet
+  br i1 %29, label %30, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-31:                                               ; preds = %14
-  %32 = getelementptr inbounds i64, ptr %retStart, i64 %29
-  %33 = load i64, ptr %32, align 8, !tbaa !14
+30:                                               ; preds = %14
+  %31 = getelementptr inbounds i64, ptr %retStart, i64 %28
+  %32 = load i64, ptr %31, align 8, !tbaa !13
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %31, %14
-  %.0.reg2mem.0.i = phi i64 [ %33, %31 ], [ %7, %14 ]
-  %outputSlot = zext i32 %28 to i64
-  %34 = zext i32 %26 to i64
-  %35 = add i64 %34, %21
-  %36 = inttoptr i64 %35 to ptr
-  %37 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %.0.reg2mem.0.i, ptr %37, align 8
-  %38 = getelementptr inbounds i8, ptr %23, i64 10
-  %39 = load i16, ptr %38, align 1
-  %40 = zext i16 %39 to i64
-  %41 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %40
-  %42 = load ptr, ptr %41, align 8
-  musttail call ghccc void %42(ptr %0, ptr nonnull %16, ptr nonnull %38, ptr %36, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
+__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %30, %14
+  %.0.reg2mem.0.i = phi i64 [ %32, %30 ], [ %7, %14 ]
+  %outputSlot = zext i32 %27 to i64
+  %33 = zext i32 %25 to i64
+  %34 = add i64 %33, %20
+  %35 = inttoptr i64 %34 to ptr
+  %36 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
+  store i64 %.0.reg2mem.0.i, ptr %36, align 8
+  %37 = getelementptr inbounds i8, ptr %22, i64 10
+  %38 = load i16, ptr %37, align 1
+  %39 = zext i16 %38 to i64
+  %40 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %39
+  %41 = load ptr, ptr %40, align 8
+  musttail call ghccc void %41(ptr %0, ptr nonnull %16, ptr nonnull %37, ptr %35, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #2
   ret void
 }
 
@@ -69,9 +68,8 @@ attributes #2 = { nounwind }
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
 !9 = !{!7, !8, i64 0}
-!10 = !{!4, !4, i64 0}
-!11 = !{!3, !4, i64 0}
-!12 = !{!13, !8, i64 0}
-!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
-!14 = !{!15, !15, i64 0}
-!15 = !{!"long", !5, i64 0}
+!10 = !{!3, !4, i64 0}
+!11 = !{!12, !8, i64 0}
+!12 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
+!13 = !{!14, !14, i64 0}
+!14 = !{!"long", !5, i64 0}

@@ -63,6 +63,7 @@ VM* WARN_UNUSED VM::Create()
     // Map memory and initialize the VM struct
     //
     void* vmVoid = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptrVoid) + x_vmBaseOffset);
+    activeVMForCurrentThread = reinterpret_cast<VM*>(vmVoid);
     assert(reinterpret_cast<uintptr_t>(vmVoid) % x_vmLayoutAlignment == 0);
     constexpr size_t sizeToMap = RoundUpToMultipleOf<x_pageSize>(sizeof(VM));
     {
@@ -78,6 +79,7 @@ VM* WARN_UNUSED VM::Create()
         {
             vm->~VM();
         }
+        activeVMForCurrentThread = nullptr;
     );
 
     CHECK_LOG_ERROR(vm->Initialize());
@@ -86,6 +88,7 @@ VM* WARN_UNUSED VM::Create()
         {
             vm->Cleanup();
         }
+        activeVMForCurrentThread = nullptr;
     );
 
     success = true;

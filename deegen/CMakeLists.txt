@@ -70,6 +70,7 @@ add_executable(fps
   fps_process_bytecode_definition_for_baseline_jit.cpp
   fps_generate_baseline_jit_function_entry_logic.cpp
   fps_process_bytecode_definition_for_dfg_jit.cpp
+  ../drt/memory_ptr.cpp # TODO: this is a stupid hack find a solution
 )
 
 target_link_libraries(fps PUBLIC

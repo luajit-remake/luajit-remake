@@ -14,40 +14,39 @@ define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(ptr %0, p
   %16 = load ptr, ptr %15, align 8, !tbaa !2
   %17 = getelementptr %0, ptr %1, i64 -1, i32 3
   %18 = load i32, ptr %17, align 4, !tbaa !9
-  %19 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %20 = getelementptr inbounds %0, ptr %16, i64 -1
-  %21 = load ptr, ptr %20, align 8, !tbaa !11
-  %22 = load i32, ptr %21, align 4, !tbaa !12
-  %23 = tail call noundef ptr @_Z2d1v() #4
-  %24 = tail call noundef i64 @_Z2a1v() #4
-  %25 = icmp ugt i64 %24, %numRet
-  %26 = tail call i64 @llvm.umin.i64(i64 %numRet, i64 %24)
-  %27 = shl i64 %26, 3
-  tail call void @llvm.memmove.p0.p0.i64(ptr align 8 %23, ptr align 8 %retStart, i64 %27, i1 false)
-  br i1 %25, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
+  %19 = getelementptr inbounds %0, ptr %16, i64 -1
+  %20 = load ptr, ptr %19, align 8, !tbaa !10
+  %21 = load i32, ptr %20, align 4, !tbaa !11
+  %22 = tail call noundef ptr @_Z2d1v() #4
+  %23 = tail call noundef i64 @_Z2a1v() #4
+  %24 = icmp ugt i64 %23, %numRet
+  %25 = tail call i64 @llvm.umin.i64(i64 %numRet, i64 %23)
+  %26 = shl i64 %25, 3
+  tail call void @llvm.memmove.p0.p0.i64(ptr align 8 %22, ptr align 8 %retStart, i64 %26, i1 false)
+  br i1 %24, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
 
 .lr.ph.i:                                         ; preds = %.lr.ph.i, %14
-  %.014.reg2mem.0.i = phi i64 [ %29, %.lr.ph.i ], [ %numRet, %14 ]
-  %28 = getelementptr inbounds i64, ptr %23, i64 %.014.reg2mem.0.i
-  store i64 %7, ptr %28, align 8, !tbaa !14
-  %29 = add nuw i64 %.014.reg2mem.0.i, 1
-  %exitcond.not.i = icmp eq i64 %29, %24
-  br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.lr.ph.i, !llvm.loop !16
+  %.014.reg2mem.0.i = phi i64 [ %28, %.lr.ph.i ], [ %numRet, %14 ]
+  %27 = getelementptr inbounds i64, ptr %22, i64 %.014.reg2mem.0.i
+  store i64 %7, ptr %27, align 8, !tbaa !13
+  %28 = add nuw i64 %.014.reg2mem.0.i, 1
+  %exitcond.not.i = icmp eq i64 %28, %23
+  br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.lr.ph.i, !llvm.loop !15
 
 __DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit: ; preds = %.lr.ph.i, %14
-  %30 = ptrtoint ptr %19 to i64
-  %31 = zext i32 %22 to i64
-  %32 = add i64 %31, %30
-  %33 = inttoptr i64 %32 to ptr
-  %34 = zext i32 %18 to i64
-  %35 = add i64 %30, %34
-  %36 = inttoptr i64 %35 to ptr
-  %37 = getelementptr inbounds i8, ptr %36, i64 6
-  %38 = load i16, ptr %37, align 1
-  %39 = zext i16 %38 to i64
-  %40 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %39
-  %41 = load ptr, ptr %40, align 8
-  musttail call ghccc void %41(ptr %0, ptr %16, ptr nonnull %37, ptr %33, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #4
+  %29 = ptrtoint ptr %5 to i64
+  %30 = zext i32 %21 to i64
+  %31 = add i64 %30, %29
+  %32 = inttoptr i64 %31 to ptr
+  %33 = zext i32 %18 to i64
+  %34 = add i64 %33, %29
+  %35 = inttoptr i64 %34 to ptr
+  %36 = getelementptr inbounds i8, ptr %35, i64 6
+  %37 = load i16, ptr %36, align 1
+  %38 = zext i16 %37 to i64
+  %39 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %38
+  %40 = load ptr, ptr %39, align 8
+  musttail call ghccc void %40(ptr %0, ptr %16, ptr nonnull %36, ptr %32, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #4
   ret void
 }
 
@@ -80,13 +79,12 @@ attributes #4 = { nounwind }
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
 !9 = !{!7, !8, i64 0}
-!10 = !{!4, !4, i64 0}
-!11 = !{!3, !4, i64 0}
-!12 = !{!13, !8, i64 0}
-!13 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
-!14 = !{!15, !15, i64 0}
-!15 = !{!"long", !5, i64 0}
-!16 = distinct !{!16, !17, !18, !19}
-!17 = !{!"llvm.loop.mustprogress"}
-!18 = !{!"llvm.loop.unroll.disable"}
-!19 = !{!"llvm.loop.vectorize.width", i32 1}
+!10 = !{!3, !4, i64 0}
+!11 = !{!12, !8, i64 0}
+!12 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
+!13 = !{!14, !14, i64 0}
+!14 = !{!"long", !5, i64 0}
+!15 = distinct !{!15, !16, !17, !18}
+!16 = !{!"llvm.loop.mustprogress"}
+!17 = !{!"llvm.loop.unroll.disable"}
+!18 = !{!"llvm.loop.vectorize.width", i32 1}

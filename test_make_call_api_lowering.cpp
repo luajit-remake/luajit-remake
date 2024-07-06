@@ -385,10 +385,10 @@ void TestModuleOneCase(llvm::Module* moduleIn,
         uint64_t /*tagRegister1*/,
         uint64_t /*unused*/,
         uint64_t /*unused*/,
-        uint64_t /*unused*/,
+        VM*      /*vmBasePointer*/,
         uint64_t /*unused*/,
         uint64_t /*tagRegister2*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, TValue::x_int32Tag, 0, 0, 0, 0, TValue::x_mivTag);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, TValue::x_int32Tag, 0, 0, VM_GetActiveVMForCurrentThread(), 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
