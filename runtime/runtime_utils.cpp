@@ -421,7 +421,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
                                                                             m_linkedListHead /*callSiteNextNode*/,
                                                                             func,
                                                                             dcIcTraitKind);
-        TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
+        m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { newEntry };
 
         *transitedToCCMode = 0;
         return newEntry->GetJitRegionStart();
@@ -448,7 +448,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
                                                                      SpdsPtr<JitCallInlineCacheEntry> { 0 } /*callSiteNextNode*/,
                                                                      targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
-    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { entry };
     m_mode = (m_numEntries > 1) ? Mode::ClosureCallWithMoreThanOneTargetObserved : Mode::ClosureCall;
     m_numEntries = 1;
     m_bloomFilter = 0;
@@ -501,7 +501,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
                                                                      m_linkedListHead /*callSiteNextNode*/,
                                                                      targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
-    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { entry };
     m_numEntries++;
     return entry->GetJitRegionStart();
 }

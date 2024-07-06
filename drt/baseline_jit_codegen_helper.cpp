@@ -327,7 +327,7 @@ void* WARN_UNUSED JitGenericInlineCacheSite::Insert(uint16_t traitKind)
     assert(m_numEntries < x_maxJitGenericInlineCacheEntries);
     VM* vm = VM::GetActiveVMForCurrentThread();
     JitGenericInlineCacheEntry* entry = JitGenericInlineCacheEntry::Create(vm, m_linkedListHead, traitKind);
-    TCSet(m_linkedListHead, SpdsPtr<JitGenericInlineCacheEntry> { entry });
+    m_linkedListHead = SpdsPtr<JitGenericInlineCacheEntry> { entry };
     m_numEntries++;
     return entry->m_jitAddr;
 }

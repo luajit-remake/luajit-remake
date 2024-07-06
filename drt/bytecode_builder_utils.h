@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
-#include "heap_ptr_utils.h"
+#include "ptr_utils.h"
 #include "tvalue.h"
 #include "deegen_metadata_accessor.h"
 #include "bytecode_rwc_info.h"

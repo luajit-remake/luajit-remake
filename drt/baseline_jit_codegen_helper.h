@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "heap_ptr_utils.h"
+#include "ptr_utils.h"
 #include "jit_memory_allocator.h"
 #include "memory_ptr.h"
 

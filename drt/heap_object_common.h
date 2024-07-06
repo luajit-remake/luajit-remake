@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
-#include "heap_ptr_utils.h"
+#include "ptr_utils.h"
 
 #define HOI_SYS_HEAP 1
 #define HOI_USR_HEAP 2

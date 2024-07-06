@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "heap_ptr_utils.h"
+#include "ptr_utils.h"
 #include "memory_ptr.h"
 
 template<typename CRTP>
@@ -10,8 +10,8 @@ class SpdsDoublyLinkedListNode
 public:
     SpdsDoublyLinkedListNode()
     {
-        TCSet(m_prevNode, SpdsOrSystemHeapPtr<Node> { 0 });
-        TCSet(m_nextNode, SpdsOrSystemHeapPtr<Node> { 0 });
+        m_prevNode = SpdsOrSystemHeapPtr<Node> { 0 };
+        m_nextNode = SpdsOrSystemHeapPtr<Node> { 0 };
     }
 
     static bool IsOnDoublyLinkedList(CRTP* self)
@@ -33,11 +33,11 @@ public:
         SpdsOrSystemHeapPtr<Node> prev = nodeToRemove->m_prevNode;
         SpdsOrSystemHeapPtr<Node> next = nodeToRemove->m_nextNode;
 
-        TCSet(next->m_prevNode, prev);
-        TCSet(prev->m_nextNode, next);
+        next->m_prevNode = prev;
+        prev->m_nextNode = next;
 
-        TCSet(nodeToRemove->m_prevNode, SpdsOrSystemHeapPtr<Node> { 0 });
-        TCSet(nodeToRemove->m_nextNode, SpdsOrSystemHeapPtr<Node> { 0 });
+        nodeToRemove->m_prevNode = SpdsOrSystemHeapPtr<Node> { 0 };
+        nodeToRemove->m_nextNode = SpdsOrSystemHeapPtr<Node> { 0 };
 
         assert(!IsOnDoublyLinkedList(nodeToRemove));
     }
@@ -86,7 +86,7 @@ public:
         SpdsOrSystemHeapPtr<Node> head = m_anchor.m_nextNode;
         p->m_prevNode = &m_anchor;
         p->m_nextNode = head;
-        TCSet(head->m_prevNode, SpdsOrSystemHeapPtr<Node> { p });
+        head->m_prevNode = SpdsOrSystemHeapPtr<Node> { p };
         m_anchor.m_nextNode = SpdsOrSystemHeapPtr<Node> { p };
     }
 

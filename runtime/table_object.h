@@ -1185,17 +1185,17 @@ public:
                 TableObject::GrowButterfly<true /*isGrowNamedStorage*/>(self, icInfo.m_newStructure.As()->m_butterflyNamedStorageCapacity);
             }
 
-            TCSet(self->m_hiddenClass, SystemHeapPointer<void> { icInfo.m_newStructure.As() });
+            self->m_hiddenClass = SystemHeapPointer<void> { icInfo.m_newStructure.As() };
         }
 
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
         {
-            TCSet(self->m_inlineStorage[icInfo.m_slot], newValue);
+            self->m_inlineStorage[icInfo.m_slot] = newValue;
         }
 
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage)
         {
-            TCSet(*(self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot)), newValue);
+            *(self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot)) = newValue;
         }
     }
 
