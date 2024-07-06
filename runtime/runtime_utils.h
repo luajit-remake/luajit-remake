@@ -49,14 +49,12 @@ void ALWAYS_INLINE WriteBarrierImpl(uint8_t* ptr)
 }
 
 template<typename T>
-void WriteBarrier(T ptr)
+void WriteBarrier(T* ptr)
 {
-    static_assert(std::is_pointer_v<T>);
-    using RawType = std::remove_pointer_t<remove_heap_ptr_t<T>>;
-    static_assert(std::is_same_v<value_type_of_member_object_pointer_t<decltype(&RawType::m_cellState)>, GcCellState>);
-    constexpr size_t x_offset = offsetof_member_v<&RawType::m_cellState>;
+    static_assert(std::is_same_v<value_type_of_member_object_pointer_t<decltype(&T::m_cellState)>, GcCellState>);
+    constexpr size_t x_offset = offsetof_member_v<&T::m_cellState>;
     static_assert(x_offset == offsetof_member_v<&UserHeapGcObjectHeader::m_cellState> || x_offset == offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>);
-    WriteBarrierImpl<x_offset>(ReinterpretCastPreservingAddressSpace<uint8_t*>(ptr));
+    WriteBarrierImpl<x_offset>(reinterpret_cast<uint8_t*>(ptr));
 }
 
 struct CoroutineStatus

@@ -14,8 +14,7 @@ public:
         TCSet(m_nextNode, SpdsOrSystemHeapPtr<Node> { 0 });
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CRTP>>>
-    static bool IsOnDoublyLinkedList(T self)
+    static bool IsOnDoublyLinkedList(CRTP* self)
     {
         SpdsOrSystemHeapPtr<Node> prev = self->m_prevNode;
 #ifndef NDEBUG
@@ -27,8 +26,7 @@ public:
 
     bool IsOnDoublyLinkedList() { return IsOnDoublyLinkedList(static_cast<CRTP*>(this)); }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CRTP>>>
-    static void RemoveFromDoublyLinkedList(T nodeToRemove)
+    static void RemoveFromDoublyLinkedList(CRTP* nodeToRemove)
     {
         assert(IsOnDoublyLinkedList(nodeToRemove));
 
@@ -120,8 +118,7 @@ public:
         Node* m_anchorPtr;
     };
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SpdsDoublyLinkedList>>>
-    static Elements elements(T self)
+    static Elements elements(SpdsDoublyLinkedList* self)
     {
         VM* vm = VM_GetActiveVMForCurrentThread();
         return { .m_vm = vm, .m_anchorPtr = &(self->m_anchor) };

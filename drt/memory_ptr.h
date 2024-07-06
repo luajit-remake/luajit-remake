@@ -10,14 +10,16 @@ class VM;
 //
 static constexpr uintptr_t x_segmentRegisterSelfReferencingOffset = 0;
 
+extern "C" void* WARN_UNUSED DeegenImpl_GetVMBasePointer();
 extern thread_local VM* activeVMForCurrentThread;
 
 // Same as VM::GetActiveVMForCurrentThread(), but no need to include vm.h
 //
 inline VM* VM_GetActiveVMForCurrentThread()
 {
-    assert(activeVMForCurrentThread != nullptr);
-    return activeVMForCurrentThread;
+    VM* vm = reinterpret_cast<VM*>(DeegenImpl_GetVMBasePointer());
+    assert(vm != nullptr);
+    return vm;
 }
 
 inline void AssertIsSpdsPointer(void* DEBUG_ONLY(ptr))
@@ -73,15 +75,6 @@ inline void AssertIsValidHeapPointer(void* DEBUG_ONLY(ptr))
 #endif
 }
 
-inline void AssertIsValidHeapPointer(HeapPtr<void> DEBUG_ONLY(ptr))
-{
-#ifndef NDEBUG
-    intptr_t ptrVoid = reinterpret_cast<intptr_t>(ptr);
-    assert((-(16LL << 30) <= ptrVoid && ptrVoid < -(4LL << 30)) ||
-           (-(1LL << 31) <= ptrVoid && ptrVoid < (1LL << 31)));
-#endif
-}
-
 constexpr uint32_t x_vmBasePtrLog2Alignment = 35;
 
 template<typename T>
@@ -94,12 +87,10 @@ inline uintptr_t VM_PointerToOffset(T* ptr)
     return val;
 }
 
-extern "C" void* WARN_UNUSED DeegenImpl_GetVMBasePointer();
-
 template<typename T>
 inline T* VM_OffsetToPointer(uintptr_t offset)
 {
-    return reinterpret_cast<T*>(offset + reinterpret_cast<uintptr_t>(DeegenImpl_GetVMBasePointer()));
+    return reinterpret_cast<T*>(offset + reinterpret_cast<uintptr_t>(VM_GetActiveVMForCurrentThread()));
 }
 
 template<typename T = void>

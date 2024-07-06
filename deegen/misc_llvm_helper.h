@@ -626,7 +626,7 @@ inline void CopyFunctionAttributes(llvm::Function* dstFunc, llvm::Function* srcF
         "target-features",
         "tune-cpu",
         "frame-pointer",
-        "min-legal-vector-width",
+        //"min-legal-vector-width",
         "no-trapping-math",
         "stack-protector-buffer-size"
     };
@@ -635,6 +635,9 @@ inline void CopyFunctionAttributes(llvm::Function* dstFunc, llvm::Function* srcF
     {
         const char* feature = featuresToCopy[i];
         ReleaseAssert(!dstFunc->hasFnAttribute(feature));
+        if (!srcFunc->hasFnAttribute(feature)) {
+            std::cout << feature << std::endl;
+        }
         ReleaseAssert(srcFunc->hasFnAttribute(feature));
         Attribute attr = srcFunc->getFnAttribute(feature);
         dstFunc->addFnAttr(attr);

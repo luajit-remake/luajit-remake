@@ -508,7 +508,7 @@ public:
 
     static VM* GetActiveVMForCurrentThread()
     {
-        return reinterpret_cast<VM*>(reinterpret_cast<HeapPtr<VM>>(0)->m_self);
+        return VM_GetActiveVMForCurrentThread();
     }
 
     HeapPtrTranslator GetHeapPtrTranslator() const

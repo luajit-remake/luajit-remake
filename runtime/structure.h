@@ -106,7 +106,7 @@ public:
         return m_numElementsInHashTable >= m_hashTableMask / 2 + 1;
     }
 
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureTransitionTable*> WARN_UNUSED Find(StructureTransitionTable* self, int32_t key, bool& found)
+    static HashTableEntry* WARN_UNUSED Find(StructureTransitionTable* self, int32_t key, bool& found)
     {
         assert(key != x_key_invalid && key != x_key_deleted);
         uint32_t hashMask = self->m_hashTableMask;
@@ -218,15 +218,15 @@ public:
 
     static StructureAnchorHashTable* WARN_UNUSED Create(VM* vm, Structure* shc);
 
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureAnchorHashTable*> GetHashTableBegin(StructureAnchorHashTable* self)
+    static HashTableEntry* GetHashTableBegin(StructureAnchorHashTable* self)
     {
         uint32_t hashTableSize = GetHashTableSizeFromHashTableMask(self->m_hashTableMask);
         return GetHashTableEnd(self) - hashTableSize;
     }
 
-    static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, StructureAnchorHashTable*> GetHashTableEnd(StructureAnchorHashTable* self)
+    static HashTableEntry* GetHashTableEnd(StructureAnchorHashTable* self)
     {
-        return ReinterpretCastPreservingAddressSpace<HashTableEntry*>(self);
+        return reinterpret_cast<HashTableEntry*>(self);
     }
 
     void CloneHashTableTo(HashTableEntry* htStart, uint32_t htSize);
@@ -408,15 +408,15 @@ public:
     };
     static_assert(sizeof(InlineHashTableEntry) == 2);
 
-    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, Structure*> GetInlineHashTableBegin(Structure* self)
+    static InlineHashTableEntry* GetInlineHashTableBegin(Structure* self)
     {
         uint32_t hashTableSize = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask);
         return GetInlineHashTableEnd(self) - hashTableSize;
     }
 
-    static ReinterpretCastPreservingAddressSpaceType<InlineHashTableEntry*, Structure*> GetInlineHashTableEnd(Structure* self)
+    static InlineHashTableEntry* GetInlineHashTableEnd(Structure* self)
     {
-        return ReinterpretCastPreservingAddressSpace<InlineHashTableEntry*>(self);
+        return reinterpret_cast<InlineHashTableEntry*>(self);
     }
 
     static uint32_t ComputeHashTableSizeFromHashTableMask(uint8_t mask)
@@ -674,10 +674,10 @@ public:
         return numSlots >= x_hiddenClassBlockSize && numSlots % x_hiddenClassBlockSize != 0;
     }
 
-    static ReinterpretCastPreservingAddressSpaceType<SystemHeapPointer<GeneralHeapPointer<void>>*, Structure*> GetFinalFullBlockPointerAddress(Structure* self)
+    static SystemHeapPointer<GeneralHeapPointer<void>>*GetFinalFullBlockPointerAddress(Structure* self)
     {
         assert(HasFinalFullBlockPointer(self->m_numSlots));
-        return ReinterpretCastPreservingAddressSpace<SystemHeapPointer<GeneralHeapPointer<void>>*>(self->m_values + self->m_nonFullBlockLen);
+        return reinterpret_cast<SystemHeapPointer<GeneralHeapPointer<void>>*>(self->m_values + self->m_nonFullBlockLen);
     }
 
     static SystemHeapPointer<GeneralHeapPointer<void>> GetFinalFullBlockPointer(Structure* self)

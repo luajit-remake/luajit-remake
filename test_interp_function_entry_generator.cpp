@@ -96,7 +96,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     Auto(vm->Destroy());
 
     CodeBlock* calleeCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
-    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
+    SystemHeapGcObjectHeader::Populate<ExecutableCode>(calleeCb);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;

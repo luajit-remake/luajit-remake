@@ -95,7 +95,7 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
 
     CodeBlock* cb = reinterpret_cast<CodeBlock*>(addressBegin + sizeof(TValue) * ucb->m_cstTableLength);
     ConstructInPlace(cb);
-    cb->SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
+    cb->SystemHeapGcObjectHeader::Populate<ExecutableCode>(cb);
     cb->m_executableCodeKind = Kind::BytecodeFunction;
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;

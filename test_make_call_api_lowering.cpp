@@ -105,7 +105,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     }
 
     CodeBlock* calleeCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
-    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
+    SystemHeapGcObjectHeader::Populate<ExecutableCode>(calleeCb);
 
     calleeCb->m_bestEntryPoint = reinterpret_cast<void*>(ResultChecker);
 
@@ -114,7 +114,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     FunctionObject* calleefo = FunctionObject::Create(vm, calleeCb).As();
 
     CodeBlock* callerCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
-    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(callerCb);
+    SystemHeapGcObjectHeader::Populate<ExecutableCode>(callerCb);
     callerCb->m_bestEntryPoint = nullptr;
     callerCb->m_numUpvalues = 0;
     callerCb->m_stackFrameNumSlots = static_cast<uint32_t>(numLocals);

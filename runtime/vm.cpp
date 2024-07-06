@@ -78,8 +78,8 @@ VM* WARN_UNUSED VM::Create()
         if (!success)
         {
             vm->~VM();
+            activeVMForCurrentThread = nullptr;
         }
-        activeVMForCurrentThread = nullptr;
     );
 
     CHECK_LOG_ERROR(vm->Initialize());
@@ -87,8 +87,8 @@ VM* WARN_UNUSED VM::Create()
         if (!success)
         {
             vm->Cleanup();
+            activeVMForCurrentThread = nullptr;
         }
-        activeVMForCurrentThread = nullptr;
     );
 
     success = true;

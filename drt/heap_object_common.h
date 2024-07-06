@@ -152,9 +152,7 @@ public:
     template<typename T>
     static void Populate(T self)
     {
-        using RawTypePtr = remove_heap_ptr_t<T>;
-        static_assert(std::is_pointer_v<RawTypePtr>);
-        using RawType = std::remove_pointer_t<RawTypePtr>;
+        using RawType = std::remove_pointer_t<T>;
         static_assert(IsHeapObjectType<RawType>);
         static_assert(offsetof_member_v<&RawType::m_type> == offsetof_member_v<&UserHeapGcObjectHeader::m_type>);
         static_assert(offsetof_member_v<&RawType::m_cellState> == offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>);
@@ -172,15 +170,12 @@ public:
     GcCellState m_cellState;     // reserved for GC
 
     template<typename T>
-    static void Populate(T self)
+    static void Populate(T* self)
     {
-        using RawTypePtr = remove_heap_ptr_t<T>;
-        static_assert(std::is_pointer_v<RawTypePtr>);
-        using RawType = std::remove_pointer_t<RawTypePtr>;
-        static_assert(IsHeapObjectType<RawType>);
-        static_assert(std::is_base_of_v<SystemHeapGcObjectHeader, RawType>);
-        static_assert(TypeMayLiveInSystemHeap<RawType>);
-        self->m_type = TypeEnumForHeapObject<RawType>;
+        static_assert(IsHeapObjectType<T>);
+        static_assert(std::is_base_of_v<SystemHeapGcObjectHeader, T>);
+        static_assert(TypeMayLiveInSystemHeap<T>);
+        self->m_type = TypeEnumForHeapObject<T>;
         self->m_cellState = GcCellState::White;
     }
 };
