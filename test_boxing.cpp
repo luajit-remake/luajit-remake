@@ -5,7 +5,6 @@ TEST(NaNBoxing, Correctness)
 {
     VM* vm = VM::Create();
     Auto(vm->Destroy());
-    std::cout << DeegenImpl_GetVMBasePointer()  << ' ' << vm << std::endl;
 
     // test int
     //
