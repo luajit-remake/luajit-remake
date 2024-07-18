@@ -165,7 +165,6 @@ static_assert(sizeof(JitMemoryPageHeaderBase) == 2);
 //
 class JitMemoryPageHeader final : public JitMemoryPageHeaderBase
 {
-public:
     MAKE_NONCOPYABLE(JitMemoryPageHeader);
     MAKE_NONMOVABLE(JitMemoryPageHeader);
 
@@ -482,6 +481,7 @@ public:
         return m_totalMemorySpill;
     }
 
+private:
     // Returns the new free list head
     //
     JitMemoryPageHeader* AllocateNewPageForStepping(uint8_t stepping)
@@ -515,6 +515,9 @@ public:
     //
     size_t m_totalUsedMemory;
 
+    // The current amount of memory that was spilled.
+    // Spill is the space in a page that is left over.
+    //
     size_t m_totalMemorySpill;
 
     // The current size of memory we allocated from OS
