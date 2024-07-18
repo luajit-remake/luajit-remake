@@ -1006,9 +1006,9 @@ public:
     // The interpretation of each element in the list depends on whether the upvalue is immutable
     // (this information is recorded in the UnlinkedCodeBlock's upvalue metadata list):
     //
-    // 1. If the upvalue is not immutable, then the TValue must be a HeapPtr<Upvalue> object,
+    // 1. If the upvalue is not immutable, then the TValue must be a Upvalue* object,
     //    and the value of the upvalue should be read from the Upvalue object.
-    // 2. If the upvalue is immutable, then the TValue must not be a HeapPtr<Upvalue> (since upvalue
+    // 2. If the upvalue is immutable, then the TValue must not be a Upvalue* (since upvalue
     //    objects are never exposed directly to user code). The TValue itself is simply the value of the upvalue.
     //
     TValue m_upvalues[0];

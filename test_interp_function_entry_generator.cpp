@@ -169,14 +169,14 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
         CoroutineRuntimeContext* /*coroCtx*/,
         uint64_t* /*sb*/,
         uint64_t /*numArgs*/,
-        uint64_t /*cbHeapPtrAsU64*/,
+        CodeBlock* /*codeBlock*/,
         uint64_t /*tagRegister1*/,
         uint64_t /*unused*/,
         uint64_t /*isMustTail64*/,
         uint64_t /*unused*/,
         uint64_t /*unused*/,
         uint64_t /*tagRegister2*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, reinterpret_cast<uint64_t>(calleeCb), TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, calleeCb, TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
