@@ -16,24 +16,66 @@
 // The exponentially-growing stepping array for the segregated allocator
 //
 constexpr uint16_t x_jit_mem_alloc_stepping_array[] = {
-// cellSize      num cells       remain
-    32,     //      511            32
-    64,     //      255            64
-    96,     //      170            64
-    144,    //      113            112
-    192,    //      85             64
-    272,    //      60             64
-    368,    //      44             192
-    496,    //      33             16
-    704,    //      23             192
-    1008,   //      16             256
-    1488,   //      11             16
-    2032,   //      8              128
-    2720,   //      6              64
-    3264,   //      5              64
-    4080,   //      4              64
-    5456,   //      3              16
-    8176    //      2              32
+// cellSize
+    32,
+    64,
+    96,
+    144,
+    192,
+    272,
+    368,
+    496,
+    704,
+    1008,
+    1488,
+    2032,
+    2720,
+    3264,
+    4080,
+    5456,
+    8176
+};
+
+constexpr uint16_t x_jit_mem_alloc_stepping_spill_array[] = {
+// num cells per page
+    32,
+    64,
+    64,
+    112,
+    64,
+    64,
+    192,
+    16,
+    192,
+    256,
+    16,
+    128,
+    64,
+    64,
+    64,
+    16,
+    32
+};
+
+constexpr uint16_t x_jit_mem_alloc_stepping_cell_array[] = {
+// amount of memory spilled per page
+    511,
+    255,
+    170,
+    113,
+    85,
+    60,
+    44,
+    33,
+    23,
+    16,
+    11,
+    8,
+    6,
+    5,
+    4,
+    3,
+    2
 };
 
 constexpr size_t x_jit_mem_alloc_total_steppings = std::extent_v<decltype(x_jit_mem_alloc_stepping_array)>;
@@ -123,6 +165,7 @@ static_assert(sizeof(JitMemoryPageHeaderBase) == 2);
 //
 class JitMemoryPageHeader final : public JitMemoryPageHeaderBase
 {
+public:
     MAKE_NONCOPYABLE(JitMemoryPageHeader);
     MAKE_NONMOVABLE(JitMemoryPageHeader);
 
@@ -329,6 +372,7 @@ public:
             m_freeList[i] = nullptr;
         }
         m_totalUsedMemory = 0;
+        m_totalMemorySpill = 0;
         m_totalOsMemoryUsage = 0;
         m_reservedRangeCur = 0;
         m_reservedRangeEnd = 0;
@@ -350,6 +394,7 @@ public:
         JitMemoryPageHeader* freelist = m_freeList[wantedStepping];
         if (unlikely(freelist == nullptr))
         {
+            m_totalMemorySpill += x_jit_mem_alloc_stepping_spill_array[wantedStepping];
             freelist = AllocateNewPageForStepping(wantedStepping);
         }
         assert(freelist == m_freeList[wantedStepping]);
@@ -432,7 +477,11 @@ public:
         return m_totalOsMemoryUsage;
     }
 
-private:
+    size_t GetTotalMemorySpilled()
+    {
+        return m_totalMemorySpill;
+    }
+
     // Returns the new free list head
     //
     JitMemoryPageHeader* AllocateNewPageForStepping(uint8_t stepping)
@@ -465,6 +514,8 @@ private:
     // This statastic includes internal fragmentation.
     //
     size_t m_totalUsedMemory;
+
+    size_t m_totalMemorySpill;
 
     // The current size of memory we allocated from OS
     // i.e., m_totalUsedMemory + memory of available cells + page header overhead
