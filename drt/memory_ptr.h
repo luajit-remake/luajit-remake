@@ -81,9 +81,7 @@ template<typename T>
 inline uintptr_t VM_PointerToOffset(T* ptr)
 {
     AssertIsValidHeapPointer(ptr);
-    uintptr_t val = reinterpret_cast<uintptr_t>(ptr);
-    uintptr_t base = reinterpret_cast<uintptr_t>(VM_GetActiveVMForCurrentThread());
-    return val - base;
+    return reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(DeegenImpl_GetVMBasePointer());
 }
 
 template<typename T>

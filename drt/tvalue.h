@@ -242,6 +242,7 @@ struct TValue
     }
 
     template<typename T>
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED CreatePointer(UserHeapPointer<T> ptr)
     {
         TValue result { static_cast<uint64_t>(ptr.m_value) };
@@ -250,6 +251,7 @@ struct TValue
     }
 
     template<typename T>
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED CreatePointer(T* ptr)
     {
         TValue result { static_cast<uint64_t>(VM_PointerToOffset(ptr)) };
@@ -301,9 +303,14 @@ struct TValue
     auto WARN_UNUSED ALWAYS_INLINE As() const;
 
     template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 1>>
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
 
     template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 0>>
+    // I have added these always inline flatten attributes because before llvm stopped
+    // inlining these functions and I haven't found a better solution
+    //
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED Create();
 
     uint64_t m_value;
@@ -492,14 +499,14 @@ inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
             return v.IsPointer() && DeegenImpl_TValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                   \
         }                                                                                                                       \
                                                                                                                                 \
-        static TValue encode(PtrType* o)                                                                                        \
+        static __attribute__((always_inline, flatten)) inline TValue encode(PtrType* o)                                         \
         {                                                                                                                       \
             return TValue::CreatePointer(o);                                                                                    \
         }                                                                                                                       \
                                                                                                                                 \
-        static PtrType* decode(TValue v)                                                                                \
+        static __attribute__((always_inline, flatten)) PtrType* decode(TValue v)                                                \
         {                                                                                                                       \
-            return v.AsPointer<PtrType>().As();                                                             \
+            return v.AsPointer<PtrType>().As();                                                                                 \
         }                                                                                                                       \
     };
 
