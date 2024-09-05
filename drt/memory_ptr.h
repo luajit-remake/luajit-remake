@@ -82,9 +82,8 @@ inline uintptr_t VM_PointerToOffset(T* ptr)
 {
     AssertIsValidHeapPointer(ptr);
     uintptr_t val = reinterpret_cast<uintptr_t>(ptr);
-    constexpr uint32_t shift = 64 - x_vmBasePtrLog2Alignment;
-    val = SignExtendedShiftRight(val << shift, shift);
-    return val;
+    uintptr_t base = reinterpret_cast<uintptr_t>(VM_GetActiveVMForCurrentThread());
+    return val - base;
 }
 
 template<typename T>

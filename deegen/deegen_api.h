@@ -22,7 +22,7 @@ extern "C" void NO_RETURN DeegenImpl_ReturnNoneAndBranch();
 extern "C" void NO_RETURN DeegenImpl_MakeCall_ReportContinuationAfterCall(void* handler, void* func);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParam(void* handler, TValue arg);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParamList(void* handler, const TValue* argBegin, size_t numArgs);
-extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportTarget(void* handler, uint64_t target);
+extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportTarget(void* handler, FunctionObject* target);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportOption(void* handler, size_t option);
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallPassingVariadicResInfo();
@@ -252,7 +252,7 @@ struct MakeCallHandlerImpl<FunctionObject*, Args...>
 {
     static void NO_RETURN ALWAYS_INLINE handle(void* handler, FunctionObject* target, Args... args)
     {
-        MakeCallArgHandlerImpl<Args...>::handle(DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target)), args...);
+        MakeCallArgHandlerImpl<Args...>::handle(DeegenImpl_MakeCall_ReportTarget(handler, target), args...);
     }
 };
 
@@ -270,14 +270,14 @@ constexpr size_t x_stackFrameHeaderSlots = 4;
 template<typename... ContinuationFnArgs>
 void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, FunctionObject* target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target));
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, target);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
 }
 
 inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, FunctionObject* target, TValue* argsBegin, size_t numArgs)
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target));
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, target);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
 }

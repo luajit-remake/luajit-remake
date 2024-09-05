@@ -73,15 +73,9 @@ static bool WARN_UNUSED CheckCanHoistCallIcCheck(llvm::Value* functionObject,
                                                  llvm::BranchInst*& condBrInst /*out*/)
 {
     using namespace llvm;
-    ReleaseAssert(llvm_value_has_type<uint64_t>(functionObject));
-    PtrToIntInst* ptrToInt = dyn_cast<PtrToIntInst>(functionObject);
-    if (ptrToInt == nullptr)
-    {
-        return false;
-    }
+    ReleaseAssert(llvm_value_has_type<void*>(functionObject));
 
-    Value* ptrOperand = ptrToInt->getPointerOperand();
-    CallInst* ci = dyn_cast<CallInst>(ptrOperand);
+    CallInst* ci = dyn_cast<CallInst>(functionObject);
     if (ci == nullptr)
     {
         return false;
@@ -250,7 +244,9 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
     //
     Value* icMissCalleeCb = nullptr;
     Value* icMissCodePtr = nullptr;
-    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, tv, icMissCalleeCb /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
+    Value* func = ifi->CallDeegenCommonSnippet("UnboxTValueToFunctionObject", { tv }, updateIcBBEnd /*insertBefore*/);
+    ReleaseAssert(llvm_value_has_type<void*>(func));
+    EmitInterpreterCallIcCacheMissPopulateIcSlowPath(ifi, func, icMissCalleeCb /*out*/, icMissCodePtr /*out*/, updateIcBBEnd /*insertBefore*/);
     ReleaseAssert(icMissCalleeCb != nullptr);
     ReleaseAssert(icMissCodePtr != nullptr);
 
@@ -654,7 +650,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     ReleaseAssert(origin->getParent() != nullptr);
     Function* func = origin->getParent()->getParent();
     ReleaseAssert(func != nullptr);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(functionObject));
+    ReleaseAssert(llvm_value_has_type<void*>(functionObject));
 
     // Emit the direct call IC hit block, and push the MakeCall instance to finalRes
     //
@@ -2305,7 +2301,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     {
         ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, skipIcCreationBB);
+        Value* unboxed = CreateCallToDeegenCommonSnippet(module.get(), "UnboxTValueToFunctionObject", { tv }, skipIcCreationBB);
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { unboxed }, skipIcCreationBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", skipIcCreationBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", skipIcCreationBB);
@@ -2429,7 +2426,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
         X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, dcJitAddr /*newDest*/, insertIcDcModeBB);
 
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, insertIcDcModeBB);
+        Value* unboxed = CreateCallToDeegenCommonSnippet(module.get(), "UnboxTValueToFunctionObject", { tv }, insertIcDcModeBB);
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { unboxed }, insertIcDcModeBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcDcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcDcModeBB);
@@ -2534,7 +2532,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
         X64PatchableJumpUtil::SetDest(patchableJmpEndAddr, jitAddr /*newDest*/, insertIcCcModeBB);
 
-        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { tv }, insertIcCcModeBB);
+        Value* unboxed = CreateCallToDeegenCommonSnippet(module.get(), "UnboxTValueToFunctionObject", { tv }, insertIcCcModeBB);
+        Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(module.get(), "GetCalleeEntryPoint", { unboxed }, insertIcCcModeBB);
 
         Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", insertIcCcModeBB);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", insertIcCcModeBB);

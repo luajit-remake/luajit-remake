@@ -23,7 +23,7 @@ AstMakeCall WARN_UNUSED AstMakeCall::ParseFromApiUse(llvm::CallInst* callInst)
     item.m_passVariadicRes = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_passVariadicRes));
     item.m_isMustTailCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_isMustTailCall));
     item.m_target = callInst->getArgOperand(x_ord_target);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(item.m_target));
+    ReleaseAssert(llvm_value_has_type<void*>(item.m_target));
     item.m_callOption = static_cast<MakeCallOption>(GetValueOfLLVMConstantInt<size_t>(callInst->getArgOperand(x_ord_callOption)));
     if (item.m_isMustTailCall)
     {
@@ -103,7 +103,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::CreatePlaceholderFunction(llvm::Module*
     argTypes.push_back(llvm_type_of<bool>(ctx));
     argTypes.push_back(llvm_type_of<bool>(ctx));
     argTypes.push_back(llvm_type_of<bool>(ctx));
-    argTypes.push_back(llvm_type_of<uint64_t>(ctx));
+    argTypes.push_back(llvm_type_of<void*>(ctx));
     argTypes.push_back(llvm_type_of<void*>(ctx));
     argTypes.push_back(llvm_type_of<uint64_t>(ctx));
 
@@ -259,7 +259,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
         }
 
         ReleaseAssert(md[x_ord_target] != nullptr);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(md[x_ord_target]));
+        ReleaseAssert(llvm_value_has_type<void*>(md[x_ord_target]));
 
         ReleaseAssert(md[x_ord_continuation] != nullptr);
         if (item.m_isMustTailCall)

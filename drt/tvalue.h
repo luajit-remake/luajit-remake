@@ -252,7 +252,9 @@ struct TValue
     template<typename T>
     static TValue WARN_UNUSED CreatePointer(T* ptr)
     {
-        return CreatePointer(UserHeapPointer<T> { ptr });
+        TValue result { static_cast<uint64_t>(VM_PointerToOffset(ptr)) };
+        assert(result.AsPointer<T>() == ptr);
+        return result;
     }
 
     static constexpr TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
@@ -1061,6 +1063,7 @@ auto WARN_UNUSED ALWAYS_INLINE TValue::As() const
 }
 
 template<typename T, typename>
+__attribute__((always_inline, flatten)) inline
 TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val)
 {
     static_assert(IsValidTypeSpecialization<T>);

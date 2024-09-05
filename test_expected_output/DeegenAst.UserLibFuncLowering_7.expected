@@ -22,20 +22,15 @@ define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn
   store i32 0, ptr %20, align 8, !tbaa !10
   %21 = getelementptr i8, ptr %1, i64 28
   store i32 0, ptr %21, align 4, !tbaa !11
-  %22 = load i64, ptr %1, align 8
-  %23 = ptrtoint ptr %7 to i64
-  %24 = add i64 %22, %23
-  %25 = shl i64 %24, 29
-  %26 = ashr exact i64 %25, 29
-  %27 = add i64 %26, %23
-  %28 = inttoptr i64 %27 to ptr
-  %29 = load i32, ptr %28, align 4, !tbaa !12
-  %30 = zext i32 %29 to i64
-  %31 = add i64 %30, %23
-  %32 = inttoptr i64 %31 to ptr
-  %33 = getelementptr inbounds %0, ptr %32, i64 0, i32 4
-  %34 = load ptr, ptr %33, align 8, !tbaa !14
-  musttail call ghccc void %34(ptr %0, ptr nonnull %17, ptr null, ptr %32, i64 %4, ptr undef, i64 0, ptr %7, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %22 = load ptr, ptr %1, align 8
+  %23 = load i32, ptr %22, align 4, !tbaa !12
+  %24 = zext i32 %23 to i64
+  %25 = ptrtoint ptr %7 to i64
+  %26 = add i64 %24, %25
+  %27 = inttoptr i64 %26 to ptr
+  %28 = getelementptr inbounds %0, ptr %27, i64 0, i32 4
+  %29 = load ptr, ptr %28, align 8, !tbaa !14
+  musttail call ghccc void %29(ptr %0, ptr nonnull %17, ptr null, ptr %27, i64 %4, ptr undef, i64 0, ptr %7, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 

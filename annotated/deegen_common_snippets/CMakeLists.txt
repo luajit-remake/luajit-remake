@@ -61,6 +61,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
   get_cb_from_u32.cpp
+  unbox_tvalue_to_function_object.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

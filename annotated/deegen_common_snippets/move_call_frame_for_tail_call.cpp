@@ -5,7 +5,7 @@
 
 // Returns the updated stack frame base
 //
-static void* DeegenSnippet_MoveCallFrameForTailCall(void* stackBase, uint64_t target, uint64_t numArgs)
+static void* DeegenSnippet_MoveCallFrameForTailCall(void* stackBase, FunctionObject* target, uint64_t numArgs)
 {
     // This is lame.. We cannot use StackFrameHeader::GetStackFrameHeader because it's an external function call,
     // and we are not running optimization pass before extraction for this function..

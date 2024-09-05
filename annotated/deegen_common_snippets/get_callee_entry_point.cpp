@@ -3,9 +3,9 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static std::pair<ExecutableCode*, void*> DeegenSnippet_GetCalleeEntryPoint(TValue tv)
+static std::pair<ExecutableCode*, void*> DeegenSnippet_GetCalleeEntryPoint(FunctionObject* func)
 {
-    ExecutableCode* ec = tv.As<tFunction>()->m_executable.As();
+    ExecutableCode* ec = reinterpret_cast<ExecutableCode*>(func->m_executable.As());
     void* entrypoint = ec->m_bestEntryPoint;
     return std::make_pair(ec, entrypoint);
 }
