@@ -506,9 +506,9 @@ public:
     static VM* WARN_UNUSED Create();
     void Destroy();
 
-    static VM* GetActiveVMForCurrentThread()
+    static __attribute__((always_inline, flatten)) VM* GetActiveVMForCurrentThread()
     {
-        return VM_GetActiveVMForCurrentThread();
+        return reinterpret_cast<VM*>(DeegenImpl_GetVMBasePointer());
     }
 
     HeapPtrTranslator GetHeapPtrTranslator() const

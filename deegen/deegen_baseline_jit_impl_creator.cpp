@@ -108,10 +108,6 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     //
     RunTagRegisterOptimizationPass(m_wrapper);
 
-    // Now, run the vm base pointer optimization pass
-    //
-    RunVMBasePointerOptimizationPass(m_wrapper);
-
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
     // Run the stencil runtime constant insertion pass if this function is for the JIT
@@ -129,6 +125,10 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     //
     DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
     DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(m_module.get());
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
 

@@ -477,7 +477,7 @@ struct tInt32
 // same value for the same pointer, since this fact comes from high-level knowledge of the system.
 // So we manually add 'readnone' (which is GCC/Clang attribute '__const__') to this function.
 //
-inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGetPointerType(TValue v)
+inline HeapEntityType WARN_UNUSED __attribute__((__const__, always_inline, flatten)) DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 }

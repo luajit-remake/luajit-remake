@@ -10,7 +10,7 @@ class VM;
 //
 static constexpr uintptr_t x_segmentRegisterSelfReferencingOffset = 0;
 
-extern "C" void* WARN_UNUSED DeegenImpl_GetVMBasePointer();
+extern "C" void* __attribute__((__const__)) WARN_UNUSED DeegenImpl_GetVMBasePointer();
 extern thread_local VM* activeVMForCurrentThread;
 
 // Same as VM::GetActiveVMForCurrentThread(), but no need to include vm.h

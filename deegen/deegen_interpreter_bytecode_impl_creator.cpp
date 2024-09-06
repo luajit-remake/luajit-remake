@@ -410,10 +410,6 @@ void InterpreterBytecodeImplCreator::DoLowering()
     //
     RunTagRegisterOptimizationPass(m_wrapper);
 
-    // Now, run the vm base pointer optimization pass
-    //
-    RunVMBasePointerOptimizationPass(m_wrapper);
-
     // Run LLVM optimization pass
     //
     RunLLVMOptimizePass(m_module.get());
@@ -422,6 +418,10 @@ void InterpreterBytecodeImplCreator::DoLowering()
     //
     DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
     DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(m_module.get());
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: our caller will fix up the linkage for us.
