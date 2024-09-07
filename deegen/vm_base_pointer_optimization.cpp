@@ -9,6 +9,8 @@ void dast::RunVMBasePointerOptimizationPass(llvm::Function* func)
     std::vector<CallInst*> removeList;
 
     for (Function::iterator b = func->begin(), be = func->end(); b != be; ++b) {
+        func->getArg(7)->setName("vmBasePointer");
+
         for (BasicBlock::iterator i = b->begin(), ie = b->end(); i != ie; ++i) {
             CallInst* ci = dyn_cast<CallInst>(i);
             if (!ci)

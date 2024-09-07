@@ -9,34 +9,34 @@ target triple = "x86_64-unknown-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, ptr %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 section "deegen_interpreter_code_section_hot" {
-  %15 = getelementptr %0, ptr %1, i64 -1, i32 1
-  %16 = load ptr, ptr %15, align 8, !tbaa !2
-  %17 = getelementptr %0, ptr %1, i64 -1, i32 3
-  %18 = load i32, ptr %17, align 4, !tbaa !9
-  %19 = zext i32 %18 to i64
-  %20 = ptrtoint ptr %5 to i64
-  %21 = add i64 %19, %20
-  %22 = inttoptr i64 %21 to ptr
-  %23 = getelementptr inbounds %0, ptr %16, i64 -1
-  %24 = load ptr, ptr %23, align 8, !tbaa !10
-  %25 = load i32, ptr %24, align 4, !tbaa !11
-  %26 = zext i32 %25 to i64
-  %27 = add i64 %26, %20
-  %28 = inttoptr i64 %27 to ptr
-  %29 = getelementptr inbounds i8, ptr %22, i64 2
-  %30 = load i32, ptr %29, align 1
-  %outputSlot = zext i32 %30 to i64
-  %31 = getelementptr inbounds i64, ptr %retStart, i64 1
-  %32 = load i64, ptr %31, align 8
-  %33 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %32, ptr %33, align 8
-  %34 = getelementptr inbounds i8, ptr %22, i64 10
-  %35 = load i16, ptr %34, align 1
-  %36 = zext i16 %35 to i64
-  %37 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %36
-  %38 = load ptr, ptr %37, align 8
-  musttail call ghccc void %38(ptr %0, ptr %16, ptr nonnull %34, ptr %28, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
+define dso_local ghccc void @__deegen_interpreter_op_test2_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, ptr %vmBasePointer, i64 %5, i64 %6, double %7, double %8, double %9, double %10, double %11, double %12) #0 section "deegen_interpreter_code_section_hot" {
+  %14 = getelementptr %0, ptr %1, i64 -1, i32 1
+  %15 = load ptr, ptr %14, align 8, !tbaa !2
+  %16 = getelementptr %0, ptr %1, i64 -1, i32 3
+  %17 = load i32, ptr %16, align 4, !tbaa !9
+  %18 = zext i32 %17 to i64
+  %19 = ptrtoint ptr %vmBasePointer to i64
+  %20 = add i64 %19, %18
+  %21 = inttoptr i64 %20 to ptr
+  %22 = getelementptr inbounds %0, ptr %15, i64 -1
+  %23 = load ptr, ptr %22, align 8, !tbaa !10
+  %24 = load i32, ptr %23, align 4, !tbaa !11
+  %25 = zext i32 %24 to i64
+  %26 = add i64 %25, %19
+  %27 = inttoptr i64 %26 to ptr
+  %28 = getelementptr inbounds i8, ptr %21, i64 2
+  %29 = load i32, ptr %28, align 1
+  %outputSlot = zext i32 %29 to i64
+  %30 = getelementptr inbounds i64, ptr %retStart, i64 1
+  %31 = load i64, ptr %30, align 8
+  %32 = getelementptr inbounds i64, ptr %15, i64 %outputSlot
+  store i64 %31, ptr %32, align 8
+  %33 = getelementptr inbounds i8, ptr %21, i64 10
+  %34 = load i16, ptr %33, align 1
+  %35 = zext i16 %34 to i64
+  %36 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %35
+  %37 = load ptr, ptr %36, align 8
+  musttail call ghccc void %37(ptr %0, ptr %15, ptr nonnull %33, ptr %27, i64 %4, ptr undef, i64 undef, ptr %vmBasePointer, i64 undef, i64 %6, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 

@@ -9,44 +9,44 @@ target triple = "x86_64-unknown-linux-gnu"
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, ptr %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 section "deegen_interpreter_code_section_hot" {
-  %15 = getelementptr %0, ptr %1, i64 -1, i32 1
-  %16 = load ptr, ptr %15, align 8, !tbaa !2
-  %17 = getelementptr %0, ptr %1, i64 -1, i32 3
-  %18 = load i32, ptr %17, align 4, !tbaa !9
-  %19 = getelementptr inbounds %0, ptr %16, i64 -1
-  %20 = load ptr, ptr %19, align 8, !tbaa !10
-  %21 = load i32, ptr %20, align 4, !tbaa !11
-  %22 = tail call noundef ptr @_Z2d1v() #4
-  %23 = tail call noundef i64 @_Z2a1v() #4
-  %24 = icmp ugt i64 %23, %numRet
-  %25 = tail call i64 @llvm.umin.i64(i64 %numRet, i64 %23)
-  %26 = shl i64 %25, 3
-  tail call void @llvm.memmove.p0.p0.i64(ptr align 8 %22, ptr align 8 %retStart, i64 %26, i1 false)
-  br i1 %24, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
+define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, ptr %vmBasePointer, i64 %5, i64 %6, double %7, double %8, double %9, double %10, double %11, double %12) #0 section "deegen_interpreter_code_section_hot" {
+  %14 = getelementptr %0, ptr %1, i64 -1, i32 1
+  %15 = load ptr, ptr %14, align 8, !tbaa !2
+  %16 = getelementptr %0, ptr %1, i64 -1, i32 3
+  %17 = load i32, ptr %16, align 4, !tbaa !9
+  %18 = getelementptr inbounds %0, ptr %15, i64 -1
+  %19 = load ptr, ptr %18, align 8, !tbaa !10
+  %20 = load i32, ptr %19, align 4, !tbaa !11
+  %21 = tail call noundef ptr @_Z2d1v() #4
+  %22 = tail call noundef i64 @_Z2a1v() #4
+  %23 = icmp ugt i64 %22, %numRet
+  %24 = tail call i64 @llvm.umin.i64(i64 %numRet, i64 %22)
+  %25 = shl i64 %24, 3
+  tail call void @llvm.memmove.p0.p0.i64(ptr align 8 %21, ptr align 8 %retStart, i64 %25, i1 false)
+  br i1 %23, label %.lr.ph.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
 
-.lr.ph.i:                                         ; preds = %.lr.ph.i, %14
-  %.014.reg2mem.0.i = phi i64 [ %28, %.lr.ph.i ], [ %numRet, %14 ]
-  %27 = getelementptr inbounds i64, ptr %22, i64 %.014.reg2mem.0.i
-  store i64 %7, ptr %27, align 8, !tbaa !13
-  %28 = add nuw i64 %.014.reg2mem.0.i, 1
-  %exitcond.not.i = icmp eq i64 %28, %23
+.lr.ph.i:                                         ; preds = %.lr.ph.i, %13
+  %.014.reg2mem.0.i = phi i64 [ %27, %.lr.ph.i ], [ %numRet, %13 ]
+  %26 = getelementptr inbounds i64, ptr %21, i64 %.014.reg2mem.0.i
+  store i64 %6, ptr %26, align 8, !tbaa !13
+  %27 = add nuw i64 %.014.reg2mem.0.i, 1
+  %exitcond.not.i = icmp eq i64 %27, %22
   br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.lr.ph.i, !llvm.loop !15
 
-__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit: ; preds = %.lr.ph.i, %14
-  %29 = zext i32 %21 to i64
-  %30 = ptrtoint ptr %5 to i64
-  %31 = add i64 %29, %30
-  %32 = inttoptr i64 %31 to ptr
-  %33 = zext i32 %18 to i64
-  %34 = add i64 %33, %30
-  %35 = inttoptr i64 %34 to ptr
-  %36 = getelementptr inbounds i8, ptr %35, i64 6
-  %37 = load i16, ptr %36, align 1
-  %38 = zext i16 %37 to i64
-  %39 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %38
-  %40 = load ptr, ptr %39, align 8
-  musttail call ghccc void %40(ptr %0, ptr %16, ptr nonnull %36, ptr %32, i64 %4, ptr undef, i64 undef, ptr %5, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #4
+__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit: ; preds = %.lr.ph.i, %13
+  %28 = zext i32 %20 to i64
+  %29 = ptrtoint ptr %vmBasePointer to i64
+  %30 = add i64 %29, %28
+  %31 = inttoptr i64 %30 to ptr
+  %32 = zext i32 %17 to i64
+  %33 = add i64 %29, %32
+  %34 = inttoptr i64 %33 to ptr
+  %35 = getelementptr inbounds i8, ptr %34, i64 6
+  %36 = load i16, ptr %35, align 1
+  %37 = zext i16 %36 to i64
+  %38 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %37
+  %39 = load ptr, ptr %38, align 8
+  musttail call ghccc void %39(ptr %0, ptr %15, ptr nonnull %35, ptr %31, i64 %4, ptr undef, i64 undef, ptr %vmBasePointer, i64 undef, i64 %6, double undef, double undef, double undef, double undef, double undef, double undef) #4
   ret void
 }
 
