@@ -17,8 +17,8 @@ static void NO_RETURN ForLoopInitSlowPath(TValue* base)
         }
         else if (v.Is<tString>())
         {
-            HeapPtr<HeapString> hs = v.As<tString>();
-            uint8_t* str = TranslateToRawPointer(hs->m_string);
+            HeapString* hs = v.As<tString>();
+            uint8_t* str = hs->m_string;
             uint32_t len = hs->m_length;
             StrScanResult r = TryConvertStringToDoubleWithLuaSemantics(str, len);
             if (r.fmt == STRSCAN_ERROR)

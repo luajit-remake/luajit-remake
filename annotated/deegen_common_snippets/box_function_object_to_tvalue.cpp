@@ -3,9 +3,8 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static TValue DeegenSnippet_BoxFunctionObjectToTValue(uint64_t func64)
+static TValue DeegenSnippet_BoxFunctionObjectToTValue(FunctionObject* func)
 {
-    HeapPtr<FunctionObject> func = reinterpret_cast<HeapPtr<FunctionObject>>(func64);
     return TValue::Create<tFunction>(func);
 }
 

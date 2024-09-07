@@ -54,7 +54,7 @@ TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
     else
     {
         assert(badValue.IsPointer());
-        UserHeapGcObjectHeader* p = TranslateToRawPointer(badValue.AsPointer<UserHeapGcObjectHeader>().As());
+        UserHeapGcObjectHeader* p = badValue.AsPointer<UserHeapGcObjectHeader>().As();
         if (p->m_type == HeapEntityType::String)
         {
             makeMsg("string");
@@ -90,12 +90,12 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
 {
     assert(ucb->m_bytecodeMetadataLength % 8 == 0);
     size_t sizeToAllocate = GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength + sizeof(TValue) * ucb->m_cstTableLength + RoundUpToMultipleOf<8>(ucb->m_bytecodeLengthIncludingTailPadding);
-    uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
+    uint8_t* addressBegin = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>();
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
 
     CodeBlock* cb = reinterpret_cast<CodeBlock*>(addressBegin + sizeof(TValue) * ucb->m_cstTableLength);
     ConstructInPlace(cb);
-    cb->SystemHeapGcObjectHeader::Populate<ExecutableCode*>(cb);
+    cb->SystemHeapGcObjectHeader::Populate<ExecutableCode>(cb);
     cb->m_executableCodeKind = Kind::BytecodeFunction;
     cb->m_hasVariadicArguments = ucb->m_hasVariadicArguments;
     cb->m_numFixedArguments = ucb->m_numFixedArguments;
@@ -183,12 +183,12 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
     return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
 }
 
-UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
+UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
-    HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
-    assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
-    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
+    FunctionObject* r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
+    assert(parent->m_executable.As()->IsBytecodeFunction());
+    assert(cb->m_owner->m_parent == static_cast<CodeBlock*>(parent->m_executable.As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
     UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
     for (uint32_t ord = 0; ord < numUpvalues; ord++)
@@ -211,7 +211,7 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             }
             else
             {
-                HeapPtr<Upvalue> uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
+                Upvalue* uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
                 uv = TValue::CreatePointer(uvPtr);
             }
         }
@@ -220,14 +220,14 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
             uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
         }
         AssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
-        TCSet(r->m_upvalues[ord], uv);
+        r->m_upvalues[ord] = uv;
     }
     return r;
 }
 
 CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer<TableObject> globalObject, size_t numStackSlots)
 {
-    CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
+    CoroutineRuntimeContext* r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>();
     UserHeapGcObjectHeader::Populate(r);
     r->m_hiddenClass = x_hiddenClassForCoroutineRuntimeContext;
     r->m_coroutineStatus = CoroutineStatus::CreateInitStatus();
@@ -265,7 +265,7 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
     sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
-    uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
+    uint8_t* addressBegin = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>();
     memcpy(addressBegin, cb->m_owner->m_cstTable, sizeof(TValue) * numEntriesInConstantTable);
 
     BaselineCodeBlock* res = reinterpret_cast<BaselineCodeBlock*>(addressBegin + sizeof(TValue) * numEntriesInConstantTable);
@@ -289,7 +289,7 @@ BaselineCodeBlock* WARN_UNUSED BaselineCodeBlock::Create(CodeBlock* cb,
 JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
                                                                      ExecutableCode* targetExecutableCode,
                                                                      SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
-                                                                     HeapPtr<void> entity,
+                                                                     void* entity,
                                                                      size_t icTraitKind)
 {
     JitCallInlineCacheEntry* entry = vm->AllocateFromSpdsRegionUninitialized<JitCallInlineCacheEntry>();
@@ -301,7 +301,7 @@ JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
 
     AssertImp(trait->m_isDirectCallMode, entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
     AssertImp(!trait->m_isDirectCallMode, !entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
-    AssertImp(!trait->m_isDirectCallMode, targetExecutableCode == TranslateToRawPointer(vm, entity));
+    AssertImp(!trait->m_isDirectCallMode, targetExecutableCode == entity);
 
     void* regionVoidPtr = vm->GetJITMemoryAlloc()->AllocateGivenStepping(trait->m_jitCodeAllocationLengthStepping);
 
@@ -324,7 +324,7 @@ JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
 
 void JitCallInlineCacheEntry::Destroy(VM* vm)
 {
-    AssertIff(IsOnDoublyLinkedList(), GetTargetExecutableCode(vm)->IsBytecodeFunction());
+    AssertIff(IsOnDoublyLinkedList(), GetTargetExecutableCode()->IsBytecodeFunction());
     if (IsOnDoublyLinkedList())
     {
         RemoveFromDoublyLinkedList();
@@ -333,11 +333,11 @@ void JitCallInlineCacheEntry::Destroy(VM* vm)
     vm->DeallocateSpdsRegionObject(this);
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, FunctionObject* func, uint8_t* transitedToCCMode /*out*/)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::DirectCall);
-    assert(tv.Is<tFunction>());
+    assert(reinterpret_cast<UserHeapGcObjectHeader*>(func)->m_type == HeapEntityType::Function);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
 
@@ -345,11 +345,11 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     //
     uint16_t bloomFilterMask;
     {
-        uint64_t hashValue64 = HashPrimitiveTypes(tv.As<tFunction>()->m_executable.m_value);
+        uint64_t hashValue64 = HashPrimitiveTypes(func->m_executable.m_value);
         bloomFilterMask = static_cast<uint16_t>((1 << (hashValue64 & 15)) | (1 << ((hashValue64 >> 8) & 15)));
     }
 
-    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* targetEc = func->m_executable.As();
 
     // Figure out if we shall transition to closure call mode, we do this when we notice that
     // the passed-in call target has the same ExecutableCode as an existing cached target
@@ -357,19 +357,19 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     bool shouldTransitToCCMode = false;
     if (unlikely((m_bloomFilter & bloomFilterMask) == bloomFilterMask))
     {
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         // if the IC site is empty, m_bloomFilter should be 0 and the above check shall never pass
         //
         assert(!linkListNode.IsInvalidPtr());
         do {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            JitCallInlineCacheEntry* entry = linkListNode.AsPtr();
             assert(entry->GetIcTraitKind() == dcIcTraitKind);
-            if (entry->GetTargetExecutableCodeKnowingDirectCall(vm) == targetEc)
+            if (entry->GetTargetExecutableCodeKnowingDirectCall() == targetEc)
             {
                 shouldTransitToCCMode = true;
                 break;
             }
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         } while (!linkListNode.IsInvalidPtr());
     }
 
@@ -380,20 +380,20 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     {
         std::unordered_set<ExecutableCode*> checkUnique;
         bool goldDecision = false;
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         while (!linkListNode.IsInvalidPtr())
         {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            JitCallInlineCacheEntry* entry = linkListNode.AsPtr();
             assert(entry->GetIcTraitKind() == dcIcTraitKind);
 
             // We should never reach here if the IC ought to hit
             //
             assert(entry->m_entity.IsUserHeapPointer());
-            assert(entry->m_entity.As() != tv.As<tFunction>());
+            assert(entry->m_entity.As() != func);
 
             // All the ExecutableCode in the IC list should be distinct
             //
-            ExecutableCode* ec = entry->GetTargetExecutableCodeKnowingDirectCall(vm);
+            ExecutableCode* ec = entry->GetTargetExecutableCodeKnowingDirectCall();
             assert(!checkUnique.count(ec));
             checkUnique.insert(ec);
 
@@ -402,7 +402,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
                 goldDecision = true;
             }
 
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         }
         assert(checkUnique.size() == m_numEntries);
         assert(goldDecision == shouldTransitToCCMode);
@@ -418,10 +418,10 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
 
         JitCallInlineCacheEntry* newEntry = JitCallInlineCacheEntry::Create(vm,
                                                                             targetEc,
-                                                                            TCGet(m_linkedListHead) /*callSiteNextNode*/,
-                                                                            tv.As<tFunction>(),
+                                                                            m_linkedListHead /*callSiteNextNode*/,
+                                                                            func,
                                                                             dcIcTraitKind);
-        TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { newEntry });
+        m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { newEntry };
 
         *transitedToCCMode = 0;
         return newEntry->GetJitRegionStart();
@@ -432,11 +432,11 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     {
         // Invalidate all existing ICs
         //
-        SpdsPtr<JitCallInlineCacheEntry> node = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> node = m_linkedListHead;
         assert(!node.IsInvalidPtr());
         do {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, node.AsPtr());
-            node = TCGet(entry->m_callSiteNextNode);
+            JitCallInlineCacheEntry* entry = node.AsPtr();
+            node = entry->m_callSiteNextNode;
             entry->Destroy(vm);
         } while (!node.IsInvalidPtr());
     }
@@ -446,9 +446,9 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
                                                                      targetEc,
                                                                      SpdsPtr<JitCallInlineCacheEntry> { 0 } /*callSiteNextNode*/,
-                                                                     TranslateToHeapPtr(targetEc),
+                                                                     targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
-    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { entry };
     m_mode = (m_numEntries > 1) ? Mode::ClosureCallWithMoreThanOneTargetObserved : Mode::ClosureCall;
     m_numEntries = 1;
     m_bloomFilter = 0;
@@ -457,30 +457,30 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
     return entry->GetJitRegionStart();
 }
 
-void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv)
+void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, FunctionObject* func)
 {
     assert(m_numEntries < x_maxEntries);
     assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
-    assert(tv.Is<tFunction>());
+    assert(reinterpret_cast<UserHeapGcObjectHeader*>(func)->m_type == HeapEntityType::Function);
 
     VM* vm = VM::GetActiveVMForCurrentThread();
-    ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
+    ExecutableCode* targetEc = func->m_executable.As();
 
 #ifndef NDEBUG
     // In debug mode, validate that assorted information of the linked list is as expected
     //
     {
         std::unordered_set<ExecutableCode*> checkUnique;
-        SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
+        SpdsPtr<JitCallInlineCacheEntry> linkListNode = m_linkedListHead;
         while (!linkListNode.IsInvalidPtr())
         {
-            JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
+            JitCallInlineCacheEntry* entry = linkListNode.AsPtr();
             assert(entry->GetIcTraitKind() == dcIcTraitKind + 1);
             assert(!entry->GetIcTrait()->m_isDirectCallMode);
 
             // We should never reach here if the IC ought to hit
             //
-            ExecutableCode* ec = entry->GetTargetExecutableCode(vm);
+            ExecutableCode* ec = entry->GetTargetExecutableCode();
             assert(ec != targetEc);
 
             // All the ExecutableCode in the IC list should be distinct
@@ -488,7 +488,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
             assert(!checkUnique.count(ec));
             checkUnique.insert(ec);
 
-            linkListNode = TCGet(entry->m_callSiteNextNode);
+            linkListNode = entry->m_callSiteNextNode;
         }
         assert(checkUnique.size() == m_numEntries);
     }
@@ -498,10 +498,10 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
     //
     JitCallInlineCacheEntry* entry = JitCallInlineCacheEntry::Create(vm,
                                                                      targetEc,
-                                                                     TCGet(m_linkedListHead) /*callSiteNextNode*/,
-                                                                     TranslateToHeapPtr(targetEc),
+                                                                     m_linkedListHead /*callSiteNextNode*/,
+                                                                     targetEc,
                                                                      dcIcTraitKind + 1 /*icTraitKind*/);
-    TCSet(m_linkedListHead, SpdsPtr<JitCallInlineCacheEntry> { entry });
+    m_linkedListHead = SpdsPtr<JitCallInlineCacheEntry> { entry };
     m_numEntries++;
     return entry->GetJitRegionStart();
 }

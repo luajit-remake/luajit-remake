@@ -17,6 +17,7 @@ add_library(deegen_rt
 	dfg_construct_block_local_ssa.cpp
 	dfg_trivial_cfg_cleanup.cpp
 	dfg_phantom_insertion.cpp
+	memory_ptr.cpp
 )
 
 add_dependencies(deegen_rt 

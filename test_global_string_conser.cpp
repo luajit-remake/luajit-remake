@@ -6,13 +6,12 @@ namespace {
 void CheckStringObjectIsAsExpected(UserHeapPointer<HeapString> p, const void* expectedStr, size_t expectedLen)
 {
     uint64_t expectedHash = HashString(expectedStr, expectedLen);
-    HeapPtr<HeapString> s = p.As<HeapString>();
+    HeapString* s = p.As<HeapString>();
     ReleaseAssert(s->m_type == HeapEntityType::String);
     ReleaseAssert(static_cast<size_t>(s->m_length) == expectedLen);
     ReleaseAssert(s->m_hashHigh == static_cast<uint8_t>(expectedHash >> 56));
     ReleaseAssert(s->m_hashLow == static_cast<uint32_t>(expectedHash));
-    void* ptr = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator().TranslateToRawPtr(s->m_string);
-    ReleaseAssert(memcmp(ptr, expectedStr, expectedLen) == 0);
+    ReleaseAssert(memcmp(s->m_string, expectedStr, expectedLen) == 0);
 }
 
 TEST(GlobalStringHashConser, Sanity)

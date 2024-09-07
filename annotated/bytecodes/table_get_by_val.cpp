@@ -9,12 +9,12 @@ static void NO_RETURN TableGetByValMetamethodCallContinuation(TValue /*base*/, T
     Return(GetReturnValue(0));
 }
 
-static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromTableObject(HeapPtr<TableObject> tableObj)
+static std::pair<bool, TValue> WARN_UNUSED ALWAYS_INLINE GetIndexMetamethodFromTableObject(TableObject* tableObj)
 {
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -34,7 +34,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
 static void NO_RETURN Int64IndexCheckMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue base)
 {
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = base.As<tTable>();
     while (true)
     {
         // The invariant here is 'base' is table 'tableObj', 'base[index]' is nil, and we should check its metatable
@@ -89,7 +89,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = base.As<tTable>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, UserHeapPointer<void> { tvIndex.As<tHeapEntity>() }, icInfo);
@@ -129,7 +129,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = base.As<tTable>();
 
                 TValue result;
                 if (unlikely(IsNaN(idx)))
@@ -149,7 +149,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
                     if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap ||
                         icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap)
                     {
-                        assert(TCGet(tableObj->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+                        assert(tableObj->m_arrayType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
                         result = TableObject::QueryArraySparseMap(tableObj, idx);
                     }
                     else
@@ -208,7 +208,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue /*bc_base*/, TValue /*b
             while (true)
             {
                 assert(base.Is<tTable>());
-                HeapPtr<TableObject> tableObj = base.As<tTable>();
+                TableObject* tableObj = base.As<tTable>();
 
                 TValue result;
                 if (specialKey.m_value == 0)
@@ -304,7 +304,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue tv
         // tvIndex is a double that represents a int64_t value
         //
         assert(base.Is<tTable>());
-        HeapPtr<TableObject> tableObj = base.As<tTable>();
+        TableObject* tableObj = base.As<tTable>();
         GetByIntegerIndexICInfo icInfo;
         TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
         TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -343,7 +343,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
     {
         if (likely(base.Is<tHeapEntity>()))
         {
-            HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+            TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();
@@ -401,7 +401,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap: {
                     return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        assert(heapEntity->m_arrayType.HasSparseMap());
                         auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {
@@ -422,7 +422,7 @@ static void NO_RETURN TableGetByValImpl(TValue base, TValue tvIndex)
                 case GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap: {
                     return ic->Effect([heapEntity, index, c_resKind]() {
                         IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                        assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                        assert(heapEntity->m_arrayType.HasSparseMap());
                         auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                         if (success)
                         {

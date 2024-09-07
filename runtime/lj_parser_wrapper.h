@@ -22,7 +22,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, const char*
 // Parse Lua script obtained by tab[1] .. tab[length]
 // Each TValue must be a string
 //
-ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, HeapPtr<TableObject> tab, uint32_t length);
+ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, TableObject* tab, uint32_t length);
 
 ParseResult WARN_UNUSED ParseLuaScriptFromFile(CoroutineRuntimeContext* ctx, const char* fileName);
 

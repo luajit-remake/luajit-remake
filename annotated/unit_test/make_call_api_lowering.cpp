@@ -3,7 +3,7 @@
 #include "api_define_bytecode.h"
 #include "deegen_api.h"
 
-HeapPtr<FunctionObject> callee();
+FunctionObject* callee();
 
 TValue a1();
 TValue a2();
@@ -65,7 +65,7 @@ DEEGEN_DEFINE_BYTECODE(test3)
 static void NO_RETURN fn4()
 {
     TValue* r = r1();
-    MakeInPlaceCall((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1(), rc);
+    MakeInPlaceCall(*reinterpret_cast<FunctionObject**>(r - x_numSlotsForStackFrameHeader), r, s1(), rc);
 }
 
 DEEGEN_DEFINE_BYTECODE(test4)
@@ -79,7 +79,7 @@ DEEGEN_DEFINE_BYTECODE(test4)
 static void NO_RETURN fn5()
 {
     TValue* r = r1();
-    MakeInPlaceCallPassingVariadicRes((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1(), rc);
+    MakeInPlaceCallPassingVariadicRes(*reinterpret_cast<FunctionObject**>(r - x_numSlotsForStackFrameHeader), r, s1(), rc);
 }
 
 DEEGEN_DEFINE_BYTECODE(test5)
@@ -171,7 +171,7 @@ DEEGEN_DEFINE_BYTECODE(test11)
 static void NO_RETURN fn12()
 {
     TValue* r = r1();
-    MakeInPlaceTailCall((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1());
+    MakeInPlaceTailCall(*reinterpret_cast<FunctionObject**>(r - x_numSlotsForStackFrameHeader), r, s1());
 }
 
 DEEGEN_DEFINE_BYTECODE(test12)
@@ -185,7 +185,7 @@ DEEGEN_DEFINE_BYTECODE(test12)
 static void NO_RETURN fn13()
 {
     TValue* r = r1();
-    MakeInPlaceTailCallPassingVariadicRes((r - x_numSlotsForStackFrameHeader)->As<tFunction>(), r, s1());
+    MakeInPlaceTailCallPassingVariadicRes(*reinterpret_cast<FunctionObject**>(r - x_numSlotsForStackFrameHeader), r, s1());
 }
 
 DEEGEN_DEFINE_BYTECODE(test13)

@@ -56,7 +56,8 @@ add_library(deegen_utils
   deegen_analyze_read_locations.cpp
   deegen_jit_slow_path_data.cpp
   deegen_jit_impl_creator_base.cpp
-) 
+  vm_base_pointer_optimization.cpp
+)
 
 # Build the main Futamura projection stage binary
 #
@@ -69,11 +70,11 @@ add_executable(fps
   fps_process_bytecode_definition_for_baseline_jit.cpp
   fps_generate_baseline_jit_function_entry_logic.cpp
   fps_process_bytecode_definition_for_dfg_jit.cpp
+  ../drt/memory_ptr.cpp # TODO: this is a stupid hack find a solution
 )
 
 target_link_libraries(fps PUBLIC
   -Wl,--start-group
-  common_utils
   deegen_utils
   deegen_common_snippet_ir
   -Wl,--end-group

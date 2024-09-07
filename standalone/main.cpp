@@ -32,7 +32,7 @@ static void LaunchScript(int argc, char** argv)
     //     The script name is stored at index 0, the first argument after the script name goes to index 1, and so on.
     //     Any arguments before the script name (that is, the interpreter name plus the options) go to negative indices.
     //
-    HeapPtr<TableObject> arg = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCapacity*/, static_cast<uint32_t>(argc) /*arrayCapacity*/);
+    TableObject* arg = TableObject::CreateEmptyTableObject(vm, 0U /*inlineCapacity*/, static_cast<uint32_t>(argc) /*arrayCapacity*/);
     // TODO: this needs to be changed when we support options
     //
     for (int i = 0; i < argc; i++)
@@ -43,7 +43,7 @@ static void LaunchScript(int argc, char** argv)
 
     {
         UserHeapPointer<void> strArg = vm->CreateStringObjectFromRawCString("arg");
-        HeapPtr<TableObject> globalObj = vm->GetRootGlobalObject();
+        TableObject* globalObj = vm->GetRootGlobalObject();
         PutByIdICInfo info;
         TableObject::PreparePutByIdForGlobalObject(globalObj, strArg, info);
         TableObject::PutById(globalObj, strArg, TValue::Create<tTable>(arg), info);

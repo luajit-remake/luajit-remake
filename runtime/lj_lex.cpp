@@ -433,7 +433,7 @@ static LexToken lex_scan(LexState* ls, TValue* tv)
             TValue tvStr = lj_parse_keepstr(ls, ls->sb->Begin(), ls->sb->Len());
             *tv = tvStr;
             assert(tvStr.Is<tString>());
-            HeapPtr<HeapString> s = tvStr.As<tString>();
+            HeapString* s = tvStr.As<tString>();
             if (HeapString::IsReservedWord(s) > 0) /* Reserved word? */
             {
                 return TK_OFS + HeapString::GetReservedWordOrdinal(s) + 1;
@@ -670,7 +670,7 @@ void lj_lex_init(VM* vm)
     uint32_t i;
     for (i = 0; i < TK_RESERVED; i++)
     {
-        HeapPtr<HeapString> s = vm->CreateStringObjectFromRawCString(tokennames[i]);
+        HeapString* s = vm->CreateStringObjectFromRawCString(tokennames[i]);
         HeapString::SetReservedWord(s, i /*reservedWordOrd*/);
     }
 }
@@ -779,7 +779,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* coroCtx, lua_Rea
 
         check(snprintf(errorMsgBuf + offset, errorMsgBufLen - offset, "\n"));
 
-        HeapPtr<HeapString> msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
+        HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(errorMsgBuf, static_cast<uint32_t>(offset)).As();
         return {
             .m_scriptModule = nullptr,
             .errMsg = TValue::Create<tString>(msg)
@@ -827,7 +827,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, const char*
 
 struct LuaStringArrayReaderState
 {
-    HeapPtr<TableObject> m_tab;
+    TableObject* m_tab;
     uint32_t m_cur;
     uint32_t m_length;
 };
@@ -845,12 +845,12 @@ static const char* Parser_LuaStringArrayReader(CoroutineRuntimeContext* /*ctx*/,
     TValue tv = TableObject::GetByIntegerIndex(state->m_tab, state->m_cur, info);
     state->m_cur++;
     assert(tv.Is<tString>());
-    HeapString* s = TranslateToRawPointer(tv.As<tString>());
+    HeapString* s = tv.As<tString>();
     *size = s->m_length;
     return reinterpret_cast<const char*>(s->m_string);
 }
 
-ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, HeapPtr<TableObject> tab, uint32_t length)
+ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, TableObject* tab, uint32_t length)
 {
 #ifndef NDEBUG
     for (uint32_t i = 1; i <= length; i++)
@@ -902,7 +902,7 @@ ParseResult WARN_UNUSED ParseLuaScriptFromFile(CoroutineRuntimeContext* ctx, con
         constexpr size_t errorMsgBufLen = 1000;
         char errorMsgBuf[errorMsgBufLen + 1];
         snprintf(errorMsgBuf, errorMsgBufLen, "Failed to open file '%s', error %d (%s)", fileName, err, strerror(err));
-        HeapPtr<HeapString> msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf);
+        HeapString* msg = VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawCString(errorMsgBuf);
         return {
             .m_scriptModule = nullptr,
             .errMsg = TValue::Create<tString>(msg)

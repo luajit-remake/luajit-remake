@@ -3,53 +3,52 @@ source_filename = "/home/u/project/annotated/unit_test/return_value_accessor_api
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-%0 = type { ptr addrspace(256), ptr, ptr, %1, i32 }
+%0 = type { ptr, ptr, ptr, %1, i32 }
 %1 = type { i32 }
 
 @__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @__deegen_interpreter_op_test3_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, i64 %7, double %8, double %9, double %10, double %11, double %12, double %13) #0 section "deegen_interpreter_code_section_hot" {
-  %15 = getelementptr %0, ptr %1, i64 -1, i32 1
-  %16 = load ptr, ptr %15, align 8, !tbaa !2
-  %17 = getelementptr %0, ptr %1, i64 -1, i32 3
-  %18 = load i32, ptr %17, align 4, !tbaa !9
-  %19 = zext i32 %18 to i64
-  %20 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
-  %21 = ptrtoint ptr %20 to i64
-  %22 = add i64 %21, %19
-  %23 = inttoptr i64 %22 to ptr
-  %24 = getelementptr inbounds %0, ptr %16, i64 -1
-  %25 = load ptr addrspace(256), ptr %24, align 8, !tbaa !11
-  %.sroa.0.0.copyload6.i.i.i = load i32, ptr addrspace(256) %25, align 4, !tbaa !12
-  %26 = getelementptr inbounds i8, ptr %23, i64 2
-  %27 = load i32, ptr %26, align 1
-  %28 = icmp ugt i64 %numRet, 10
-  br i1 %28, label %29, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
+define dso_local ghccc void @__deegen_interpreter_op_test3_0_retcont_0(ptr %0, ptr nocapture readonly %1, ptr nocapture readnone %2, ptr %vmBasePointer, i64 %3, ptr nocapture readonly %retStart, i64 %numRet, i64 %4, i64 %5, i64 %6, double %7, double %8, double %9, double %10, double %11, double %12) #0 section "deegen_interpreter_code_section_hot" {
+  %14 = getelementptr %0, ptr %1, i64 -1, i32 1
+  %15 = load ptr, ptr %14, align 8, !tbaa !2
+  %16 = getelementptr %0, ptr %1, i64 -1, i32 3
+  %17 = load i32, ptr %16, align 4, !tbaa !9
+  %18 = zext i32 %17 to i64
+  %19 = ptrtoint ptr %vmBasePointer to i64
+  %20 = add i64 %19, %18
+  %21 = inttoptr i64 %20 to ptr
+  %22 = getelementptr inbounds %0, ptr %15, i64 -1
+  %23 = load ptr, ptr %22, align 8, !tbaa !10
+  %24 = load i32, ptr %23, align 4, !tbaa !11
+  %25 = getelementptr inbounds i8, ptr %21, i64 2
+  %26 = load i32, ptr %25, align 1
+  %27 = icmp ugt i64 %numRet, 10
+  br i1 %27, label %28, label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-29:                                               ; preds = %14
-  %30 = getelementptr inbounds i64, ptr %retStart, i64 10
-  %31 = load i64, ptr %30, align 8, !tbaa !13
+28:                                               ; preds = %13
+  %29 = getelementptr inbounds i64, ptr %retStart, i64 10
+  %30 = load i64, ptr %29, align 8, !tbaa !13
   br label %__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit
 
-__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %29, %14
-  %.0.reg2mem.0.i = phi i64 [ %31, %29 ], [ %7, %14 ]
-  %outputSlot = zext i32 %27 to i64
-  %32 = zext i32 %.sroa.0.0.copyload6.i.i.i to i64
-  %33 = add i64 %32, %21
-  %34 = inttoptr i64 %33 to ptr
-  %35 = getelementptr inbounds i64, ptr %16, i64 %outputSlot
-  store i64 %.0.reg2mem.0.i, ptr %35, align 8
-  %36 = getelementptr inbounds i8, ptr %23, i64 10
-  %37 = load i16, ptr %36, align 1
-  %38 = zext i16 %37 to i64
-  %39 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %38
-  %40 = load ptr, ptr %39, align 8
-  musttail call ghccc void %40(ptr %0, ptr nonnull %16, ptr nonnull %36, ptr %34, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %7, double undef, double undef, double undef, double undef, double undef, double undef) #1
+__DeegenImpl_CommonSnippetLib_GetReturnValueAtSpecifiedOrdinal.exit: ; preds = %28, %13
+  %.0.reg2mem.0.i = phi i64 [ %30, %28 ], [ %6, %13 ]
+  %outputSlot = zext i32 %26 to i64
+  %31 = zext i32 %24 to i64
+  %32 = add i64 %31, %19
+  %33 = inttoptr i64 %32 to ptr
+  %34 = getelementptr inbounds i64, ptr %15, i64 %outputSlot
+  store i64 %.0.reg2mem.0.i, ptr %34, align 8
+  %35 = getelementptr inbounds i8, ptr %21, i64 10
+  %36 = load i16, ptr %35, align 1
+  %37 = zext i16 %36 to i64
+  %38 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %37
+  %39 = load ptr, ptr %38, align 8
+  musttail call ghccc void %39(ptr %0, ptr nonnull %15, ptr nonnull %35, ptr %vmBasePointer, i64 %3, ptr %33, i64 undef, i64 undef, i64 undef, i64 %6, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
-attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #0 = { nounwind "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }
 
 !llvm.linker.options = !{}
@@ -65,8 +64,8 @@ attributes #1 = { nounwind }
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
 !9 = !{!7, !8, i64 0}
-!10 = !{!4, !4, i64 0}
-!11 = !{!3, !4, i64 0}
-!12 = !{!5, !5, i64 0}
+!10 = !{!3, !4, i64 0}
+!11 = !{!12, !8, i64 0}
+!12 = !{!"_ZTS17SystemHeapPointerI14ExecutableCodeE", !8, i64 0}
 !13 = !{!14, !14, i64 0}
 !14 = !{!"long", !5, i64 0}

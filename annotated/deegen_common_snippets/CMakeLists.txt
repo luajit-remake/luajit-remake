@@ -15,7 +15,6 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_return_value_at_specified_ordinal.cpp
   store_first_k_return_values_padding_nil.cpp
   store_return_values_as_variadic_results.cpp
-  simple_translate_to_raw_pointer.cpp
   populate_nil_to_unprovided_params.cpp
   get_num_fixed_params_from_code_block.cpp
   fixup_stack_frame_for_variadic_arg_function.cpp
@@ -35,8 +34,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   store_variadic_args_as_variadic_results.cpp
   get_variadic_results_start.cpp
   box_function_object_to_tvalue.cpp
-  get_cb_heap_ptr_from_tvalue.cpp
-  get_func_obj_as_u64_from_tvalue.cpp
+  get_cb_from_tvalue.cpp
   get_immutable_upvalue.cpp
   get_mutable_upvalue.cpp
   get_bytecode_ptr_from_bytecode_offset.cpp
@@ -54,15 +52,16 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   update_interpreter_tier_up_counter_for_return_or_throw.cpp
   update_interpreter_tier_up_counter_for_branch.cpp
   get_interpreter_tier_up_counter.cpp
-  get_interpreter_tier_up_counter_from_cb_heap_ptr.cpp
+  get_interpreter_tier_up_counter_from_cb.cpp
   tier_up_into_baseline_jit.cpp
   update_interpreter_call_ic_doubly_link.cpp
   osr_entry_into_baseline_jit.cpp
   get_baseline_codeblock_from_stack_base.cpp
   get_end_of_call_frame_from_baseline_codeblock.cpp
-  get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
+  get_cb_from_u32.cpp
+  unbox_tvalue_to_function_object.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

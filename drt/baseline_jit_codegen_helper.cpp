@@ -326,15 +326,14 @@ void* WARN_UNUSED JitGenericInlineCacheSite::Insert(uint16_t traitKind)
 {
     assert(m_numEntries < x_maxJitGenericInlineCacheEntries);
     VM* vm = VM::GetActiveVMForCurrentThread();
-    JitGenericInlineCacheEntry* entry = JitGenericInlineCacheEntry::Create(vm, TCGet(m_linkedListHead), traitKind);
-    TCSet(m_linkedListHead, SpdsPtr<JitGenericInlineCacheEntry> { entry });
+    JitGenericInlineCacheEntry* entry = JitGenericInlineCacheEntry::Create(vm, m_linkedListHead, traitKind);
+    m_linkedListHead = SpdsPtr<JitGenericInlineCacheEntry> { entry };
     m_numEntries++;
     return entry->m_jitAddr;
 }
 
-BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(HeapPtr<CodeBlock> cbHeapPtr)
+BaselineCodeBlockAndEntryPoint NO_INLINE WARN_UNUSED deegen_prepare_tier_up_into_baseline_jit(CodeBlock* cb)
 {
-    CodeBlock* cb = TranslateToRawPointer(cbHeapPtr);
     BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
     return {
         .baselineCodeBlock = bcb,

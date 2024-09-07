@@ -95,7 +95,7 @@ typedef struct BCInsLine {
 
 /* Info for local variables. Only used during bytecode generation. */
 typedef struct VarInfo {
-  HeapPtr<HeapString> name;		/* Local variable name or goto/label name. */
+  HeapString* name;	/* Local variable name or goto/label name. */
   BCPos startpc;	/* First point where the local variable is active. */
   BCPos endpc;		/* First point where the local variable is dead. */
   uint8_t slot;		/* Variable slot. */
@@ -170,7 +170,7 @@ typedef struct LexState {
   void *rdata;		/* Reader callback data. */
   BCLine linenumber;	/* Input line counter. */
   BCLine lastline;	/* Line of last token. */
-  HeapPtr<HeapString> chunkname;	/* Current chunk name (interned string). */
+  HeapString* chunkname;	/* Current chunk name (interned string). */
   const char *chunkarg;	/* Chunk name argument. */
   const char *mode;	/* Allow loading bytecode (b) and/or source text (t). */
   std::vector<VarInfo> vstack;	/* Stack for names and extents of local variables. */

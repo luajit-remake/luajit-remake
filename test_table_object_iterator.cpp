@@ -23,7 +23,7 @@ TEST(TableObjectIterator, Sanity)
             {
                 uint32_t inlineCapacity = testcase * 8;
                 Structure* structure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCapacity));
-                HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, structure, 0 /*initButterflyCap*/);
+                TableObject* obj = TableObject::CreateEmptyTableObject(vm, structure, 0 /*initButterflyCap*/);
                 std::unordered_map<double, TValue> expectedArrayPart;
                 std::unordered_map<int64_t, TValue> expectedNamedProps;
 
@@ -196,7 +196,7 @@ TEST(TableObjectIterator, IterateWithDeleteInBetween)
                     for (int numOps : { 100, 200, 400, 800, 1000 })
                     {
                         Structure* structure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCapacity));
-                        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, structure, 0 /*initButterflyCap*/);
+                        TableObject* obj = TableObject::CreateEmptyTableObject(vm, structure, 0 /*initButterflyCap*/);
                         std::unordered_map<double, TValue> expectedArrayPart;
                         std::unordered_map<int64_t, TValue> expectedNamedProps;
 

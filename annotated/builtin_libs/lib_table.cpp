@@ -21,7 +21,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
     {
         ThrowError("bad argument #1 to 'concat' (table expected)");
     }
-    HeapPtr<TableObject> tab = GetArg(0).As<tTable>();
+    TableObject* tab = GetArg(0).As<tTable>();
 
     VM* vm = VM::GetActiveVMForCurrentThread();
 
@@ -38,7 +38,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
         TValue tvSep = GetArg(1);
         if (tvSep.Is<tString>())
         {
-            separator = TranslateToRawPointer(vm, tvSep.As<tString>()->m_string);
+            separator = tvSep.As<tString>()->m_string;
             separatorLength = tvSep.As<tString>()->m_length;
         }
         else if (tvSep.Is<tDouble>())
@@ -178,7 +178,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
             TValue val = TableObject::GetByIntegerIndex(tab, i, info);
             if (val.Is<tString>())
             {
-                strings[ord].first = TranslateToRawPointer(vm, val.As<tString>()->m_string);
+                strings[ord].first = val.As<tString>()->m_string;
                 strings[ord].second = val.As<tString>()->m_length;
             }
             else if (val.Is<tDouble>() || val.Is<tInt32>())
@@ -246,7 +246,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
 
     // Now, concat everything
     //
-    HeapPtr<HeapString> result = vm->CreateStringObjectFromConcatenation(strings, numItems).As();
+    HeapString* result = vm->CreateStringObjectFromConcatenation(strings, numItems).As();
 
     if (strings != internalStringBuffer)
     {
@@ -301,7 +301,7 @@ static bool LuaLibCheckStringHasNoExoticLtMetamethod(VM* vm)
         return true;
     }
 
-    HeapPtr<TableObject> mt = vm->m_metatableForString.As<TableObject>();
+    TableObject* mt = vm->m_metatableForString.As<TableObject>();
     assert(mt->m_type == HeapEntityType::Table);
     if (mt->m_hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value)
     {
@@ -325,7 +325,7 @@ static void LuaLibTableSortDoubleContinuousArrayNoMM(TValue* arr, size_t n)
     std::sort(arrDbl + 1, arrDbl + n + 1);
 }
 
-static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab, size_t n)
+static void LuaLibTableSortDoubleNonContinuousArrayNoMM(TableObject* tab, size_t n)
 {
     constexpr size_t internalBufSize = 500;
     double buf[internalBufSize];
@@ -369,14 +369,13 @@ static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab
 static bool LuaLibTableSortStringComparator(TValue lhs, TValue rhs)
 {
     assert(lhs.Is<tString>() && rhs.Is<tString>());
-    HeapPtr<HeapString> lstr = lhs.As<tString>();
-    HeapPtr<HeapString> rstr = rhs.As<tString>();
+    HeapString* lstr = lhs.As<tString>();
+    HeapString* rstr = rhs.As<tString>();
     if (lstr == rstr)
     {
         return false;
     }
-    VM* vm = VM::GetActiveVMForCurrentThread();
-    int cmpRes = TranslateToRawPointer(vm, lstr)->Compare(TranslateToRawPointer(vm, rstr));
+    int cmpRes = lstr->Compare(rstr);
     return cmpRes < 0;
 }
 
@@ -394,7 +393,7 @@ static void LuaLibTableSortStringContinuousArrayNoMM(TValue* arr, size_t n)
     std::stable_sort(arr + 1, arr + n + 1, LuaLibTableSortStringComparator);
 }
 
-static void LuaLibTableSortStringNonContinuousArrayNoMM(HeapPtr<TableObject> tab, size_t n)
+static void LuaLibTableSortStringNonContinuousArrayNoMM(TableObject* tab, size_t n)
 {
     constexpr size_t internalBufSize = 500;
     TValue buf[internalBufSize];
@@ -510,7 +509,7 @@ struct QuickSortStateMachine
     //
     static constexpr int32_t x_limit_for_ins_sort = 8;
 
-    static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, HeapPtr<TableObject> tableObj, int32_t n)
+    static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, TableObject* tableObj, int32_t n)
     {
         assert(n >= 2);
         GetByIntegerIndexICInfo info;
@@ -566,7 +565,7 @@ struct QuickSortStateMachine
         assert(stackBase[4].Is<tInt32>());
         assert(stackBase[5].Is<tInt32>());
         assert(stackBase[6].Is<tInt32>() && 0 <= stackBase[6].As<tInt32>() && stackBase[6].As<tInt32>() <= 2);
-        HeapPtr<TableObject> tableObj = stackBase[0].As<tTable>();
+        TableObject* tableObj = stackBase[0].As<tTable>();
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
         return QuickSortStateMachine {
@@ -805,8 +804,7 @@ private:
         if (unlikely(!TableObject::TryPutByValIntegerIndexFastNoIC(tab, idx, val)))
         {
             VM* vm = VM::GetActiveVMForCurrentThread();
-            TableObject* obj = TranslateToRawPointer(vm, tab);
-            obj->PutByIntegerIndexSlow(vm, idx, val);
+            tab->PutByIntegerIndexSlow(vm, idx, val);
             // If the user writes exotic code that changes the array in the comparator, it could result in ArrayType change.
             // Clearly this is undefined behavior, but we should not corrupt the VM. So compute GetByIntegerIndexICInfo again.
             //
@@ -816,7 +814,7 @@ private:
 
 public:
     TValue* sb;
-    HeapPtr<TableObject> tab;
+    TableObject* tab;
     TValue pivot;
     int32_t h;
     int32_t i;
@@ -851,9 +849,9 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
 
         if (lhs.Is<tTable>())
         {
-            HeapPtr<TableObject> lhsMetatable;
+            TableObject* lhsMetatable;
             {
-                HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+                TableObject* tableObj = lhs.As<tTable>();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                 if (result.m_result.m_value == 0)
                 {
@@ -862,9 +860,9 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
                 lhsMetatable = result.m_result.As<TableObject>();
             }
 
-            HeapPtr<TableObject> rhsMetatable;
+            TableObject *rhsMetatable;
             {
-                HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+                TableObject* tableObj = rhs.As<tTable>();
                 TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                 if (result.m_result.m_value == 0)
                 {
@@ -885,8 +883,8 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
 
         if (lhs.Is<tString>())
         {
-            HeapString* lhsString = TranslateToRawPointer(lhs.As<tString>());
-            HeapString* rhsString = TranslateToRawPointer(rhs.As<tString>());
+            HeapString* lhsString = lhs.As<tString>();
+            HeapString* rhsString = rhs.As<tString>();
             return (lhsString->Compare(rhsString) < 0) ? LessThanComparisonResult::True : LessThanComparisonResult::False;
         }
 
@@ -979,20 +977,20 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(table_sort_no_comparator_continuation)
     if (likely(mm.Is<tFunction>()))
     {
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = mm;
+        reinterpret_cast<void**>(callFrame)[0] = mm.As<tFunction>();
         callFrame[x_numSlotsForStackFrameHeader] = lhs;
         callFrame[x_numSlotsForStackFrameHeader + 1] = rhs;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_no_comparator_continuation));
     }
     else
     {
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(mm);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(mm);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(mm));
         }
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = TValue::Create<tFunction>(callTarget);
+        reinterpret_cast<void**>(callFrame)[0] = callTarget;
         callFrame[x_numSlotsForStackFrameHeader] = mm;
         callFrame[x_numSlotsForStackFrameHeader + 1] = lhs;
         callFrame[x_numSlotsForStackFrameHeader + 2] = rhs;
@@ -1020,7 +1018,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(table_sort_usr_comparator_continuation)
     assert(fn.Is<tFunction>());
     qsm.PutToStack();
     TValue* callFrame = qsm.CallFrameEnd();
-    callFrame[0] = fn;
+    reinterpret_cast<void**>(callFrame)[0] = fn.As<tFunction>();
     callFrame[x_numSlotsForStackFrameHeader] = action.lhs;
     callFrame[x_numSlotsForStackFrameHeader + 1] = action.rhs;
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_usr_comparator_continuation));
@@ -1048,7 +1046,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
     {
         ThrowError("bad argument #1 to 'sort' (table expected)");
     }
-    HeapPtr<TableObject> tab = GetArg(0).As<tTable>();
+    TableObject* tab = GetArg(0).As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
 
     if (numArgs > 1)
@@ -1062,7 +1060,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
         {
             ThrowError("bad argument #2 to 'sort' (function expected)");
         }
-        HeapPtr<FunctionObject> func = GetArg(1).As<tFunction>();
+        FunctionObject* func = GetArg(1).As<tFunction>();
 
         size_t n = TableObject::GetTableLengthWithLuaSemantics(tab);
         if (n < 2)
@@ -1077,7 +1075,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
 
         qsm.PutToStack();
         TValue* callFrame = qsm.CallFrameEnd();
-        callFrame[0] = TValue::Create<tFunction>(func);
+        reinterpret_cast<uint64_t*>(callFrame)[0] = reinterpret_cast<uint64_t>(func);
         callFrame[x_numSlotsForStackFrameHeader] = action.lhs;
         callFrame[x_numSlotsForStackFrameHeader + 1] = action.rhs;
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_usr_comparator_continuation));
@@ -1102,7 +1100,7 @@ no_usr_comparator:
         if (info.m_isContinuous)
         {
             TValue* arr = reinterpret_cast<TValue*>(tab->m_butterfly);
-            if (TCGet(tab->m_arrayType).ArrayKind() == ArrayType::Kind::Double)
+            if (tab->m_arrayType.ArrayKind() == ArrayType::Kind::Double)
             {
                 if (unlikely(vm->m_metatableForNumber.m_value != 0))
                 {
@@ -1229,20 +1227,20 @@ slowpath:
         if (likely(mm.Is<tFunction>()))
         {
             TValue* callFrame = qsm.CallFrameEnd();
-            callFrame[0] = mm;
+            reinterpret_cast<void**>(callFrame)[0] = mm.As<tFunction>();
             callFrame[x_numSlotsForStackFrameHeader] = lhs;
             callFrame[x_numSlotsForStackFrameHeader + 1] = rhs;
             MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 2 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(table_sort_no_comparator_continuation));
         }
         else
         {
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(mm);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(mm);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(mm));
             }
             TValue* callFrame = qsm.CallFrameEnd();
-            callFrame[0] = TValue::Create<tFunction>(callTarget);
+            reinterpret_cast<void**>(callFrame)[0] = callTarget;
             callFrame[x_numSlotsForStackFrameHeader] = mm;
             callFrame[x_numSlotsForStackFrameHeader + 1] = lhs;
             callFrame[x_numSlotsForStackFrameHeader + 2] = rhs;

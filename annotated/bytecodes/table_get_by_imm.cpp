@@ -21,7 +21,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_in
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -69,7 +69,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
         EnterSlowPath<HandleNotTableObjectSlowPath>(base, index);
     }
 
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = base.As<tTable>();
     GetByIntegerIndexICInfo icInfo;
     TableObject::PrepareGetByIntegerIndex(tableObj, icInfo /*out*/);
     TValue result = TableObject::GetByIntegerIndex(tableObj, index, icInfo);
@@ -91,7 +91,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
 {
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
         ic->FuseICIntoInterpreterOpcode();
@@ -153,7 +153,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    assert(heapEntity->m_arrayType.HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {
@@ -175,7 +175,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    assert(heapEntity->m_arrayType.HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {

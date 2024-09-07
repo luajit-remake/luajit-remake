@@ -16,26 +16,28 @@ class CodeBlock;
 
 class Upvalue;
 
+inline void StorePtrToCallframe(TValue *callframe, void *ptr)
+{
+    reinterpret_cast<void**>(callframe)[0] = ptr;
+}
+
 inline void NO_RETURN WriteBarrierSlowPath(void* /*obj*/, uint8_t* /*cellState*/)
 {
     // TODO: implement
     ReleaseAssert(false && "unimplemented");
 }
 
-template<size_t cellStateOffset, typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, uint8_t>>>
-void NO_INLINE WriteBarrierSlowPathEnter(T ptr)
+template<size_t cellStateOffset>
+void NO_INLINE WriteBarrierSlowPathEnter(uint8_t* ptr)
 {
-    uint8_t* raw = TranslateToRawPointer(ptr);
-    WriteBarrierSlowPath(raw, raw + cellStateOffset);
+    WriteBarrierSlowPath(ptr, ptr + cellStateOffset);
 }
 
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>, uint8_t*, void>(uint8_t* ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>, HeapPtr<uint8_t>, void>(HeapPtr<uint8_t> ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>, uint8_t*, void>(uint8_t* ptr);
-template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>, HeapPtr<uint8_t>, void>(HeapPtr<uint8_t> ptr);
+template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&UserHeapGcObjectHeader::m_cellState>>(uint8_t* ptr);
+template void NO_INLINE WriteBarrierSlowPathEnter<offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>>(uint8_t* ptr);
 
-template<size_t cellStateOffset, typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, uint8_t>>>
-void ALWAYS_INLINE WriteBarrierImpl(T ptr)
+template<size_t cellStateOffset>
+void ALWAYS_INLINE WriteBarrierImpl(uint8_t* ptr)
 {
     uint8_t cellState = ptr[cellStateOffset];
     constexpr uint8_t blackThreshold = 0;
@@ -47,14 +49,12 @@ void ALWAYS_INLINE WriteBarrierImpl(T ptr)
 }
 
 template<typename T>
-void WriteBarrier(T ptr)
+void WriteBarrier(T* ptr)
 {
-    static_assert(std::is_pointer_v<T>);
-    using RawType = std::remove_pointer_t<remove_heap_ptr_t<T>>;
-    static_assert(std::is_same_v<value_type_of_member_object_pointer_t<decltype(&RawType::m_cellState)>, GcCellState>);
-    constexpr size_t x_offset = offsetof_member_v<&RawType::m_cellState>;
+    static_assert(std::is_same_v<value_type_of_member_object_pointer_t<decltype(&T::m_cellState)>, GcCellState>);
+    constexpr size_t x_offset = offsetof_member_v<&T::m_cellState>;
     static_assert(x_offset == offsetof_member_v<&UserHeapGcObjectHeader::m_cellState> || x_offset == offsetof_member_v<&SystemHeapGcObjectHeader::m_cellState>);
-    WriteBarrierImpl<x_offset>(ReinterpretCastPreservingAddressSpace<uint8_t*>(ptr));
+    WriteBarrierImpl<x_offset>(reinterpret_cast<uint8_t*>(ptr));
 }
 
 struct CoroutineStatus
@@ -185,7 +185,7 @@ public:
 
     static SystemHeapPointer<ExecutableCode> WARN_UNUSED CreateCFunction(VM* vm, void* fn)
     {
-        HeapPtr<ExecutableCode> e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
+        ExecutableCode* e = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeof(ExecutableCode))).AsNoAssert<ExecutableCode>();
         SystemHeapGcObjectHeader::Populate(e);
         e->m_executableCodeKind = Kind::CFunction;
         e->m_hasVariadicArguments = true;
@@ -288,8 +288,8 @@ public:
 
     // Get the ExecutableCode of the function target cached by this IC
     //
-    ExecutableCode* WARN_UNUSED GetTargetExecutableCode(VM* vm);
-    ExecutableCode* WARN_UNUSED GetTargetExecutableCodeKnowingDirectCall(VM* vm);
+    ExecutableCode* WARN_UNUSED GetTargetExecutableCode();
+    ExecutableCode* WARN_UNUSED GetTargetExecutableCodeKnowingDirectCall();
 
     size_t WARN_UNUSED GetIcTraitKind()
     {
@@ -309,7 +309,7 @@ public:
     static JitCallInlineCacheEntry* WARN_UNUSED Create(VM* vm,
                                                        ExecutableCode* targetExecutableCode,
                                                        SpdsPtr<JitCallInlineCacheEntry> callSiteNextNode,
-                                                       HeapPtr<void> entity,
+                                                       void* entity,
                                                        size_t icTraitKind);
 
     // Note that this function removes the IC from the doubly-linked list (anchored at the CodeBlock) as needed,
@@ -415,7 +415,7 @@ struct __attribute__((__packed__, __aligned__(1))) JitCallInlineCacheSite
     //
     // Use attribute 'malloc' to teach LLVM that the returned address is noalias, which is very useful due to how our codegen function is written
     //
-    __attribute__((__malloc__)) void* WARN_UNUSED InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/);
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInDirectCallMode(uint16_t dcIcTraitKind, FunctionObject* func, uint8_t* transitedToCCMode /*out*/);
 
     // May only be called if m_numEntries < x_maxEntries and m_mode != DirectCall
     // This function handles everything except actually JIT'ting code
@@ -424,7 +424,7 @@ struct __attribute__((__packed__, __aligned__(1))) JitCallInlineCacheSite
     //
     // Note that the passed in IcTraitKind is the DC one, not the CC one!
     //
-    __attribute__((__malloc__)) void* WARN_UNUSED InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv);
+    __attribute__((__malloc__)) void* WARN_UNUSED InsertInClosureCallMode(uint16_t dcIcTraitKind, FunctionObject* func);
 };
 static_assert(sizeof(JitCallInlineCacheSite) == 8);
 static_assert(alignof(JitCallInlineCacheSite) == 1);
@@ -508,10 +508,10 @@ namespace DeegenBytecodeBuilder { class BytecodeBuilder; }
 class UnlinkedCodeBlock : public SystemHeapGcObjectHeader
 {
 public:
-    static UnlinkedCodeBlock* WARN_UNUSED Create(VM* vm, HeapPtr<TableObject> globalObject)
+    static UnlinkedCodeBlock* WARN_UNUSED Create(VM* vm, TableObject* globalObject)
     {
         size_t sizeToAllocate = RoundUpToMultipleOf<8>(GetTrailingArrayOffset() + x_num_bytecode_metadata_struct_kinds_ * sizeof(uint16_t));
-        uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
+        uint8_t* addressBegin = vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>();
         UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(addressBegin);
         SystemHeapGcObjectHeader::Populate(ucb);
         ucb->m_uvFixUpCompleted = false;
@@ -735,39 +735,38 @@ class FunctionObject;
 class Upvalue
 {
 public:
-    static HeapPtr<Upvalue> WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, TValue* dst, bool isImmutable)
+    static Upvalue* WARN_UNUSED CreateUpvalueImpl(UserHeapPointer<Upvalue> prev, TValue* dst, bool isImmutable)
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
-        HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
+        Upvalue* r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
         UserHeapGcObjectHeader::Populate(r);
         r->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
         r->m_ptr = dst;
         r->m_isClosed = false;
         r->m_isImmutable = isImmutable;
-        TCSet(r->m_prev, prev);
+        r->m_prev = prev;
         return r;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED CreateClosed(VM* vm, TValue val)
+    static Upvalue* WARN_UNUSED CreateClosed(VM* vm, TValue val)
     {
-        HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
-        Upvalue* raw = TranslateToRawPointer(vm, r);
+        Upvalue* raw = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
         UserHeapGcObjectHeader::Populate(raw);
         raw->m_hiddenClass.m_value = x_hiddenClassForUpvalue;
         raw->m_ptr = &raw->m_tv;
         raw->m_tv = val;
         raw->m_isClosed = true;
         raw->m_isImmutable = true;
-        return r;
+        return raw;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
+    static Upvalue* WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
     {
         if (rc->m_upvalueList.m_value == 0 || rc->m_upvalueList.As()->m_ptr < dst)
         {
             // Edge case: the open upvalue list is empty, or the upvalue shall be inserted as the first element in the list
             //
-            HeapPtr<Upvalue> newNode = CreateUpvalueImpl(rc->m_upvalueList /*prev*/, dst, isImmutable);
+            Upvalue* newNode = CreateUpvalueImpl(rc->m_upvalueList /*prev*/, dst, isImmutable);
             rc->m_upvalueList = newNode;
             WriteBarrier(rc);
             return newNode;
@@ -776,7 +775,7 @@ public:
         {
             // Invariant: after the loop, the node shall be inserted between 'cur' and 'prev'
             //
-            HeapPtr<Upvalue> cur = rc->m_upvalueList.As();
+            Upvalue* cur = rc->m_upvalueList.As();
             TValue* curVal = cur->m_ptr;
             UserHeapPointer<Upvalue> prev;
             while (true)
@@ -790,7 +789,7 @@ public:
                     return cur;
                 }
 
-                prev = TCGet(cur->m_prev);
+                prev = cur->m_prev;
                 if (prev.m_value == 0)
                 {
                     // 'cur' is the last node, so we found the insertion location
@@ -813,11 +812,11 @@ public:
             }
 
             assert(curVal == cur->m_ptr);
-            assert(prev == TCGet(cur->m_prev));
+            assert(prev == cur->m_prev);
             assert(dst < curVal);
             assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
-            HeapPtr<Upvalue> newNode = CreateUpvalueImpl(prev, dst, isImmutable);
-            TCSet(cur->m_prev, UserHeapPointer<Upvalue>(newNode));
+            Upvalue* newNode = CreateUpvalueImpl(prev, dst, isImmutable);
+            cur->m_prev = UserHeapPointer<Upvalue>(newNode);
             WriteBarrier(cur);
             return newNode;
         }
@@ -862,7 +861,6 @@ static_assert(sizeof(Upvalue) == 32);
 
 inline void CoroutineRuntimeContext::CloseUpvalues(TValue* base)
 {
-    VM* vm = VM::GetActiveVMForCurrentThread();
     UserHeapPointer<Upvalue> cur = m_upvalueList;
     while (cur.m_value != 0)
     {
@@ -871,7 +869,7 @@ inline void CoroutineRuntimeContext::CloseUpvalues(TValue* base)
             break;
         }
         assert(!cur.As()->m_isClosed);
-        Upvalue* uv = TranslateToRawPointer(vm, cur.As());
+        Upvalue* uv = cur.As();
         cur = uv->m_prev;
         assert(cur.m_value == 0 || cur.As()->m_ptr < uv->m_ptr);
         uv->Close();
@@ -892,7 +890,7 @@ public:
     {
         size_t sizeToAllocate = GetTrailingArrayOffset() + sizeof(TValue) * numUpvalues;
         sizeToAllocate = RoundUpToMultipleOf<8>(sizeToAllocate);
-        HeapPtr<FunctionObject> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>();
+        FunctionObject* r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<FunctionObject>();
         UserHeapGcObjectHeader::Populate(r);
 
         r->m_numUpvalues = numUpvalues;
@@ -908,25 +906,25 @@ public:
         assert(numUpvalues <= std::numeric_limits<uint8_t>::max());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, static_cast<uint8_t>(numUpvalues));
         SystemHeapPointer<ExecutableCode> executable { static_cast<ExecutableCode*>(cb) };
-        TCSet(r.As()->m_executable, executable);
+        r.As()->m_executable = executable;
         return r;
     }
 
     static UserHeapPointer<FunctionObject> WARN_UNUSED CreateCFunc(VM* vm, SystemHeapPointer<ExecutableCode> executable, uint8_t numUpvalues = 0)
     {
-        assert(TranslateToRawPointer(executable.As())->IsUserCFunction());
+        assert(executable.As()->IsUserCFunction());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, numUpvalues);
-        TCSet(r.As()->m_executable, executable);
+        r.As()->m_executable = executable;
         return r;
     }
 
     // DEVNOTE: C library function must not use this function.
     //
-    static bool ALWAYS_INLINE IsUpvalueImmutable(HeapPtr<FunctionObject> self, size_t ord)
+    static bool ALWAYS_INLINE IsUpvalueImmutable(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
-        assert(TranslateToRawPointer(TCGet(self->m_executable).As())->IsBytecodeFunction());
-        HeapPtr<CodeBlock> cb = static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As());
+        assert(self->m_executable.As()->IsBytecodeFunction());
+        CodeBlock* cb = static_cast<CodeBlock*>(self->m_executable.As());
         assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
         assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
         return cb->m_owner->m_upvalueInfo[ord].m_isImmutable;
@@ -936,11 +934,11 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static HeapPtr<Upvalue> ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
+    static Upvalue* ALWAYS_INLINE GetMutableUpvaluePtr(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         assert(!IsUpvalueImmutable(self, ord));
-        TValue tv = TCGet(self->m_upvalues[ord]);
+        TValue tv = self->m_upvalues[ord];
         assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
         return tv.AsPointer().As<Upvalue>();
     }
@@ -949,11 +947,11 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static TValue ALWAYS_INLINE GetImmutableUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue ALWAYS_INLINE GetImmutableUpvalueValue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         assert(IsUpvalueImmutable(self, ord));
-        TValue tv = TCGet(self->m_upvalues[ord]);
+        TValue tv = self->m_upvalues[ord];
         assert(!(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue));
         return tv;
     }
@@ -963,7 +961,7 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static TValue ALWAYS_INLINE GetUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue ALWAYS_INLINE GetUpvalueValue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
         if (IsUpvalueImmutable(self, ord))
@@ -972,18 +970,18 @@ public:
         }
         else
         {
-            HeapPtr<Upvalue> uv = GetMutableUpvaluePtr(self, ord);
+            Upvalue* uv = GetMutableUpvaluePtr(self, ord);
             return *uv->m_ptr;
         }
     }
 
-    static TValue GetMutableUpvaluePtrOrImmutableUpvalue(HeapPtr<FunctionObject> self, size_t ord)
+    static TValue GetMutableUpvaluePtrOrImmutableUpvalue(FunctionObject* self, size_t ord)
     {
         assert(ord < self->m_numUpvalues);
-        return TCGet(self->m_upvalues[ord]);
+        return self->m_upvalues[ord];
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame);
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, FunctionObject* parent, size_t selfOrdinalInStackFrame);
 
     static constexpr size_t GetTrailingArrayOffset()
     {
@@ -1008,39 +1006,39 @@ public:
     // The interpretation of each element in the list depends on whether the upvalue is immutable
     // (this information is recorded in the UnlinkedCodeBlock's upvalue metadata list):
     //
-    // 1. If the upvalue is not immutable, then the TValue must be a HeapPtr<Upvalue> object,
+    // 1. If the upvalue is not immutable, then the TValue must be a Upvalue* object,
     //    and the value of the upvalue should be read from the Upvalue object.
-    // 2. If the upvalue is immutable, then the TValue must not be a HeapPtr<Upvalue> (since upvalue
+    // 2. If the upvalue is immutable, then the TValue must not be a Upvalue* (since upvalue
     //    objects are never exposed directly to user code). The TValue itself is simply the value of the upvalue.
     //
     TValue m_upvalues[0];
 };
 static_assert(sizeof(FunctionObject) == 8);
 
-inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCode(VM* vm)
+inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCode()
 {
     AssertIff(m_entity.IsUserHeapPointer(), GetIcTrait()->m_isDirectCallMode);
     ExecutableCode* ec;
     if (m_entity.IsUserHeapPointer())
     {
         assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
-        ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
+        ec = m_entity.As<FunctionObject>()->m_executable.As();
     }
     else
     {
         assert(m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
-        ec = TranslateToRawPointer(vm, m_entity.As<ExecutableCode>());
+        ec = m_entity.As<ExecutableCode>();
     }
     AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
     return ec;
 }
 
-inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCodeKnowingDirectCall(VM* vm)
+inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCodeKnowingDirectCall()
 {
     assert(GetIcTrait()->m_isDirectCallMode);
     assert(m_entity.IsUserHeapPointer());
     assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
-    ExecutableCode* ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
+    ExecutableCode* ec = m_entity.As<FunctionObject>()->m_executable.As();
     AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
     return ec;
 }
@@ -1091,7 +1089,7 @@ inline void PrintTValue(FILE* fp, TValue val)
     else
     {
         assert(val.IsPointer());
-        UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
+        UserHeapGcObjectHeader* p = val.AsPointer<UserHeapGcObjectHeader>().As();
         if (p->m_type == HeapEntityType::String)
         {
             HeapString* hs = reinterpret_cast<HeapString*>(p);
@@ -1164,7 +1162,7 @@ public:
 
 };
 
-inline TValue WARN_UNUSED GetMetamethodFromMetatable(HeapPtr<TableObject> metatable, LuaMetamethodKind mtKind)
+inline TValue WARN_UNUSED GetMetamethodFromMetatable(TableObject* metatable, LuaMetamethodKind mtKind)
 {
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
@@ -1176,7 +1174,7 @@ inline TValue WARN_UNUSED GetMetamethodForValue(TValue value, LuaMetamethodKind 
     UserHeapPointer<void> metatableMaybeNull = GetMetatableForValue(value);
     if (metatableMaybeNull.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+        TableObject* metatable = metatableMaybeNull.As<TableObject>();
         return GetMetamethodFromMetatable(metatable, mtKind);
     }
     else
@@ -1325,8 +1323,8 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
     }
     else if (lhs.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = lhs.AsPointer<HeapString>().As();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = lhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             lhsNumber = ssr.d;
@@ -1348,8 +1346,8 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
     }
     else if (rhs.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = rhs.AsPointer<HeapString>().As();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = rhs.AsPointer<HeapString>().As();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             rhsNumber = ssr.d;
@@ -1393,7 +1391,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
         UserHeapPointer<void> lhsMetatableMaybeNull = GetMetatableForValue(lhs);
         if (lhsMetatableMaybeNull.m_value != 0)
         {
-            HeapPtr<TableObject> metatable = lhsMetatableMaybeNull.As<TableObject>();
+            TableObject* metatable = lhsMetatableMaybeNull.As<TableObject>();
             GetByIdICInfo icInfo;
             TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
             TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -1411,7 +1409,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
             return TValue::Nil();
         }
 
-        HeapPtr<TableObject> metatable = rhsMetatableMaybeNull.As<TableObject>();
+        TableObject* metatable = rhsMetatableMaybeNull.As<TableObject>();
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
         return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
@@ -1426,7 +1424,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
 //     For Lua 5.2+, the restriction "both have the same type and both share the same metamethod" is removed.
 //
 template<bool supportsQuicklyRuleOutMetamethod>
-TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<TableObject> lhsMetatable, HeapPtr<TableObject> rhsMetatable, LuaMetamethodKind mtKind)
+TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(TableObject* lhsMetatable, TableObject* rhsMetatable, LuaMetamethodKind mtKind)
 {
     TValue lhsMetamethod;
     {
@@ -1500,12 +1498,12 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
     }
 }
 
-inline TValue WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) GetNewIndexMetamethodFromTableObject(HeapPtr<TableObject> tableObj)
+inline TValue WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) GetNewIndexMetamethodFromTableObject(TableObject* tableObj)
 {
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
     if (unlikely(gmr.m_result.m_value != 0))
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
         {
             return GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);

@@ -18,7 +18,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
         ThrowError("Invalid types for length");
     }
 
-    HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+    TableObject* metatable = metatableMaybeNull.As<TableObject>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len), icInfo /*out*/);
     TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len).As<void>(), icInfo);
@@ -39,7 +39,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
         MakeCall(metamethod.As<tFunction>(), input, LengthOperatorMetamethodCallContinuation);
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
@@ -59,7 +59,7 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
 {
     if (input.Is<tString>())
     {
-        HeapPtr<HeapString> s = input.As<tString>();
+        HeapString* s = input.As<tString>();
         Return(TValue::Create<tDouble>(s->m_length));
     }
 
@@ -68,7 +68,7 @@ static void NO_RETURN LengthOperatorImpl(TValue input)
         // In Lua 5.1, the primitive length operator is always used, even if there exists a 'length' metamethod
         // But in Lua 5.2+, the 'length' metamethod takes precedence, so this needs to be changed once we add support for Lua 5.2+
         //
-        HeapPtr<TableObject> s = input.As<tTable>();
+        TableObject* s = input.As<tTable>();
         auto [success, result] = TableObject::TryGetTableLengthWithLuaSemanticsFastPath(s);
         if (likely(success))
         {

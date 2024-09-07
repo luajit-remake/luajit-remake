@@ -79,7 +79,7 @@ static void NO_RETURN KVLoopIterNotNextFunctionSlowPath(TValue* /*base*/, uint8_
         MakeInPlaceCall(callee.As<tFunction>(), callBase + x_numSlotsForStackFrameHeader /*argsBegin*/, 2 /*numArgs*/, KVLoopIterCallReturnContinuation);
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(callee);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(callee));
@@ -96,7 +96,7 @@ static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
     if (likely(base[0].m_value == VM_GetLibFunctionObject<VM::LibFn::BaseNextValidationOk>().m_value))
     {
         TableObjectIterator* iter = reinterpret_cast<TableObjectIterator*>(base + 2);
-        HeapPtr<TableObject> table = base[1].As<tTable>();
+        TableObject* table = base[1].As<tTable>();
         TableObjectIterator::KeyValuePair kv = iter->Advance(table);
         assert(1 <= numRets && numRets <= 2);
         base[3] = kv.m_key;

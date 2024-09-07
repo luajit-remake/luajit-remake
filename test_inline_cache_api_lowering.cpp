@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+#include "ptr_utils.h"
 #include "test_util_helper.h"
 #include "annotated/unit_test/unit_test_ir_accessor.h"
 #include "misc_llvm_helper.h"

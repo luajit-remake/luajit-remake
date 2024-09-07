@@ -67,8 +67,8 @@ inline std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& fil
     {
         // Sanity check that the entry point of the module indeed points to the baseline JIT code
         //
-        HeapPtr<FunctionObject> obj = res.m_scriptModule->m_defaultEntryPoint.As();
-        ExecutableCode* ec = TranslateToRawPointer(TCGet(obj->m_executable).As());
+        FunctionObject* obj = res.m_scriptModule->m_defaultEntryPoint.As();
+        ExecutableCode* ec = obj->m_executable.As();
         ReleaseAssert(ec->IsBytecodeFunction());
         CodeBlock* cb = static_cast<CodeBlock*>(ec);
         ReleaseAssert(ec->m_bestEntryPoint == cb->m_baselineCodeBlock->m_jitCodeEntry);

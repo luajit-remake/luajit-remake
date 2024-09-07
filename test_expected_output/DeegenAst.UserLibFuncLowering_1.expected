@@ -3,23 +3,23 @@ source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-%class.StackFrameHeader = type { ptr addrspace(256), ptr, ptr, %struct.SystemHeapPointer, i32 }
+%class.StackFrameHeader = type { ptr, ptr, ptr, %struct.SystemHeapPointer, i32 }
 %struct.SystemHeapPointer = type { i32 }
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn1(ptr %0, ptr %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, i64 %9, double %10, double %11, double %12, double %13, double %14, double %15) local_unnamed_addr #0 {
-  store i64 %9, ptr %1, align 8
-  %17 = getelementptr inbounds i64, ptr %1, i64 1
-  store i64 %9, ptr %17, align 8
-  %18 = getelementptr inbounds i64, ptr %1, i64 2
-  store i64 %9, ptr %18, align 8
-  %19 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 2
-  %20 = load ptr, ptr %19, align 8, !tbaa !2
-  musttail call ghccc void %20(ptr %0, ptr nonnull %1, ptr undef, ptr undef, i64 %4, ptr nonnull %1, i64 0, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn1(ptr %0, ptr %1, ptr nocapture readnone %2, ptr %vmBasePointer, i64 %3, ptr nocapture readnone %4, i64 %5, i64 %6, i64 %7, i64 %8, double %9, double %10, double %11, double %12, double %13, double %14) local_unnamed_addr #0 {
+  store i64 %8, ptr %1, align 8
+  %16 = getelementptr inbounds i64, ptr %1, i64 1
+  store i64 %8, ptr %16, align 8
+  %17 = getelementptr inbounds i64, ptr %1, i64 2
+  store i64 %8, ptr %17, align 8
+  %18 = getelementptr %class.StackFrameHeader, ptr %1, i64 -1, i32 2
+  %19 = load ptr, ptr %18, align 8, !tbaa !2
+  musttail call ghccc void %19(ptr %0, ptr nonnull %1, ptr undef, ptr %vmBasePointer, i64 %3, ptr nonnull %1, i64 0, i64 undef, i64 undef, i64 %8, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
-attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #0 = { nounwind "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }
 
 !llvm.linker.options = !{}

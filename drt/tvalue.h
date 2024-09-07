@@ -215,7 +215,7 @@ struct TValue
     UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
         assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
-        return UserHeapPointer<T> { reinterpret_cast<HeapPtr<T>>(m_value) };
+        return UserHeapPointer<T> { VM_OffsetToPointer<T>(m_value) };
     }
 
     constexpr MiscImmediateValue ALWAYS_INLINE AsMIV() const
@@ -242,6 +242,7 @@ struct TValue
     }
 
     template<typename T>
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED CreatePointer(UserHeapPointer<T> ptr)
     {
         TValue result { static_cast<uint64_t>(ptr.m_value) };
@@ -250,11 +251,11 @@ struct TValue
     }
 
     template<typename T>
-    static TValue WARN_UNUSED CreatePointer(HeapPtr<T> ptr)
+    inline __attribute__((always_inline, flatten))
+    static TValue WARN_UNUSED CreatePointer(T* ptr)
     {
-        uint64_t val = reinterpret_cast<uint64_t>(ptr);
-        assert(val >= 0xFFFFFFFC00000000ULL);
-        TValue result { val };
+        TValue result { static_cast<uint64_t>(VM_PointerToOffset(ptr)) };
+        assert(result.AsPointer<T>() == ptr);
         return result;
     }
 
@@ -302,9 +303,14 @@ struct TValue
     auto WARN_UNUSED ALWAYS_INLINE As() const;
 
     template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 1>>
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val);
 
     template<typename T, typename = std::enable_if_t<fn_num_args<decltype(&T::encode)> == 0>>
+    // I have added these always inline flatten attributes because before llvm stopped
+    // inlining these functions and I haven't found a better solution
+    //
+    inline __attribute__((always_inline, flatten))
     static TValue WARN_UNUSED Create();
 
     uint64_t m_value;
@@ -471,7 +477,7 @@ struct tInt32
 // same value for the same pointer, since this fact comes from high-level knowledge of the system.
 // So we manually add 'readnone' (which is GCC/Clang attribute '__const__') to this function.
 //
-inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGetPointerType(TValue v)
+inline HeapEntityType WARN_UNUSED __attribute__((__const__, always_inline, flatten)) DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 }
@@ -493,12 +499,12 @@ inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
             return v.IsPointer() && DeegenImpl_TValueGetPointerType(v) == HeapEntityType::HOI_ENUM_NAME(hoi);                   \
         }                                                                                                                       \
                                                                                                                                 \
-        static TValue encode(HeapPtr<PtrType> o)                                                                                \
+        static __attribute__((always_inline, flatten)) inline TValue encode(PtrType* o)                                         \
         {                                                                                                                       \
             return TValue::CreatePointer(o);                                                                                    \
         }                                                                                                                       \
                                                                                                                                 \
-        static HeapPtr<PtrType> decode(TValue v)                                                                                \
+        static __attribute__((always_inline, flatten)) PtrType* decode(TValue v)                                                \
         {                                                                                                                       \
             return v.AsPointer<PtrType>().As();                                                                                 \
         }                                                                                                                       \
@@ -520,12 +526,12 @@ struct tHeapEntity
         return v.IsPointer();
     }
 
-    static TValue encode(HeapPtr<UserHeapGcObjectHeader> v)
+    static TValue encode(UserHeapGcObjectHeader* v)
     {
         return TValue::CreatePointer(UserHeapPointer<UserHeapGcObjectHeader> { v });
     }
 
-    static HeapPtr<UserHeapGcObjectHeader> decode(TValue v)
+    static UserHeapGcObjectHeader* decode(TValue v)
     {
         return v.AsPointer().As<UserHeapGcObjectHeader>();
     }
@@ -1064,6 +1070,7 @@ auto WARN_UNUSED ALWAYS_INLINE TValue::As() const
 }
 
 template<typename T, typename>
+__attribute__((always_inline, flatten)) inline
 TValue WARN_UNUSED TValue::Create(arg_nth_t<decltype(&T::encode), 0 /*argOrd*/> val)
 {
     static_assert(IsValidTypeSpecialization<T>);
@@ -1090,7 +1097,7 @@ public:
     // The function corresponding to this stack frame
     // Must be first element: this is expected by a lot of places
     //
-    HeapPtr<FunctionObject> m_func;
+    FunctionObject* m_func;
     // The address of the caller stack frame (points to the END of the stack frame header)
     //
     void* m_caller;

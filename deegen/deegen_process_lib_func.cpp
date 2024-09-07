@@ -4,6 +4,7 @@
 #include "deegen_ast_throw_error.h"
 #include "runtime_utils.h"
 #include "tag_register_optimization.h"
+#include "vm_base_pointer_optimization.h"
 
 namespace dast {
 
@@ -212,7 +213,7 @@ void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* fu
             target,
             ifi->GetCoroutineCtx(),
             ifi->GetStackBase(),
-            UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
+            UndefValue::get(llvm_type_of<void*>(ctx)),
             errorObject /*numArgs repurposed as errorObj*/,
             UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             callInst /*insertBefore*/);
@@ -320,12 +321,11 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
             callInst /*insertBefore*/);
 
         Value* calleeSlot = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), argsBegin, { CreateLLVMConstantInt<int64_t>(ctx, -static_cast<int64_t>(x_numSlotsForStackFrameHeader))}, "", callInst /*insertBefore*/);
-        Value* calleeValue = new LoadInst(llvm_type_of<uint64_t>(ctx), calleeSlot, "", false /*isVolatile*/, Align(8), callInst /*insertBefore*/);
-
+        Value* calleeValue = new LoadInst(llvm_type_of<void*>(ctx), calleeSlot, "", false /*isVolatile*/, Align(8), callInst /*insertBefore*/);
         Value* codeBlockAndEntryPoint = CreateCallToDeegenCommonSnippet(func->getParent(), "GetCalleeEntryPoint", { calleeValue }, callInst /*insertBefore*/);
         ReleaseAssert(codeBlockAndEntryPoint->getType()->isAggregateType());
 
-        Value* calleeCbHeapPtr = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", callInst /*insertBefore*/);
+        Value* calleeCb = ExtractValueInst::Create(codeBlockAndEntryPoint, { 0 /*idx*/ }, "", callInst /*insertBefore*/);
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", callInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
@@ -333,7 +333,7 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
             codePointer,
             ifi->GetCoroutineCtx(),
             argsBegin,
-            calleeCbHeapPtr,
+            calleeCb,
             numArgs,
             CreateLLVMConstantInt<uint64_t>(ctx, 0) /*isTailCall*/,
             callInst /*insertBefore*/);
@@ -547,6 +547,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         Function* func = module->getFunction(item.m_wrapperName);
         ReleaseAssert(func != nullptr);
         RunTagRegisterOptimizationPass(func);
+        RunVMBasePointerOptimizationPass(func);
     }
 }
 

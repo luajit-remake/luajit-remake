@@ -63,6 +63,7 @@ VM* WARN_UNUSED VM::Create()
     // Map memory and initialize the VM struct
     //
     void* vmVoid = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptrVoid) + x_vmBaseOffset);
+    activeVMForCurrentThread = reinterpret_cast<VM*>(vmVoid);
     assert(reinterpret_cast<uintptr_t>(vmVoid) % x_vmLayoutAlignment == 0);
     constexpr size_t sizeToMap = RoundUpToMultipleOf<x_pageSize>(sizeof(VM));
     {
@@ -77,6 +78,7 @@ VM* WARN_UNUSED VM::Create()
         if (!success)
         {
             vm->~VM();
+            activeVMForCurrentThread = nullptr;
         }
     );
 
@@ -85,6 +87,7 @@ VM* WARN_UNUSED VM::Create()
         if (!success)
         {
             vm->Cleanup();
+            activeVMForCurrentThread = nullptr;
         }
     );
 
@@ -111,8 +114,6 @@ bool WARN_UNUSED VM::InitializeVMBase()
     static_assert(!std::is_polymorphic_v<VM>, "must be not polymorphic");
 
     m_self = reinterpret_cast<uintptr_t>(this);
-
-    SetUpSegmentationRegister();
 
     m_isEngineStartingTierBaselineJit = false;
     m_engineMaxTier = EngineMaxTier::Unrestricted;
@@ -354,10 +355,9 @@ bool WARN_UNUSED VM::InitializeVMStringManager()
         };
 
         size_t allocationLength = HeapString::ComputeAllocationLengthForString(slah.m_length);
-        HeapPtrTranslator translator = GetHeapPtrTranslator();
         UserHeapPointer<void> uhp = AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
 
-        HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
+        HeapString* ptr = uhp.AsNoAssert<HeapString>();
 
         ptr->PopulateHeader(slah);
         // Copy the trailing '\0' as well
@@ -388,8 +388,6 @@ void VM::CleanupVMStringManager()
 
 bool WARN_UNUSED VM::Initialize()
 {
-    static_assert(x_segmentRegisterSelfReferencingOffset == offsetof_member_v<&VM::m_self>);
-
     bool success = false;
     CHECK_LOG_ERROR(InitializeVMBase());
     CHECK_LOG_ERROR(InitializeVMStringManager());
@@ -444,10 +442,9 @@ HeapString* WARN_UNUSED ALWAYS_INLINE MaterializeMultiPieceString(VM* vm, Iterat
     VM_FAIL_IF(!IntegerCanBeRepresentedIn<uint32_t>(allocationLength),
                "Cannot create a string longer than 4GB (attempted length: %llu bytes).", static_cast<unsigned long long>(allocationLength));
 
-    HeapPtrTranslator translator = vm->GetHeapPtrTranslator();
     UserHeapPointer<void> uhp = vm->AllocFromUserHeap(static_cast<uint32_t>(allocationLength));
 
-    HeapString* ptr = translator.TranslateToRawPtr(uhp.AsNoAssert<HeapString>());
+    HeapString* ptr = uhp.AsNoAssert<HeapString>();
     ptr->PopulateHeader(slah);
 
     uint8_t* curDst = ptr->m_string;
@@ -557,21 +554,20 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::InsertMultiPieceString(Iterator iter
                 }
             }
 
-            HeapPtr<HeapString> s = ptr.As<HeapString>();
+            HeapString* s = ptr.As<HeapString>();
             if (s->m_hashHigh != expectedHashHigh || s->m_hashLow != expectedHashLow || s->m_length != length)
             {
                 goto next_slot;
             }
 
-            HeapString* rawPtr = translator.TranslateToRawPtr(s);
-            if (!CompareMultiPieceStringEqual(iterator, rawPtr))
+            if (!CompareMultiPieceStringEqual(iterator, s))
             {
                 goto next_slot;
             }
 
             // We found the string
             //
-            return translator.TranslateToUserHeapPtr(rawPtr);
+            return translator.TranslateToUserHeapPtr(s);
         }
 next_slot:
         slot = (slot + 1) & m_hashTableSizeMask;
@@ -610,7 +606,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
         std::pair<const uint8_t*, uint32_t> GetAndAdvance()
         {
             assert(m_cur < m_end);
-            HeapString* e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
+            HeapString* e = m_cur->AsPointer().As<HeapString>();
             m_cur++;
             return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
         }
@@ -687,12 +683,12 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
             if (m_isFirst)
             {
                 m_isFirst = false;
-                e = m_translator.TranslateToRawPtr(m_firstString.As<HeapString>());
+                e = m_firstString.As<HeapString>();
             }
             else
             {
                 assert(m_cur < m_end);
-                e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
+                e = m_cur->AsPointer().As<HeapString>();
                 m_cur++;
             }
             return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
@@ -843,7 +839,7 @@ void VM::CreateRootCoroutine()
     m_rootCoroutine->m_parent = nullptr;
 }
 
-HeapPtr<TableObject> VM::GetRootGlobalObject()
+TableObject* VM::GetRootGlobalObject()
 {
     return m_rootCoroutine->m_globalObject.As();
 }

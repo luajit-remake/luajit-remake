@@ -33,10 +33,11 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, CodeBlock* codeBlock, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, VM* vmBasePointer, uint64_t tagRegister1, CodeBlock* codeBlock, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
 {
     ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
     ReleaseAssert(tagRegister2 == TValue::x_mivTag);
+    ReleaseAssert(vmBasePointer == VM_GetActiveVMForCurrentThread());
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
 
@@ -95,8 +96,8 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     VM* vm = VM::Create();
     Auto(vm->Destroy());
 
-    CodeBlock* calleeCb = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>());
-    SystemHeapGcObjectHeader::Populate<ExecutableCode*>(calleeCb);
+    CodeBlock* calleeCb = vm->AllocFromSystemHeap(sizeof(CodeBlock) + 128).AsNoAssert<CodeBlock>();
+    SystemHeapGcObjectHeader::Populate<ExecutableCode>(calleeCb);
 
     calleeCb->m_numUpvalues = 0;
     calleeCb->m_stackFrameNumSlots = 0;
@@ -124,7 +125,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     StackFrameHeader* rootSfh = reinterpret_cast<StackFrameHeader*>(stack);
     rootSfh->m_caller = reinterpret_cast<void*>(1000000123);
     rootSfh->m_retAddr = reinterpret_cast<void*>(1000000234);
-    rootSfh->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(1000000345);
+    rootSfh->m_func = VM_OffsetToPointer<FunctionObject>(1000000345);
     rootSfh->m_callerBytecodePtr = 0;
     rootSfh->m_numVariadicArguments = 0;
     uint64_t* previousFrameEnd = reinterpret_cast<uint64_t*>(rootSfh + 1);
@@ -132,7 +133,7 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(previousFrameEnd);
     hdr->m_caller = rootSfh + 1;
     hdr->m_retAddr = reinterpret_cast<void*>(22345678987654322ULL);
-    hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(12345678987654321ULL);
+    hdr->m_func = reinterpret_cast<FunctionObject*>(12345678987654321ULL);
     hdr->m_callerBytecodePtr.m_value = 50;
     hdr->m_numVariadicArguments = 0;
 
@@ -169,15 +170,14 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
         CoroutineRuntimeContext* /*coroCtx*/,
         uint64_t* /*sb*/,
         uint64_t /*numArgs*/,
-        uint64_t /*cbHeapPtrAsU64*/,
+        VM* /*vmBasePointer*/,
         uint64_t /*tagRegister1*/,
-        uint64_t /*unused*/,
+        CodeBlock* /*codeBlock*/,
         uint64_t /*isMustTail64*/,
         uint64_t /*unused*/,
         uint64_t /*unused*/,
         uint64_t /*tagRegister2*/);
-    HeapPtr<CodeBlock> calleeCbHeapPtr = TranslateToHeapPtr(calleeCb);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, reinterpret_cast<uint64_t>(calleeCbHeapPtr), TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, VM_GetActiveVMForCurrentThread(), TValue::x_int32Tag, calleeCb, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }

@@ -16,12 +16,13 @@ enum MakeCallOption
 //
 extern "C" void NO_RETURN DeegenImpl_ReturnValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ReturnNone();
+// extern "C" void* WARN_UNUSED DeegenImpl_GetVMBasePointer();
 extern "C" void NO_RETURN DeegenImpl_ReturnValueAndBranch(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ReturnNoneAndBranch();
 extern "C" void NO_RETURN DeegenImpl_MakeCall_ReportContinuationAfterCall(void* handler, void* func);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParam(void* handler, TValue arg);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportParamList(void* handler, const TValue* argBegin, size_t numArgs);
-extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportTarget(void* handler, uint64_t target);
+extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportTarget(void* handler, FunctionObject* target);
 extern "C" void* WARN_UNUSED DeegenImpl_MakeCall_ReportOption(void* handler, size_t option);
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeCallPassingVariadicResInfo();
@@ -33,11 +34,11 @@ extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallInfo();
 extern "C" void* WARN_UNUSED DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo();
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorTValue(TValue value);
 extern "C" void NO_RETURN DeegenImpl_ThrowErrorCString(const char* value);
-extern "C" HeapPtr<TableObject> WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
+extern "C" TableObject* WARN_UNUSED DeegenImpl_GetFEnvGlobalObject();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn_NoValue();
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturn(const TValue* retStart, size_t numRets);
 extern "C" void NO_RETURN DeegenImpl_GuestLanguageFunctionReturnAppendingVariadicResults(const TValue* retStart, size_t numRets);
-extern "C" HeapPtr<FunctionObject> WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
+extern "C" FunctionObject* WARN_UNUSED DeegenImpl_CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal);
 extern "C" size_t WARN_UNUSED ALWAYS_INLINE DeegenImpl_GetOutputBytecodeSlotOrdinal();
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetMutable(size_t ord);
 TValue WARN_UNUSED DeegenImpl_UpvalueAccessor_GetImmutable(size_t ord);
@@ -87,7 +88,7 @@ inline void ALWAYS_INLINE NO_RETURN ThrowError(const char* value)
 
 // Get the global object captured by the current function
 //
-inline HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE GetFEnvGlobalObject()
+inline TableObject* WARN_UNUSED ALWAYS_INLINE GetFEnvGlobalObject()
 {
     return DeegenImpl_GetFEnvGlobalObject();
 }
@@ -114,7 +115,7 @@ inline void ALWAYS_INLINE NO_RETURN GuestLanguageFunctionReturnAppendingVariadic
 //
 // Therefore, we must manually check if the upvalue is a self-reference and handle this case specially.
 //
-inline HeapPtr<FunctionObject> WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal)
+inline FunctionObject* WARN_UNUSED ALWAYS_INLINE CreateNewClosure(CodeBlock* cb, size_t selfBytecodeSlotOrdinal)
 {
     return DeegenImpl_CreateNewClosure(cb, selfBytecodeSlotOrdinal);
 }
@@ -247,36 +248,36 @@ template<typename... Args>
 struct MakeCallHandlerImpl;
 
 template<typename... Args>
-struct MakeCallHandlerImpl<HeapPtr<FunctionObject>, Args...>
+struct MakeCallHandlerImpl<FunctionObject*, Args...>
 {
-    static void NO_RETURN ALWAYS_INLINE handle(void* handler, HeapPtr<FunctionObject> target, Args... args)
+    static void NO_RETURN ALWAYS_INLINE handle(void* handler, FunctionObject* target, Args... args)
     {
-        MakeCallArgHandlerImpl<Args...>::handle(DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target)), args...);
+        MakeCallArgHandlerImpl<Args...>::handle(DeegenImpl_MakeCall_ReportTarget(handler, target), args...);
     }
 };
 
 template<typename... Args>
-struct MakeCallHandlerImpl<MakeCallOption, HeapPtr<FunctionObject>, Args...>
+struct MakeCallHandlerImpl<MakeCallOption, FunctionObject*, Args...>
 {
-    static void NO_RETURN ALWAYS_INLINE handle(void* handler, MakeCallOption option, HeapPtr<FunctionObject> target, Args... args)
+    static void NO_RETURN ALWAYS_INLINE handle(void* handler, MakeCallOption option, FunctionObject* target, Args... args)
     {
-        MakeCallHandlerImpl<HeapPtr<FunctionObject>, Args...>::handle(DeegenImpl_MakeCall_ReportOption(handler, static_cast<size_t>(option)), target, args...);
+        MakeCallHandlerImpl<FunctionObject*, Args...>::handle(DeegenImpl_MakeCall_ReportOption(handler, static_cast<size_t>(option)), target, args...);
     }
 };
 
 constexpr size_t x_stackFrameHeaderSlots = 4;
 
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceCall(void* handler, FunctionObject* target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target));
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, target);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, reinterpret_cast<void*>(continuationFn));
 }
 
-inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, FunctionObject* target, TValue* argsBegin, size_t numArgs)
 {
-    handler = DeegenImpl_MakeCall_ReportTarget(handler, reinterpret_cast<uint64_t>(target));
+    handler = DeegenImpl_MakeCall_ReportTarget(handler, target);
     handler = DeegenImpl_MakeCall_ReportParamList(handler, argsBegin, numArgs);
     DeegenImpl_MakeCall_ReportContinuationAfterCall(handler, nullptr);
 }
@@ -289,7 +290,7 @@ inline void NO_RETURN ALWAYS_INLINE ReportInfoForInPlaceTailCall(void* handler, 
 // Note that this also implies that everything >= argsBegin - stackFrameHdrSize are invalidated after the call
 //
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(FunctionObject* target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
     detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallInfo(), target, argsBegin, numArgs, continuationFn);
 }
@@ -297,19 +298,19 @@ void NO_RETURN ALWAYS_INLINE MakeInPlaceCall(HeapPtr<FunctionObject> target, TVa
 // Same as above, except that the variadic results from the immediate preceding opcode are appended to the end of the argument list
 //
 template<typename... ContinuationFnArgs>
-void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
+void NO_RETURN ALWAYS_INLINE MakeInPlaceCallPassingVariadicRes(FunctionObject* target, TValue* argsBegin, size_t numArgs, void(*continuationFn)(ContinuationFnArgs...))
 {
     detail::ReportInfoForInPlaceCall(DeegenImpl_StartMakeInPlaceCallPassingVariadicResInfo(), target, argsBegin, numArgs, continuationFn);
 }
 
 // The tail call versions
 //
-inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCall(FunctionObject* target, TValue* argsBegin, size_t numArgs)
 {
     detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallInfo(), target, argsBegin, numArgs);
 }
 
-inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(HeapPtr<FunctionObject> target, TValue* argsBegin, size_t numArgs)
+inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(FunctionObject* target, TValue* argsBegin, size_t numArgs)
 {
     detail::ReportInfoForInPlaceTailCall(DeegenImpl_StartMakeInPlaceTailCallPassingVariadicResInfo(), target, argsBegin, numArgs);
 }
@@ -320,7 +321,7 @@ inline void NO_RETURN ALWAYS_INLINE MakeInPlaceTailCallPassingVariadicRes(HeapPt
 //
 // The parameters are (in listed order):
 // 1. An optional Option flag
-// 2. The target function (a HeapPtr<FunctionObject> value)
+// 2. The target function (a FunctionObject* value)
 // 3. The arguments, described as a list of TValue and (TValue*, size_t)
 // 4. The continuation function
 //

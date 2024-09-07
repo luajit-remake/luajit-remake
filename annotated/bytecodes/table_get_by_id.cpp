@@ -21,7 +21,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_ind
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::Index)))
         {
             TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
@@ -68,9 +68,9 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
     }
 
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = tvIndex.As<tString>();
 
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = base.As<tTable>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
     TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -91,14 +91,14 @@ enum class TableGetByIdIcResultKind
 static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = tvIndex.As<tString>();
 
     // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
     // As long as we know it's a heap entity, we can get its hidden class which the IC caches on.
     //
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> heapEntity = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* heapEntity = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(heapEntity->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();
@@ -140,7 +140,7 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
                 return ic->Effect([heapEntity, c_slot, c_resKind] {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
                     IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                    TValue res = TCGet(heapEntity->m_inlineStorage[c_slot]);
+                    TValue res = heapEntity->m_inlineStorage[c_slot];
                     return std::make_pair(res, c_resKind);
                 });
             }

@@ -86,7 +86,7 @@ static size_t WARN_UNUSED TryReadLineOnce(FILE* fp, char* buf, size_t limit)
     return static_cast<size_t>(-1);
 }
 
-static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* firstChunk, size_t firstChunkLen)
+static HeapString* NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* firstChunk, size_t firstChunkLen)
 {
     // Just use a vector for simplicity now
     //
@@ -121,7 +121,7 @@ static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* f
         break;
     }
 
-    HeapPtr<HeapString> result = vm->CreateStringObjectFromConcatenation(chunkList.data(), chunkList.size()).As();
+    HeapString* result = vm->CreateStringObjectFromConcatenation(chunkList.data(), chunkList.size()).As();
 
     // The first element in 'chunkList' is the internal buffer, we must not free it. Free everything else.
     //
@@ -149,7 +149,7 @@ DEEGEN_DEFINE_LIB_FUNC(io_lines_iter)
         assert(len < x_internalBufferSize);
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(internalBuf, static_cast<uint32_t>(len)).As()));
     }
-    HeapPtr<HeapString> result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);
+    HeapString* result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);
     Return(TValue::Create<tString>(result));
 }
 
@@ -291,7 +291,7 @@ DEEGEN_DEFINE_LIB_FUNC(io_write)
         }
         else if (val.Is<tString>())
         {
-            HeapString* hs = TranslateToRawPointer(vm, val.As<tString>());
+            HeapString* hs = val.As<tString>();
             size_t written = fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, fp);
             if (unlikely(hs->m_length != written)) { success = false; break; }
         }

@@ -3,6 +3,9 @@
 
 TEST(NaNBoxing, Correctness)
 {
+    VM* vm = VM::Create();
+    Auto(vm->Destroy());
+
     // test int
     //
     for (int testcase = 0; testcase < 100000; testcase++)
@@ -92,8 +95,8 @@ TEST(NaNBoxing, Correctness)
             uint32_t v = (static_cast<uint32_t>(x1) << 16) + static_cast<uint32_t>(x2);
             v &= ~7U;
 
-            int64_t ptr = static_cast<int64_t>(0xFFFFFFFE00000000ULL + static_cast<uint32_t>(v));
-            UserHeapPointer<void> value { reinterpret_cast<HeapPtr<void>>(ptr) };
+            uintptr_t ptr = static_cast<uintptr_t>(0xFFFFFFFE00000000ULL + static_cast<uint32_t>(v));
+            UserHeapPointer<void> value { VM_OffsetToPointer<void>(ptr) };
 
             TValue r = TValue::CreatePointer(value);
             ReleaseAssert(!r.IsInt32());

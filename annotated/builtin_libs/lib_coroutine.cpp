@@ -84,12 +84,12 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_init)
     // So we can simply execute a InPlaceCall here.
     //
     assert(start == GetStackBase() + x_numSlotsForStackFrameHeader);
-    assert(GetStackBase()[0].Is<tFunction>());
+    assert(TValue::CreatePointer(reinterpret_cast<void*>(GetStackBase()[0].m_value)).Is<tFunction>());
     MakeInPlaceCall(start, numArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(coro_finish));
 }
 
 static CoroutineRuntimeContext* WARN_UNUSED ALWAYS_INLINE CreateNewCoroutine(UserHeapPointer<TableObject> globalObject,
-                                                                             HeapPtr<FunctionObject> entryFn)
+                                                                             FunctionObject* entryFn)
 {
     // We set up the initial stack for the new coroutine like the following:
     //     [ dummyHdr ] [ nextHdr ]
@@ -135,7 +135,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_create)
     }
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
-    Return(TValue::Create<tThread>(TranslateToHeapPtr(newCoro)));
+    Return(TValue::Create<tThread>(newCoro));
 }
 
 // coroutine.resume -- https://www.lua.org/manual/5.1/manual.html#pdf-coroutine.resume
@@ -170,8 +170,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_resume)
     //
     {
         assert(arg.Is<tThread>());
-        VM* vm = VM::GetActiveVMForCurrentThread();
-        CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(vm, arg.As<tThread>());
+        CoroutineRuntimeContext* targetCoro = arg.As<tThread>();
 
         // Update coroutine status: the target coroutine becomes no longer resumable and has the current coroutine as parent
         //
@@ -203,7 +202,7 @@ not_coroutine_object_or_not_resumable:
     if (arg.Is<tThread>())
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
-        CoroutineStatus status = TCGet(arg.As<tThread>()->m_coroutineStatus);
+        CoroutineStatus status = arg.As<tThread>()->m_coroutineStatus;
         assert(!status.IsResumable());
         if (status.IsDead())
         {
@@ -233,7 +232,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_running)
     }
     else
     {
-        Return(TValue::Create<tThread>(TranslateToHeapPtr(currentCoro)));
+        Return(TValue::Create<tThread>(currentCoro));
     }
 }
 
@@ -258,13 +257,13 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
         ThrowError("bad argument #1 to 'status' (coroutine expected)");
     }
 
-    HeapPtr<CoroutineRuntimeContext> coro = arg.As<tThread>();
-    CoroutineStatus status = TCGet(coro->m_coroutineStatus);
+    CoroutineRuntimeContext* coro = arg.As<tThread>();
+    CoroutineStatus status = coro->m_coroutineStatus;
     assert(status.IsCoroutineObject());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    if (TranslateToHeapPtr(currentCoro) == coro)
+    if (currentCoro == coro)
     {
         assert(!status.IsDead() && !status.IsResumable());
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("running")));
@@ -289,11 +288,11 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
 //
 DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 {
-    HeapPtr<FunctionObject> func = GetStackFrameHeader()->m_func;
+    FunctionObject* func = GetStackFrameHeader()->m_func;
     assert(func->m_numUpvalues == 1);
-    TValue uv = TCGet(func->m_upvalues[0]);
+    TValue uv = func->m_upvalues[0];
     assert(uv.Is<tThread>());
-    CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(uv.As<tThread>());
+    CoroutineRuntimeContext* targetCoro = uv.As<tThread>();
 
     // We are basically duplicating the logic in coroutine.resume here, because we do not want to make an
     // extra indirect call (which also happens to need to copy parameters) for performance reasons...
@@ -358,9 +357,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap)
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     CoroutineRuntimeContext* newCoro = CreateNewCoroutine(currentCoro->m_globalObject, arg.As<tFunction>() /*entryFn*/);
     VM* vm = VM::GetActiveVMForCurrentThread();
-    HeapPtr<FunctionObject> wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
-    TValue uv = TValue::Create<tThread>(TranslateToHeapPtr(newCoro));
-    TCSet(wrap->m_upvalues[0], uv);
+    FunctionObject* wrap = FunctionObject::CreateCFunc(vm, vm->GetLibFnProto<VM::LibFnProto::CoroutineWrapCall>(), 1 /*numUpValues*/).As();
+    TValue uv = TValue::Create<tThread>(newCoro);
+    wrap->m_upvalues[0] = uv;
     Return(TValue::Create<tFunction>(wrap));
 }
 

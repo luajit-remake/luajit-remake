@@ -3594,6 +3594,11 @@ AstInlineCache::BaselineJitCodegenResult WARN_UNUSED AstInlineCache::CreateJitIc
                 Argument* expectArg = target->getArg(static_cast<uint32_t>(i + 1));
                 if (arg == nullptr)
                 {
+                    if (!expectArg->use_empty())
+                    {
+                        cgCodeFn->print(dbgs());
+                        std::cout << std::endl << std::endl << (i + 2) << std::endl << std::endl;
+                    }
                     ReleaseAssert(expectArg->use_empty());
                 }
                 else

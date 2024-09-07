@@ -16,8 +16,8 @@ inline std::pair<bool /*success*/, double> WARN_UNUSED NO_INLINE LuaLib_ToNumber
 
     if (val.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = val.As<tString>();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = val.As<tString>();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             return std::make_pair(true /*success*/, ssr.d);
@@ -83,7 +83,7 @@ inline bool WARN_UNUSED ALWAYS_INLINE LuaLib_TVDoubleViewToNumberSlow(double& tv
         TValue macro_tv = GetArg(oneIndexedArgOrd - 1);                                                                     \
         if (likely(macro_tv.Is<tString>()))                                                                                 \
         {                                                                                                                   \
-            strPtrVar = reinterpret_cast<char*>(TranslateToRawPointer(macro_tv.As<tString>()->m_string));                   \
+            strPtrVar = reinterpret_cast<char*>(macro_tv.As<tString>()->m_string);                   \
             strLenVar = macro_tv.As<tString>()->m_length;                                                                   \
         }                                                                                                                   \
         else if (macro_tv.Is<tDouble>())                                                                                    \

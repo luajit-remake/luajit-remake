@@ -12,7 +12,7 @@ static void NO_RETURN TablePutByIdMetamethodCallContinuation(TValue /*base*/, TV
 static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TValue valueToPut, TValue metamethod)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = tvIndex.As<tString>();
 
     // If 'metamethod' is a function, we should invoke the metamethod.
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
@@ -29,7 +29,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = metamethod.As<tTable>();
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
 
@@ -83,29 +83,29 @@ enum class TablePutByIdIcResultKind
 namespace PutByIdICHelper
 {
 
-static void ALWAYS_INLINE StoreValueIntoTableObject(HeapPtr<TableObject> obj, PutByIdICInfo::ICKind kind, int32_t slot, TValue valueToPut)
+static void ALWAYS_INLINE StoreValueIntoTableObject(TableObject* obj, PutByIdICInfo::ICKind kind, int32_t slot, TValue valueToPut)
 {
     if (kind == PutByIdICInfo::ICKind::InlinedStorage)
     {
-        TCSet(obj->m_inlineStorage[slot], valueToPut);
+        obj->m_inlineStorage[slot] = valueToPut;
     }
     else
     {
         assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
-        TCSet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)), valueToPut);
+        *(obj->m_butterfly->GetNamedPropertyAddr(slot)) = valueToPut;
     }
 }
 
-static TValue ALWAYS_INLINE GetOldValueFromTableObject(HeapPtr<TableObject> obj, PutByIdICInfo::ICKind kind, int32_t slot)
+static TValue ALWAYS_INLINE GetOldValueFromTableObject(TableObject* obj, PutByIdICInfo::ICKind kind, int32_t slot)
 {
     if (kind == PutByIdICInfo::ICKind::InlinedStorage)
     {
-        return TCGet(obj->m_inlineStorage[slot]);
+        return obj->m_inlineStorage[slot];
     }
     else
     {
         assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
-        return TCGet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)));
+        return *(obj->m_butterfly->GetNamedPropertyAddr(slot));
     }
 }
 
@@ -114,11 +114,11 @@ static TValue ALWAYS_INLINE GetOldValueFromTableObject(HeapPtr<TableObject> obj,
 static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue valueToPut)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
+    HeapString* index = tvIndex.As<tString>();
 
     if (likely(base.Is<tHeapEntity>()))
     {
-        HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+        TableObject* tableObj = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
         ICHandler* ic = MakeInlineCache();
         ic->AddKey(tableObj->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
         ic->FuseICIntoInterpreterOpcode();
@@ -176,10 +176,10 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                             IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                             IcSpecifyCaptureAs2GBPointerNotNull(c_newStructure);
-                            assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-                            uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
+                            assert(tableObj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                            uint32_t oldButterflyNamedStorageCapacity = tableObj->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
                             TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
-                            TCSet(tableObj->m_hiddenClass, c_newStructure);
+                            tableObj->m_hiddenClass = c_newStructure;
                             PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                         });
@@ -190,7 +190,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                             IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                             IcSpecifyCaptureAs2GBPointerNotNull(c_newStructure);
-                            TCSet(tableObj->m_hiddenClass, c_newStructure);
+                            tableObj->m_hiddenClass = c_newStructure;
                             PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                         });
@@ -224,11 +224,11 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             return std::make_pair(mm, ResKind::HandleMetamethod);
                         }
 
-                        assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-                        uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
+                        assert(tableObj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                        uint32_t oldButterflyNamedStorageCapacity = tableObj->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity;
                         TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
 
-                        TCSet(tableObj->m_hiddenClass, c_newStructure);
+                        tableObj->m_hiddenClass = c_newStructure;
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                     });
@@ -245,7 +245,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                         {
                             return std::make_pair(mm, ResKind::HandleMetamethod);
                         }
-                        TCSet(tableObj->m_hiddenClass, c_newStructure);
+                        tableObj->m_hiddenClass = c_newStructure;
                         PutByIdICHelper::StoreValueIntoTableObject(tableObj, c_icKind, c_slot, valueToPut);
                         return std::make_pair(TValue(), ResKind::NoMetamethod);
                     });

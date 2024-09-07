@@ -16,10 +16,9 @@ static void NO_RETURN HandleInt64IndexNoMetamethodSlowPathPut(TValue base, TValu
     assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     assert(base.Is<tTable>());
-    HeapPtr<TableObject> tableObj = base.As<tTable>();
+    TableObject* tableObj = base.As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* raw = TranslateToRawPointer(vm, tableObj);
-    raw->PutByIntegerIndexSlow(vm, index, valueToPut);
+    tableObj->PutByIntegerIndexSlow(vm, index, valueToPut);
     Return();
 }
 
@@ -47,9 +46,9 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
             }
             else if (mmType == HeapEntityType::Table)
             {
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                TableObject* tableObj = metamethod.As<tTable>();
 
-                if (likely(!TCGet(tableObj->m_arrayType).MayHaveMetatable()))
+                if (likely(!tableObj->m_arrayType.MayHaveMetatable()))
                 {
                     goto no_metamethod;
                 }
@@ -63,7 +62,7 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
                         goto no_metamethod;
                     }
 
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    TableObject* metatable = gmr.m_result.As<TableObject>();
                     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         goto no_metamethod;
@@ -112,9 +111,9 @@ no_metamethod:
     }
 }
 
-static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(HeapPtr<TableObject> tableObj, double indexDouble)
+static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(TableObject* tableObj, double indexDouble)
 {
-    ArrayType arrType = TCGet(tableObj->m_arrayType);
+    ArrayType arrType = tableObj->m_arrayType;
     if (likely(!arrType.MayHaveMetatable()))
     {
         return std::make_pair(TValue(), false);
@@ -126,7 +125,7 @@ static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE Ch
         return std::make_pair(TValue(), false);
     }
 
-    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+    TableObject* metatable = gmr.m_result.As<TableObject>();
     if (likely(TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
     {
         return std::make_pair(TValue(), false);
@@ -170,7 +169,7 @@ static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/,
         while (true)
         {
             assert(base.Is<tTable>());
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            TableObject* tableObj = base.As<tTable>();
 
             auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(tableObj, indexDouble);
             if (likely(!hasMetamethod))
@@ -223,7 +222,7 @@ double_index_handle_metamethod:
         while (true)
         {
             assert(base.Is<tTable>());
-            HeapPtr<TableObject> tableObj = base.As<tTable>();
+            TableObject* tableObj = base.As<tTable>();
 
             PutByIdICInfo icInfo;
             TableObject::PreparePutById(tableObj, key, icInfo /*out*/);
@@ -234,7 +233,7 @@ double_index_handle_metamethod:
                 TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
                 if (gmr.m_result.m_value != 0)
                 {
-                    HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+                    TableObject* metatable = gmr.m_result.As<TableObject>();
                     if (unlikely(!TableObject::TryQuicklyRuleOutMetamethod(metatable, LuaMetamethodKind::NewIndex)))
                     {
                         metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::NewIndex);
@@ -359,7 +358,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
     {
         if (likely(base.Is<tHeapEntity>()))
         {
-            HeapPtr<TableObject> tableObj = reinterpret_cast<HeapPtr<TableObject>>(base.As<tHeapEntity>());
+            TableObject* tableObj = reinterpret_cast<TableObject*>(base.As<tHeapEntity>());
             ICHandler* ic = MakeInlineCache();
             ic->AddKey(tableObj->m_arrayType.m_asValue).SpecifyImpossibleValue(ArrayType::x_impossibleArrayType);
             ic->FuseICIntoInterpreterOpcode();
@@ -432,12 +431,12 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                                     Butterfly* butterfly = tableObj->m_butterfly;
                                     if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
                                     {
-                                        if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                        if (likely(tableObj->m_hiddenClass.m_value == c_expectedHiddenClass.m_value))
                                         {
                                             *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
                                             butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                                            TCSet(tableObj->m_arrayType, c_newArrayType);
-                                            TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                            tableObj->m_arrayType = c_newArrayType;
+                                            tableObj->m_hiddenClass = c_newHiddenClass;
                                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                                         }
                                     }
@@ -552,12 +551,12 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                                     Butterfly* butterfly = tableObj->m_butterfly;
                                     if (likely(butterfly->GetHeader()->m_arrayStorageCapacity > 0))
                                     {
-                                        if (likely(TCGet(tableObj->m_hiddenClass).m_value == c_expectedHiddenClass.m_value))
+                                        if (likely(tableObj->m_hiddenClass.m_value == c_expectedHiddenClass.m_value))
                                         {
                                             *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = valueToPut;
                                             butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                                            TCSet(tableObj->m_arrayType, c_newArrayType);
-                                            TCSet(tableObj->m_hiddenClass, c_newHiddenClass);
+                                            tableObj->m_arrayType = c_newArrayType;
+                                            tableObj->m_hiddenClass = c_newHiddenClass;
                                             return std::make_pair(TValue(), ResKind::NoMetamethod);
                                         }
                                     }

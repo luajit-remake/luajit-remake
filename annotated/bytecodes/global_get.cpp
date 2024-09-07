@@ -15,12 +15,12 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_tvIndex*/, TValue base
 
 // At this point, we know that 'rawget(base, index)' is nil and 'base' might have a metatable
 //
-static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, HeapPtr<TableObject> base)
+static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, TableObject* base)
 {
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base);
     if (gmr.m_result.m_value != 0)
     {
-        HeapPtr<TableObject> metatable = gmr.m_result.As<TableObject>();
+        TableObject* metatable = gmr.m_result.As<TableObject>();
         TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Index);
         if (!metamethod.Is<tNil>())
         {
@@ -50,8 +50,8 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
             else if (mmType == HeapEntityType::Table)
             {
                 assert(tvIndex.Is<tString>());
-                HeapPtr<HeapString> index = tvIndex.As<tString>();
-                HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
+                HeapString* index = tvIndex.As<tString>();
+                TableObject* tableObj = metamethod.As<tTable>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(tableObj, UserHeapPointer<HeapString> { index }, icInfo /*out*/);
                 TValue result = TableObject::GetById(tableObj, index, icInfo);
@@ -80,8 +80,8 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
 static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 {
     assert(tvIndex.Is<tString>());
-    HeapPtr<HeapString> index = tvIndex.As<tString>();
-    HeapPtr<TableObject> base = GetFEnvGlobalObject();
+    HeapString* index = tvIndex.As<tString>();
+    TableObject* base = GetFEnvGlobalObject();
 
     ICHandler* ic = MakeInlineCache();
     ic->AddKey(base->m_hiddenClass.m_value).SpecifyImpossibleValue(0);
@@ -98,7 +98,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
             return ic->Effect([base, c_slot, c_mayHaveMt] {
                 IcSpecializeValueFullCoverage(c_mayHaveMt, false, true);
                 IcSpecifyCaptureValueRange(c_slot, 0, 255);
-                return std::make_pair(TCGet(base->m_inlineStorage[c_slot]), c_mayHaveMt);
+                return std::make_pair(base->m_inlineStorage[c_slot], c_mayHaveMt);
             });
         }
         else if (c_info.m_icKind == GetByIdICInfo::ICKind::OutlinedStorage)

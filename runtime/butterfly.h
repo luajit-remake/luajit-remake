@@ -54,7 +54,7 @@ public:
         return m_arrayLengthIfContinuous < - 1;
     }
 
-    HeapPtr<ArraySparseMap> GetSparseMap()
+    ArraySparseMap* GetSparseMap()
     {
         assert(HasSparseMap());
         return GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As();

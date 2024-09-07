@@ -7,5 +7,9 @@ ljr.creator.user
 ljr.cxxflags
 ljr.files
 ljr.includes
+benchmark.log
 main
 shared_libs
+.idea/
+luajitr
+__generated__/

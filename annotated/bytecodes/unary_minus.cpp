@@ -18,8 +18,8 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
 
     if (input.Is<tString>())
     {
-        HeapPtr<HeapString> stringObj = input.As<tString>();
-        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(TranslateToRawPointer(stringObj->m_string), stringObj->m_length);
+        HeapString* stringObj = input.As<tString>();
+        StrScanResult ssr = TryConvertStringToDoubleWithLuaSemantics(stringObj->m_string, stringObj->m_length);
         if (ssr.fmt == StrScanFmt::STRSCAN_NUM)
         {
             double result = -ssr.d;
@@ -33,7 +33,7 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
         ThrowError("Invalid types for unary minus");
     }
 
-    HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
+    TableObject* metatable = metatableMaybeNull.As<TableObject>();
     GetByIdICInfo icInfo;
     TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm), icInfo /*out*/);
     TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm).As<void>(), icInfo);
@@ -50,7 +50,7 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
         ThrowError("Invalid type for unary minus");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));

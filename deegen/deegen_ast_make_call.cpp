@@ -23,7 +23,7 @@ AstMakeCall WARN_UNUSED AstMakeCall::ParseFromApiUse(llvm::CallInst* callInst)
     item.m_passVariadicRes = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_passVariadicRes));
     item.m_isMustTailCall = GetValueOfLLVMConstantInt<bool>(callInst->getArgOperand(x_ord_isMustTailCall));
     item.m_target = callInst->getArgOperand(x_ord_target);
-    ReleaseAssert(llvm_value_has_type<uint64_t>(item.m_target));
+    ReleaseAssert(llvm_value_has_type<void*>(item.m_target));
     item.m_callOption = static_cast<MakeCallOption>(GetValueOfLLVMConstantInt<size_t>(callInst->getArgOperand(x_ord_callOption)));
     if (item.m_isMustTailCall)
     {
@@ -103,7 +103,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::CreatePlaceholderFunction(llvm::Module*
     argTypes.push_back(llvm_type_of<bool>(ctx));
     argTypes.push_back(llvm_type_of<bool>(ctx));
     argTypes.push_back(llvm_type_of<bool>(ctx));
-    argTypes.push_back(llvm_type_of<uint64_t>(ctx));
+    argTypes.push_back(llvm_type_of<void*>(ctx));
     argTypes.push_back(llvm_type_of<void*>(ctx));
     argTypes.push_back(llvm_type_of<uint64_t>(ctx));
 
@@ -259,7 +259,7 @@ void AstMakeCall::PreprocessModule(llvm::Module* module)
         }
 
         ReleaseAssert(md[x_ord_target] != nullptr);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(md[x_ord_target]));
+        ReleaseAssert(llvm_value_has_type<void*>(md[x_ord_target]));
 
         ReleaseAssert(md[x_ord_continuation] != nullptr);
         if (item.m_isMustTailCall)
@@ -833,10 +833,10 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
 
     // Get the code pointer and the callee CodeBlock
     //
-    Value* calleeCbHeapPtr = nullptr;
+    Value* calleeCb = nullptr;
     Value* codePointer = nullptr;
-    DeegenCallIcLogicCreator::EmitForInterpreter(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
-    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    DeegenCallIcLogicCreator::EmitForInterpreter(ifi, m_target, calleeCb /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+    ReleaseAssert(calleeCb != nullptr);
     ReleaseAssert(codePointer != nullptr);
 
     Value* callSiteInfo = nullptr;
@@ -853,7 +853,7 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
 
-    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
+    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCb, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();
@@ -884,13 +884,13 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
     bool shouldEmployCallIc = ifi->IsMainComponent();
     if (!shouldEmployCallIc)
     {
-        Value* calleeCbHeapPtr = nullptr;
+        Value* calleeCb = nullptr;
         Value* codePointer = nullptr;
-        DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
-        ReleaseAssert(calleeCbHeapPtr != nullptr);
+        DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCb /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+        ReleaseAssert(calleeCb != nullptr);
         ReleaseAssert(codePointer != nullptr);
         list.push_back({
-            .calleeCbHeapPtr = calleeCbHeapPtr,
+            .calleeCb = calleeCb,
             .codePointer = codePointer,
             .origin = m_origin
         });
@@ -904,7 +904,7 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
 
     for (auto& item : list)
     {
-        Value* calleeCbHeapPtr = item.calleeCbHeapPtr;
+        Value* calleeCb = item.calleeCb;
         Value* codePointer = item.codePointer;
         ReleaseAssert(isa<CallInst>(item.origin));
         CallInst* origin = cast<CallInst>(item.origin);
@@ -948,7 +948,7 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
         InterpreterFunctionInterface::CreateDispatchToCallee(codePointer,
                                                              ifi->GetCoroutineCtx(),
                                                              newSfBase,
-                                                             calleeCbHeapPtr,
+                                                             calleeCb,
                                                              totalNumArgs,
                                                              CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)),
                                                              origin /*insertBefore*/);

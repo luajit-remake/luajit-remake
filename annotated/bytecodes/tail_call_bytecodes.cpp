@@ -7,7 +7,7 @@ template<bool passVariadicRes>
 static void NO_RETURN TailCallCheckMetamethodSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, TValue* base, uint16_t numArgs, TValue func)
 {
     TValue* argStart = base + x_numSlotsForStackFrameHeader;
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(func));

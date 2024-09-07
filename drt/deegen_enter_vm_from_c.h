@@ -22,7 +22,8 @@ extern "C" DeegenInternalEnterVMFromCReturnResults deegen_enter_vm_from_c_impl(
     void* ghcFn,
     uint64_t* stackBase,
     uint64_t numArgs,
-    HeapPtr<CodeBlock> cbHeapPtr);
+    CodeBlock* cb,
+    VM* vm);
 
 // This function should never be called from C/C++ code!
 //
@@ -34,7 +35,7 @@ extern "C" void deegen_internal_use_only_exit_vm_epilogue(DeegenPreventMagicFunc
 //
 inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     CoroutineRuntimeContext* coroCtx,
-    HeapPtr<FunctionObject> func,
+    FunctionObject* func,
     TValue* lowestAvailableVMStackAddress,
     TValue* args = nullptr,
     size_t numArgs = 0)
@@ -50,8 +51,8 @@ inline std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> DeegenEnterVMFromC(
     {
         memcpy(stackBase, args, sizeof(TValue) * numArgs);
     }
-    HeapPtr<CodeBlock> cbHeapPtr = static_cast<HeapPtr<CodeBlock>>(TCGet(func->m_executable).As());
-    void* ghcFn = cbHeapPtr->m_bestEntryPoint;
-    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, cbHeapPtr);
+    CodeBlock* cb = static_cast<CodeBlock*>(func->m_executable.As());
+    void* ghcFn = cb->m_bestEntryPoint;
+    DeegenInternalEnterVMFromCReturnResults result = deegen_enter_vm_from_c_impl(coroCtx, ghcFn, stackBase, numArgs, cb, VM_GetActiveVMForCurrentThread());
     return std::make_pair(result.m_retStart, result.m_numRets);
 }

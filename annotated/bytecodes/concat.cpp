@@ -20,21 +20,21 @@ struct ScanForMetamethodCallResult
     TValue m_rhsValue;
 };
 
-inline HeapPtr<HeapString> WARN_UNUSED StringifyDoubleToStringObject(double value)
+inline HeapString* WARN_UNUSED StringifyDoubleToStringObject(double value)
 {
     char buf[x_default_tostring_buffersize_double];
     char* bufEnd = StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, value);
     return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As();
 }
 
-inline HeapPtr<HeapString> WARN_UNUSED StringifyInt32ToStringObject(int32_t value)
+inline HeapString* WARN_UNUSED StringifyInt32ToStringObject(int32_t value)
 {
     char buf[x_default_tostring_buffersize_int];
     char* bufEnd = StringifyInt32UsingDefaultLuaFormattingOptions(buf /*out*/, value);
     return VM::GetActiveVMForCurrentThread()->CreateStringObjectFromRawString(buf, static_cast<uint32_t>(bufEnd - buf)).As();
 }
 
-inline std::optional<HeapPtr<HeapString>> WARN_UNUSED TryGetStringOrConvertNumberToString(TValue value)
+inline std::optional<HeapString*> WARN_UNUSED TryGetStringOrConvertNumberToString(TValue value)
 {
     if (value.Is<tString>())
     {
@@ -59,7 +59,7 @@ inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* bas
 {
     assert(startOffset >= 0);
 
-    std::optional<HeapPtr<HeapString>> optStr = TryGetStringOrConvertNumberToString(curValue);
+    std::optional<HeapString*> optStr = TryGetStringOrConvertNumberToString(curValue);
     if (!optStr)
     {
         return {
@@ -75,10 +75,10 @@ inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* bas
     // This is required, because if no concatenation happens before metamethod call,
     // the metamethod should see the original parameter, not the coerced-to-string parameter.
     //
-    HeapPtr<HeapString> curString = optStr.value();
+    HeapString* curString = optStr.value();
     while (startOffset >= 0)
     {
-        std::optional<HeapPtr<HeapString>> lhs = TryGetStringOrConvertNumberToString(base[startOffset]);
+        std::optional<HeapString*> lhs = TryGetStringOrConvertNumberToString(base[startOffset]);
         if (!lhs)
         {
             return {
@@ -190,7 +190,7 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
         ThrowError("Invalid types for concat");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));
@@ -230,7 +230,7 @@ static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
         ThrowError("Invalid types for concat");
     }
 
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(metamethod));

@@ -5,8 +5,7 @@
 
 static uint32_t DeegenSnippet_GetCalleeCbU32FromTValue(TValue tv)
 {
-    HeapPtr<FunctionObject> o = tv.As<tFunction>();
-    SystemHeapPointer<ExecutableCode> ec = TCGet(o->m_executable);
+    SystemHeapPointer<ExecutableCode> ec = tv.As<tFunction>()->m_executable;
     return ec.m_value;
 }
 

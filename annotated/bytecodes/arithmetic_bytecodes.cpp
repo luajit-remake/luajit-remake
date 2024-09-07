@@ -49,11 +49,11 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
 
         if (likely(lhs.Is<tTable>()))
         {
-            HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+            TableObject* tableObj = lhs.As<tTable>();
             TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
             if (result.m_result.m_value != 0)
             {
-                HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
+                TableObject* metatable = result.m_result.As<TableObject>();
                 GetByIdICInfo icInfo;
                 TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(opKind), icInfo /*out*/);
                 metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(opKind).As<void>(), icInfo);
@@ -92,7 +92,7 @@ do_metamethod_call:
             MakeCall(metamethod.As<tFunction>(), lhs, rhs, ArithmeticOperationMetamethodCallContinuation);
         }
 
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));

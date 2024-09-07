@@ -13,6 +13,7 @@
 #include "deegen_ast_inline_cache.h"
 #include "deegen_ast_slow_path.h"
 #include "deegen_type_based_hcs_helper.h"
+#include "vm_base_pointer_optimization.h"
 
 #include "llvm/Linker/Linker.h"
 
@@ -66,7 +67,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         curBytecode->setName(x_curBytecode);
         m_valuePreserver.Preserve(x_curBytecode, curBytecode);
 
-        Value* codeBlock = m_wrapper->getArg(3);
+        Value* codeBlock = m_wrapper->getArg(5);
         codeBlock->setName(x_interpreterCodeBlock);
         m_valuePreserver.Preserve(x_interpreterCodeBlock, codeBlock);
     }
@@ -417,6 +418,10 @@ void InterpreterBytecodeImplCreator::DoLowering()
     //
     DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
     DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(m_module.get());
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     // After the optimization pass, change the linkage of everything to 'external' before extraction
     // This is fine: our caller will fix up the linkage for us.

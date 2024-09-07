@@ -7,8 +7,8 @@ static void NO_RETURN TableDupGeneralImpl(TValue src)
 {
     assert(src.Is<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
-    HeapPtr<TableObject> newObject = obj->ShallowCloneTableObject(vm);
+    TableObject* obj = src.As<tTable>();
+    TableObject* newObject = obj->ShallowCloneTableObject(vm);
     Return(TValue::Create<tTable>(newObject));
 }
 
@@ -32,8 +32,8 @@ static void NO_RETURN TableDupSpecializedImpl(TValue src, uint8_t inlineCapacity
 {
     assert(src.Is<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
-    TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
-    HeapPtr<TableObject> newObject = obj->ShallowCloneTableObjectForTableDup(vm, inlineCapacityStepping, static_cast<bool>(hasButterfly));
+    TableObject* obj = src.As<tTable>();
+    TableObject* newObject = obj->ShallowCloneTableObjectForTableDup(vm, inlineCapacityStepping, static_cast<bool>(hasButterfly));
     Return(TValue::Create<tTable>(newObject));
 }
 

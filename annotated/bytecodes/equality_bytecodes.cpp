@@ -67,9 +67,9 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
     {
         // Consider metamethod call
         //
-        HeapPtr<TableObject> lhsMetatable;
+        TableObject* lhsMetatable;
         {
-            HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+            TableObject* tableObj = lhs.As<tTable>();
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
@@ -78,9 +78,9 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
             lhsMetatable = gmr.m_result.As<TableObject>();
         }
 
-        HeapPtr<TableObject> rhsMetatable;
+        TableObject* rhsMetatable;
         {
-            HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+            TableObject* tableObj = rhs.As<tTable>();
             TableObject::GetMetatableResult gmr = TableObject::GetMetatable(tableObj);
             if (gmr.m_result.m_value == 0)
             {
@@ -100,7 +100,7 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
             MakeCall(metamethod.As<tFunction>(), lhs, rhs, EqualityOperationMetamethodCallContinuation<compareForNotEqual, shouldBranch>);
         }
 
-        HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+        FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
         if (unlikely(callTarget == nullptr))
         {
             ThrowError(MakeErrorMessageForUnableToCall(metamethod));

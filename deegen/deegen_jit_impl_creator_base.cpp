@@ -223,7 +223,7 @@ void JitImplCreatorBase::CreateWrapperFunction()
         stackBase->setName(x_stackBase);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
-        Value* baselineCodeBlock = m_wrapper->getArg(3);
+        Value* baselineCodeBlock = m_wrapper->getArg(5);
         baselineCodeBlock->setName(GetJitCodeBlockLLVMVarName());
         m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), baselineCodeBlock);
 
@@ -296,13 +296,13 @@ void JitImplCreatorBase::CreateWrapperFunction()
             // For the JIT fast path, we only need to set up the BaselineCodeBlock or DfgCodeBlock, which is hardcoded as a stencil hole
             // For now since we don't support encoding 64-bit constant, just translate from HeapPtr..
             //
-            Value* val = CreateConstantPlaceholderForOperand(104 /*ordinal*/,
-                                                             llvm_type_of<uint64_t>(ctx),
-                                                             1,
-                                                             m_stencilRcInserter.GetLowAddrRangeUB(),
-                                                             currentBlock);
-            Value* jitCodeBlockHeapPtr = new IntToPtrInst(val, llvm_type_of<HeapPtr<void>>(ctx), "", currentBlock);
-            Value* jitCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "SimpleTranslateToRawPointer", { jitCodeBlockHeapPtr }, currentBlock);
+            Value* jitCodeBlockU64 = CreateConstantPlaceholderForOperand(104 /*ordinal*/,
+                                                                         llvm_type_of<uint64_t>(ctx),
+                                                                         1,
+                                                                         m_stencilRcInserter.GetLowAddrRangeUB(),
+                                                                         currentBlock);
+            Value* jitCodeBlockU32 = new TruncInst(jitCodeBlockU64, llvm_type_of<uint32_t>(ctx), "", currentBlock);
+            Value* jitCodeBlock = CreateCallToDeegenCommonSnippet(GetModule(), "GetCbFromU32", { jitCodeBlockU32 }, currentBlock);
             ReleaseAssert(llvm_value_has_type<void*>(jitCodeBlock));
             m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), jitCodeBlock);
         }

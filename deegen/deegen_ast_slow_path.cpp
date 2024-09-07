@@ -342,15 +342,8 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
                 }
                 else
                 {
-                    if (llvm_value_has_type<void*>(src))
-                    {
-                        cvt = src;
-                    }
-                    else
-                    {
-                        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(src));
-                        cvt = new AddrSpaceCastInst(src, dstTy, "", m_origin);
-                    }
+                    ReleaseAssert(llvm_value_has_type<void*>(src));
+                    cvt = src;
                 }
             }
             else

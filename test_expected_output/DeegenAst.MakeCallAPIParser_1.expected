@@ -15,32 +15,29 @@ define dso_local void @testfn1(i64 %0, i64 %1) #1 {
   %4 = alloca %class.anon.0, align 1
   %"reg2mem alloca point" = bitcast i32 0 to i32
   %5 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %0) #7
-  br i1 %5, label %6, label %10
+  br i1 %5, label %6, label %9
 
 6:                                                ; preds = %2
-  %7 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0) #7
+  %7 = call noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %0) #7
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %3) #8
   %8 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %3) #8
-  %9 = ptrtoint ptr addrspace(256) %7 to i64
-  call void @__DeegenInternal_AstMakeCallIdentificationFunc_0(i1 false, i1 false, i1 false, i64 %9, ptr @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m", i64 0, i64 %0, i64 %1)
+  call void @__DeegenInternal_AstMakeCallIdentificationFunc_0(i1 false, i1 false, i1 false, ptr %7, ptr @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m", i64 0, i64 %0, i64 %1)
   unreachable
 
-10:                                               ; preds = %2
-  %11 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %1) #7
-  br i1 %11, label %12, label %15
+9:                                                ; preds = %2
+  %10 = call noundef zeroext i1 @_Z19DeegenImpl_TValueIsI9tFunctionEb6TValue(i64 %1) #7
+  br i1 %10, label %11, label %13
 
-12:                                               ; preds = %10
-  %13 = call noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1) #7
-  %14 = ptrtoint ptr addrspace(256) %13 to i64
-  call void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1 false, i1 false, i1 true, i64 %14, ptr null, i64 0, i64 %1, i64 %0)
+11:                                               ; preds = %9
+  %12 = call noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64 %1) #7
+  call void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1 false, i1 false, i1 true, ptr %12, ptr null, i64 0, i64 %1, i64 %0)
   unreachable
 
-15:                                               ; preds = %10
-  %16 = call noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64 %0, i64 %1) #8
+13:                                               ; preds = %9
+  %14 = call noundef ptr @_Z9GetCallee6TValueS_(i64 %0, i64 %1) #8
   call void @llvm.lifetime.start.p0(i64 1, ptr nonnull %4) #8
-  %17 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %4) #8
-  %18 = ptrtoint ptr addrspace(256) %16 to i64
-  call void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1 false, i1 true, i1 false, i64 %18, ptr @"_ZZ7testfn1EN3$_18__invokeE6TValueS0_PS0_m", i64 1, i64 %0, i64 %1, i64 %0, i64 %1)
+  %15 = call fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1) %4) #8
+  call void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1 false, i1 true, i1 false, ptr %14, ptr @"_ZZ7testfn1EN3$_18__invokeE6TValueS0_PS0_m", i64 1, i64 %0, i64 %1, i64 %0, i64 %1)
   unreachable
 }
 
@@ -50,13 +47,13 @@ declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture) #2
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_0cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #3 align 2
 
-declare dso_local noundef ptr addrspace(256) @_Z9GetCallee6TValueS_(i64, i64) local_unnamed_addr #4
+declare dso_local noundef ptr @_Z9GetCallee6TValueS_(i64, i64) local_unnamed_addr #4
 
 ; Function Attrs: inlinehint mustprogress nounwind uwtable
 declare dso_local fastcc noundef ptr @"_ZZ7testfn1ENK3$_1cvPFv6TValueS0_PS0_mEEv"(ptr noundef nonnull align 1 dereferenceable(1)) unnamed_addr #3 align 2
 
 ; Function Attrs: mustprogress nounwind readnone willreturn uwtable
-declare dso_local noundef ptr addrspace(256) @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64) local_unnamed_addr #0
+declare dso_local noundef ptr @_Z19DeegenImpl_TValueAsI9tFunctionEDa6TValue(i64) local_unnamed_addr #0
 
 ; Function Attrs: inlinehint nounwind uwtable
 declare dso_local void @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m"(i64, i64, ptr noundef, i64 noundef) #5 align 2
@@ -65,13 +62,13 @@ declare dso_local void @"_ZZ7testfn1EN3$_08__invokeE6TValueS0_PS0_m"(i64, i64, p
 declare dso_local void @"_ZZ7testfn1EN3$_18__invokeE6TValueS0_PS0_m"(i64, i64, ptr noundef, i64 noundef) #5 align 2
 
 ; Function Attrs: noreturn nounwind
-declare void @__DeegenInternal_AstMakeCallIdentificationFunc_0(i1, i1, i1, i64, ptr, i64, i64, i64) #6
+declare void @__DeegenInternal_AstMakeCallIdentificationFunc_0(i1, i1, i1, ptr, ptr, i64, i64, i64) #6
 
 ; Function Attrs: noreturn nounwind
-declare void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1, i1, i1, i64, ptr, i64, i64, i64) #6
+declare void @__DeegenInternal_AstMakeCallIdentificationFunc_1(i1, i1, i1, ptr, ptr, i64, i64, i64) #6
 
 ; Function Attrs: noreturn nounwind
-declare void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1, i1, i1, i64, ptr, i64, i64, i64, i64, i64) #6
+declare void @__DeegenInternal_AstMakeCallIdentificationFunc_2(i1, i1, i1, ptr, ptr, i64, i64, i64, i64, i64) #6
 
 attributes #0 = { mustprogress nounwind readnone willreturn uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { mustprogress noreturn nounwind uwtable "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }

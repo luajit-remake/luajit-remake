@@ -21,7 +21,7 @@ static void NO_RETURN ForLoopIterCallReturnContinuation(TValue* base, uint16_t n
 static void NO_RETURN ForLoopIterCheckMetamethodSlowPath(TValue* /*base*/, uint16_t /*numRets*/, TValue* base, TValue callee)
 {
     TValue* callBase = base + 3;
-    HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(callee);
+    FunctionObject* callTarget = GetCallTargetViaMetatable(callee);
     if (unlikely(callTarget == nullptr))
     {
         ThrowError(MakeErrorMessageForUnableToCall(callee));

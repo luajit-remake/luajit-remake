@@ -9,7 +9,7 @@ static void NO_RETURN NewClosureImpl(TValue tvucb)
     //
     UnlinkedCodeBlock* ucb = reinterpret_cast<UnlinkedCodeBlock*>(tvucb.m_value);
     CodeBlock* cb = ucb->GetCodeBlock(GetFEnvGlobalObject());
-    HeapPtr<FunctionObject> func = CreateNewClosure(cb, GetOutputBytecodeSlotOrdinal());
+    FunctionObject* func = CreateNewClosure(cb, GetOutputBytecodeSlotOrdinal());
     Return(TValue::Create<tFunction>(func));
 }
 

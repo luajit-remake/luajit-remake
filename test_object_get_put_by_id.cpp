@@ -14,7 +14,7 @@ TEST(ObjectGetPutById, Sanity)
     uint32_t numTestCases = x_isDebugBuild ? 100 : 500;    // total # of objects
     uint32_t numProps = 253;    // props per object
 
-    auto checkProperty = [&](HeapPtr<TableObject> obj, UserHeapPointer<HeapString> prop, bool expectExist, uint32_t expectedAbsoluteOrd, int32_t expectedVal)
+    auto checkProperty = [&](TableObject* obj, UserHeapPointer<HeapString> prop, bool expectExist, uint32_t expectedAbsoluteOrd, int32_t expectedVal)
     {
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(obj, prop, icInfo /*out*/);
@@ -50,11 +50,11 @@ TEST(ObjectGetPutById, Sanity)
 
     Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), static_cast<uint8_t>(inlineCapacity));
     std::vector<std::vector<UserHeapPointer<HeapString>>> allProps;
-    std::vector<HeapPtr<TableObject>> allObjects;
+    std::vector<TableObject*> allObjects;
     for (uint32_t testCase = 0; testCase < numTestCases; testCase++)
     {
         uint32_t initArrayPartSize = static_cast<uint32_t>(rand() % 5);
-        HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
         // Sanity check the array part is initialized correctly
         //
         if (initArrayPartSize == 0)
@@ -105,7 +105,7 @@ TEST(ObjectGetPutById, Sanity)
                 ReleaseAssert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
                 ReleaseAssert(icInfo.m_slot == static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(i) - 1);
             }
-            if (i == TCGet(curObject->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity + TCGet(curObject->m_hiddenClass).As<Structure>()->m_inlineNamedStorageCapacity)
+            if (i == curObject->m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity + curObject->m_hiddenClass.As<Structure>()->m_inlineNamedStorageCapacity)
             {
                 ReleaseAssert(icInfo.m_shouldGrowButterfly);
             }
@@ -113,7 +113,7 @@ TEST(ObjectGetPutById, Sanity)
             {
                 ReleaseAssert(!icInfo.m_shouldGrowButterfly);
             }
-            ReleaseAssert(TCGet(curObject->m_hiddenClass).As<Structure>() != icInfo.m_newStructure.As());
+            ReleaseAssert(curObject->m_hiddenClass.As<Structure>() != icInfo.m_newStructure.As());
 
             TableObject::PutById(curObject, propToAdd.As<void>(), TValue::CreateInt32(static_cast<int32_t>(i + 456)), icInfo);
 
@@ -198,13 +198,13 @@ TEST(ObjectGetPutById, Sanity)
     {
         for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
         {
-            HeapPtr<TableObject> obj = allObjects[testcase];
+            TableObject* obj = allObjects[testcase];
             std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
             ReleaseAssert(propList.size() == numProps);
 
             for (uint32_t i = 0; i < inlineCapacity; i++)
             {
-                TValue val = TCGet(obj->m_inlineStorage[i]);
+                TValue val = obj->m_inlineStorage[i];
                 ReleaseAssert(val.IsInt32());
                 ReleaseAssert(val.AsInt32() == static_cast<int32_t>(i + expectedBaseValue));
             }
@@ -229,7 +229,7 @@ TEST(ObjectGetPutById, Sanity)
     //
     for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
     {
-        HeapPtr<TableObject> obj = allObjects[testcase];
+        TableObject* obj = allObjects[testcase];
         std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
 
         for (uint32_t i = 0; i < numProps; i++)
@@ -263,11 +263,11 @@ TEST(ObjectGetPutById, Sanity)
     // Finally, just to sanity check that the Structures are working, redo all the PutById from empty objects,
     // and validate the resulting structure is the same
     //
-    std::vector<HeapPtr<TableObject>> newObjectList;
+    std::vector<TableObject*> newObjectList;
     for (uint32_t testcase = 0; testcase < numTestCases; testcase++)
     {
         uint32_t initArrayPartSize = allObjects[testcase]->m_butterfly->GetHeader()->m_arrayStorageCapacity;
-        HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
 
         std::vector<UserHeapPointer<HeapString>>& propList = allProps[testcase];
 
@@ -283,7 +283,7 @@ TEST(ObjectGetPutById, Sanity)
 
         ReleaseAssert(curObject != allObjects[testcase]);
         ReleaseAssert(curObject->m_butterfly != allObjects[testcase]->m_butterfly);
-        ReleaseAssert(TCGet(curObject->m_hiddenClass) == TCGet(allObjects[testcase]->m_hiddenClass));
+        ReleaseAssert(curObject->m_hiddenClass == allObjects[testcase]->m_hiddenClass);
         allObjects[testcase] = curObject;
     }
 
@@ -303,7 +303,7 @@ TEST(ObjectGetSetById, CacheableDictionary)
         const uint32_t maxArrayPartSize = 5;
         uint32_t initArrayPartSize = static_cast<uint32_t>(rand()) % maxArrayPartSize;
         uint32_t initArrayPartFillSize = static_cast<uint32_t>(rand()) % (initArrayPartSize + 1);
-        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
+        TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initArrayPartSize);
 
         std::unordered_map<int64_t, TValue> expected;
         TValue arrayExpected[maxArrayPartSize + 2];
@@ -405,7 +405,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
     const uint32_t numStrings = 500;
     StringList strings = GetStringList(VM::GetActiveVMForCurrentThread(), numStrings);
     Structure* initStructure = Structure::CreateInitialStructure(VM::GetActiveVMForCurrentThread(), 8 /*inlineCapacity*/);
-    HeapPtr<TableObject> curObject = TableObject::CreateEmptyTableObject(vm, initStructure, 0 /*initArraySize*/);
+    TableObject* curObject = TableObject::CreateEmptyTableObject(vm, initStructure, 0 /*initArraySize*/);
     for (uint32_t i = 0; i < numStrings - 1; i++)
     {
         UserHeapPointer<HeapString> propToAdd = strings[i];
@@ -418,7 +418,7 @@ TEST(ObjectGetPutById, MissedGetByIdIsUncacheableForCacheableDicitonary)
         UserHeapPointer<HeapString> propToTest = strings[numStrings - 1];
         GetByIdICInfo icInfo;
         TableObject::PrepareGetById(curObject, propToTest, icInfo /*out*/);
-        ReleaseAssert(TCGet(curObject->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        ReleaseAssert(curObject->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
         ReleaseAssert(icInfo.m_mayHaveMetatable == false);
         ReleaseAssert(icInfo.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
     }

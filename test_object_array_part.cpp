@@ -72,7 +72,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 }
                             };
 
-                            HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                            TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                             for (uint32_t i = 0; i < numNamedProps; i++)
                             {
@@ -83,7 +83,7 @@ TEST(ObjectArrayPart, PutFirstElement)
 
                             if (hasButterfly && obj->m_butterfly == nullptr)
                             {
-                                TranslateToRawPointer(obj)->GrowButterfly<false /*isGrowNamedStorage*/>(0);
+                                obj->GrowButterfly<false /*isGrowNamedStorage*/>(0);
                             }
 
                             if (!hasButterfly)
@@ -143,7 +143,7 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 else
                                 {
                                     ReleaseAssert(!fastPathSuccess);
-                                    TranslateToRawPointer(vm, obj)->PutByIntegerIndexSlow(vm, putLocation, value);
+                                    obj->PutByIntegerIndexSlow(vm, putLocation, value);
                                 }
                             }
 
@@ -159,8 +159,8 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 //
                                 if (ArrayGrowthPolicy::x_arrayBaseOrd <= putLocation && putLocation <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
                                 {
-                                    ArrayType arrType = TCGet(obj->m_arrayType);
-                                    ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                    ArrayType arrType = obj->m_arrayType;
+                                    ReleaseAssert(arrType.m_asValue == obj->m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                                     ReleaseAssert(!arrType.IsContinuous());
                                     ReleaseAssert(!arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
@@ -168,8 +168,8 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 }
                                 else
                                 {
-                                    ArrayType arrType = TCGet(obj->m_arrayType);
-                                    ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                    ArrayType arrType = obj->m_arrayType;
+                                    ReleaseAssert(arrType.m_asValue == obj->m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
                                     ReleaseAssert(!arrType.IsContinuous());
                                     ReleaseAssert(arrType.HasSparseMap());
                                     ReleaseAssert(!arrType.SparseMapContainsVectorIndex());
@@ -178,8 +178,8 @@ TEST(ObjectArrayPart, PutFirstElement)
                             }
                             else
                             {
-                                ArrayType arrType = TCGet(obj->m_arrayType);
-                                ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                ArrayType arrType = obj->m_arrayType;
+                                ReleaseAssert(arrType.m_asValue == obj->m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
 
                                 if (ArrayGrowthPolicy::x_arrayBaseOrd == putLocation)
                                 {
@@ -267,14 +267,14 @@ TEST(ObjectArrayPart, PutFirstElement)
                                 TableObject::PreparePutByIntegerIndex(obj, index2, value, icInfo /*out*/);
                                 bool fastPathSuccess = TableObject::TryPutByIntegerIndexFast(obj, index2, value, icInfo);
                                 ReleaseAssert(!fastPathSuccess);
-                                TranslateToRawPointer(vm, obj)->PutByIntegerIndexSlow(vm, index2, value);
+                                obj->PutByIntegerIndexSlow(vm, index2, value);
                             }
 
                             // Check the array type is as expected
                             //
                             {
-                                ArrayType arrType = TCGet(obj->m_arrayType);
-                                ReleaseAssert(arrType.m_asValue == TCGet(obj->m_hiddenClass).As<Structure>()->m_arrayType.m_asValue);
+                                ArrayType arrType = obj->m_arrayType;
+                                ReleaseAssert(arrType.m_asValue == obj->m_hiddenClass.As<Structure>()->m_arrayType.m_asValue);
 
                                 if (ArrayGrowthPolicy::x_alwaysVectorCutoff < putLocation && putLocation <= ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
                                 {
@@ -408,7 +408,7 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 continue;
                             }
 
-                            HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                            TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                             for (uint32_t i = 0; i < numNamedProps; i++)
                             {
@@ -423,8 +423,8 @@ TEST(ObjectArrayPart, ContinuousArray)
 
                             auto validateEverything = [&](size_t expectedContinuousLen)
                             {
-                                ArrayType arrType = TCGet(obj->m_arrayType);
-                                SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                                ArrayType arrType = obj->m_arrayType;
+                                SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
                                 if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                                 {
                                     ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
@@ -637,8 +637,8 @@ TEST(ObjectArrayPart, ContinuousArray)
                                 expected[indexToPut] = lastInsertElement;
                             }
 
-                            ArrayType arrType = TCGet(obj->m_arrayType);
-                            SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                            ArrayType arrType = obj->m_arrayType;
+                            SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
                             if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                             {
                                 ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
@@ -739,7 +739,7 @@ TEST(ObjectArrayPart, RandomTest)
         }
 
         Structure* initStructure = Structure::CreateInitialStructure(vm, static_cast<uint8_t>(inlineCap));
-        HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initialButterflyCap);
+        TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initialButterflyCap);
 
         std::unordered_map<int64_t, TValue> namedPropMap;
         std::unordered_map<double, TValue> arrayPropMap;
@@ -936,8 +936,8 @@ TEST(ObjectArrayPart, RandomTest)
             testRead();
             doWrite();
 
-            ArrayType arrType = TCGet(obj->m_arrayType);
-            SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+            ArrayType arrType = obj->m_arrayType;
+            SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
             if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
             {
                 ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
@@ -969,7 +969,7 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
             {
                 for (bool putNamedPropsBeforeArray : { false, true })
                 {
-                    HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
+                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, initStructure, initButterflyCap);
 
                     if (putNamedPropsBeforeArray)
                     {
@@ -1037,8 +1037,8 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
 
                     auto checkArrayType = [&]()
                     {
-                        ArrayType arrType = TCGet(obj->m_arrayType);
-                        SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                        ArrayType arrType = obj->m_arrayType;
+                        SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
                         if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                         {
                             ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);
@@ -1108,8 +1108,8 @@ void ObjectArrayPartDensityTest(VM* vm, uint32_t numProps)
                         TValue val = getValueToPut();
                         TableObject::RawPutByValIntegerIndex(obj, index, val);
 
-                        ArrayType arrType = TCGet(obj->m_arrayType);
-                        SystemHeapPointer<void> hiddenClass = TCGet(obj->m_hiddenClass);
+                        ArrayType arrType = obj->m_arrayType;
+                        SystemHeapPointer<void> hiddenClass = obj->m_hiddenClass;
                         if (hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                         {
                             ReleaseAssert(arrType.m_asValue == hiddenClass.As<Structure>()->m_arrayType.m_asValue);

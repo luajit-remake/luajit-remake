@@ -123,7 +123,7 @@ struct DeegenCallIcLogicCreator
     //
     struct BaselineJitLLVMLoweringResult
     {
-        llvm::Value* calleeCbHeapPtr;
+        llvm::Value* calleeCb;
         llvm::Value* codePointer;
         // The 'MakeCall' API in the BB for this path
         //

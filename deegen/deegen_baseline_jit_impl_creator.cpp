@@ -16,6 +16,7 @@
 #include "invoke_clang_helper.h"
 #include "llvm_override_option.h"
 #include "llvm/Linker/Linker.h"
+#include "vm_base_pointer_optimization.h"
 
 namespace dast {
 
@@ -124,6 +125,10 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     //
     DeegenExtraLLVMOptPass_FuseTwoNaNChecksIntoOne(m_module.get());
     DeegenExtraLLVMOptPass_FuseNaNAndCmpCheckIntoOne(m_module.get());
+
+    // Now, run the vm base pointer optimization pass
+    //
+    RunVMBasePointerOptimizationPass(m_wrapper);
 
     ReleaseAssert(m_module->getFunction(m_resultFuncName) == m_wrapper);
 

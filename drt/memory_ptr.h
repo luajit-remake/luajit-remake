@@ -10,11 +10,16 @@ class VM;
 //
 static constexpr uintptr_t x_segmentRegisterSelfReferencingOffset = 0;
 
+extern "C" void* __attribute__((__const__)) WARN_UNUSED DeegenImpl_GetVMBasePointer();
+extern thread_local VM* activeVMForCurrentThread;
+
 // Same as VM::GetActiveVMForCurrentThread(), but no need to include vm.h
 //
 inline VM* VM_GetActiveVMForCurrentThread()
 {
-    return *reinterpret_cast<HeapPtr<VM*>>(x_segmentRegisterSelfReferencingOffset);
+    VM* vm = reinterpret_cast<VM*>(DeegenImpl_GetVMBasePointer());
+    assert(vm != nullptr);
+    return vm;
 }
 
 inline void AssertIsSpdsPointer(void* DEBUG_ONLY(ptr))
@@ -70,38 +75,19 @@ inline void AssertIsValidHeapPointer(void* DEBUG_ONLY(ptr))
 #endif
 }
 
-inline void AssertIsValidHeapPointer(HeapPtr<void> DEBUG_ONLY(ptr))
-{
-#ifndef NDEBUG
-    intptr_t ptrVoid = reinterpret_cast<intptr_t>(ptr);
-    assert((-(16LL << 30) <= ptrVoid && ptrVoid < -(4LL << 30)) ||
-           (-(1LL << 31) <= ptrVoid && ptrVoid < (1LL << 31)));
-#endif
-}
-
-template<typename T>
-remove_heap_ptr_t<T> TranslateToRawPointer(T ptr);
-
 constexpr uint32_t x_vmBasePtrLog2Alignment = 35;
 
 template<typename T>
-add_heap_ptr_t<T> TranslateToHeapPtr(T ptr)
+inline uintptr_t VM_PointerToOffset(T* ptr)
 {
-    if constexpr(IsHeapPtrType<T>::value)
-    {
-        AssertIsValidHeapPointer(ptr);
-        return ptr;
-    }
-    else
-    {
-        AssertIsValidHeapPointer(ptr);
-        uintptr_t val = reinterpret_cast<uintptr_t>(ptr);
-        constexpr uint32_t shift = 64 - x_vmBasePtrLog2Alignment;
-        val = SignExtendedShiftRight(val << shift, shift);
-        add_heap_ptr_t<T> r = reinterpret_cast<add_heap_ptr_t<T>>(val);
-        assert(TranslateToRawPointer(r) == ptr);
-        return r;
-    }
+    AssertIsValidHeapPointer(ptr);
+    return reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(DeegenImpl_GetVMBasePointer());
+}
+
+template<typename T>
+inline T* VM_OffsetToPointer(uintptr_t offset)
+{
+    return reinterpret_cast<T*>(offset + reinterpret_cast<uintptr_t>(VM_GetActiveVMForCurrentThread()));
 }
 
 template<typename T = void>
@@ -110,30 +96,21 @@ struct UserHeapPointer
     UserHeapPointer() : m_value(0) { }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(HeapPtr<U> value)
-        : m_value(reinterpret_cast<intptr_t>(value))
+    UserHeapPointer(U* value)
+        : m_value(static_cast<intptr_t>(VM_PointerToOffset(value)))
     {
-        static_assert(TypeMayLiveInUserHeap<T>);
-        assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
         assert(As<U>() == value);
     }
 
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    UserHeapPointer(U* value)
-        : UserHeapPointer(TranslateToHeapPtr(value))
-    {
-        assert(TranslateToRawPointer(As<U>()) == value);
-    }
-
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
+    U* WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(m_value);
+        return VM_OffsetToPointer<U>(static_cast<uintptr_t>(m_value));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
+    U* WARN_UNUSED As() const
     {
         static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
                       std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
@@ -184,22 +161,15 @@ struct SystemHeapPointer
         AssertIsSystemHeapPointer(value);
     }
 
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    SystemHeapPointer(HeapPtr<U> value)
-        : SystemHeapPointer(SafeIntegerCast<uint32_t>(reinterpret_cast<intptr_t>(value)))
-    {
-        assert(As<U>() == value);
-    }
-
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
+    U* WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInSystemHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(static_cast<uint64_t>(m_value));
+        return VM_OffsetToPointer<U>(static_cast<uintptr_t>(m_value));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
+    U* WARN_UNUSED As() const
     {
         static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
                       std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
@@ -280,7 +250,7 @@ public:
     }
 
     template<typename T>
-    HeapPtr<T> As()
+    T* As()
     {
         assert(IsType<T>());
         return SystemHeapPointer<T> { m_value ^ x_tagFor<T> }.As();
@@ -306,34 +276,26 @@ struct GeneralHeapPointer
     }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(HeapPtr<U> value)
-        : GeneralHeapPointer(SafeIntegerCast<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
+    GeneralHeapPointer(U* value)
+        : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
         assert(As<U>() == value);
     }
 
-    template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
-    GeneralHeapPointer(U* value)
-        : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
-    {
-        assert(TranslateToRawPointer(As<U>()) == value);
-    }
-
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED AsNoAssert() const
+    U* WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInSystemHeap<U> || TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(ArithmeticShiftLeft(static_cast<int64_t>(m_value), x_shiftFromRawOffset));
+        return VM_OffsetToPointer<U>(static_cast<uintptr_t>(ArithmeticShiftLeft(static_cast<int64_t>(m_value), x_shiftFromRawOffset)));
     }
 
     template<typename U = T>
-    HeapPtr<U> WARN_UNUSED As() const
+    U* WARN_UNUSED As() const
     {
         static_assert(std::is_same_v<T, void> || std::is_same_v<T, uint8_t> ||
                       std::is_same_v<U, void> || std::is_same_v<U, uint8_t> ||
                       std::is_same_v<T, U>, "should either keep the type, or reinterpret from/to void*/uint8_t*");
-
-        HeapPtr<U> r = AsNoAssert<U>();
+        U* r = AsNoAssert<U>();
         if constexpr(!std::is_same_v<U, void>)
         {
             assert(reinterpret_cast<uintptr_t>(r) % std::alignment_of_v<U> == 0);
@@ -343,13 +305,13 @@ struct GeneralHeapPointer
             if constexpr(TypeMayLiveInSystemHeap<U>)
             {
                 assert(static_cast<int32_t>(x_minimum_valid_heap_address >> x_shiftFromRawOffset) <= m_value && m_value <= x_posMaxValue);
-                assert(reinterpret_cast<HeapPtr<SystemHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
+                assert(reinterpret_cast<SystemHeapGcObjectHeader*>(r)->m_type == TypeEnumForHeapObject<U>);
             }
             else
             {
                 static_assert(TypeMayLiveInUserHeap<U>);
                 assert(x_negMinValue <= m_value && m_value <= x_negMaxValue);
-                assert(reinterpret_cast<HeapPtr<UserHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
+                assert(reinterpret_cast<UserHeapGcObjectHeader*>(r)->m_type == TypeEnumForHeapObject<U>);
             }
         }
         return r;
@@ -393,29 +355,18 @@ struct SpdsPtr
         AssertIsSpdsPointer(rawPtr);
     }
 
-    SpdsPtr(HeapPtr<T> heapPtr)
-        : SpdsPtr(SafeIntegerCast<int32_t>(reinterpret_cast<intptr_t>(heapPtr)))
-    { }
-
     bool IsInvalidPtr() const
     {
         return m_value >= 0;
     }
 
-    HeapPtr<T> WARN_UNUSED ALWAYS_INLINE AsPtr() const
+    T* WARN_UNUSED ALWAYS_INLINE AsPtr() const
     {
         assert(!IsInvalidPtr());
-        return reinterpret_cast<HeapPtr<T>>(static_cast<int64_t>(m_value));
+        return VM_OffsetToPointer<T>(static_cast<uintptr_t>(m_value));
     }
 
-    template<typename Enable = T, typename = std::enable_if_t<std::is_same_v<Enable, T> && !std::is_same_v<T, void>>>
-    HeapRef<Enable> WARN_UNUSED operator*() const
-    {
-        static_assert(std::is_same_v<Enable, T>);
-        return *AsPtr();
-    }
-
-    HeapPtr<T> WARN_UNUSED operator->() const
+    T* WARN_UNUSED operator->() const
     {
         return AsPtr();
     }
@@ -442,29 +393,18 @@ struct SpdsOrSystemHeapPtr
         AssertIsSpdsOrSystemHeapPointer(rawPtr);
     }
 
-    SpdsOrSystemHeapPtr(HeapPtr<T> heapPtr)
-        : SpdsOrSystemHeapPtr(SafeIntegerCast<int32_t>(reinterpret_cast<intptr_t>(heapPtr)))
-    { }
-
     bool IsInvalidPtr() const
     {
         return 0 <= m_value && m_value < static_cast<int32_t>(x_minimum_valid_heap_address);
     }
 
-    HeapPtr<T> WARN_UNUSED ALWAYS_INLINE AsPtr() const
+    T* WARN_UNUSED ALWAYS_INLINE AsPtr() const
     {
         assert(!IsInvalidPtr());
-        return reinterpret_cast<HeapPtr<T>>(static_cast<int64_t>(m_value));
+        return VM_OffsetToPointer<T>(static_cast<uintptr_t>(m_value));
     }
 
-    template<typename Enable = T, typename = std::enable_if_t<std::is_same_v<Enable, T> && !std::is_same_v<T, void>>>
-    HeapRef<Enable> WARN_UNUSED operator*() const
-    {
-        static_assert(std::is_same_v<Enable, T>);
-        return *AsPtr();
-    }
-
-    HeapPtr<T> WARN_UNUSED operator->() const
+    T* WARN_UNUSED operator->() const
     {
         return AsPtr();
     }
@@ -480,82 +420,36 @@ struct SpdsOrSystemHeapPtr
 class HeapPtrTranslator
 {
 public:
-    HeapPtrTranslator(uint64_t segRegBase) : m_segRegBase(segRegBase) { }
-
-    template<typename T>
-    T* WARN_UNUSED TranslateToRawPtr(HeapPtr<T> ptr) const
-    {
-        static_assert(!IsHeapPtrType<T*>::value);
-        return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) + m_segRegBase);
-    }
+    HeapPtrTranslator() { }
 
     template<typename T>
     UserHeapPointer<T> WARN_UNUSED TranslateToUserHeapPtr(T* ptr) const
     {
-        return UserHeapPointer<T> { TranslateToHeapPtr(ptr) };
+        return UserHeapPointer<T> { ptr };
     }
 
     template<typename T>
     SystemHeapPointer<T> WARN_UNUSED TranslateToSystemHeapPtr(T* ptr) const
     {
-        return SystemHeapPointer<T> { TranslateToHeapPtr(ptr) };
+        return SystemHeapPointer<T> { ptr };
     }
 
     template<typename T>
     SpdsPtr<T> WARN_UNUSED TranslateToSpdsPtr(T* ptr) const
     {
-        return SpdsPtr<T> { TranslateToHeapPtr(ptr) };
+        return SpdsPtr<T> { ptr };
     }
 
     template<typename T>
     GeneralHeapPointer<T> WARN_UNUSED TranslateToGeneralHeapPtr(T* ptr) const
     {
-        return GeneralHeapPointer<T> { TranslateToHeapPtr(ptr) };
+        return GeneralHeapPointer<T> { ptr };
     }
-
-private:
-    template<typename T>
-    HeapPtr<T> TranslateToHeapPtr(T* ptr) const
-    {
-        static_assert(!IsHeapPtrType<T*>::value);
-        return reinterpret_cast<HeapPtr<T>>(reinterpret_cast<uint64_t>(ptr) - m_segRegBase);
-    }
-
-    uint64_t m_segRegBase;
 };
 
 // Same as VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator(), but no need to include vm.h
 //
 inline HeapPtrTranslator VM_GetHeapPtrTranslatorBasedOnVMForCurrentThread()
 {
-    return HeapPtrTranslator { reinterpret_cast<uintptr_t>(VM_GetActiveVMForCurrentThread()) };
-}
-
-template<typename T>
-remove_heap_ptr_t<T> TranslateToRawPointer(VM* vm, T ptr)
-{
-    if constexpr(IsHeapPtrType<T>::value)
-    {
-        HeapPtrTranslator translator { reinterpret_cast<uintptr_t>(vm) };
-        return translator.TranslateToRawPtr(ptr);
-    }
-    else
-    {
-        static_assert(std::is_pointer_v<T>);
-        return ptr;
-    }
-}
-
-template<typename T>
-remove_heap_ptr_t<T> TranslateToRawPointer(T ptr)
-{
-    if constexpr(IsHeapPtrType<T>::value)
-    {
-        return VM_GetHeapPtrTranslatorBasedOnVMForCurrentThread().TranslateToRawPtr(ptr);
-    }
-    else
-    {
-        static_assert(std::is_pointer_v<T>);
-        return ptr;
-    }
+    return HeapPtrTranslator { };
 }

@@ -1,6 +1,6 @@
 #include "deegen_api.h"
 
-HeapPtr<FunctionObject> GetCallee(TValue lhs, TValue rhs);
+FunctionObject* GetCallee(TValue lhs, TValue rhs);
 
 __attribute__((__used__)) extern "C" void NO_RETURN testfn1(TValue lhs, TValue rhs)
 {

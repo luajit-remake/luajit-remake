@@ -1,7 +1,7 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static void DeegenSnippet_UpdateInterpreterCallIcDoublyLink(HeapPtr<ExecutableCode> calleeCbHeapPtr, uint8_t* doublyLink)
+static void DeegenSnippet_UpdateInterpreterCallIcDoublyLink(ExecutableCode* calleeCb, uint8_t* doublyLink)
 {
     uint8_t* prev = doublyLink + UnalignedLoad<int32_t>(doublyLink);
     uint8_t* next = doublyLink - UnalignedLoad<int32_t>(doublyLink + 4);
@@ -11,8 +11,8 @@ static void DeegenSnippet_UpdateInterpreterCallIcDoublyLink(HeapPtr<ExecutableCo
         UnalignedStore<int32_t>(next, diff);
     }
 
-    HeapPtr<ExecutableCode::InterpreterCallIcAnchor> cbAnchor = &calleeCbHeapPtr->m_interpreterCallIcList;
-    HeapPtr<uint8_t> cbAnchorNext = reinterpret_cast<HeapPtr<uint8_t>>(cbAnchor) - cbAnchor->m_nextOffset;
+    ExecutableCode::InterpreterCallIcAnchor* cbAnchor = &calleeCb->m_interpreterCallIcList;
+    uint8_t* cbAnchorNext = reinterpret_cast<uint8_t*>(cbAnchor) - cbAnchor->m_nextOffset;
 
     SystemHeapPointer<uint8_t> cbAnchorU8 { cbAnchor };
     SystemHeapPointer<uint8_t> doublyLinkU8 { doublyLink };

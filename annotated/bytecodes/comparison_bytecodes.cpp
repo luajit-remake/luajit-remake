@@ -140,9 +140,8 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
 
             if (lhs.Is<tString>())
             {
-                VM* vm = VM::GetActiveVMForCurrentThread();
-                HeapString* lhsString = TranslateToRawPointer(vm, lhs.As<tString>());
-                HeapString* rhsString = TranslateToRawPointer(vm, rhs.As<tString>());
+                HeapString* lhsString = lhs.As<tString>();
+                HeapString* rhsString = rhs.As<tString>();
                 bool result = DoComparison<opKind>(lhsString, rhsString);
                 if constexpr(shouldBranch)
                 {
@@ -156,9 +155,9 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
 
             if (lhs.Is<tTable>())
             {
-                HeapPtr<TableObject> lhsMetatable;
+                TableObject* lhsMetatable;
                 {
-                    HeapPtr<TableObject> tableObj = lhs.As<tTable>();
+                    TableObject* tableObj = lhs.As<tTable>();
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
@@ -167,9 +166,9 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
                     lhsMetatable = result.m_result.As<TableObject>();
                 }
 
-                HeapPtr<TableObject> rhsMetatable;
+                TableObject* rhsMetatable;
                 {
-                    HeapPtr<TableObject> tableObj = rhs.As<tTable>();
+                    TableObject* tableObj = rhs.As<tTable>();
                     TableObject::GetMetatableResult result = TableObject::GetMetatable(tableObj);
                     if (result.m_result.m_value == 0)
                     {
@@ -246,7 +245,7 @@ do_metamethod_call:
                 MakeCall(metamethod.As<tFunction>(), lhs, rhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, ShouldInvertMetatableCallResult<opKind>()>);
             }
 
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(metamethod));
@@ -263,7 +262,7 @@ do_metamethod_call_lt_for_le:
                 MakeCall(metamethod.As<tFunction>(), rhs, lhs, ComparisonOperationMetamethodCallContinuation<shouldBranch, !ShouldInvertMetatableCallResult<opKind>()>);
             }
 
-            HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(metamethod);
+            FunctionObject* callTarget = GetCallTargetViaMetatable(metamethod);
             if (unlikely(callTarget == nullptr))
             {
                 ThrowError(MakeErrorMessageForUnableToCall(metamethod));

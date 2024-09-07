@@ -340,7 +340,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     // TODO: if we have more than x_maxSlot keys, we'd better make it CacheableDictionary right now
                     //
                     SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForInlineCapacity(vm, inlineCapcitySize);
-                    HeapPtr<TableObject> obj = TableObject::CreateEmptyTableObject(vm, TranslateToRawPointer(vm, structure.As()), initalArraySize);
+                    TableObject* obj = TableObject::CreateEmptyTableObject(vm, structure.As(), initalArraySize);
 
                     // Now, insert all the string properties in alphabetic order
                     //
@@ -1485,12 +1485,12 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 TestAssert(opdata.size() == 2);
                 TValue tv = objCst(opdata[1]);
                 TestAssert(tv.Is<tTable>());
-                HeapPtr<TableObject> tab = tv.As<tTable>();
+                TableObject* tab = tv.As<tTable>();
                 bool usedSpecializedTableDup = false;
-                if (TCGet(tab->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
+                if (tab->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
                 {
-                    HeapPtr<Structure> structure = TCGet(tab->m_hiddenClass).As<Structure>();
-                    if (structure->m_butterflyNamedStorageCapacity == 0 && !TCGet(tab->m_arrayType).HasSparseMap())
+                    Structure* structure = tab->m_hiddenClass.As<Structure>();
+                    if (structure->m_butterflyNamedStorageCapacity == 0 && !tab->m_arrayType.HasSparseMap())
                     {
                         uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;
                         uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);

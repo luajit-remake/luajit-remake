@@ -7,13 +7,13 @@ static void NO_RETURN TableNewImpl(uint8_t inlineStorageSizeStepping, uint16_t a
 {
     VM* vm = VM::GetActiveVMForCurrentThread();
     SystemHeapPointer<Structure> structure = Structure::GetInitialStructureForSteppingKnowingAlreadyBuilt(vm, inlineStorageSizeStepping);
-    HeapPtr<TableObject> obj;
+    TableObject* obj;
     // We use the 'impl' version and pass in inlineCapacity directly so that Clang can do
     // constant propagation for specialized 'inlineStorageSizeStepping' values
     //
     [[clang::always_inline]] obj = TableObject::CreateEmptyTableObjectImpl(
         vm,
-        TranslateToRawPointer(vm, structure.As()),
+        structure.As(),
         internal::x_inlineStorageSizeForSteppingArray[inlineStorageSizeStepping] /*inlineCapacity*/,
         arrayPartSizeHint);
     Return(TValue::Create<tTable>(obj));

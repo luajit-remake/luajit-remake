@@ -471,22 +471,19 @@ public:
         }
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static void SetReservedWord(T self, uint8_t reservedId)
+    static void SetReservedWord(HeapString* self, uint8_t reservedId)
     {
         assert(reservedId + 1 <= 63);
         uint8_t arrTy = ArrayType::x_invalidArrayType + reservedId + 1;
-        TCSet(self->m_invalidArrayType, arrTy);
+        self->m_invalidArrayType = arrTy;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static bool WARN_UNUSED IsReservedWord(T self)
+    static bool WARN_UNUSED IsReservedWord(HeapString* self)
     {
         return self->m_invalidArrayType != ArrayType::x_invalidArrayType;
     }
 
-    template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
-    static uint8_t WARN_UNUSED GetReservedWordOrdinal(T self)
+    static uint8_t WARN_UNUSED GetReservedWordOrdinal(HeapString* self)
     {
         assert(IsReservedWord(self));
         assert(self->m_invalidArrayType > ArrayType::x_invalidArrayType);
@@ -509,19 +506,14 @@ public:
     static VM* WARN_UNUSED Create();
     void Destroy();
 
-    static VM* GetActiveVMForCurrentThread()
+    static __attribute__((always_inline, flatten)) VM* GetActiveVMForCurrentThread()
     {
-        return reinterpret_cast<VM*>(reinterpret_cast<HeapPtr<VM>>(0)->m_self);
+        return reinterpret_cast<VM*>(DeegenImpl_GetVMBasePointer());
     }
 
     HeapPtrTranslator GetHeapPtrTranslator() const
     {
-        return HeapPtrTranslator { VMBaseAddress() };
-    }
-
-    void SetUpSegmentationRegister()
-    {
-        X64_SetSegmentationRegister<X64SegmentationRegisterKind::GS>(VMBaseAddress());
+        return HeapPtrTranslator { };
     }
 
     SpdsAllocImpl<VM, true /*isTempAlloc*/> WARN_UNUSED CreateSpdsArenaAlloc()
@@ -600,7 +592,7 @@ public:
         {
             BumpUserHeap();
         }
-        return UserHeapPointer<void> { reinterpret_cast<HeapPtr<void>>(m_userHeapCurPtr) };
+        return UserHeapPointer<void> { VM_OffsetToPointer<void>(static_cast<uintptr_t>(m_userHeapCurPtr)) };
     }
 
     // Allocate a chunk of memory from the system heap
@@ -637,14 +629,14 @@ public:
                         m_spdsExecutionThreadFreeList[x_spdsAllocatableClassOrdinal<T>];
             if (likely(freelist.m_value != 0))
             {
-                HeapPtr<void> result = freelist.AsPtr();
-                freelist = TCGet(*reinterpret_cast<HeapPtr<SpdsPtr<void>>>(result));
-                return GetHeapPtrTranslator().TranslateToRawPtr<T>(reinterpret_cast<HeapPtr<T>>(result));
+                void* result = freelist.AsPtr();
+                freelist = *reinterpret_cast<SpdsPtr<void>*>(result);
+                return reinterpret_cast<T*>(result);
             }
             else
             {
                 SpdsPtr<T> result = GetSpdsAllocForCurrentThread().template Alloc<T, true /*collectedByFreeList*/>();
-                return GetHeapPtrTranslator().TranslateToRawPtr<T>(result.AsPtr());
+                return result.AsPtr();
             }
         }
         else
@@ -697,7 +689,7 @@ public:
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len);
     UserHeapPointer<HeapString> WARN_UNUSED CreateStringObjectFromRawString(const void* str, uint32_t len);
 
-    HeapPtr<HeapString> WARN_UNUSED CreateStringObjectFromRawCString(const char* str)
+    HeapString* WARN_UNUSED CreateStringObjectFromRawCString(const char* str)
     {
         return CreateStringObjectFromRawString(str, static_cast<uint32_t>(strlen(str))).As();
     }
@@ -751,10 +743,10 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_rootCoroutine>;
         using T = typeof_member_t<&VM::m_rootCoroutine>;
-        return *reinterpret_cast<HeapPtr<T>>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
-    HeapPtr<TableObject> GetRootGlobalObject();
+    TableObject* GetRootGlobalObject();
 
     // The VM structure also stores several 'true' library functions that doesn't change even if the respective user-exposed
     // global value is overwritten.
@@ -821,7 +813,7 @@ public:
 
     // return -1 if not found, otherwise return the corresponding LuaMetamethodKind
     //
-    int WARN_UNUSED GetMetamethodOrdinalFromStringName(HeapPtr<HeapString> stringName)
+    int WARN_UNUSED GetMetamethodOrdinalFromStringName(HeapString* stringName)
     {
         int ord = GetLuaMetamethodOrdinalFromStringHash(stringName->m_hashHigh);
         if (likely(ord == -1))
@@ -840,7 +832,7 @@ public:
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_usrPRNG>;
         using T = typeof_member_t<&VM::m_usrPRNG>;
-        std::mt19937* res = *reinterpret_cast<HeapPtr<T>>(offset);
+        std::mt19937* res = *VM_OffsetToPointer<T>(offset);
         if (likely(res != nullptr))
         {
             return res;
@@ -853,16 +845,16 @@ public:
         return offsetof_member_v<&VM::m_stringNameForMetatableKind>;
     }
 
-    static HeapPtr<TValue> ALWAYS_INLINE VM_LibFnArrayAddr()
+    static TValue* ALWAYS_INLINE VM_LibFnArrayAddr()
     {
-        return reinterpret_cast<HeapPtr<TValue>>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
+        return VM_OffsetToPointer<TValue>(offsetof_member_v<&VM::m_vmLibFunctionObjects>);
     }
 
-    static HeapPtr<HeapString> ALWAYS_INLINE VM_GetEmptyString()
+    static HeapString* ALWAYS_INLINE VM_GetEmptyString()
     {
         constexpr size_t offset = offsetof_member_v<&VM::m_emptyString>;
         using T = typeof_member_t<&VM::m_emptyString>;
-        return *reinterpret_cast<HeapPtr<T>>(offset);
+        return *VM_OffsetToPointer<T>(offset);
     }
 
     std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> LaunchScript(ScriptModule* module);
@@ -1085,7 +1077,6 @@ private:
     uint32_t m_hashTableSizeMask;
     uint32_t m_elementCount;
     // use GeneralHeapPointer because it's 4 bytes
-    // All pointers are actually always HeapPtr<HeapString>
     //
     GeneralHeapPointer<HeapString>* m_hashTable;
 
@@ -1128,7 +1119,7 @@ public:
 
     // The string ""
     //
-    HeapPtr<HeapString> m_emptyString;
+    HeapString* m_emptyString;
 
     // The string 'tostring'
     //
@@ -1149,20 +1140,20 @@ public:
 inline UserHeapPointer<HeapString> VM_GetSpecialKeyForBoolean(bool v)
 {
     constexpr size_t offset = VM::OffsetofSpecialKeyForBooleanIndex();
-    return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(v)]);
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(v)];
 }
 
 inline UserHeapPointer<HeapString> VM_GetStringNameForMetatableKind(LuaMetamethodKind kind)
 {
     constexpr size_t offset = VM::OffsetofStringNameForMetatableKind();
-    return TCGet(reinterpret_cast<HeapPtr<UserHeapPointer<HeapString>>>(offset)[static_cast<size_t>(kind)]);
+    return VM_OffsetToPointer<UserHeapPointer<HeapString>>(offset)[static_cast<size_t>(kind)];
 }
 
 template<VM::LibFn fn>
 inline TValue ALWAYS_INLINE VM_GetLibFunctionObject()
 {
     static_assert(fn != VM::LibFn::X_END_OF_ENUM);
-    HeapPtr<TValue> arrayStart = VM::VM_LibFnArrayAddr();
-    return TCGet(arrayStart[static_cast<size_t>(fn)]);
+    TValue* arrayStart = VM::VM_LibFnArrayAddr();
+    return arrayStart[static_cast<size_t>(fn)];
 }
 

@@ -3,10 +3,10 @@
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static void DeegenSnippet_PopulateNewCallFrameHeader(void* newStackBase, void* oldStackBase, uint32_t curBytecodeSysHeapPtr, uint64_t target, void* onReturn)
+static void DeegenSnippet_PopulateNewCallFrameHeader(void* newStackBase, void* oldStackBase, uint32_t curBytecodeSysHeapPtr, FunctionObject* target, void* onReturn)
 {
     StackFrameHeader* hdr = StackFrameHeader::Get(newStackBase);
-    hdr->m_func = reinterpret_cast<HeapPtr<FunctionObject>>(target);
+    hdr->m_func = target;
     hdr->m_caller = oldStackBase;
     hdr->m_retAddr = onReturn;
     // We just want to do

@@ -474,7 +474,6 @@ static SimpleTempStringStream* lj_strfmt_putfnum_uint(SimpleTempStringStream* sb
 /* Format stack arguments to buffer. */
 StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* sb, const char* fmt, size_t fmtLen, TValue* argBegin, size_t narg)
 {
-    VM* vm = VM::GetActiveVMForCurrentThread();
     size_t arg = 0;
     FormatState fs;
     SFormat sf;
@@ -553,7 +552,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
                 if (likely(o.Is<tString>()))
                 {
                     len = o.As<tString>()->m_length;
-                    s = reinterpret_cast<char*>(TranslateToRawPointer(vm, o.As<tString>()->m_string));
+                    s = reinterpret_cast<char*>(o.As<tString>()->m_string);
                 }
                 else if (o.Is<tDouble>())
                 {
@@ -590,7 +589,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
                 void* val = nullptr;
                 if (o.Is<tHeapEntity>())
                 {
-                    val = TranslateToRawPointer(vm, o.As<tHeapEntity>());
+                    val = o.As<tHeapEntity>();
                 }
                 lj_strfmt_putptr(sb, val);
                 break;

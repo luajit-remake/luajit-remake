@@ -80,7 +80,7 @@ private:
 
 inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
 {
-    HeapPtr<TableObject> globalObject = vm->GetRootGlobalObject();
+    TableObject* globalObject = vm->GetRootGlobalObject();
     UserHeapPointer<HeapString> hs = vm->CreateStringObjectFromRawString(name.c_str(), static_cast<uint32_t>(name.length()));
 
     GetByIdICInfo icInfo;
@@ -91,13 +91,13 @@ inline TValue WARN_UNUSED GetGlobalVariable(VM* vm, const std::string& name)
 inline TableObject* AssertAndGetTableObject(TValue t)
 {
     ReleaseAssert(t.IsPointer() && t.AsPointer<UserHeapGcObjectHeader>().As()->m_type == HeapEntityType::Table);
-    return TranslateToRawPointer(t.AsPointer<TableObject>().As());
+    return t.AsPointer<TableObject>().As();
 }
 
 inline Structure* AssertAndGetStructure(TableObject* obj)
 {
-    ReleaseAssert(TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-    return TranslateToRawPointer(TCGet(obj->m_hiddenClass).As<Structure>());
+    ReleaseAssert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+    return obj->m_hiddenClass.As<Structure>();
 }
 
 using StringList = std::vector<UserHeapPointer<HeapString>>;
