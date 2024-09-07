@@ -53,14 +53,18 @@ deegen_enter_vm_from_c_impl:
 	# Move numArgs (%rcx)
 	#
 	movq	%rcx, %r12
-	
+
+    # Move vmBasePointer (%r9)
+    #
+    movq    %r9, %rbx
+
+    # Save the callee (%rsi) to (%r9)
+    #
+    movq    %rsi, %r9
+
 	# Move cb (%r8)
 	#
-	movq	%r8, %rbx
-
-	# Move vmBasePointer (%r9)
-	#
-	movq    %r9, %r8
+	movq	%r8, %rsi
 	
 	# Set isMustTail64 (%rdi) to 0
 	# Note that %rdi is originally holding CoroutineCtx, so this must be done after moving it
@@ -75,13 +79,13 @@ deegen_enter_vm_from_c_impl:
 	#
 	movabsq	$0xfffcffff0000007f, %r15
 	
-	# Branch to callee (%rsi)
+	# Branch to callee (%r9)
 	# The stack is unbalanced yet, but it's fine because by design control must 
 	# eventually transfer to deegen_internal_use_only_exit_vm_epilogue, 
 	# which will restore the callee-saved registers, re-balance the stack,
 	# and return control to C
 	#
-	jmpq	*%rsi
+	jmpq	*%r9
 	ud2
 	
 .Lfunc_end_deegen_enter_vm_from_c_impl:

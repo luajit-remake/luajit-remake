@@ -4,15 +4,15 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn5(ptr %0, ptr %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, ptr %vmBasePointer, i64 %7, i64 %8, double %9, double %10, double %11, double %12, double %13, double %14) local_unnamed_addr #0 {
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn5(ptr %0, ptr %1, ptr nocapture readnone %2, ptr %vmBasePointer, i64 %3, ptr nocapture readnone %4, i64 %5, i64 %6, i64 %7, i64 %8, double %9, double %10, double %11, double %12, double %13, double %14) local_unnamed_addr #0 {
   %.val.val.i.i = load i64, ptr %1, align 8, !tbaa.struct !2
   %16 = inttoptr i64 %.val.val.i.i to ptr
-  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr %0, ptr nonnull %1, ptr %16, ptr undef, i64 %4, ptr undef, i64 undef, ptr %vmBasePointer, i64 undef, i64 %8, double undef, double undef, double undef, double undef, double undef, double undef)
+  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr %0, ptr nonnull %1, ptr %16, ptr %vmBasePointer, i64 %3, ptr undef, i64 undef, i64 undef, i64 undef, i64 %8, double undef, double undef, double undef, double undef, double undef, double undef)
   ret void
 }
 
 ; Function Attrs: nounwind
-declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, ptr, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
+declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, i64, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
 
 attributes #0 = { nounwind "frame-pointer"="none" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }

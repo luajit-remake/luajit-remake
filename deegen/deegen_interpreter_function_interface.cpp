@@ -46,9 +46,7 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             llvm_type_of<void*>(ctx),
 
             // RBX [CC/MSABI callee saved]
-            // For bytecode function: the current codeBlock
-            // For return continuation: unused
-            // For function entry: codeblock
+            // VMBasePointer
             //
             llvm_type_of<void*>(ctx),
 
@@ -58,8 +56,9 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             llvm_type_of<uint64_t>(ctx),
 
             // RSI [MSABI callee saved]
+            // For bytecode function: the current codeBlock
             // For return continuation: the start of the ret values
-            // Otherwise unused
+            // For function entry: codeblock
             //
             llvm_type_of<void*>(ctx),
 
@@ -71,9 +70,9 @@ llvm::FunctionType* WARN_UNUSED InterpreterFunctionInterface::GetType(llvm::LLVM
             llvm_type_of<uint64_t>(ctx),
 
             // R8
-            // VM base pointer
+            // unused
             //
-            llvm_type_of<void*>(ctx),
+            llvm_type_of<uint64_t>(ctx),
 
             // R9
             // unused
@@ -134,7 +133,7 @@ std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableGPRLi
     // The order doesn't matter. But I chose the order of GPR list to stay away from the C calling conv registers,
     // in the hope that it can reduce the likelihood of register shuffling when making C calls.
     //
-    return std::vector<uint64_t> { 8 /*R9*/, 5 /*RSI*/, 6 /*RDI*/ };
+    return std::vector<uint64_t> { 7 /*R8*/, 8 /*R9*/, 6 /*RDI*/ };
 }
 
 std::vector<uint64_t> WARN_UNUSED InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath()
@@ -187,11 +186,11 @@ static llvm::CallInst* InterpreterFunctionCreateDispatchToBytecodeImpl(llvm::Val
             /*R13*/ coroutineCtx,
             /*RBP*/ stackbase,
             /*R12*/ bytecodePtr,
-            /*RBX*/ codeBlock,
+            /*RBX*/ func->getArg(3),
             /*R14*/ func->getArg(4),
-            /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RSI*/ codeBlock,
             /*RDI*/ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            /*R8 */ func->getArg(7),
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/
@@ -244,11 +243,11 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToReturnContinuation
             /*R13*/ coroutineCtx,
             /*RBP*/ stackbase,
             /*R12*/ UndefValue::get(llvm_type_of<void*>(ctx)),
-            /*RBX*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RBX*/ func->getArg(3),
             /*R14*/ func->getArg(4),
             /*RSI*/ retStart,
             /*RDI*/ numRets,
-            /*R8 */ func->getArg(7),
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/
@@ -294,11 +293,11 @@ llvm::CallInst* InterpreterFunctionInterface::CreateDispatchToCallee(llvm::Value
             /*R13*/ coroutineCtx,
             /*RBP*/ preFixupStackBase,
             /*R12*/ numArgsAsPtr,
-            /*RBX*/ calleeCodeBlock,
+            /*RBX*/ func->getArg(3),
             /*R14*/ func->getArg(4),
-            /*RSI*/ UndefValue::get(llvm_type_of<void*>(ctx)),
+            /*RSI*/ calleeCodeBlock,
             /*RDI*/ isMustTail64,
-            /*R8 */ func->getArg(7),
+            /*R8 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R9 */ UndefValue::get(llvm_type_of<uint64_t>(ctx)),
             /*R15*/ func->getArg(9),
             /*XMM 1-6*/

@@ -51,7 +51,7 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cb, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, VM* vmBasePointer, uint64_t tagRegister1, uint64_t cb, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
 {
     ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
     ReleaseAssert(tagRegister2 == TValue::x_mivTag);
@@ -61,6 +61,7 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64
     ReleaseAssert(g_expectedResult.m_expectedCb == cb);
     ReleaseAssert(g_expectedResult.m_expectedIsMustTail == isMustTail);
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
+    ReleaseAssert(VM_GetActiveVMForCurrentThread() == vmBasePointer);
     g_expectedResult.m_checkerFnCalled = true;
 
     for (size_t i = 0; i < g_expectedResult.m_expectedStackContent.size(); i++)
@@ -381,14 +382,14 @@ void TestModuleOneCase(llvm::Module* moduleIn,
         CoroutineRuntimeContext* /*coroCtx*/,
         uint64_t* /*sb*/,
         uint8_t* /*curbytecode*/,
-        CodeBlock* /*cb*/,
-        uint64_t /*tagRegister1*/,
-        uint64_t /*unused*/,
-        uint64_t /*unused*/,
         VM*      /*vmBasePointer*/,
+        uint64_t /*tagRegister1*/,
+        CodeBlock* /*cb*/,
+        uint64_t /*unused*/,
+        uint64_t /*unused*/,
         uint64_t /*unused*/,
         uint64_t /*tagRegister2*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, TValue::x_int32Tag, 0, 0, VM_GetActiveVMForCurrentThread(), 0, TValue::x_mivTag);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, VM_GetActiveVMForCurrentThread(), TValue::x_int32Tag, callerCb, 0, 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }

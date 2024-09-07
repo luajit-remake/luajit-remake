@@ -223,7 +223,7 @@ void JitImplCreatorBase::CreateWrapperFunction()
         stackBase->setName(x_stackBase);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
-        Value* baselineCodeBlock = m_wrapper->getArg(3);
+        Value* baselineCodeBlock = m_wrapper->getArg(5);
         baselineCodeBlock->setName(GetJitCodeBlockLLVMVarName());
         m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), baselineCodeBlock);
 

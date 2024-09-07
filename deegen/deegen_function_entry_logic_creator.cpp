@@ -71,7 +71,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* preFixupStackBase = func->getArg(1);
         preFixupStackBase->setName("preFixupStackBase");
         Value* numArgsAsPtr = func->getArg(2);
-        Value* calleeCodeBlock = func->getArg(3);
+        Value* calleeCodeBlock = func->getArg(5);
         Value* isMustTail64 = func->getArg(6);
 
         BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
@@ -117,7 +117,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* curBytecode = func->getArg(2);
         curBytecode->setName("curBytecode");
 
-        Value* codeBlock = func->getArg(3);
+        Value* codeBlock = func->getArg(5);
         codeBlock->setName("codeBlock");
 
         BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
@@ -182,7 +182,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     Value* preFixupStackBase = func->getArg(1);
     preFixupStackBase->setName("preFixupStackBase");
     Value* numArgsAsPtr = func->getArg(2);
-    Value* calleeCodeBlock = func->getArg(3);
+    Value* calleeCodeBlock = func->getArg(5);
     Value* isMustTail64 = func->getArg(6);
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);

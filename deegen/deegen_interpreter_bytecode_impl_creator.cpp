@@ -67,7 +67,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         curBytecode->setName(x_curBytecode);
         m_valuePreserver.Preserve(x_curBytecode, curBytecode);
 
-        Value* codeBlock = m_wrapper->getArg(3);
+        Value* codeBlock = m_wrapper->getArg(5);
         codeBlock->setName(x_interpreterCodeBlock);
         m_valuePreserver.Preserve(x_interpreterCodeBlock, codeBlock);
     }

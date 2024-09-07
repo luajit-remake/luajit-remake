@@ -33,10 +33,11 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, CodeBlock* codeBlock, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
+void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, VM* vmBasePointer, uint64_t tagRegister1, CodeBlock* codeBlock, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
 {
     ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
     ReleaseAssert(tagRegister2 == TValue::x_mivTag);
+    ReleaseAssert(vmBasePointer == VM_GetActiveVMForCurrentThread());
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
 
@@ -169,14 +170,14 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
         CoroutineRuntimeContext* /*coroCtx*/,
         uint64_t* /*sb*/,
         uint64_t /*numArgs*/,
-        CodeBlock* /*codeBlock*/,
+        VM* /*vmBasePointer*/,
         uint64_t /*tagRegister1*/,
-        uint64_t /*unused*/,
+        CodeBlock* /*codeBlock*/,
         uint64_t /*isMustTail64*/,
         uint64_t /*unused*/,
         uint64_t /*unused*/,
         uint64_t /*tagRegister2*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, calleeCb, TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
+    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, VM_GetActiveVMForCurrentThread(), TValue::x_int32Tag, calleeCb, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
