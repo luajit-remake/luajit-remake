@@ -27,7 +27,7 @@ struct DeegenOptJitSpeculativeInliningInfo
         m_bytecodeDef = mainJitComponent->m_bytecodeDef;
         m_callSiteOrdinal = callSiteOrdinal;
         m_component = mainJitComponent;
-        ReleaseAssert(m_callSiteOrdinal < m_bytecodeDef->GetNumCallICsInJitTier());
+        ReleaseAssert(m_callSiteOrdinal < m_bytecodeDef->GetNumCallICsInBaselineJitTier());
         m_success = false;
     }
 

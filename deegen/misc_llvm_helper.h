@@ -18,6 +18,9 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Transforms/IPO/StripSymbols.h"
+#include "llvm/Transforms/IPO/StripDeadPrototypes.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -633,7 +636,6 @@ inline void CopyFunctionAttributes(llvm::Function* dstFunc, llvm::Function* srcF
         "target-cpu",
         "target-features",
         "tune-cpu",
-        "frame-pointer",
         "min-legal-vector-width",
         "no-trapping-math",
         "stack-protector-buffer-size"
@@ -669,8 +671,9 @@ inline void ReplaceInstructionWithValue(llvm::Instruction* inst, llvm::Value* va
 {
     ReleaseAssert(inst->getType() == value->getType());
     using namespace llvm;
+    ReleaseAssert(inst->getParent() != nullptr);
     BasicBlock::iterator BI(inst);
-    ReplaceInstWithValue(inst->getParent()->getInstList(), BI, value);
+    ReplaceInstWithValue(BI, value);
 }
 
 inline void DumpLLVMModuleForDebug(llvm::Module* module)
@@ -711,6 +714,8 @@ inline std::unique_ptr<llvm::Module> WARN_UNUSED ParseLLVMModuleFromString(llvm:
     ReleaseAssert(module.get() != nullptr);
     return module;
 }
+
+std::pair<std::unique_ptr<llvm::Module>, llvm::Function*> WARN_UNUSED GetDeegenCommonSnippetModule(llvm::LLVMContext& ctx, const std::string& snippetName);
 
 // Link the requested snippet into the current module if it hasn't been linked in yet.
 // Return the LLVM Function for the requested snippet.
@@ -807,8 +812,8 @@ public:
         FunctionType* fty = FunctionType::get(Type::getVoidTy(ctx) /*ret*/, { inst->getType() } /*arg*/, false /*isVarArg*/);
         Function* dummyFunc = Function::Create(fty, GlobalValue::ExternalLinkage, dummyFnName, module);
         ReleaseAssert(dummyFunc->getName() == dummyFnName);
-        dummyFunc->addFnAttr(Attribute::AttrKind::WillReturn);
-        dummyFunc->addFnAttr(Attribute::AttrKind::NoUnwind);
+        dummyFunc->addFnAttr(Attribute::WillReturn);
+        dummyFunc->addFnAttr(Attribute::NoUnwind);
 
         CallInst* callInst = CallInst::Create(dummyFunc, { inst });
         callInst->insertAfter(inst);
@@ -909,6 +914,28 @@ public:
         m_func = nullptr;
     }
 
+    // Clone this struct to 'dest' after the function has been cloned into a new module
+    //
+    void Clone(LLVMInstructionPreserver& dest /*out*/, llvm::Module* newModule)
+    {
+        if (m_func == nullptr)
+        {
+            ReleaseAssert(m_nameToInstMap.empty() && m_ordToNameMap.empty());
+            dest.m_func = nullptr;
+            dest.m_nameToInstMap.clear();
+            dest.m_ordToNameMap.clear();
+        }
+        else
+        {
+            ReleaseAssert(m_func != nullptr && dest.m_func == nullptr);
+            dest.m_func = newModule->getFunction(m_func->getName());
+            ReleaseAssert(dest.m_func != nullptr);
+            dest.m_nameToInstMap = m_nameToInstMap;
+            dest.m_ordToNameMap = m_ordToNameMap;
+            dest.RefreshAfterTransform();
+        }
+    }
+
     friend class LLVMValuePreserver;
 
 private:
@@ -989,6 +1016,47 @@ public:
         m_func = nullptr;
     }
 
+    // Clone this struct to 'dest' after the function has been cloned into a new module
+    //
+    void Clone(LLVMValuePreserver& dest /*out*/, llvm::Module* newModule)
+    {
+        using namespace llvm;
+        m_instPreserver.Clone(dest.m_instPreserver /*out*/, newModule);
+        if (m_func == nullptr)
+        {
+            ReleaseAssert(m_nonInstMap.empty());
+            dest.m_func = nullptr;
+            dest.m_nonInstMap.clear();
+        }
+        else
+        {
+            ReleaseAssert(m_func != nullptr && dest.m_func == nullptr);
+            dest.m_func = newModule->getFunction(m_func->getName());
+            ReleaseAssert(dest.m_func != nullptr);
+
+            dest.m_nonInstMap.clear();
+            for (auto& it : m_nonInstMap)
+            {
+                Value* val = it.second;
+                Value* mappedVal;
+                if (isa<Constant>(val))
+                {
+                    mappedVal = val;
+                }
+                else
+                {
+                    ReleaseAssert(isa<Argument>(val) && cast<Argument>(val)->getParent() == m_func);
+                    uint32_t ord = cast<Argument>(val)->getArgNo();
+                    ReleaseAssert(ord < dest.m_func->arg_size());
+                    mappedVal = dest.m_func->getArg(ord);
+                }
+                ReleaseAssert(!dest.m_nonInstMap.count(it.first));
+                dest.m_nonInstMap[it.first] = mappedVal;
+            }
+            ReleaseAssert(m_nonInstMap.size() == dest.m_nonInstMap.size());
+        }
+    }
+
 private:
     llvm::Function* m_func;
     LLVMInstructionPreserver m_instPreserver;
@@ -1017,10 +1085,32 @@ inline llvm::Instruction* WARN_UNUSED CreateSignedAddNoOverflow(llvm::Value* lhs
     return res;
 }
 
+inline llvm::Instruction* WARN_UNUSED CreateSignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    ReleaseAssert(insertAtEnd != nullptr);
+    LLVMContext& ctx = insertAtEnd->getContext();
+    UnreachableInst* dummy = new UnreachableInst(ctx, insertAtEnd);
+    Instruction* res = CreateSignedAddNoOverflow(lhs, rhs, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
 inline llvm::Instruction* WARN_UNUSED CreateUnsignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
     llvm::Instruction* res = CreateAdd(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
     if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedAddNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    ReleaseAssert(insertAtEnd != nullptr);
+    LLVMContext& ctx = insertAtEnd->getContext();
+    UnreachableInst* dummy = new UnreachableInst(ctx, insertAtEnd);
+    Instruction* res = CreateUnsignedAddNoOverflow(lhs, rhs, dummy);
+    dummy->eraseFromParent();
     return res;
 }
 
@@ -1036,10 +1126,32 @@ inline llvm::Instruction* WARN_UNUSED CreateSignedSubNoOverflow(llvm::Value* lhs
     return res;
 }
 
+inline llvm::Instruction* WARN_UNUSED CreateSignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    ReleaseAssert(insertAtEnd != nullptr);
+    LLVMContext& ctx = insertAtEnd->getContext();
+    UnreachableInst* dummy = new UnreachableInst(ctx, insertAtEnd);
+    Instruction* res = CreateSignedSubNoOverflow(lhs, rhs, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
 inline llvm::Instruction* WARN_UNUSED CreateUnsignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::Instruction* insertBefore = nullptr)
 {
     llvm::Instruction* res = CreateSub(lhs, rhs, true /*mustHaveNoUnsignedWrap*/, false /*mustHaveNoSignedWrap*/);
     if (insertBefore != nullptr) { res->insertBefore(insertBefore); }
+    return res;
+}
+
+inline llvm::Instruction* WARN_UNUSED CreateUnsignedSubNoOverflow(llvm::Value* lhs, llvm::Value* rhs, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    ReleaseAssert(insertAtEnd != nullptr);
+    LLVMContext& ctx = insertAtEnd->getContext();
+    UnreachableInst* dummy = new UnreachableInst(ctx, insertAtEnd);
+    Instruction* res = CreateUnsignedSubNoOverflow(lhs, rhs, dummy);
+    dummy->eraseFromParent();
     return res;
 }
 
@@ -1332,7 +1444,7 @@ struct LLVMRepeatedInliningInhibitor
                     Function* func = dyn_cast<Function>(c);
                     ReleaseAssert(func != nullptr);
 
-                    if (func->hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+                    if (func->hasFnAttribute(Attribute::AlwaysInline))
                     {
                         // This means our caller has changed the function to always_inline.
                         // We should respect it. Just skip.
@@ -1352,7 +1464,7 @@ struct LLVMRepeatedInliningInhibitor
 
                     std::string fnName = func->getName().str();
 
-                    if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
+                    if (func->hasFnAttribute(Attribute::NoInline))
                     {
                         // This means our caller has added no_inline attribute to this function.
                         // We should respect it by making sure it is still no_inline after the pass.
@@ -1371,7 +1483,7 @@ struct LLVMRepeatedInliningInhibitor
                         ReleaseAssert(!m_list.count(fnName));
                         m_list.insert(fnName);
 
-                        func->addFnAttr(Attribute::AttrKind::NoInline);
+                        func->addFnAttr(Attribute::NoInline);
                         ReleaseAssert(!m_functionToRemoveNoInlineAttr.count(fnName));
                         m_functionToRemoveNoInlineAttr.insert(fnName);
                     }
@@ -1394,11 +1506,11 @@ struct LLVMRepeatedInliningInhibitor
             {
                 continue;
             }
-            if (func.hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+            if (func.hasFnAttribute(Attribute::AlwaysInline))
             {
                 continue;
             }
-            if (!func.hasFnAttribute(Attribute::AttrKind::NoInline))
+            if (!func.hasFnAttribute(Attribute::NoInline))
             {
                 ReleaseAssert(!m_list.count(func.getName().str()));
                 m_list.insert(func.getName().str());
@@ -1422,8 +1534,8 @@ struct LLVMRepeatedInliningInhibitor
             }
             else
             {
-                ReleaseAssert(func->hasFnAttribute(Attribute::AttrKind::NoInline));
-                func->removeFnAttr(Attribute::AttrKind::NoInline);
+                ReleaseAssert(func->hasFnAttribute(Attribute::NoInline));
+                func->removeFnAttr(Attribute::NoInline);
             }
         }
 
@@ -1593,6 +1705,40 @@ inline void RunLLVMOptimizePass(llvm::Module* module)
     ValidateLLVMModule(module);
 }
 
+inline void RunLLVMDeadGlobalEliminationRaw(llvm::Module* module)
+{
+    using namespace llvm;
+
+    ValidateLLVMModule(module);
+
+    PassBuilder passBuilder;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    ModulePassManager MPM;
+
+    // Delete unreachable globals
+    //
+    MPM.addPass(GlobalDCEPass());
+
+    // Remove dead debug info
+    //
+    MPM.addPass(StripDeadDebugInfoPass());
+    // Remove dead func decls
+    //
+    MPM.addPass(StripDeadPrototypesPass());
+
+    MPM.run(*module, MAM);
+}
+
 inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
 {
     using namespace llvm;
@@ -1600,18 +1746,7 @@ inline void RunLLVMDeadGlobalElimination(llvm::Module* module)
     LLVMRepeatedInliningInhibitor rii(module);
     rii.PrepareForDCE();
 
-    ValidateLLVMModule(module);
-    legacy::PassManager Passes;
-    // Delete unreachable globals
-    //
-    Passes.add(createGlobalDCEPass());
-    // Remove dead debug info
-    //
-    Passes.add(createStripDeadDebugInfoPass());
-    // Remove dead func decls
-    //
-    Passes.add(createStripDeadPrototypesPass());
-    Passes.run(*module);
+    RunLLVMDeadGlobalEliminationRaw(module);
 
     rii.RestoreAfterDCE();
     ValidateLLVMModule(module);
@@ -1646,16 +1781,83 @@ inline int WARN_UNUSED StoiOrFail(const std::string& s)
     return res;
 }
 
+// Copy 'bytes' to 'dst'. 'bytes' may have at most 15 bytes
+//
+inline void EmitMemcpyLessThan16B(llvm::Value* dst, const std::vector<uint8_t>& bytes, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    LLVMContext& ctx = dst->getContext();
+
+    size_t size = bytes.size();
+    ReleaseAssert(size <= 15);
+    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> copyStrategies = {
+        /*0*/   {},
+        /*1*/   { {0, 1} },
+        /*2*/   { {0, 2} },
+        /*3*/   { {0, 2}, {2, 1} },
+        /*4*/   { {0, 4} },
+        /*5*/   { {0, 4}, {4, 1} },
+        /*6*/   { {0, 4}, {4, 2} },
+        /*7*/   { {0, 4}, {3, 4} },
+        /*8*/   { {0, 8} },
+        /*9*/   { {0, 8}, {8, 1} },
+        /*10*/  { {0, 8}, {8, 2} },
+        /*11*/  { {0, 8}, {7, 4} },
+        /*12*/  { {0, 8}, {8, 4} },
+        /*13*/  { {0, 8}, {5, 8} },
+        /*14*/  { {0, 8}, {6, 8} },
+        /*15*/  { {0, 8}, {7, 8} }
+    };
+    ReleaseAssert(size < copyStrategies.size());
+    std::vector<std::pair<uint32_t, uint32_t>> strategy = copyStrategies[size];
+
+    // Check the strategy is correct
+    //
+    {
+        std::vector<bool> bytesFilled;
+        bytesFilled.resize(size, false /*value*/);
+        for (auto& item : strategy)
+        {
+            for (size_t i = item.first; i < item.first + item.second; i++)
+            {
+                ReleaseAssert(i < size);
+                bytesFilled[i] = true;
+            }
+        }
+        for (size_t i = 0; i < size; i++) { ReleaseAssert(bytesFilled[i]); }
+    }
+
+    for (auto& item : strategy)
+    {
+        size_t offset = item.first;
+        uint32_t sizeBytes = item.second;
+
+        uint64_t value;
+        switch (sizeBytes)
+        {
+        case 1: { value = UnalignedLoad<uint8_t>(bytes.data() + offset); break; }
+        case 2: { value = UnalignedLoad<uint16_t>(bytes.data() + offset); break; }
+        case 4: { value = UnalignedLoad<uint32_t>(bytes.data() + offset); break; }
+        case 8: { value = UnalignedLoad<uint64_t>(bytes.data() + offset); break; }
+        default: { ReleaseAssert(false); }
+        }   /*switch*/
+
+        Value* valToStore = ConstantInt::get(ctx, APInt(sizeBytes * 8 /*numBits*/, value, false /*isSigned*/));
+        Value* addr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), dst, { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertAtEnd);
+        new StoreInst(valToStore, addr, false /*isVolatile*/, Align(1), insertAtEnd);
+    }
+}
+
 // Emit a memcpy_inline.
-// If 'mustBeExact' is false (which is the default!), this function will be allowed to overwrite at most 7 bytes (so that we can have less instructions)
+// If 'mustBeExact' is false, this function will be allowed to overwrite at most 7 bytes (so that we can have less instructions)
 // The caller is responsible for accounting for the extra bytes when doing the allocation in such case.
 //
-inline void EmitCopyLogicForBaselineJitCodeGen(llvm::Module* module,
-                                               const std::vector<uint8_t>& bytes,
-                                               llvm::Value* dst,
-                                               const std::string& gvName,
-                                               llvm::BasicBlock* insertAtEnd,
-                                               bool mustBeExact = false)
+inline void EmitCopyLogicForJitCodeGen(llvm::Module* module,
+                                       const std::vector<uint8_t>& bytes,
+                                       llvm::Value* dst,
+                                       const std::string& gvNameHint,
+                                       llvm::BasicBlock* insertAtEnd,
+                                       bool mustBeExact)
 {
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
@@ -1667,40 +1869,49 @@ inline void EmitCopyLogicForBaselineJitCodeGen(llvm::Module* module,
         roundedLen = RoundUpToMultipleOf<8>(roundedLen);
     }
 
-    std::vector<Constant*> arr;
-    for (size_t i = 0; i < roundedLen; i++)
+    std::vector<uint8_t> paddedBytes = bytes;
+    while (paddedBytes.size() < roundedLen)
     {
-        uint8_t value;
-        if (i < bytes.size())
-        {
-            value = bytes[i];
-        }
-        else
-        {
-            value = 0;
-        }
+        paddedBytes.push_back(0);
+    }
+    ReleaseAssert(paddedBytes.size() == roundedLen);
 
-        arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, value));
+    // LLVM will use SIMD registers to move the 16-byte chunks, then use GPR with literal constants to move the residue parts
+    // Chop of the residue parts from the array since they will not be used by LLVM (LLVM cannot eliminate these by itself even though in theory it can)
+    //
+    size_t simdChunkSize = roundedLen / 16 * 16;
+    if (simdChunkSize > 0)
+    {
+        std::vector<Constant*> arr;
+        for (size_t i = 0; i < simdChunkSize; i++)
+        {
+            arr.push_back(CreateLLVMConstantInt<uint8_t>(ctx, paddedBytes[i]));
+        }
+        ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), simdChunkSize);
+        Constant* ca = ConstantArray::get(aty, arr);
+
+        GlobalVariable* gv = new GlobalVariable(*module, aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, gvNameHint);
+        gv->setAlignment(Align(16));
+        gv->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
+
+        // TODO: LLVM lowers memcpy.inline to 'rep movsb' if the buffer is too long (>128 bytes?),
+        // which has disastrous performance on older CPUs without FSRM, but (should?) work well on Golden Cove
+        // or later (but really? our output buffer is not aligned..)
+        // Think about if we need to do anything to this later..
+        //
+        EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(module, dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, simdChunkSize), insertAtEnd);
     }
 
-    ReleaseAssert(arr.size() == roundedLen);
-    ReleaseAssertImp(mustBeExact, roundedLen == bytes.size());
+    if (simdChunkSize < roundedLen)
+    {
+        std::vector<uint8_t> residueBytes;
+        residueBytes.insert(residueBytes.end(), paddedBytes.data() + simdChunkSize, paddedBytes.data() + roundedLen);
+        ReleaseAssert(residueBytes.size() + simdChunkSize == roundedLen);
 
-    ArrayType* aty = ArrayType::get(llvm_type_of<uint8_t>(ctx), roundedLen);
-    Constant* ca = ConstantArray::get(aty, arr);
-
-    ReleaseAssert(module->getNamedValue(gvName) == nullptr);
-    GlobalVariable* gv = new GlobalVariable(*module, aty, true /*isConstant*/, GlobalValue::PrivateLinkage, ca /*initializer*/, gvName);
-    ReleaseAssert(gv->getName() == gvName);
-    gv->setAlignment(Align(16));
-
-    // TODO: LLVM lowers memcpy.inline to 'rep movsb' if the buffer is too long (>128 bytes?),
-    // which has disastrous performance on older CPUs without FSRM, but (should?) work well on Golden Cove
-    // or later (but really? our output buffer is not aligned..)
-    // Think about if we need to do anything to this later..
-    //
-    EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(module, dst, gv, CreateLLVMConstantInt<uint64_t>(ctx, roundedLen), insertAtEnd);
-};
+        Value* newDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), dst, { CreateLLVMConstantInt<uint64_t>(ctx, simdChunkSize) }, "", insertAtEnd);
+        EmitMemcpyLessThan16B(newDst, residueBytes, insertAtEnd);
+    }
+}
 
 // Find the first non-alloca instruction in the entry block of the specified function, which is the earliest safe place to insert new instructions
 //
@@ -1719,7 +1930,101 @@ inline llvm::Instruction* WARN_UNUSED FindFirstNonAllocaInstInEntryBB(llvm::Func
         it++;
     }
     ReleaseAssert(false);
-};
+}
+
+// For each function in the given module which function name starts with "prefixToFind",
+// rename the function by changing the prefix into "prefixToReplace"
+//
+inline void RenameAllFunctionsStartingWithPrefix(llvm::Module* module, const std::string& prefixToFind, const std::string& prefixToReplace)
+{
+    using namespace llvm;
+    std::vector<Function*> fnsToRename;
+    for (Function& fn : *module)
+    {
+        if (fn.getName().starts_with(prefixToFind))
+        {
+            fnsToRename.push_back(&fn);
+        }
+    }
+    for (Function* fn : fnsToRename)
+    {
+        std::string oldName = fn->getName().str();
+        ReleaseAssert(oldName.starts_with(prefixToFind));
+        std::string newName = prefixToReplace + oldName.substr(prefixToFind.length());
+        fn->setName(newName);
+        ReleaseAssert(fn->getName() == newName);
+    }
+}
+
+inline std::string WARN_UNUSED ConvertStringToLowerCase(const std::string& input)
+{
+    std::string result = input;
+    for (size_t i = 0; i < result.size(); i++)
+    {
+        if ('A' <= result[i] && result[i] <= 'Z')
+        {
+            result[i] = static_cast<char>(result[i] - 'A' + 'a');
+        }
+    }
+    return result;
+}
+
+// The IR generated by these CPP struct accessor functions do not have proper TBAA information!
+// So caller should be very careful to only use these functions when not having TBAA info is fine.
+//
+// To generate TBAA-safe LLVM IR one should use DeegenCommonSnippet.
+//
+template<auto member_object_ptr>
+llvm::Value* WARN_UNUSED GetMemberFromCppStruct(llvm::Value* ptr, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ptr->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(ptr));
+
+    constexpr size_t offset = offsetof_member_v<member_object_ptr>;
+    using MemberTy = typeof_member_t<member_object_ptr>;
+
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ptr,
+                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
+    Type* ty = llvm_type_of<MemberTy>(ctx);
+    return new LoadInst(ty, gep, "", insertBefore);
+}
+
+template<auto member_object_ptr>
+llvm::Value* WARN_UNUSED GetMemberFromCppStruct(llvm::Value* ptr, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(ptr->getContext(), insertAtEnd);
+    Value* res = GetMemberFromCppStruct<member_object_ptr>(ptr, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
+template<auto member_object_ptr>
+void WriteCppStructMember(llvm::Value* ptr, llvm::Value* valueToWrite, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ptr->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(ptr));
+
+    constexpr size_t offset = offsetof_member_v<member_object_ptr>;
+    using MemberTy = typeof_member_t<member_object_ptr>;
+
+    GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ptr,
+                                                               { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
+    Type* ty = llvm_type_of<MemberTy>(ctx);
+    ReleaseAssert(valueToWrite->getType() == ty);
+    new StoreInst(valueToWrite, gep, insertBefore);
+}
+
+template<auto member_object_ptr>
+void WriteCppStructMember(llvm::Value* ptr, llvm::Value* valueToWrite, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(ptr->getContext(), insertAtEnd);
+    WriteCppStructMember<member_object_ptr>(ptr, valueToWrite, dummy);
+    dummy->eraseFromParent();
+}
 
 // Populate multi-byte NOP instruction to an address range
 //
@@ -1790,7 +2095,7 @@ struct X64PatchableJumpUtil
         Value* jmpEndAddr64 = new PtrToIntInst(jmpEndAddr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
         Value* newDest64 = new PtrToIntInst(newDest, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
         Instruction* diff = CreateSub(newDest64, jmpEndAddr64);
-        insertAtEnd->getInstList().push_back(diff);
+        diff->insertBefore(insertAtEnd->end());
         Value* diff32 = new TruncInst(diff, llvm_type_of<uint32_t>(ctx), "", insertAtEnd);
         GetElementPtrInst* ptr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jmpEndAddr,
                                                                    { CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(-4)) }, "", insertAtEnd);

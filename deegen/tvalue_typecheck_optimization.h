@@ -71,7 +71,7 @@ public:
         Constraint() { }
         virtual ~Constraint() { }
 
-        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) = 0;
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeMaskTy /*singletonTypeMask*/>& comb) = 0;
     };
 
     class AndConstraint final : public Constraint
@@ -83,7 +83,7 @@ public:
             m_clauses.push_back(std::move(constraint));
         }
 
-        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeMaskTy /*singletonTypeMask*/>& comb) override
         {
             for (auto& it : m_clauses)
             {
@@ -108,7 +108,7 @@ public:
             ReleaseAssert(m_clause.get() != nullptr);
         }
 
-        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeMaskTy /*singletonTypeMask*/>& comb) override
         {
             return !m_clause->eval(comb);
         }
@@ -120,23 +120,23 @@ public:
     class LeafConstraint final : public Constraint
     {
     public:
-        LeafConstraint(uint32_t operandOrd, TypeSpeculationMask allowedMask)
+        LeafConstraint(uint32_t operandOrd, TypeMaskTy allowedMask)
             : m_operandOrd(operandOrd), m_allowedMask(allowedMask)
         { }
 
-        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeSpeculationMask /*singletonTypeMask*/>& comb) override
+        virtual bool eval(const std::unordered_map<uint32_t /*operandOrd*/, TypeMaskTy /*singletonTypeMask*/>& comb) override
         {
             auto it = comb.find(m_operandOrd);
             ReleaseAssert(it != comb.end());
-            TypeSpeculationMask singletonMask = it->second;
-            TypeSpeculationMask passed = m_allowedMask & singletonMask;
+            TypeMaskTy singletonMask = it->second;
+            TypeMaskTy passed = m_allowedMask & singletonMask;
             ReleaseAssert(passed == 0 || passed == singletonMask);
             return passed == singletonMask;
         }
 
     private:
         uint32_t m_operandOrd;
-        TypeSpeculationMask m_allowedMask;
+        TypeMaskTy m_allowedMask;
     };
 
     void SetTargetFunction(llvm::Function* func)
@@ -188,7 +188,7 @@ private:
     bool m_didOptimization;
     // Maps each TValue::Is<XXX>(arg) call to the proven type mask precondition of 'arg'
     //
-    std::unordered_map<llvm::CallInst* /*typecheckInst*/, TypeSpeculationMask /*provenTypePrecondition*/> m_provenPreconditionForTypeChecks;
+    std::unordered_map<llvm::CallInst* /*typecheckInst*/, TypeMaskTy /*provenTypePrecondition*/> m_provenPreconditionForTypeChecks;
     // Map each instruction to the proven constant this instruction produces
     //
     std::unordered_map<llvm::Instruction*, llvm::Constant*> m_provenConstants;
@@ -202,11 +202,11 @@ private:
 
 // Returns true if the function is a TValue typecheck API function (TValue::Is<>(...))
 //
-bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr);
+bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeMaskTy* typeMask /*out*/ = nullptr);
 
 // Returns true if the function is a TValue decode API function (TValue::As<>(...))
 //
-bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/ = nullptr);
+bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeMaskTy* typeMask /*out*/ = nullptr);
 
 // Returns true if the function is a TValue typecheck strength reduction function (created by optimization)
 //
@@ -217,7 +217,7 @@ DesugarDecision ShouldDesugarTValueTypecheckAPI(llvm::Function* func, Desugaring
 // 'func' must be a TValue typecheck API or typecheck strength reduction function
 // Returns the mask being checked
 //
-TypeSpeculationMask WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func);
+TypeMaskTy WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func);
 
 struct TypecheckStrengthReductionCandidate;
 
@@ -241,7 +241,7 @@ struct TypeCheckFunctionSelector
         llvm::Function* m_func;
     };
 
-    QueryResult WARN_UNUSED Query(TypeSpeculationMask maskToCheck, TypeSpeculationMask preconditionMask);
+    QueryResult WARN_UNUSED Query(TypeMaskTy maskToCheck, TypeMaskTy preconditionMask);
 
     const std::vector<TypecheckStrengthReductionCandidate>& GetStrengthReductionList()
     {
@@ -249,7 +249,7 @@ struct TypeCheckFunctionSelector
     }
 
 private:
-    std::pair<llvm::Function*, size_t /*cost*/> FindBestStrengthReduction(TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask);
+    std::pair<llvm::Function*, size_t /*cost*/> FindBestStrengthReduction(TypeMaskTy checkedMask, TypeMaskTy precondMask);
 
     std::unique_ptr<std::vector<TypecheckStrengthReductionCandidate>> m_candidateList;
 };

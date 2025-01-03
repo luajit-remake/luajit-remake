@@ -49,7 +49,7 @@
 #define STRSCAN_OPT_LL		0x08
 #define STRSCAN_OPT_C		0x10
 
-#define strscan_error_result() StrScanResult { .fmt = STRSCAN_ERROR }
+#define strscan_error_result() StrScanResult { .fmt = STRSCAN_ERROR, .u64 = Undef<uint64_t>() }
 
 /* -- Scanning numbers ---------------------------------------------------- */
 
@@ -128,7 +128,7 @@ static double WARN_UNUSED strscan_double(uint64_t x, int32_t ex2, int32_t neg)
     }
 
     /* Convert to double using a signed int64_t conversion, then rescale. */
-    assert((int64_t)x >= 0 && "bad double conversion");
+    Assert((int64_t)x >= 0 && "bad double conversion");
     n = (double)(int64_t)x;
     if (neg) n = -n;
     if (ex2) n = ldexp(n, ex2);
@@ -290,7 +290,7 @@ plainnumber:    /* Fast path for plain numbers < 2^63. */
         uint32_t hi = 0, lo = (uint32_t)(xip-xi);
         int32_t ex2 = 0, idig = (int32_t)lo + (ex10 >> 1);
 
-        assert(lo > 0 && (ex10 & 1) == 0);
+        Assert(lo > 0 && (ex10 & 1) == 0);
 
         /* Handle simple overflow/underflow. */
         if (idig > 310/2) {
@@ -554,7 +554,7 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleWithLuaSemantics(const void* s
 {
     StrScanResult res = lj_strscan_scan((const uint8_t *)str, len,
                                         STRSCAN_OPT_TONUM);
-    assert((res.fmt == STRSCAN_ERROR || res.fmt == STRSCAN_NUM) && "bad scan format");
+    Assert((res.fmt == STRSCAN_ERROR || res.fmt == STRSCAN_NUM) && "bad scan format");
     return res;
 }
 
@@ -562,7 +562,7 @@ StrScanResult WARN_UNUSED TryConvertStringToDoubleOrInt32WithLuaSemantics(const 
 {
     StrScanResult res = lj_strscan_scan((const uint8_t *)str, len,
                                         STRSCAN_OPT_TOINT);
-    assert((res.fmt == STRSCAN_ERROR || res.fmt == STRSCAN_NUM || res.fmt == STRSCAN_INT)
+    Assert((res.fmt == STRSCAN_ERROR || res.fmt == STRSCAN_NUM || res.fmt == STRSCAN_INT)
            && "bad scan format");
     return res;
 }
@@ -589,7 +589,7 @@ StrScanResult WARN_UNUSED TryConvertStringWithBaseToDoubleWithLuaSemantics(int32
             }
         }
     }
-    return StrScanResult { .fmt = STRSCAN_ERROR };
+    return strscan_error_result();
 }
 
 #undef DNEXT

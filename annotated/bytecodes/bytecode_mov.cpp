@@ -19,6 +19,10 @@ DEEGEN_DEFINE_BYTECODE(Mov)
     Variant(
         Op("input").IsConstant()
     );
+    // DFG speculations: not needed
+    //
+    DfgVariant();
+    TypeDeductionRule([](TypeMask input) { return input; });
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

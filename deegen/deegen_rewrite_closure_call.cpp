@@ -48,7 +48,7 @@ RewriteClosureToFunctionCall::Result WARN_UNUSED RewriteClosureToFunctionCall::R
                 ReleaseAssert(arg->getType() == clone->getValueOperand()->getType());
                 clone->setOperand(0 /*valueOperandIndex*/, arg);
                 ReleaseAssert(clone->getValueOperand() == arg);
-                bb->getInstList().push_back(clone);
+                clone->insertBefore(bb->end());
             });
             closureRewriteArgs.push_back(si->getValueOperand());
             instructionToRemove.push_back(si);
@@ -76,8 +76,8 @@ RewriteClosureToFunctionCall::Result WARN_UNUSED RewriteClosureToFunctionCall::R
                 ReleaseAssert(arg->getType() == siClone->getValueOperand()->getType());
                 siClone->setOperand(0 /*valueOperandIndex*/, arg);
                 ReleaseAssert(siClone->getValueOperand() == arg);
-                bb->getInstList().push_back(gepClone);
-                bb->getInstList().push_back(siClone);
+                gepClone->insertBefore(bb->end());
+                siClone->insertBefore(bb->end());
             });
             closureRewriteArgs.push_back(si->getValueOperand());
             instructionToRemove.push_back(si);
@@ -95,7 +95,7 @@ RewriteClosureToFunctionCall::Result WARN_UNUSED RewriteClosureToFunctionCall::R
     FunctionType* fty = FunctionType::get(lambda->getReturnType() /*result*/, closureWrapperFnArgTys, false /*isVarArg*/);
     Function* wrapper = Function::Create(fty, GlobalValue::LinkageTypes::InternalLinkage, newFnName, module);
     ReleaseAssert(wrapper->getName().str() == newFnName);
-    wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
+    wrapper->addFnAttr(Attribute::NoUnwind);
     CopyFunctionAttributes(wrapper, lambda);
 
     {
@@ -118,12 +118,12 @@ RewriteClosureToFunctionCall::Result WARN_UNUSED RewriteClosureToFunctionCall::R
     }
 
     ValidateLLVMFunction(wrapper);
-    if (lambda->hasFnAttribute(Attribute::AttrKind::NoInline))
+    if (lambda->hasFnAttribute(Attribute::NoInline))
     {
-        lambda->removeFnAttr(Attribute::AttrKind::NoInline);
-        wrapper->addFnAttr(Attribute::AttrKind::NoInline);
+        lambda->removeFnAttr(Attribute::NoInline);
+        wrapper->addFnAttr(Attribute::NoInline);
     }
-    lambda->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    lambda->addFnAttr(Attribute::AlwaysInline);
 
     instructionToRemove.push_back(capture);
 

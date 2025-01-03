@@ -17,7 +17,10 @@ enum FpsCommand
     FpsCommand_GenerateBaselineJitFunctionEntryLogic,
     FpsCommand_GenerateBytecodeOpcodeTraitTable,
     FpsCommand_GenerateDfgJitSpecializedBytecodeInfo,
-    FpsCommand_GenerateDfgJitBytecodeInfoApiHeader
+    FpsCommand_GenerateDfgJitBytecodeInfoApiHeader,
+    FpsCommand_ProcessDfgJitBuiltinNodes,
+    FpsCommand_GenerateDfgJitCCallWrapperStubs,
+    FpsCommand_PostProcessLinkImplementations
 };
 
 inline cl::OptionCategory FPSOptions("Control options", "");
@@ -55,6 +58,16 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_GenerateDfgJitBytecodeInfoApiHeader,
                    "generate-dfg-jit-bytecode-info-api-header",
                    "Generate the header file for accessing all the DFG JIT bytecode info.")
+      , clEnumValN(FpsCommand_ProcessDfgJitBuiltinNodes,
+                   "process-dfg-jit-builtin-nodes",
+                   "Generate the code generators for DFG builtin nodes.")
+      , clEnumValN(FpsCommand_GenerateDfgJitCCallWrapperStubs,
+                   "generate-dfg-jit-c-call-wrapper-stubs",
+                   "Generate the assembly file for all the DFG JIT C call wrapper stubs.")
+      , clEnumValN(FpsCommand_PostProcessLinkImplementations,
+                   "post-process-link-implementations",
+                   "Link all the generated logic back into the original bytecode definition file to produce the final implementation.")
+
     ),
     cl::init(BadFpsCommand),
     cl::cat(FPSOptions));
@@ -64,11 +77,14 @@ inline cl::opt<std::string> cl_inputListFilenames("input-list", cl::desc("A comm
 inline cl::opt<std::string> cl_bytecodeNameTable("bytecode-name-table", cl::desc("A JSON file containing the list of all bytecode names, in the same order as the dispatch table"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_bytecodeTraitTable("bytecode-trait-table", cl::desc("A JSON file containing the list of all bytecode traits, in the same order as the dispatch table"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonInputFilename("json-input", cl::desc("The JSON input file name"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_jsonInputFilename2("json-input-2", cl::desc("The JSON input file name #2"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_jsonInputFilename3("json-input-3", cl::desc("The JSON input file name #3"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_headerOutputFilename("hdr-output", cl::desc("The output file name for the generated C++ header"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename("cpp-output", cl::desc("The output file name for the generated CPP file"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_cppOutputFilename2("cpp-output-2", cl::desc("The output file name for the generated CPP file #2"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_assemblyOutputFilename("asm-output", cl::desc("The output file name for the generated assembly"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonOutputFilename("json-output", cl::desc("The output file name for the generated JSON"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_jsonOutputFilename2("json-output-2", cl::desc("The output file name for the generated JSON #2"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_auditDirPath("audit-dir", cl::desc("The directory for outputting audit information. These are not used for the build, but for human inspection only."), cl::value_desc("path"), cl::init(""), cl::cat(FPSOptions));
 
 std::vector<std::string> WARN_UNUSED ParseCommaSeparatedFileList(const std::string& commaSeparatedFiles);
@@ -125,6 +141,18 @@ void FPS_GenerateDfgSpecializedBytecodeInfo();
 // Generate the header file that allows accessing all the generated DFG info
 //
 void FPS_GenerateDfgBytecodeInfoApiHeader();
+
+// Generate the assembly file for all the DFG JIT C call wrapper stubs
+//
+void Fps_GenerateDfgJitCCallWrapperStubs();
+
+// Link all the generated logic back into the original bytecode definition file to produce the final implementation.
+//
+void Fps_PostProcessLinkImplementations();
+
+// Generate the code generators for DFG builtin nodes
+//
+void FPS_ProcessDfgBuiltinNodes();
 
 // Given the desired file name in the audit directory, returns the full file path.
 // This also creates the audit directory if it doesn't exist yet.

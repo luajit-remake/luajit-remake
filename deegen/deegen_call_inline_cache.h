@@ -140,7 +140,7 @@ struct DeegenCallIcLogicCreator
         uint64_t unique_ord,
         llvm::Instruction* origin);
 
-    struct BaselineJitAsmTransformResult
+    struct JitAsmTransformResult
     {
         // The label for the SMC region
         //
@@ -179,16 +179,19 @@ struct DeegenCallIcLogicCreator
     // Perform the ASM transformation pass for Call IC lowering
     // See comments in CPP file for detail
     //
-    static std::vector<BaselineJitAsmTransformResult> WARN_UNUSED DoBaselineJitAsmTransform(X64AsmFile* file);
+    static std::vector<JitAsmTransformResult> WARN_UNUSED DoJitAsmTransform(X64AsmFile* file);
 
     // Final result after all ASM-level lowering, produced by stencil lowering pipeline
     //
-    struct BaselineJitAsmLoweringResult
+    struct JitAsmLoweringResult
     {
         // Assembly files for the extracted DirectCall and ClosureCall IC logic
         //
         std::string m_directCallLogicAsm;
         std::string m_closureCallLogicAsm;
+
+        size_t m_directCallLogicAsmLineCount;
+        size_t m_closureCallLogicAsmLineCount;
 
         // The special symbols holding the offset and length of the SMC region in the fast path
         //
@@ -253,7 +256,7 @@ struct DeegenCallIcLogicCreator
     static BaselineJitCodegenResult WARN_UNUSED CreateBaselineJitCallIcCreator(BaselineJitImplCreator* ifi,
                                                                                std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
                                                                                DeegenStencil& mainLogicStencil /*inout*/,
-                                                                               BaselineJitAsmLoweringResult& icInfo,
+                                                                               JitAsmLoweringResult& icInfo,
                                                                                const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor);
 };
 

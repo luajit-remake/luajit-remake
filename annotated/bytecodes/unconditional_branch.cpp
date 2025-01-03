@@ -15,6 +15,7 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(BranchOperation, bool isLoopHint)
     Implementation(UnconditionalBranchImpl);
     CheckForInterpreterTierUp(isLoopHint);
     Variant();
+    DfgVariant();
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(Branch, BranchOperation, false /*isLoopHint*/);
@@ -34,6 +35,7 @@ DEEGEN_DEFINE_BYTECODE(LoopHeaderHint)
     Implementation(LoopHeaderHintImpl);
     CheckForInterpreterTierUp(true);
     Variant();
+    DfgVariant();
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

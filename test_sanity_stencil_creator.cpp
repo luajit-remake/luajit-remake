@@ -10,7 +10,7 @@
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
 #include "deegen_stencil_lowering_pass.h"
 #include "deegen_stencil_creator.h"
-#include "deegen_baseline_jit_codegen_logic_creator.h"
+#include "deegen_jit_codegen_logic_creator.h"
 #include "deegen_ast_inline_cache.h"
 #include "lj_parser_wrapper.h"
 #include "drt/baseline_jit_codegen_helper.h"
@@ -32,7 +32,7 @@ TEST(StencilCreator, DataSectionHandling_1)
     std::unique_ptr<LLVMContext> llvmCtxHolder(new LLVMContext);
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    DeegenStencil ds = DeegenStencil::ParseMainLogic(ctx, ReadFileContentAsString("test_inputs/test_stencil_parser_1.o"));
+    DeegenStencil ds = DeegenStencil::ParseMainLogic(ctx, false /*isLastStencilInBytecode*/, ReadFileContentAsString("test_inputs/test_stencil_parser_1.o"));
 
     ReleaseAssert(ds.m_privateDataObject.m_bytes.size() == 64);
     ReleaseAssert(ds.m_privateDataObject.m_relocations.size() == 8);

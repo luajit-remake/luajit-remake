@@ -70,6 +70,21 @@ int main(int argc, char** argv)
         FPS_GenerateDfgBytecodeInfoApiHeader();
         break;
     }
+    case FpsCommand_ProcessDfgJitBuiltinNodes:
+    {
+        FPS_ProcessDfgBuiltinNodes();
+        break;
+    }
+    case FpsCommand_GenerateDfgJitCCallWrapperStubs:
+    {
+        Fps_GenerateDfgJitCCallWrapperStubs();
+        break;
+    }
+    case FpsCommand_PostProcessLinkImplementations:
+    {
+        Fps_PostProcessLinkImplementations();
+        break;
+    }
     }   /* switch cl_mainCommand */
 
     return 0;

@@ -77,7 +77,7 @@ TEST(DeegenAst, UserLibFuncLowering_7)
 {
     std::unique_ptr<LLVMContext> ctxHolder = std::make_unique<LLVMContext>();
     std::unique_ptr<Module> module = GetTestCase(*ctxHolder.get(), 7);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, UserLibFuncLowering_8)

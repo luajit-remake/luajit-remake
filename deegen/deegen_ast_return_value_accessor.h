@@ -22,14 +22,14 @@ public:
 
     static std::vector<AstReturnValueAccessor> WARN_UNUSED GetAllUseInFunction(llvm::Function* func);
 
-    void DoLoweringForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi);
+    void DoLoweringForInterpreterOrBaselineOrDfg(DeegenBytecodeImplCreatorBase* ifi);
 
-    static void LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
+    static void LowerForInterpreterOrBaselineOrDfg(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
     {
         std::vector<AstReturnValueAccessor> res = GetAllUseInFunction(func);
         for (AstReturnValueAccessor& item : res)
         {
-            item.DoLoweringForInterpreterOrBaselineJIT(ifi);
+            item.DoLoweringForInterpreterOrBaselineOrDfg(ifi);
         }
     }
 

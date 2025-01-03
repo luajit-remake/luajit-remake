@@ -24,7 +24,7 @@ static llvm::Function* CreateBytecodeMetadataElementAnnotationFn(llvm::Module* m
     FunctionType* fty = FunctionType::get(llvm_type_of<void*>(ctx), { llvm_type_of<void*>(ctx) }, false /*isVarArg*/);
     f = Function::Create(fty, GlobalValue::ExternalLinkage, fnName, module);
     ReleaseAssert(f->getName() == fnName);
-    f->addFnAttr(Attribute::AttrKind::NoUnwind);
+    f->addFnAttr(Attribute::NoUnwind);
     return f;
 }
 
@@ -81,7 +81,7 @@ void BytecodeMetadataStructBase::LowerAll(llvm::Module* module) const
         ReturnInst::Create(ctx, gep, bb);
 
         f->setLinkage(GlobalValue::InternalLinkage);
-        f->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        f->addFnAttr(Attribute::AlwaysInline);
 
         // Now, rename the function so that even if 'LowerAll' is called again, the function won't be lowered again
         // This also prevents an edge case where the user called 'LowerAll', but before calling any desugaring pass to inline the function,

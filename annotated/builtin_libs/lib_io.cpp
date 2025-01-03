@@ -62,7 +62,7 @@ static size_t WARN_UNUSED TryReadLineOnce(FILE* fp, char* buf, size_t limit)
     if (buf[limit] != '\0')
     {
         size_t len = strlen(buf);
-        assert(len < limit);
+        Assert(len < limit);
         if (len >= 1 && buf[len - 1] == '\n')
         {
             len--;
@@ -114,7 +114,7 @@ static HeapPtr<HeapString> NO_INLINE ReadLinesSlowPath(FILE* fp, VM* vm, char* f
             continue;
         }
 
-        assert(len < x_chunkSize);
+        Assert(len < x_chunkSize);
         // We found a newline or EOF, we are done.
         //
         chunkList.push_back(std::make_pair(buf, len));
@@ -146,7 +146,7 @@ DEEGEN_DEFINE_LIB_FUNC(io_lines_iter)
     }
     if (len != static_cast<size_t>(-1))
     {
-        assert(len < x_internalBufferSize);
+        Assert(len < x_internalBufferSize);
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawString(internalBuf, static_cast<uint32_t>(len)).As()));
     }
     HeapPtr<HeapString> result = ReadLinesSlowPath(stdin, vm, internalBuf, x_internalBufferSize);

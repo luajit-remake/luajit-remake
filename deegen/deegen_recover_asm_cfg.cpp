@@ -24,7 +24,7 @@ void DeegenAsmCfg::AnalyzeIndirectBranch(X64AsmFile* file, llvm::Function* /*fun
         X64AsmLine& line = block->m_lines.back();
         if (line.IsIndirectJumpInst())
         {
-            if (line.m_trailingComments.find("__deegen_asm_annotation_tailcall") != std::string::npos)
+            if (line.HasDeegenTailCallAnnotation())
             {
                 // This is a tail call, don't bother
                 //

@@ -100,7 +100,7 @@ struct X64AsmLine
         if (!IsInstruction()) { return false; }
         std::string& opcode = GetWord(0);
         if (opcode == "jmp" || opcode == "jmpq") { return false; }
-        return opcode.starts_with("j");         // hopefully this is good enough..
+        return opcode.starts_with("j") || opcode.starts_with("loop");         // hopefully this is good enough..
     }
 
     void FlipConditionalJumpCondition()
@@ -126,6 +126,18 @@ struct X64AsmLine
         // it is only a perf issue (we would emit an unnecessary jump), not a correctness issue.
         //
         return (opcode == "jmp" || opcode == "jmpq" || opcode == "ud2" || opcode == "ret");
+    }
+
+    bool WARN_UNUSED IsCallInstruction()
+    {
+        if (!IsInstruction()) { return false; }
+        std::string& opcode = GetWord(0);
+        return opcode == "call" || opcode == "callq";
+    }
+
+    bool WARN_UNUSED HasDeegenTailCallAnnotation()
+    {
+        return m_trailingComments.find("__deegen_asm_annotation_tailcall") != std::string::npos;
     }
 
     bool WARN_UNUSED IsDirective()
@@ -282,6 +294,29 @@ struct X64AsmBlock
     //
     static X64AsmBlock* WARN_UNUSED Create(X64AsmFile* owner, X64AsmBlock* jmpDst);
 
+    // Create a block that contains only one instruction: a jmp to an external symbol 'label'
+    //
+    static X64AsmBlock* WARN_UNUSED Create(X64AsmFile* owner, std::string dstLabel);
+
+    static bool WARN_UNUSED IsTerminatorInstructionFallthrough(X64AsmBlock* predBlock, X64AsmBlock* succBlock)
+    {
+        if (!(predBlock->m_endsWithJmpToLocalLabel &&
+              predBlock->m_terminalJmpTargetLabel == succBlock->m_normalizedLabelName))
+        {
+            return false;
+        }
+        // If there are opaque .byte instructions after this block, the jump is not a no-op as it skips these instructions
+        //
+        if (predBlock->m_trailingLabelLine.m_prefixingText.find(".byte ") != std::string::npos)
+        {
+            return false;
+        }
+        // Note that we cannot assert GetWord(1) == m_normalizedLabelName since GetWord(1) is not necessarily normalized
+        //
+        ReleaseAssert(predBlock->m_lines.size() > 0 && predBlock->m_lines.back().IsDirectUnconditionalJumpInst());
+        return true;
+    }
+
     // Reorder blocks to maximize fallthroughs.
     //
     static std::vector<X64AsmBlock*> WARN_UNUSED ReorderBlocksToMaximizeFallthroughs(const std::vector<X64AsmBlock*>& input,
@@ -302,6 +337,10 @@ struct X64AsmBlock
     // TODO: maintaining these fields are error prone. We should make them member functions that works by examining m_line...
     //
     bool m_endsWithJmpToLocalLabel;
+    // Note that this field is only valid if m_endsWithJmpToLocalLabel is true
+    // Also, the GetWord(1) of the terminator instruction is not necessarily normalized,
+    // so does not necessarily equal to this field (though the normalized label must be equal)
+    //
     std::string m_terminalJmpTargetLabel;
     std::vector<std::string> m_indirectBranchTargets;
 
@@ -385,8 +424,7 @@ struct X64AsmFile
         {
             return false;
         }
-        return (m_blocks[blockOrd]->m_endsWithJmpToLocalLabel &&
-                m_blocks[blockOrd]->m_terminalJmpTargetLabel == m_blocks[blockOrd + 1]->m_normalizedLabelName);
+        return X64AsmBlock::IsTerminatorInstructionFallthrough(m_blocks[blockOrd], m_blocks[blockOrd + 1]);
     }
 
     // Remove all asm magic of the specified kind, including in slow path
@@ -422,6 +460,20 @@ struct X64AsmFile
     void AssertAllMagicRemoved();
 
     static std::unique_ptr<X64AsmFile> WARN_UNUSED ParseFile(std::string fileContents, InjectedMagicDiLocationInfo diInfo);
+
+    // Return the total # of lines of assembly instructions in a snippet
+    //
+    static size_t WARN_UNUSED CountEffectiveNumInstructionsInBlockList(const std::vector<X64AsmBlock*>& blocks);
+
+    size_t GetNumAssemblyInstructionsInFastPath()
+    {
+        return CountEffectiveNumInstructionsInBlockList(m_blocks);
+    }
+
+    size_t GetNumAssemblyInstructionsInSlowPath()
+    {
+        return CountEffectiveNumInstructionsInBlockList(m_slowpath);
+    }
 
     std::string WARN_UNUSED ToString();
     std::string WARN_UNUSED ToStringAndRemoveDebugInfo();

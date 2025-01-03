@@ -11,6 +11,11 @@ namespace dast {
 class JitSlowPathDataFieldBase
 {
 public:
+    virtual ~JitSlowPathDataFieldBase() = default;
+
+    MAKE_DEFAULT_COPYABLE(JitSlowPathDataFieldBase);
+    MAKE_DEFAULT_MOVABLE(JitSlowPathDataFieldBase);
+
     JitSlowPathDataFieldBase()
         : m_isFieldValid(false)
         , m_fieldOffset(static_cast<size_t>(-1))
@@ -42,6 +47,51 @@ public:
     llvm::Value* WARN_UNUSED EmitGetFieldAddressLogic(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
     llvm::Value* WARN_UNUSED EmitGetFieldAddressLogic(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
 
+    // All subclasses must override this function and change the template parameter in IsEqualDispatch to the subclass name
+    //
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other)
+    {
+        return IsEqualDispatch<JitSlowPathDataFieldBase>(other);
+    }
+
+protected:
+    bool IsBaseEqual(JitSlowPathDataFieldBase& other)
+    {
+        CHECK(m_isFieldValid == other.m_isFieldValid);
+        if (!m_isFieldValid)
+        {
+            return true;
+        }
+        CHECK(m_fieldOffset == other.m_fieldOffset);
+        CHECK(m_fieldSize == other.m_fieldSize);
+        return true;
+    }
+
+    bool IsEqualImpl(JitSlowPathDataFieldBase& other)
+    {
+        return IsBaseEqual(other);
+    }
+
+    template<typename T>
+    bool IsEqualDispatch(JitSlowPathDataFieldBase& other)
+    {
+        // If a subclass did not override IsEqual, this assertion will catch it
+        //
+        ReleaseAssert(typeid(*this) == typeid(T));
+        T* tt = dynamic_cast<T*>(this);
+        ReleaseAssert(tt != nullptr);
+        if (typeid(other) != typeid(T))
+        {
+            // Different true types are always considered not equal
+            //
+            return false;
+        }
+        T* tother = dynamic_cast<T*>(&other);
+        ReleaseAssert(tother != nullptr);
+        static_assert(std::is_same_v<decltype(&T::IsEqualImpl), bool(T::*)(T&)>);
+        return tt->IsEqualImpl(*tother);
+    }
+
 private:
     bool m_isFieldValid;
     size_t m_fieldOffset;
@@ -61,6 +111,8 @@ public:
         SetFieldSize(4);
     }
 
+    static llvm::Value* WARN_UNUSED EmitGetValueFromFieldAddrLogic(llvm::Value* fieldAddr, llvm::Instruction* insertBefore);
+
     // Returns a void*, the JIT address
     //
     llvm::Value* WARN_UNUSED EmitGetValueLogic(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
@@ -70,6 +122,16 @@ public:
     //
     void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::Instruction* insertBefore);
     void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::BasicBlock* insertAtEnd);
+
+    bool IsEqualImpl(JitSlowPathDataJitAddress& other)
+    {
+        return IsBaseEqual(other);
+    }
+
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other) override
+    {
+        return IsEqualDispatch<JitSlowPathDataJitAddress>(other);
+    }
 };
 
 class BcOperand;
@@ -104,6 +166,15 @@ public:
     void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::Instruction* insertBefore);
     void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::BasicBlock* insertAtEnd);
 
+    // Note that this "IsEqual" only checks that the name and operandOrdinal of the operand is equal
+    //
+    bool IsEqualImpl(JitSlowPathDataBcOperand& other);
+
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other) override
+    {
+        return IsEqualDispatch<JitSlowPathDataBcOperand>(other);
+    }
+
 private:
     BcOperand* m_operand;
 };
@@ -119,6 +190,16 @@ public:
     //
     llvm::Value* WARN_UNUSED EmitGetValueLogic(llvm::Value* slowPathDataAddr, llvm::Instruction* insertBefore);
     llvm::Value* WARN_UNUSED EmitGetValueLogic(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd);
+
+    bool IsEqualImpl(JitSlowPathDataRawLiteral& other)
+    {
+        return IsBaseEqual(other);
+    }
+
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other) override
+    {
+        return IsEqualDispatch<JitSlowPathDataRawLiteral>(other);
+    }
 };
 
 // A integer with statically known width
@@ -133,9 +214,40 @@ public:
     {
         SetFieldSize(sizeof(T));
     }
+
+    void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::Instruction* insertBefore)
+    {
+        using namespace llvm;
+        ReleaseAssert(IsValid());
+        ReleaseAssert(slowPathDataAddr != nullptr && value != nullptr);
+        ReleaseAssert(value->getType()->isIntegerTy(sizeof(T) * 8 /*bitWidth*/));
+        ReleaseAssert(GetFieldSize() == sizeof(T));
+
+        Value* addr = EmitGetFieldAddressLogic(slowPathDataAddr, insertBefore);
+        new StoreInst(value, addr, false /*isVolatile*/, Align(1), insertBefore);
+    }
+
+    void EmitSetValueLogic(llvm::Value* slowPathDataAddr, llvm::Value* value, llvm::BasicBlock* insertAtEnd)
+    {
+        using namespace llvm;
+        UnreachableInst* dummy = new UnreachableInst(slowPathDataAddr->getContext(), insertAtEnd);
+        EmitSetValueLogic(slowPathDataAddr, value, dummy);
+        dummy->eraseFromParent();
+    }
+
+    bool IsEqualImpl(JitSlowPathDataInt<T>& other)
+    {
+        return JitSlowPathDataRawLiteral::IsEqualImpl(other);
+    }
+
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other) override
+    {
+        return IsEqualDispatch<JitSlowPathDataInt<T>>(other);
+    }
 };
 
 class BytecodeVariantDefinition;
+class DfgJitImplCreator;
 
 // An array of IC sites in JIT SlowPathData
 //
@@ -163,6 +275,20 @@ public:
         return GetFieldOffset() + GetSizePerSite() * siteOrd;
     }
 
+    bool IsEqualImpl(JitSlowPathDataIcSiteArray& other)
+    {
+        CHECK(IsBaseEqual(other));
+        if (!IsValid()) { return true; }
+        CHECK(GetNumSites() == other.GetNumSites());
+        CHECK(GetSizePerSite() == other.GetSizePerSite());
+        return true;
+    }
+
+    virtual bool IsEqual(JitSlowPathDataFieldBase& other) override
+    {
+        return IsEqualDispatch<JitSlowPathDataIcSiteArray>(other);
+    }
+
 private:
     size_t m_numSites;
     size_t m_sizePerSite;
@@ -171,16 +297,22 @@ private:
 struct BaselineJitSlowPathDataLayout;
 struct DfgJitSlowPathDataLayout;
 
+struct JitSlowPathDataLayoutBuilder;
+
 // Common data fields utilized by both baseline JIT slow path data and DFG JIT slow path data
 //
 struct JitSlowPathDataLayoutBase
 {
     JitSlowPathDataLayoutBase()
-        : m_totalLength(static_cast<size_t>(-1))
+        : m_isLayoutFinalized(false)
+        , m_totalLength(static_cast<size_t>(-1))
         , m_totalValidFields(static_cast<size_t>(-1))
     { }
 
     virtual ~JitSlowPathDataLayoutBase() = default;
+
+    MAKE_NONCOPYABLE(JitSlowPathDataLayoutBase);
+    MAKE_NONMOVABLE(JitSlowPathDataLayoutBase);
 
     bool IsInitialized() { return m_totalValidFields != static_cast<size_t>(-1); }
 
@@ -198,17 +330,109 @@ struct JitSlowPathDataLayoutBase
         return m_operands[idx];
     }
 
-    // Returns the JIT address of the fallthrough bytecode
+    size_t GetNumCallIcSites()
+    {
+        if (!m_callICs.IsValid()) { return 0; }
+        return m_callICs.GetNumSites();
+    }
+
+    size_t GetNumGenericIcSites()
+    {
+        if (!m_genericICs.IsValid()) { return 0; }
+        return m_genericICs.GetNumSites();
+    }
+
+protected:
+    // All JitSlowPathData share the same header:
+    // - 2 byte opcode (TODO: I don't think we need this, but I don't want to fix it now)
+    // - Fast path JIT address (m_jitAddr)
+    //
+    void SetupHeader(JitSlowPathDataLayoutBuilder& builder /*inout*/);
+
+    // Setup m_operands and m_outputDest
+    //
+    void SetupOperandsAndOutput(JitSlowPathDataLayoutBuilder& builder /*inout*/, BytecodeVariantDefinition* bvd);
+
+    // Setup call IC site array
+    //
+    void SetupCallIcSiteArray(JitSlowPathDataLayoutBuilder& builder /*inout*/, size_t numCallIcSites);
+
+    // Setup generic IC site array and m_jitSlowPathAddr / m_jitDataSecAddr
+    //
+    void SetupGenericIcSiteArray(JitSlowPathDataLayoutBuilder& builder /*inout*/, size_t numGenericIcSites);
+
+public:
+    // Returns the JIT address of the fallthrough bytecode, can only be used if SlowPathDataLayout is finalized
     //
     JitSlowPathDataJitAddress GetFallthroughJitAddress();
+
+    // Return the JIT address of the fallthrough bytecode, using an external constant to represent the value of SlowPathDataLayoutLength
+    //
+    static llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::Instruction* insertBefore);
+    static llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::BasicBlock* insertAtEnd);
+
+    static constexpr const char* x_slow_path_data_length_placeholder_name = "__placeholder_deegen_jit_slow_path_data_length";
+
+    bool IsLayoutBaseEqual(JitSlowPathDataLayoutBase& other)
+    {
+        ReleaseAssert(IsLayoutFinalized() && other.IsLayoutFinalized());
+        CHECK(m_jitAddr.IsEqual(other.m_jitAddr));
+        CHECK(m_operands.size() == other.m_operands.size());
+        for (size_t idx = 0; idx < m_operands.size(); idx++)
+        {
+            CHECK(m_operands[idx].IsEqual(other.m_operands[idx]));
+        }
+        CHECK(m_outputDest.IsEqual(other.m_outputDest));
+        CHECK(m_callICs.IsEqual(other.m_callICs));
+        CHECK(m_genericICs.IsEqual(other.m_genericICs));
+        CHECK(m_jitSlowPathAddr.IsEqual(other.m_jitSlowPathAddr));
+        CHECK(m_jitDataSecAddr.IsEqual(other.m_jitDataSecAddr));
+        CHECK(m_totalLength == other.m_totalLength);
+        CHECK(m_totalValidFields == other.m_totalValidFields);
+        return true;
+    }
+
+    bool IsLayoutFinalized() { ReleaseAssert(IsInitialized()); return m_isLayoutFinalized; }
+    void FinalizeLayout() { ReleaseAssert(!IsLayoutFinalized()); m_isLayoutFinalized = true; }
+
+    // The length and #validFields are only accessible after the layout is finalized
+    //
+    size_t GetTotalLength()
+    {
+        ReleaseAssert(IsLayoutFinalized());
+        ReleaseAssert(m_totalLength != static_cast<size_t>(-1));
+        return m_totalLength;
+    }
+
+    size_t GetNumValidFields()
+    {
+        ReleaseAssert(IsLayoutFinalized());
+        ReleaseAssert(m_totalValidFields != static_cast<size_t>(-1));
+        return m_totalValidFields;
+    }
+
+    void EnableExtraFieldIfNotYet(JitSlowPathDataFieldBase& field)
+    {
+        ReleaseAssert(IsInitialized() && !IsLayoutFinalized());
+        if (field.IsValid()) { return; }
+        AssignOffsetForExtraField(field);
+    }
+
+    void AssignOffsetForExtraField(JitSlowPathDataFieldBase& field)
+    {
+        ReleaseAssert(IsInitialized() && !IsLayoutFinalized());
+        ReleaseAssert(!field.IsValid());
+        field.SetValid();
+        field.SetFieldOffset(m_totalLength);
+        m_totalLength += field.GetFieldSize();
+        m_totalValidFields++;
+    }
+
+    friend struct JitSlowPathDataLayoutBuilder;
 
     // The fast path entry address of the associated JIT code, always at offset x_opcodeSizeBytes (a lot of places expects this)
     //
     JitSlowPathDataJitAddress m_jitAddr;
-
-    // If this bytecode has a conditional branch target, records the JIT address to branch to
-    //
-    JitSlowPathDataJitAddress m_condBrJitAddr;
 
     // All input operands of this bytecode
     //
@@ -228,6 +452,20 @@ struct JitSlowPathDataLayoutBase
     JitSlowPathDataJitAddress m_jitSlowPathAddr;
     JitSlowPathDataJitAddress m_jitDataSecAddr;
 
+    // This is the slowPathDataOffset from the CodeBlock
+    // This normally is not useful so it is not enabled in the initial ComputeLayout,
+    // but in some cases, generic IC will need this info, in which case it will enable this field later
+    //
+    JitSlowPathDataInt<uint32_t> m_offsetFromCb;
+
+private:
+    // In some cases, we cannot pre-determine all needed fields of SlowPathData before the lowering,
+    // and have to add new fields during the lowering.
+    // So after ComputeLayout, the layout is still not finalized and the length is not available
+    // Only after calling FinalizeLayout() the layout is finalized and one can access the length
+    //
+    bool m_isLayoutFinalized;
+
     // The total length of slow path data
     //
     size_t m_totalLength;
@@ -245,19 +483,52 @@ struct BaselineJitSlowPathDataLayout final : public JitSlowPathDataLayoutBase
 
     void ComputeLayout(BytecodeVariantDefinition* bvd);
 
+    // If this bytecode has a conditional branch target, records the JIT address to branch to
+    //
+    JitSlowPathDataJitAddress m_condBrJitAddr;
+
     // If this bytecode has a conditional branch target, records the bytecode index of the branch destination
     // m_condBrJitAddr and m_condBrBcIndex must be allocated adjacently (m_condBrJitAddr first, m_condBrBcIndex second),
     // as baseline JIT logic expects that.
     //
     JitSlowPathDataInt<uint32_t> m_condBrBcIndex;
+
+    bool IsLayoutEqual(BaselineJitSlowPathDataLayout& other)
+    {
+        CHECK(IsLayoutBaseEqual(other));
+        CHECK(m_condBrJitAddr.IsEqual(other.m_condBrJitAddr));
+        CHECK(m_condBrBcIndex.IsEqual(other.m_condBrBcIndex));
+        return true;
+    }
 };
 
 // Describes a piece of SlowPathData in DFG JIT
 //
 struct DfgJitSlowPathDataLayout final : public JitSlowPathDataLayoutBase
 {
+    DfgJitSlowPathDataLayout() : JitSlowPathDataLayoutBase() { }
+
     virtual DeegenEngineTier GetDeegenEngineTier() override { return DeegenEngineTier::DfgJIT; }
 
+    void ComputeLayout(DfgJitImplCreator* ifi);
+
+    // The stack frame slot ordinal where the cond branch decision is stored to
+    // This only exists if a cond branch decision is needed. Note that this is not equivalent to that the bytecode has a condBr!
+    //
+    JitSlowPathDataInt<uint16_t> m_condBrDecisionSlot;
+
+    // Describes the register configuration used for this stencil
+    // Only exists if reg alloc is enabled, and Call IC or Generic IC exists
+    //
+    JitSlowPathDataFieldBase m_compactRegConfig;
+
+    bool IsLayoutEqual(DfgJitSlowPathDataLayout& other)
+    {
+        CHECK(IsLayoutBaseEqual(other));
+        CHECK(m_condBrDecisionSlot.IsEqual(other.m_condBrDecisionSlot));
+        CHECK(m_compactRegConfig.IsEqual(other.m_compactRegConfig));
+        return true;
+    }
 };
 
 inline BaselineJitSlowPathDataLayout* WARN_UNUSED JitSlowPathDataLayoutBase::AsBaseline()

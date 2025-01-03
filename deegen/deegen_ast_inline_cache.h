@@ -13,6 +13,7 @@ struct X64AsmFile;
 struct DeegenStencil;
 class DeegenGlobalBytecodeTraitAccessor;
 struct BytecodeIrInfo;
+class JitImplCreatorBase;
 
 class AstInlineCache
 {
@@ -109,7 +110,7 @@ public:
     //
     void DoLoweringForInterpreter();
 
-    struct BaselineJitLLVMLoweringResult
+    struct JitLLVMLoweringResult
     {
         std::string m_bodyFnName;
 
@@ -129,16 +130,19 @@ public:
         std::vector<Item> m_effectPlaceholderDesc;
     };
 
-    // Do lowering for baseline JIT
+    // Do lowering for baseline/DFG JIT
     // Each bytecode in thoery may employ multiple IC sites, so 'icUsageOrdInBytecode' is the ordinal of this IC
     // The 'globalIcEffectTraitBaseOrd' is the effect trait table base index for this IC,
     // so to get trait for effect kind 'k' in this IC, the index is globalIcEffectTraitBaseOrd + k
     //
-    BaselineJitLLVMLoweringResult WARN_UNUSED DoLoweringForBaselineJit(BaselineJitImplCreator* ifi, size_t icUsageOrdInBytecode, size_t globalIcEffectTraitBaseOrd);
+    // Note that for DFG JIT, for simplicity, we currently do not globally precompute the globalIcEffectTraitBaseOrd,
+    // and the passed in globalIcEffectTraitBaseOrd is always 0
+    //
+    JitLLVMLoweringResult WARN_UNUSED DoLoweringForJit(JitImplCreatorBase* ifi, size_t icUsageOrdInBytecode, size_t globalIcEffectTraitBaseOrd);
 
-    static void LowerIcPtrGetterFunctionForBaselineJit(BaselineJitImplCreator* ifi, llvm::Function* func);
+    static void LowerIcPtrGetterFunctionForJit(JitImplCreatorBase* ifi, llvm::Function* func);
 
-    struct BaselineJitAsmTransformResult
+    struct JitAsmTransformResult
     {
         // The label for the SMC region
         //
@@ -161,15 +165,19 @@ public:
         std::string m_symbolNameForIcMissLogicLabelOffset;
     };
 
-    static std::vector<BaselineJitAsmTransformResult> WARN_UNUSED DoAsmTransformForBaselineJit(X64AsmFile* file);
+    static std::vector<JitAsmTransformResult> WARN_UNUSED DoAsmTransformForJit(X64AsmFile* file);
 
     // Final result after all ASM-level lowering, produced by stencil lowering pipeline
     //
-    struct BaselineJitAsmLoweringResult
+    struct JitAsmLoweringResult
     {
-        // Assembly files for the extracted DirectCall and ClosureCall IC logic
+        // Assembly files for each of the extracted IC case logic
         //
         std::vector<std::string> m_icLogicAsm;
+
+        // The # of lines of assembly of each IC case, in the same order
+        //
+        std::vector<size_t> m_icLogicAsmLineCount;
 
         // Special symbol name storing the various measured values
         //
@@ -182,7 +190,7 @@ public:
         uint64_t m_uniqueOrd;
     };
 
-    struct BaselineJitCodegenResult
+    struct JitCodegenResult
     {
         std::unique_ptr<llvm::Module> m_module;
         std::string m_resultFnName;
@@ -212,33 +220,45 @@ public:
         size_t m_icMissLogicOffsetInSlowPath;
     };
 
-    static BaselineJitCodegenResult WARN_UNUSED CreateJitIcCodegenImplementation(BaselineJitImplCreator* ifi,
-                                                                                 BaselineJitLLVMLoweringResult::Item icInfo,
-                                                                                 DeegenStencil& stencil,
-                                                                                 InlineSlabInfo inlineSlabInfo,
-                                                                                 size_t icUsageOrdInBytecode,
-                                                                                 bool isCodegenForInlineSlab);
+    static JitCodegenResult WARN_UNUSED CreateJitIcCodegenImplementation(JitImplCreatorBase* ifi,
+                                                                         JitLLVMLoweringResult::Item icInfo,
+                                                                         DeegenStencil& stencil,
+                                                                         InlineSlabInfo inlineSlabInfo,
+                                                                         size_t icUsageOrdInBytecode,
+                                                                         bool isCodegenForInlineSlab);
 
-    struct BaselineJitFinalLoweringResult
+    struct JitFinalLoweringResult
     {
+        // At the time we codegen the implementation, the length of the SlowPathData has not yet been finalized,
+        // so we were using an external constant to represent the length (and LLVM optimization passes were not run).
+        // This function replaces the external constant with the actual length and run the LLVM optimization passes.
+        //
+        void LateFixSlowPathDataLength(size_t length);
+
         struct TraitDesc
         {
             size_t m_ordInTraitTable;
             size_t m_allocationLength;
         };
 
+        // Must call LateFixSlowPathDataLength to get the final module
+        //
         std::unique_ptr<llvm::Module> m_icBodyModule;
+        std::vector<std::string> m_icBodyFunctionNames;
         std::vector<TraitDesc> m_icTraitInfo;
+        std::vector<InlineSlabInfo> m_inlineSlabInfo;
+        uint64_t m_fpuUsedMask;
         std::string m_disasmForAudit;
     };
 
-    static BaselineJitFinalLoweringResult WARN_UNUSED DoLoweringAfterAsmTransform(BytecodeIrInfo* bii,
-                                                                                  BaselineJitImplCreator* ifi,
-                                                                                  std::unique_ptr<llvm::Module> icBodyModule,
-                                                                                  std::vector<BaselineJitLLVMLoweringResult>& icLLRes,
-                                                                                  std::vector<BaselineJitAsmLoweringResult>& icAsmRes,
-                                                                                  DeegenStencil& mainStencil,
-                                                                                  const DeegenGlobalBytecodeTraitAccessor& gbta);
+    static JitFinalLoweringResult WARN_UNUSED DoLoweringAfterAsmTransform(BytecodeIrInfo* bii,
+                                                                          JitImplCreatorBase* ifi,
+                                                                          std::unique_ptr<llvm::Module> icBodyModule,
+                                                                          std::vector<JitLLVMLoweringResult>& icLLRes,
+                                                                          std::vector<JitAsmLoweringResult>& icAsmRes,
+                                                                          DeegenStencil& mainStencil,
+                                                                          size_t icEffectTraitBaseOrd,
+                                                                          size_t expectedNumTotalIcEffects);
 
     // Perform trivial lowering: the execution semantics of this inline cache is preserved,
     // but no inling caching ever happens (i.e., execution simply unconditionally execute the IC body).
@@ -305,8 +325,8 @@ public:
 };
 
 constexpr const char* x_get_bytecode_ptr_placeholder_fn_name = "__DeegenImpl_GetInterpreterBytecodePtrPlaceholder";
-constexpr const char* x_jit_codegen_ic_impl_placeholder_fn_prefix = "__deegen_baseline_jit_codegen_generic_ic_effect_";
-constexpr const char* x_jit_check_generic_ic_fits_in_inline_slab_placeholder_fn_prefix = "__deegen_baseline_jit_check_generic_ic_fits_in_inline_slab_";
+constexpr const char* x_jit_codegen_ic_impl_placeholder_fn_prefix = "__deegen_jit_codegen_generic_ic_effect_";
+constexpr const char* x_jit_check_generic_ic_fits_in_inline_slab_placeholder_fn_prefix = "__deegen_jit_check_generic_ic_fits_in_inline_slab_";
 
 class DeegenBytecodeImplCreatorBase;
 

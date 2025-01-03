@@ -18,7 +18,7 @@ struct MiscImmediateValue
     constexpr MiscImmediateValue(uint64_t value)
         : m_value(value)
     {
-        assert(m_value == x_nil || m_value == x_true || m_value == x_false || m_value == x_impossible_value);
+        Assert(m_value == x_nil || m_value == x_true || m_value == x_false || m_value == x_impossible_value);
     }
 
     constexpr bool IsNil() const
@@ -38,13 +38,13 @@ struct MiscImmediateValue
 
     constexpr bool GetBooleanValue() const
     {
-        assert(IsBoolean());
+        Assert(IsBoolean());
         return m_value & 1;
     }
 
     constexpr MiscImmediateValue WARN_UNUSED FlipBooleanValue() const
     {
-        assert(IsBoolean());
+        Assert(IsBoolean());
         return MiscImmediateValue { m_value ^ 1 };
     }
 
@@ -170,13 +170,13 @@ struct TValue
 
     constexpr double ALWAYS_INLINE AsDouble() const
     {
-        assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
+        Assert(IsDouble() && !IsMIV() && !IsPointer() && !IsInt32());
         return cxx2a_bit_cast<double>(m_value);
     }
 
     constexpr int32_t ALWAYS_INLINE AsInt32() const
     {
-        assert(IsInt32() && !IsMIV() && !IsPointer() && !IsDouble());
+        Assert(IsInt32() && !IsMIV() && !IsPointer() && !IsDouble());
         return BitwiseTruncateTo<int32_t>(m_value);
     }
 
@@ -214,20 +214,20 @@ struct TValue
     template<typename T = void>
     UserHeapPointer<T> ALWAYS_INLINE AsPointer() const
     {
-        assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
+        Assert(IsPointer() && !IsMIV() && !IsDouble() && !IsInt32());
         return UserHeapPointer<T> { reinterpret_cast<HeapPtr<T>>(m_value) };
     }
 
     constexpr MiscImmediateValue ALWAYS_INLINE AsMIV() const
     {
-        assert(IsMIV() && !IsDouble() && !IsInt32() && !IsPointer());
+        Assert(IsMIV() && !IsDouble() && !IsInt32() && !IsPointer());
         return MiscImmediateValue { m_value ^ x_mivTag };
     }
 
     static constexpr TValue WARN_UNUSED CreateInt32(int32_t value)
     {
         TValue result { x_int32Tag | ZeroExtendTo<uint64_t>(value) };
-        assert(result.AsInt32() == value);
+        Assert(result.AsInt32() == value);
         return result;
     }
 
@@ -245,7 +245,7 @@ struct TValue
     static TValue WARN_UNUSED CreatePointer(UserHeapPointer<T> ptr)
     {
         TValue result { static_cast<uint64_t>(ptr.m_value) };
-        assert(result.AsPointer<T>() == ptr);
+        Assert(result.AsPointer<T>() == ptr);
         return result;
     }
 
@@ -253,7 +253,7 @@ struct TValue
     static TValue WARN_UNUSED CreatePointer(HeapPtr<T> ptr)
     {
         uint64_t val = reinterpret_cast<uint64_t>(ptr);
-        assert(val >= 0xFFFFFFFC00000000ULL);
+        Assert(val >= 0xFFFFFFFC00000000ULL);
         TValue result { val };
         return result;
     }
@@ -261,7 +261,7 @@ struct TValue
     static constexpr TValue WARN_UNUSED CreateMIV(MiscImmediateValue miv)
     {
         TValue result { miv.m_value ^ x_mivTag };
-        assert(result.AsMIV().m_value == miv.m_value);
+        Assert(result.AsMIV().m_value == miv.m_value);
         return result;
     }
 
@@ -391,7 +391,7 @@ struct tDoubleNotNaN
 
     static TValue encode(double v)
     {
-        assert(!IsNaN(v));
+        Assert(!IsNaN(v));
         return TValue::CreateDouble(v);
     }
 
@@ -478,7 +478,7 @@ inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGe
 
 inline HeapEntityType ALWAYS_INLINE TValue::GetHeapEntityType() const
 {
-    assert(IsPointer());
+    Assert(IsPointer());
     return DeegenImpl_TValueGetPointerType(*this);
 }
 
@@ -579,7 +579,7 @@ using TypeSpecializationList = std::tuple<
   , tTop
 >;
 
-using TypeSpeculationMask = uint32_t;
+using TypeMaskTy = uint32_t;
 
 // Below are the constexpr logic that build up the bitmask definitions
 //
@@ -668,7 +668,7 @@ struct num_leaves_in_type_speculation_list<std::tuple<Args...>>
 
 }   // namespace detail
 
-constexpr size_t x_numUsefulBitsInTypeSpeculationMask = detail::num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
+constexpr size_t x_numUsefulBitsInTypeMask = detail::num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
 
 namespace detail {
 
@@ -702,23 +702,23 @@ struct leaf_ordinal_in_type_speculation_list<std::tuple<Args...>>
 template<typename T>
 constexpr size_t type_speculation_leaf_ordinal = leaf_ordinal_in_type_speculation_list<TypeSpecializationList>::get<T>();
 
-static_assert(std::is_unsigned_v<TypeSpeculationMask> && std::is_integral_v<TypeSpeculationMask>);
+static_assert(std::is_unsigned_v<TypeMaskTy> && std::is_integral_v<TypeMaskTy>);
 
-constexpr TypeSpeculationMask ComputeTypeSpeculationMaskForTop()
+constexpr TypeMaskTy ComputeTypeMaskForTop()
 {
-    constexpr size_t numLeaves = x_numUsefulBitsInTypeSpeculationMask;
-    static_assert(numLeaves <= sizeof(TypeSpeculationMask) * 8);
-    return static_cast<TypeSpeculationMask>(-1) >> (sizeof(TypeSpeculationMask) * 8 - numLeaves);
+    constexpr size_t numLeaves = x_numUsefulBitsInTypeMask;
+    static_assert(numLeaves <= sizeof(TypeMaskTy) * 8);
+    return static_cast<TypeMaskTy>(-1) >> (sizeof(TypeMaskTy) * 8 - numLeaves);
 }
 
-constexpr TypeSpeculationMask type_speculation_mask_for_top = ComputeTypeSpeculationMaskForTop();
+constexpr TypeMaskTy type_speculation_mask_for_top = ComputeTypeMaskForTop();
 
 struct compute_type_speculation_mask
 {
     template<typename T>
     struct eval_operator
     {
-        static constexpr TypeSpeculationMask eval()
+        static constexpr TypeMaskTy eval()
         {
             static_assert(IsValidTypeSpecialization<T>);
             return compute_type_speculation_mask::value<T>;
@@ -729,9 +729,9 @@ struct compute_type_speculation_mask
     struct eval_operator<tsm_or<Args...>>
     {
         template<typename First, typename... Remaining>
-        static constexpr TypeSpeculationMask eval_impl()
+        static constexpr TypeMaskTy eval_impl()
         {
-            TypeSpeculationMask r = eval_operator<First>::eval();
+            TypeMaskTy r = eval_operator<First>::eval();
             if constexpr(sizeof...(Remaining) > 0)
             {
                 r |= eval_impl<Remaining...>();
@@ -739,7 +739,7 @@ struct compute_type_speculation_mask
             return r;
         }
 
-        static constexpr TypeSpeculationMask eval()
+        static constexpr TypeMaskTy eval()
         {
             if constexpr(sizeof...(Args) == 0)
             {
@@ -755,16 +755,16 @@ struct compute_type_speculation_mask
     template<typename Arg>
     struct eval_operator<tsm_not<Arg>>
     {
-        static constexpr TypeSpeculationMask eval()
+        static constexpr TypeMaskTy eval()
         {
-            constexpr TypeSpeculationMask argVal = eval_operator<Arg>::eval();
+            constexpr TypeMaskTy argVal = eval_operator<Arg>::eval();
             static_assert((argVal & type_speculation_mask_for_top) == argVal);
             return type_speculation_mask_for_top ^ argVal;
         }
     };
 
     template<typename T>
-    static constexpr TypeSpeculationMask compute()
+    static constexpr TypeMaskTy compute()
     {
         static_assert(IsValidTypeSpecialization<T>);
         if constexpr(std::is_same_v<T, tBottom>)
@@ -777,28 +777,28 @@ struct compute_type_speculation_mask
         }
         else if constexpr(is_type_speculation_leaf<T>)
         {
-            static_assert(type_speculation_leaf_ordinal<T> < sizeof(TypeSpeculationMask) * 8);
-            constexpr TypeSpeculationMask result = static_cast<TypeSpeculationMask>(1) << type_speculation_leaf_ordinal<T>;
+            static_assert(type_speculation_leaf_ordinal<T> < sizeof(TypeMaskTy) * 8);
+            constexpr TypeMaskTy result = static_cast<TypeMaskTy>(1) << type_speculation_leaf_ordinal<T>;
             static_assert(result <= type_speculation_mask_for_top);
             return result;
         }
         else
         {
             using Def = typename T::TSMDef;
-            constexpr TypeSpeculationMask result = eval_operator<Def>::eval();
+            constexpr TypeMaskTy result = eval_operator<Def>::eval();
             static_assert(0 < result && result <= type_speculation_mask_for_top);
             return result;
         }
     }
 
     template<typename T>
-    static constexpr TypeSpeculationMask value = compute<T>();
+    static constexpr TypeMaskTy value = compute<T>();
 };
 
 }   // namespace detail
 
 template<typename T>
-constexpr TypeSpeculationMask x_typeSpeculationMaskFor = detail::compute_type_speculation_mask::value<T>;
+constexpr TypeMaskTy x_typeMaskFor = detail::compute_type_speculation_mask::value<T>;
 
 namespace detail {
 
@@ -811,9 +811,9 @@ struct get_type_speculation_defs<std::tuple<Args...>>
     static constexpr size_t count = sizeof...(Args);
 
     template<typename T>
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> get_one()
+    static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, 1> get_one()
     {
-        return std::array<std::pair<TypeSpeculationMask, std::string_view>, 1> { std::make_pair(x_typeSpeculationMaskFor<T>, __stringify_type__<T>()) };
+        return std::array<std::pair<TypeMaskTy, std::string_view>, 1> { std::make_pair(x_typeMaskFor<T>, __stringify_type__<T>()) };
     }
 
     template<typename First, typename... Remaining>
@@ -834,11 +834,11 @@ struct get_type_speculation_defs<std::tuple<Args...>>
         return get_impl<Args...>();
     }
 
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> value = get();
+    static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, count> value = get();
 
     static constexpr auto get_sorted()
     {
-        using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
+        using ElementT = std::pair<TypeMaskTy, std::string_view>;
         auto arr = value;
         std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
             if (lhs.first != rhs.first)
@@ -850,7 +850,7 @@ struct get_type_speculation_defs<std::tuple<Args...>>
         return arr;
     }
 
-    static constexpr std::array<std::pair<TypeSpeculationMask, std::string_view>, count> sorted_value = get_sorted();
+    static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, count> sorted_value = get_sorted();
 };
 
 }   // namespace detail
@@ -863,7 +863,7 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculationDefinitions();
 
 // Returns the human readable string of a speculation
 //
-std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask, bool printMaskValue = false);
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeMaskTy mask, bool printMaskValue = false);
 
 // Some utility logic and macros for typecheck strength reduction definitions
 //
@@ -871,10 +871,10 @@ struct tvalue_typecheck_strength_reduction_rule
 {
     // The type mask to check
     //
-    TypeSpeculationMask m_typeToCheck;
+    TypeMaskTy m_typeToCheck;
     // The proven type mask precondition
     //
-    TypeSpeculationMask m_typePrecondition;
+    TypeMaskTy m_typePrecondition;
     // The function to do the job
     //
     using Fn = bool(*)(TValue);
@@ -920,7 +920,7 @@ bool __attribute__((__const__, __flatten__)) DeegenImpl_TValueIs(TValue val)
 template<typename T>
 auto __attribute__((__const__, __flatten__)) DeegenImpl_TValueAs(TValue val)
 {
-    assert(val.Is<T>());
+    Assert(val.Is<T>());
     return T::decode(val);
 }
 
@@ -941,8 +941,8 @@ struct get_basic_tvalue_typecheck_impls<std::tuple<Args...>>
             get_basic_tvalue_typecheck_impls<std::tuple<Remaining...>>::value,
             std::array<tvalue_typecheck_strength_reduction_rule, 1> {
                 tvalue_typecheck_strength_reduction_rule {
-                    .m_typeToCheck = x_typeSpeculationMaskFor<First>,
-                    .m_typePrecondition = x_typeSpeculationMaskFor<tTop>,
+                    .m_typeToCheck = x_typeMaskFor<First>,
+                    .m_typePrecondition = x_typeMaskFor<tTop>,
                     .m_implementation = DeegenImpl_TValueIs<First>,
                     .m_estimatedCost = First::x_estimatedCheckCost
                 }
@@ -1009,14 +1009,14 @@ consteval auto std_array_to_llvm_friendly_array(T v)
     template<>                                                                                                                                       \
     struct tvalue_typecheck_strength_reduction_def_helper<counter>                                                                                   \
     {                                                                                                                                                \
-        static_assert((x_typeSpeculationMaskFor<typeToCheck> & x_typeSpeculationMaskFor<typePrecondition>) == x_typeSpeculationMaskFor<typeToCheck>, \
+        static_assert((x_typeMaskFor<typeToCheck> & x_typeMaskFor<typePrecondition>) == x_typeMaskFor<typeToCheck>,                                  \
                       "precondition must be a superset of the types to check");                                                                      \
         static constexpr auto value = constexpr_std_array_concat(                                                                                    \
             tvalue_typecheck_strength_reduction_def_helper<counter - 1>::value,                                                                      \
             std::array<tvalue_typecheck_strength_reduction_rule, 1> {                                                                                \
                 tvalue_typecheck_strength_reduction_rule {                                                                                           \
-                    .m_typeToCheck = x_typeSpeculationMaskFor<typeToCheck>,                                                                          \
-                    .m_typePrecondition = x_typeSpeculationMaskFor<typePrecondition>,                                                                \
+                    .m_typeToCheck = x_typeMaskFor<typeToCheck>,                                                                                     \
+                    .m_typePrecondition = x_typeMaskFor<typePrecondition>,                                                                           \
                     .m_implementation = tvalue_typecheck_strength_reduction_impl_holder<typeToCheck, typePrecondition>::impl,                        \
                     .m_estimatedCost = (estimatedCost) } });                                                                                         \
     };                                                                                                                                               \
@@ -1076,6 +1076,44 @@ TValue WARN_UNUSED TValue::Create()
     static_assert(IsValidTypeSpecialization<T>);
     return T::encode();
 }
+
+// A simple wrapper for TypeMask
+//
+struct TypeMask
+{
+    ALWAYS_INLINE TypeMask() : m_mask(0) { }
+    ALWAYS_INLINE TypeMask(TypeMaskTy mask) : m_mask(mask) { }
+
+    bool WARN_UNUSED ALWAYS_INLINE SubsetOf(TypeMask other)
+    {
+        return (m_mask & other.m_mask) == m_mask;
+    }
+
+    bool WARN_UNUSED ALWAYS_INLINE SupersetOf(TypeMask other)
+    {
+        return (m_mask & other.m_mask) == other.m_mask;
+    }
+
+    bool WARN_UNUSED ALWAYS_INLINE DisjointFrom(TypeMask other)
+    {
+        return (m_mask & other.m_mask) == 0;
+    }
+
+    bool WARN_UNUSED ALWAYS_INLINE OverlapsWith(TypeMask other)
+    {
+        return (m_mask & other.m_mask) != 0;
+    }
+
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SubsetOf() { return SubsetOf(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SupersetOf() { return SupersetOf(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE DisjointFrom() { return DisjointFrom(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE OverlapsWith() { return OverlapsWith(x_typeMaskFor<tMask>); }
+
+    TypeMaskTy m_mask;
+};
+
+inline bool ALWAYS_INLINE operator==(const TypeMask& lhs, const TypeMask& rhs) { return lhs.m_mask == rhs.m_mask; }
+inline bool ALWAYS_INLINE operator!=(const TypeMask& lhs, const TypeMask& rhs) { return lhs.m_mask != rhs.m_mask; }
 
 class FunctionObject;
 

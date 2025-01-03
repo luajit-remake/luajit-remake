@@ -1,0 +1,24 @@
+diff --git a/llvm/lib/Target/X86/X86FixupLEAs.cpp b/llvm/lib/Target/X86/X86FixupLEAs.cpp
+index beeebf42d..67b8eae8d 100644
+--- a/llvm/lib/Target/X86/X86FixupLEAs.cpp
++++ b/llvm/lib/Target/X86/X86FixupLEAs.cpp
+@@ -34,6 +34,10 @@ using namespace llvm;
+ 
+ STATISTIC(NumLEAs, "Number of LEA instructions created");
+ 
++static cl::opt<bool>
++    DoNotRunTuneSlow3OpsLea("no-tuning-slow-3ops-lea", cl::init(false), cl::Hidden,
++                            cl::desc("Do not run TuneSlow3OpsLea (LLVM always runs it despite that it's not an issue since IceLake)"));
++
+ namespace {
+ class FixupLEAPass : public MachineFunctionPass {
+   enum RegUsageState { RU_NotUsed, RU_Write, RU_Read };
+@@ -252,7 +256,7 @@ bool FixupLEAPass::runOnMachineFunction(MachineFunction &MF) {
+ 
+       if (IsSlowLEA)
+         processInstructionForSlowLEA(I, MBB);
+-      else if (IsSlow3OpsLEA)
++      else if (IsSlow3OpsLEA && !DoNotRunTuneSlow3OpsLea)
+         processInstrForSlow3OpLEA(I, MBB, OptIncDecPerBB);
+     }
+ 

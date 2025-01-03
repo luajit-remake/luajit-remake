@@ -3,7 +3,8 @@
 #include "deegen_rewrite_closure_call.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_baseline_jit_impl_creator.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
+#include "deegen_dfg_jit_impl_creator.h"
 
 namespace dast {
 
@@ -30,7 +31,7 @@ static void AstSlowPathPreprocessOneUse(llvm::Module* module, llvm::CallInst* or
         abort();
     }
 
-    if (!slowPathFn->hasFnAttribute(Attribute::AttrKind::NoReturn))
+    if (!slowPathFn->hasFnAttribute(Attribute::NoReturn))
     {
         fprintf(stderr, "[ERROR] The function '%s' called by EnterSlowPath must be NO_RETURN!\n", slowPathFn->getName().str().c_str());
         abort();
@@ -205,21 +206,21 @@ std::vector<AstSlowPath> AstSlowPath::GetAllUseInFunction(llvm::Function* func)
     return res;
 }
 
-void AstSlowPath::LowerAllForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
+void AstSlowPath::LowerAllForInterpreterOrBaselineOrDfg(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
 {
     std::vector<AstSlowPath> list = AstSlowPath::GetAllUseInFunction(func);
     for (AstSlowPath& slowPath : list)
     {
-        slowPath.LowerForInterpreterOrBaselineJIT(ifi);
+        slowPath.LowerForInterpreterOrBaselineOrDfg(ifi, func);
     }
 }
 
-static std::vector<uint64_t> WARN_UNUSED AstSlowPathGetInterpreterFunctionArgAssignment(const std::vector<llvm::Type*>& argTys)
+static std::vector<uint64_t> WARN_UNUSED AstSlowPathGetFunctionArgAssignment(const std::vector<llvm::Type*>& argTys)
 {
     using namespace llvm;
 
-    std::vector<uint64_t> gprList = InterpreterFunctionInterface::GetAvaiableGPRListForBytecodeSlowPath();
-    std::vector<uint64_t> fprList = InterpreterFunctionInterface::GetAvaiableFPRListForBytecodeSlowPath();
+    std::vector<uint64_t> gprList = RegisterPinningScheme::GetAvaiableGPRListForBytecodeSlowPath();
+    std::vector<uint64_t> fprList = RegisterPinningScheme::GetAvaiableFPRListForBytecodeSlowPath();
 
     std::vector<uint64_t> gprArgs;
     std::vector<uint64_t> fprArgs;
@@ -288,10 +289,19 @@ static std::vector<uint64_t> WARN_UNUSED AstSlowPathGetInterpreterFunctionArgAss
     return result;
 }
 
-void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi)
+void AstSlowPath::LowerForInterpreterOrBaselineOrDfg(DeegenBytecodeImplCreatorBase* ifi, llvm::Function* func)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    // If we are in DFG JIT'ed code and reg alloc is enabled, we need to pass argument to the slow path without
+    // touching the reg-alloc register part.
+    //
+    // This boolean denotes whether this is the case.
+    // True if we are in DFG JIT'ed code (i.e., main component) and reg alloc is enabled
+    //
+    bool isDfgJitFastPathAndRegAllocIsEnabled = (ifi->IsDfgJIT() && ifi->IsMainComponent() && !ifi->AsDfgJIT()->IsRegAllocDisabled());
+    ReleaseAssertImp(isDfgJitFastPathAndRegAllocIsEnabled, !ifi->AsDfgJIT()->IsJitSlowPath());
 
     std::string dispatchFnName;
     if (ifi->IsInterpreter())
@@ -300,10 +310,19 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
     }
     else
     {
-        ReleaseAssert(ifi->IsBaselineJIT());
+        ReleaseAssert(ifi->IsBaselineJIT() || ifi->IsDfgJIT());
         std::string implFnName = GetImplFunction()->getName().str();
         ReleaseAssert(implFnName.ends_with("_impl"));
         dispatchFnName = implFnName.substr(0, implFnName.length() - strlen("_impl"));
+
+        // If we are in DFG JIT'ed code and reg alloc is enabled in any variant (even if in this variant it is disabled),
+        // we must branch to the _save_register entrypoint of the slowpath,
+        // which will handle the work of saving registers for us and branch to the real slowpath
+        //
+        if (isDfgJitFastPathAndRegAllocIsEnabled)
+        {
+            dispatchFnName = dispatchFnName + "_save_registers";
+        }
     }
 
     std::vector<uint64_t> argOrdList;
@@ -313,12 +332,12 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         {
             argTys.push_back(m_origin->getArgOperand(i)->getType());
         }
-        argOrdList = AstSlowPathGetInterpreterFunctionArgAssignment(argTys);
+        argOrdList = AstSlowPathGetFunctionArgAssignment(argTys);
     }
     ReleaseAssert(m_origin->arg_size() == argOrdList.size() + 1);
 
     std::vector<Value*> convertedArgs;
-    FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
+    FunctionType* fty = RegisterPinningScheme::GetFunctionType(ctx);
     for (uint32_t i = 0; i < argOrdList.size(); i++)
     {
         Value* src = m_origin->getArgOperand(i + 1);
@@ -376,59 +395,137 @@ void AstSlowPath::LowerForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase
         convertedArgs.push_back(cvt);
     }
 
+    ReleaseAssert(argOrdList.size() == convertedArgs.size());
+
     Function* dispatchFn = ifi->GetModule()->getFunction(dispatchFnName);
     if (dispatchFn == nullptr)
     {
-        dispatchFn = InterpreterFunctionInterface::CreateFunction(ifi->GetModule(), dispatchFnName);
+        dispatchFn = RegisterPinningScheme::CreateFunction(ifi->GetModule(), dispatchFnName);
     }
     ReleaseAssert(dispatchFn->getFunctionType() == fty);
 
-    Value* callSiteInfo;
-    Value* cbOrBcb;
+    Value* curBytecode = nullptr;     // Only populated for interpreter
+    Value* slowPathData = nullptr;    // Only populated for baseline/DFG JIT
+    Value* cbForTier = nullptr;       // The CodeBlock for the tier
     if (ifi->IsInterpreter())
     {
         // For interpreter, we need to pass the bytecode pointer to the slow path
         //
         InterpreterBytecodeImplCreator* ibc = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
-        callSiteInfo = ibc->GetCurBytecode();
-        cbOrBcb = ibc->GetInterpreterCodeBlock();
+        curBytecode = ibc->GetCurBytecode();
+        cbForTier = ibc->GetInterpreterCodeBlock();
+        ReleaseAssert(llvm_value_has_type<void*>(curBytecode));
     }
-    else if (ifi->IsBaselineJIT())
+    else
     {
-        // For baseline JIT, if we are in JIT'ed code, we need to pass the BaselineJitSlowPathData pointer by a stencil hole.
-        // If we are already in baseline JIT slow path, we already have our BaselineJitSlowPathData pointer and just need to pass it around.
+        ReleaseAssert(ifi->IsBaselineJIT() || ifi->IsDfgJIT());
+
+        // For JIT, if we are in JIT'ed code, we need to pass the Baseline/DFG JitSlowPathData pointer by a stencil hole.
+        // If we are already in JIT slow path, we already have our Baseline/DFG JitSlowPathData pointer and just need to pass it around.
         //
-        BaselineJitImplCreator* j = assert_cast<BaselineJitImplCreator*>(ifi);
-        cbOrBcb = j->GetJitCodeBlock();
+        JitImplCreatorBase* j = assert_cast<JitImplCreatorBase*>(ifi);
+        cbForTier = j->GetJitCodeBlock();
         if (j->IsJitSlowPath())
         {
-            callSiteInfo = j->GetJitSlowPathData();
+            slowPathData = j->GetJitSlowPathData();
         }
         else
         {
             Value* offset = j->GetSlowPathDataOffsetFromJitFastPath(m_origin);
-            Value* baselineJitCodeBlock = j->GetJitCodeBlock();
-            ReleaseAssert(llvm_value_has_type<void*>(baselineJitCodeBlock));
-            callSiteInfo = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), baselineJitCodeBlock, { offset }, "", m_origin);
+            Value* jitCodeBlock = j->GetJitCodeBlock();
+            ReleaseAssert(llvm_value_has_type<void*>(jitCodeBlock));
+            slowPathData = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), jitCodeBlock, { offset }, "", m_origin);
         }
+        ReleaseAssert(llvm_value_has_type<void*>(slowPathData));
+    }
+
+    // If we are in DFG JIT'ed code and reg alloc is enabled, we need to worry about argument passing and register saving
+    // Currently the scheme is as follows:
+    // 1. The JIT code will save the arguments passed to the AOT slowpath to a temporary area, and pass all registers to slow path
+    // 2. The _save_registers AOT slow path entry point will save the registers to the stack spill area, load the parameters from the
+    //    temporary area, then branch to the real slow path
+    //
+    // Note that we cannot use the reg-alloc regs to pass parameters, since the registers in the stencils will be renamed at runtime
+    //
+    // TODO:
+    // We could have used a better scheme: use the unused scratch regs (e.g., RAX) to pass parameters to avoid saving them to memory.
+    // This should produce slightly better JIT code, but will need LLVM changes to GHC calling conv, so we put it aside for now.
+    //
+    if (isDfgJitFastPathAndRegAllocIsEnabled)
+    {
+        if (convertedArgs.size() > CoroutineRuntimeContext::x_dfg_temp_buffer_size)
+        {
+            ReleaseAssert(false && "please increase x_dfg_temp_buffer_size to match the maximum number of parameters passed in EnterSlowPath");
+        }
+
+        constexpr size_t baseBufOffset = offsetof_member_v<&CoroutineRuntimeContext::m_dfgTempBuffer>;
+        for (size_t i = 0; i < convertedArgs.size(); i++)
+        {
+            size_t offsetBytes = baseBufOffset + 8 * i;
+            GetElementPtrInst* dstPtr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCoroutineCtx(), { CreateLLVMConstantInt<uint64_t>(ctx, offsetBytes) }, "", m_origin);
+            std::ignore = new StoreInst(convertedArgs[i], dstPtr, false /*isVolatile*/, Align(8), m_origin);
+        }
+    }
+
+    CallInst* callInst;
+    if (ifi->IsInterpreter())
+    {
+        callInst = ifi->GetExecFnContext()->PrepareDispatch<InterpreterInterface>()
+                       .Set<RPV_StackBase>(ifi->GetStackBase())
+                       .Set<RPV_CodeBlock>(cbForTier)
+                       .Set<RPV_CurBytecode>(curBytecode)
+                       .Dispatch(dispatchFn, m_origin /*insertBefore*/);
     }
     else
     {
-        ReleaseAssert(ifi->IsDfgJIT());
-        ReleaseAssert(false && "unimplemented");
+        ReleaseAssert(ifi->IsBaselineJIT() || ifi->IsDfgJIT());
+        if (isDfgJitFastPathAndRegAllocIsEnabled)
+        {
+            // If we are DFG JIT code and reg alloc is enabled, we need to branch to the SaveRegStub version of the AOT slow path instead
+            //
+            callInst = ifi->GetExecFnContext()->PrepareDispatch<JitAOTSlowPathSaveRegStubInterface>()
+                           .Set<RPV_StackBase>(ifi->GetStackBase())
+                           .Set<RPV_CodeBlock>(cbForTier)
+                           .Set<RPV_JitSlowPathDataForSaveRegStub>(slowPathData)
+                           .Dispatch(dispatchFn, m_origin /*insertBefore*/);
+        }
+        else
+        {
+            callInst = ifi->GetExecFnContext()->PrepareDispatch<JitAOTSlowPathInterface>()
+                           .Set<RPV_StackBase>(ifi->GetStackBase())
+                           .Set<RPV_CodeBlock>(cbForTier)
+                           .Set<RPV_JitSlowPathData>(slowPathData)
+                           .Dispatch(dispatchFn, m_origin /*insertBefore*/);
+        }
     }
-    ReleaseAssert(llvm_value_has_type<void*>(callSiteInfo));
 
-    CallInst* callInst = InterpreterFunctionInterface::CreateDispatchToBytecodeSlowPath(
-        dispatchFn, ifi->GetCoroutineCtx(), ifi->GetStackBase(), callSiteInfo, cbOrBcb, m_origin /*insertBefore*/);
-
-    for (size_t i = 0; i < argOrdList.size(); i++)
+    if (isDfgJitFastPathAndRegAllocIsEnabled)
     {
-        uint32_t argOrd = static_cast<uint32_t>(argOrdList[i]);
-        Value* val = convertedArgs[i];
-        ReleaseAssert(argOrd < callInst->arg_size());
-        ReleaseAssert(callInst->getArgOperand(argOrd)->getType() == val->getType());
-        callInst->setArgOperand(argOrd, val);
+        // Pass all the reg-alloc registers passed in at function entry to the slow path
+        //
+        ForEachDfgRegAllocRegister(
+            [&](X64Reg reg)
+            {
+                PhyRegUseKind purpose = ifi->AsDfgJIT()->GetRegisterPurpose(reg).Kind();
+                if (purpose == PhyRegUseKind::ScratchUse)
+                {
+                    return;
+                }
+                Value* regVal = RegisterPinningScheme::GetRegisterValueAtEntry(func, reg);
+                RegisterPinningScheme::SetExtraDispatchArgument(callInst, reg, regVal);
+            });
+    }
+    else
+    {
+        // Pass the paramters to the slow path
+        //
+        ReleaseAssert(argOrdList.size() == convertedArgs.size());
+        for (size_t i = 0; i < argOrdList.size(); i++)
+        {
+            uint32_t argOrd = static_cast<uint32_t>(argOrdList[i]);
+            Value* val = convertedArgs[i];
+            RegisterPinningScheme::SetExtraDispatchArgument(callInst, argOrd, val);
+        }
     }
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
@@ -449,7 +546,7 @@ std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapp
         {
             argTys.push_back(implFunc->getArg(i)->getType());
         }
-        argOrdList = AstSlowPathGetInterpreterFunctionArgAssignment(argTys);
+        argOrdList = AstSlowPathGetFunctionArgAssignment(argTys);
     }
 
     Function* func = bb->getParent();
@@ -511,6 +608,29 @@ std::vector<llvm::Value*> WARN_UNUSED AstSlowPath::CreateCallArgsInSlowPathWrapp
     }
     ReleaseAssert(extraArgBegin + result.size() == implFunc->arg_size());
     return result;
+}
+
+std::vector<uint64_t> WARN_UNUSED AstSlowPath::GetDfgCallArgMapInSaveRegStub(BytecodeIrComponent& bic)
+{
+    using namespace llvm;
+    ReleaseAssert(bic.m_processKind == BytecodeIrComponentKind::SlowPath);
+    Function* func = bic.m_impl;
+
+    size_t extraArgBegin = bic.m_bytecodeDef->m_list.size();
+    ReleaseAssert(func->arg_size() >= extraArgBegin);
+
+    std::vector<Type*> argTys;
+    for (uint32_t i = static_cast<uint32_t>(extraArgBegin); i < func->arg_size(); i++)
+    {
+        argTys.push_back(func->getArg(i)->getType());
+    }
+
+    // This logic must be kept in sync with how we populated tempBuffer in the lowering!
+    // Specifically, currently we simply store the argument to the tempBuffer in the order of the argOrdList
+    //
+    std::vector<uint64_t> argOrdList = AstSlowPathGetFunctionArgAssignment(argTys);
+    ReleaseAssert(argOrdList.size() <= CoroutineRuntimeContext::x_dfg_temp_buffer_size);
+    return argOrdList;
 }
 
 }   // namespace dast

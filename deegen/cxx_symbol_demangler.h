@@ -13,12 +13,11 @@ inline std::string WARN_UNUSED DemangleCXXSymbol(const std::string& symbol)
 {
     // https://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.3/a01696.html
     //
-    int status = -100;
-    char* res = llvm::itaniumDemangle(symbol.c_str(), nullptr, nullptr, &status /*out*/);
-    if (status != llvm::demangle_success)
+    char* res = llvm::itaniumDemangle(symbol.c_str());
+    if (res == nullptr)
     {
-        fprintf(stderr, "[ERROR] Attempt to demangle CXX symbol '%s' failed with status %d.\n",
-                symbol.c_str(), status);
+        fprintf(stderr, "[ERROR] Attempt to demangle CXX symbol '%s' failed.\n",
+                symbol.c_str());
         abort();
     }
     std::string s = res;

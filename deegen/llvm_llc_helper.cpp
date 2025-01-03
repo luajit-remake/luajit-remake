@@ -1,7 +1,8 @@
 #include "anonymous_file.h"
+#include "deegen_options.h"
 #include "misc_llvm_helper.h"
 #include "llvm_override_option.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Target/TargetMachine.h"
@@ -88,7 +89,7 @@ static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module,
     }
 
     std::unique_ptr<TargetMachine> targetMachine = std::unique_ptr<TargetMachine>(target->createTargetMachine(
-        tripleStr, targetCpu, targetFeatures, targetOptions, relocationModel, codeModel, CodeGenOpt::Aggressive));
+        tripleStr, targetCpu, targetFeatures, targetOptions, relocationModel, codeModel, CodeGenOptLevel::Aggressive));
     ReleaseAssert(targetMachine != nullptr);
 
     // Logic below mostly copied from llvm/tools/llc/llc.cpp
@@ -129,14 +130,29 @@ static std::string WARN_UNUSED CompileLLVMModuleImpl(llvm::Module* module,
     return s;
 }
 
-std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
-{
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel, [](llvm::TargetOptions&) { });
-}
-
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
 {
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_AssemblyFile, relocationModel, codeModel, targetOptionsTweaker);
+    ScopeOverrideLLVMOption<bool> setOptionDoNotAvoid3OpsLea("no-tuning-slow-3ops-lea", x_finetune_llvm_do_not_avoid_3_ops_lea_inst);
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::AssemblyFile, relocationModel, codeModel, targetOptionsTweaker);
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
+{
+    return CompileLLVMModuleToAssemblyFile(module, relocationModel, codeModel, [](llvm::TargetOptions&) { });
+}
+
+std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
+{
+    ScopeOverrideLLVMOption<bool> setOptionAnnotateIBRDest("add-indirect-branch-dest-annotation-for-deegen", true);
+    return CompileLLVMModuleToAssemblyFile(module, relocationModel, codeModel, [&](llvm::TargetOptions& targetOptions) {
+        // Required for indirect branch dest annotation
+        //
+        targetOptions.MCOptions.AsmVerbose = true;
+        // Required for calling convention register info annotation
+        //
+        targetOptions.EmitCallSiteInfo = true;
+        targetOptionsTweaker(targetOptions);
+    });
 }
 
 std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
@@ -144,25 +160,15 @@ std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm
     return CompileLLVMModuleToAssemblyFileForStencilGeneration(module, relocationModel, codeModel, [](llvm::TargetOptions&) { });
 }
 
-std::string WARN_UNUSED CompileLLVMModuleToAssemblyFileForStencilGeneration(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
+std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
 {
-    ScopeOverrideLLVMOption<bool> overrideOption("add-indirect-branch-dest-annotation-for-deegen", true);
-    return CompileLLVMModuleToAssemblyFile(module, relocationModel, codeModel, [&](llvm::TargetOptions& targetOptions) {
-        // Required for indirect branch dest annotation
-        //
-        targetOptions.MCOptions.AsmVerbose = true;
-        targetOptionsTweaker(targetOptions);
-    });
+    ScopeOverrideLLVMOption<bool> setOptionDoNotAvoid3OpsLea("no-tuning-slow-3ops-lea", x_finetune_llvm_do_not_avoid_3_ops_lea_inst);
+    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::ObjectFile, relocationModel, codeModel, targetOptionsTweaker);
 }
 
 std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel)
 {
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel, [](llvm::TargetOptions&) { });
-}
-
-std::string WARN_UNUSED CompileLLVMModuleToElfObjectFile(llvm::Module* module, llvm::Reloc::Model relocationModel, llvm::CodeModel::Model codeModel, const std::function<void(llvm::TargetOptions&)>& targetOptionsTweaker)
-{
-    return CompileLLVMModuleImpl(module, llvm::CodeGenFileType::CGFT_ObjectFile, relocationModel, codeModel, targetOptionsTweaker);
+    return CompileLLVMModuleToElfObjectFile(module, relocationModel, codeModel, [](llvm::TargetOptions&) { });
 }
 
 llvm::object::ELFObjectFileBase* LoadElfObjectFile(llvm::LLVMContext& ctx, const std::string& fileContent)

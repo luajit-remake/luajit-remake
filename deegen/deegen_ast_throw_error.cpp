@@ -1,6 +1,6 @@
 #include "deegen_ast_throw_error.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "misc_llvm_helper.h"
 #include "deegen_ast_simple_lowering_utils.h"
 
@@ -15,18 +15,17 @@ llvm::Function* WARN_UNUSED GetThrowErrorDispatchTargetFunctionImpl(llvm::Module
     Function* errorHandlerFn = module->getFunction(errorHandlerFnName);
     if (errorHandlerFn == nullptr)
     {
-        errorHandlerFn = InterpreterFunctionInterface::CreateFunction(module, errorHandlerFnName);
-        errorHandlerFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+        errorHandlerFn = RegisterPinningScheme::CreateFunction(module, errorHandlerFnName);
     }
     else
     {
-        ReleaseAssert(errorHandlerFn->getFunctionType() == InterpreterFunctionInterface::GetType(ctx));
+        ReleaseAssert(errorHandlerFn->getFunctionType() == RegisterPinningScheme::GetFunctionType(ctx));
     }
 
     if (!errorHandlerFn->empty())
     {
-        ReleaseAssert(!errorHandlerFn->hasFnAttribute(Attribute::AttrKind::AlwaysInline));
-        errorHandlerFn->addFnAttr(Attribute::AttrKind::NoInline);
+        ReleaseAssert(!errorHandlerFn->hasFnAttribute(Attribute::AlwaysInline));
+        errorHandlerFn->addFnAttr(Attribute::NoInline);
     }
     return errorHandlerFn;
 }
@@ -61,32 +60,32 @@ struct LowerThrowErrorApiPass final : public DeegenAbstractSimpleApiLoweringPass
 
         if (ifi->IsInterpreter())
         {
-            InterpreterBytecodeImplCreator* i = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+            InterpreterBytecodeImplCreator* i = ifi->AsInterpreter();
             i->CallDeegenCommonSnippet("UpdateInterpreterTierUpCounterForReturnOrThrow", { i->GetInterpreterCodeBlock(), i->GetCurBytecode() }, origin);
         }
 
         Function* dispatchTarget;
         Value* errorObject = origin->getArgOperand(0);
+        Value* errorObjectAsPtr = nullptr;
         if (calleeName == "DeegenImpl_ThrowErrorTValue")
         {
             ReleaseAssert(llvm_value_has_type<uint64_t>(errorObject));
+            errorObjectAsPtr = new IntToPtrInst(errorObject, llvm_type_of<void*>(ctx), "", origin /*insertBefore*/);
             dispatchTarget = GetThrowTValueErrorDispatchTargetFunction(ifi->GetModule());
         }
         else
         {
             ReleaseAssert(llvm_value_has_type<void*>(errorObject));
-            errorObject = new PtrToIntInst(errorObject, llvm_type_of<uint64_t>(ctx), "", origin /*insertBefore*/);
+            errorObjectAsPtr = errorObject;
             dispatchTarget = GetThrowCStringErrorDispatchTargetFunction(ifi->GetModule());
         }
 
-        InterpreterFunctionInterface::CreateDispatchToCallee(
-            dispatchTarget,
-            ifi->GetCoroutineCtx(),
-            ifi->GetStackBase(),
-            UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
-            errorObject /*numArgs repurposed as errorObj*/,
-            UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            origin /*insertBefore*/);
+        ifi->GetExecFnContext()->PrepareDispatch<FunctionEntryInterface>()
+            .Set<RPV_StackBase>(ifi->GetStackBase())
+            .Set<RPV_NumArgsAsPtr>(errorObjectAsPtr)        // numArgs repurposed as errorObj
+            .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(UndefValue::get(llvm_type_of<void*>(ctx)))
+            .Set<RPV_IsMustTailCall>(UndefValue::get(llvm_type_of<uint64_t>(ctx)))
+            .Dispatch(dispatchTarget, origin /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(origin);
         Instruction* unreachableInst = origin->getNextNode();

@@ -1,9 +1,10 @@
 #include "deegen_ast_make_call.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_baseline_jit_impl_creator.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "deegen_call_inline_cache.h"
 #include "deegen_bytecode_operand.h"
+#include "deegen_dfg_jit_impl_creator.h"
 
 #include "runtime_utils.h"
 
@@ -122,8 +123,8 @@ llvm::Function* WARN_UNUSED AstMakeCall::CreatePlaceholderFunction(llvm::Module*
 
     FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, argTypes, false /*isVarArg*/);
     Function* func = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, decidedName, module);
-    func->addFnAttr(Attribute::AttrKind::NoUnwind);
-    func->addFnAttr(Attribute::AttrKind::NoReturn);
+    func->addFnAttr(Attribute::NoUnwind);
+    func->addFnAttr(Attribute::NoReturn);
     return func;
 }
 
@@ -348,7 +349,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     ReleaseAssert(module != nullptr);
 
     LLVMContext& ctx = module->getContext();
-    FunctionType* fty = InterpreterFunctionInterface::GetType(ctx);
+    FunctionType* fty = RegisterPinningScheme::GetFunctionType(ctx);
 
     Function* func = module->getFunction(rcFinalName);
     if (func != nullptr)
@@ -358,7 +359,7 @@ llvm::Function* WARN_UNUSED AstMakeCall::GetContinuationDispatchTarget()
     }
     else
     {
-        return InterpreterFunctionInterface::CreateFunction(module, rcFinalName);
+        return RegisterPinningScheme::CreateFunction(module, rcFinalName);
     }
 }
 
@@ -436,7 +437,6 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
                     "CopyVariadicResultsToArgumentsForwardMayOvercopy",
                     {
                         copyDst,
-                        ifi->GetStackBase(),
                         ifi->GetCoroutineCtx()
                     },
                     m_origin /*insertBefore*/);
@@ -468,20 +468,22 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
             Value* endOfStackFrame;
             if (ifi->IsInterpreter())
             {
-                InterpreterBytecodeImplCreator* ibc = assert_cast<InterpreterBytecodeImplCreator*>(ifi);
+                InterpreterBytecodeImplCreator* ibc = ifi->AsInterpreter();
                 endOfStackFrame = ibc->CallDeegenCommonSnippet(
                     "GetEndOfCallFrameFromInterpreterCodeBlock", { ibc->GetStackBase(), ibc->GetInterpreterCodeBlock() }, m_origin /*insertBefore*/);
             }
             else if (ifi->IsBaselineJIT())
             {
-                BaselineJitImplCreator* jbc = assert_cast<BaselineJitImplCreator*>(ifi);
+                BaselineJitImplCreator* jbc = ifi->AsBaselineJIT();
                 endOfStackFrame = jbc->CallDeegenCommonSnippet(
                     "GetEndOfCallFrameFromBaselineCodeBlock", { jbc->GetStackBase(), jbc->GetJitCodeBlock() }, m_origin /*insertBefore*/);
             }
             else
             {
                 ReleaseAssert(ifi->IsDfgJIT());
-                ReleaseAssert(false && "unimplemented");
+                DfgJitImplCreator* jdc = ifi->AsDfgJIT();
+                endOfStackFrame = jdc->CallDeegenCommonSnippet(
+                    "GetEndOfCallFrameFromDfgCodeBlock", { jdc->GetStackBase(), jdc->GetJitCodeBlock() }, m_origin /*insertBefore*/);
             }
             ReleaseAssert(llvm_value_has_type<void*>(endOfStackFrame));
 
@@ -499,7 +501,7 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
                 totalNumArgs = CreateUnsignedAddNoOverflow(argNum, numVRes, m_origin /*insertBefore*/);
 
                 Value* copyDst = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, newSfBase, { argNum }, "", m_origin /*insertBefore*/);
-                ifi->CallDeegenCommonSnippet("CopyVariadicResultsToArguments", { copyDst, ifi->GetStackBase(), ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
+                ifi->CallDeegenCommonSnippet("CopyVariadicResultsToArguments", { copyDst, ifi->GetCoroutineCtx() }, m_origin /*insertBefore*/);
             }
             else
             {
@@ -686,7 +688,6 @@ std::pair<llvm::Value* /*newSfBase*/, llvm::Value* /*totalNumArgs*/> WARN_UNUSED
                     "CopyVariadicResultsToArgumentsForwardMayOvercopy",
                     {
                         vaDst,
-                        ifi->GetStackBase(),
                         ifi->GetCoroutineCtx()
                     },
                     m_origin /*insertBefore*/);
@@ -853,13 +854,55 @@ void AstMakeCall::DoLoweringForInterpreter(InterpreterBytecodeImplCreator* ifi)
     ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
     ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
 
-    InterpreterFunctionInterface::CreateDispatchToCallee(codePointer, ifi->GetCoroutineCtx(), newSfBase, calleeCbHeapPtr, totalNumArgs, CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)), m_origin /*insertBefore*/);
+    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+    Value* calleeCbHeapPtrAsPtr = new AddrSpaceCastInst(calleeCbHeapPtr, llvm_type_of<void*>(ctx), "", m_origin);
+
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+    Value* totalNumArgsAsPtr = new IntToPtrInst(totalNumArgs, llvm_type_of<void*>(ctx), "", m_origin);
+
+    ifi->GetExecFnContext()->PrepareDispatch<FunctionEntryInterface>()
+        .Set<RPV_StackBase>(newSfBase)
+        .Set<RPV_NumArgsAsPtr>(totalNumArgsAsPtr)
+        .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCbHeapPtrAsPtr)
+        .Set<RPV_IsMustTailCall>(CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)))
+        .Dispatch(codePointer, m_origin /*insertBefore*/);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();
     m_origin->eraseFromParent();
     unreachableInst->eraseFromParent();
     m_origin = nullptr;
+}
+
+llvm::Value* AstMakeCall::EmitCallSiteInfoForJitCall(JitImplCreatorBase* ifi, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    Value* callSiteInfo = nullptr;
+    if (!m_isMustTailCall)
+    {
+        if (ifi->IsJitSlowPath())
+        {
+            // The JIT slow path must record the current JitSlowPathData pointer in the stack frame, as the return continuation needs to use it
+            // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.
+            // This is OK, since the SlowPathData pointer always points to the trailing array region of the Baseline/DFG CodeBlock,
+            // so when the call returns, we can restore the full 64 bit value using the Baseline/DFG CodeBlock pointer.
+            //
+            Value* slowPathDataPtr = ifi->GetJitSlowPathData();
+            ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
+            Value* slowPathDataPtrI64 = new PtrToIntInst(slowPathDataPtr, llvm_type_of<uint64_t>(ctx), "", insertBefore);
+            TruncInst* slowPathDataPtrI32 = new TruncInst(slowPathDataPtrI64, llvm_type_of<uint32_t>(ctx), "", insertBefore);
+            callSiteInfo = slowPathDataPtrI32;
+        }
+        else
+        {
+            // The JIT'ed fast path doesn't need a CallSiteInfo, just provide undefined
+            //
+            callSiteInfo = UndefValue::get(llvm_type_of<uint32_t>(ctx));
+        }
+    }
+    return callSiteInfo;
 }
 
 void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t uniqueOrd)
@@ -917,41 +960,24 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
         ReleaseAssert(amc.m_args.size() == m_args.size());
         for (size_t i = 0; i < m_args.size(); i++) { ReleaseAssert(amc.m_args[i].IsArgRange() == m_args[i].IsArgRange()); }
 
-        Value* callSiteInfo = nullptr;
-        if (!m_isMustTailCall)
-        {
-            if (ifi->IsJitSlowPath())
-            {
-                // The baseline JIT slow path must record the current BaselineJitSlowPathData pointer in the stack frame, as the return continuation needs to use it
-                // Note that we only have 32 bits here, so we only store the lower 32 bits of the SlowPathData pointer.
-                // This is OK, since the SlowPathData pointer always points to the trailing array region of the BaselineCodeBlock,
-                // so when the call returns, we can restore the full 64 bit value using the BaselineCodeBlock pointer.
-                //
-                Value* slowPathDataPtr = ifi->GetJitSlowPathData();
-                ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
-                Value* slowPathDataPtrI64 = new PtrToIntInst(slowPathDataPtr, llvm_type_of<uint64_t>(ctx), "", origin);
-                TruncInst* slowPathDataPtrI32 = new TruncInst(slowPathDataPtrI64, llvm_type_of<uint32_t>(ctx), "", origin);
-                callSiteInfo = slowPathDataPtrI32;
-            }
-            else
-            {
-                // The baseline JIT'ed fast path doesn't need a CallSiteInfo, just provide undefined
-                //
-                callSiteInfo = UndefValue::get(llvm_type_of<uint32_t>(ctx));
-            }
-        }
+        Value* callSiteInfo = EmitCallSiteInfoForJitCall(ifi, origin /*insertBefore*/);
 
         auto [newSfBase, totalNumArgs] = amc.EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
         ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
         ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
 
-        InterpreterFunctionInterface::CreateDispatchToCallee(codePointer,
-                                                             ifi->GetCoroutineCtx(),
-                                                             newSfBase,
-                                                             calleeCbHeapPtr,
-                                                             totalNumArgs,
-                                                             CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)),
-                                                             origin /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        Value* calleeCbHeapPtrAsPtr = new AddrSpaceCastInst(calleeCbHeapPtr, llvm_type_of<void*>(ctx), "", origin);
+
+        ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+        Value* totalNumArgsAsPtr = new IntToPtrInst(totalNumArgs, llvm_type_of<void*>(ctx), "", origin);
+
+        ifi->GetExecFnContext()->PrepareDispatch<FunctionEntryInterface>()
+            .Set<RPV_StackBase>(newSfBase)
+            .Set<RPV_NumArgsAsPtr>(totalNumArgsAsPtr)
+            .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCbHeapPtrAsPtr)
+            .Set<RPV_IsMustTailCall>(CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)))
+            .Dispatch(codePointer, origin /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(origin);
         Instruction* unreachableInst = origin->getNextNode();
@@ -961,7 +987,6 @@ void AstMakeCall::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t u
 
     ValidateLLVMFunction(func);
 }
-
 
 std::vector<AstMakeCall> WARN_UNUSED AstMakeCall::GetAllUseInFunctionInDeterministicOrder(llvm::Function* func)
 {
@@ -1001,7 +1026,7 @@ void AstMakeCall::LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Functio
     {
         // The # of calls must equal the # of JIT call ICs, assert this
         //
-        ReleaseAssert(res.size() == ifi->GetBytecodeDef()->GetNumCallICsInJitTier());
+        ReleaseAssert(res.size() == ifi->GetBytecodeDef()->GetNumCallICsInBaselineJitTier());
     }
 
     for (size_t i = 0; i < res.size(); i++)
@@ -1009,6 +1034,68 @@ void AstMakeCall::LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Functio
         res[i].DoLoweringForBaselineJIT(ifi, i /*uniqueOrd*/);
     }
 
+    ValidateLLVMFunction(func);
+}
+
+void AstMakeCall::DoLoweringForDfgJIT(DfgJitImplCreator* ifi)
+{
+    using namespace llvm;
+    LLVMContext& ctx = ifi->GetModule()->getContext();
+
+    if (ifi->IsMainComponent())
+    {
+        // If we are the fast path, no register allocation should happen if the fast path may do a guest language call. Assert this.
+        //
+        ReleaseAssert(ifi->IsRegAllocDisabled());
+    }
+    else
+    {
+        // If we are the slow path, all registers should have been spilled to the spill area at the time we enter slow path from fast path
+        // So we do not need to do anything. We can just execute the call.
+        //
+    }
+
+    // DFG JIT currently does not use call IC, since it is currently the highest tier (so there is no need to use call IC to collect information
+    // about the callee), and call IC does not seem to bring a performance improvement by itself on newer CPU architectures.
+    //
+    Value* calleeCbHeapPtr = nullptr;
+    Value* codePointer = nullptr;
+    DeegenCallIcLogicCreator::EmitGenericGetCallTargetLogic(ifi, m_target, calleeCbHeapPtr /*out*/, codePointer /*out*/, m_origin /*insertBefore*/);
+    ReleaseAssert(calleeCbHeapPtr != nullptr);
+    ReleaseAssert(codePointer != nullptr);
+
+    Value* callSiteInfo = EmitCallSiteInfoForJitCall(ifi, m_origin /*insertBefore*/);
+
+    auto [newSfBase, totalNumArgs] = EmitGenericNewCallFrameSetupLogic(ifi, callSiteInfo);
+    ReleaseAssert(llvm_value_has_type<void*>(newSfBase));
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+
+    ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+    Value* calleeCbHeapPtrAsPtr = new AddrSpaceCastInst(calleeCbHeapPtr, llvm_type_of<void*>(ctx), "", m_origin);
+
+    ReleaseAssert(llvm_value_has_type<uint64_t>(totalNumArgs));
+    Value* totalNumArgsAsPtr = new IntToPtrInst(totalNumArgs, llvm_type_of<void*>(ctx), "", m_origin);
+
+    ifi->GetExecFnContext()->PrepareDispatch<FunctionEntryInterface>()
+        .Set<RPV_StackBase>(newSfBase)
+        .Set<RPV_NumArgsAsPtr>(totalNumArgsAsPtr)
+        .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCbHeapPtrAsPtr)
+        .Set<RPV_IsMustTailCall>(CreateLLVMConstantInt<uint64_t>(ctx, static_cast<uint64_t>(m_isMustTailCall)))
+        .Dispatch(codePointer, m_origin /*insertBefore*/);
+
+    AssertInstructionIsFollowedByUnreachable(m_origin);
+    Instruction* unreachableInst = m_origin->getNextNode();
+    m_origin->eraseFromParent();
+    unreachableInst->eraseFromParent();
+}
+
+void AstMakeCall::LowerAllForDfgJIT(DfgJitImplCreator* ifi, llvm::Function* func)
+{
+    std::vector<AstMakeCall> res = GetAllUseInFunctionInDeterministicOrder(func);
+    for (size_t i = 0; i < res.size(); i++)
+    {
+        res[i].DoLoweringForDfgJIT(ifi);
+    }
     ValidateLLVMFunction(func);
 }
 

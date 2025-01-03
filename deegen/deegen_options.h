@@ -46,3 +46,15 @@ constexpr size_t x_forbid_tier_up_to_dfg_num_bytecodes_threshold = 200000;
 
 static_assert(!(!x_allow_interpreter_tier_up_to_baseline_jit && x_allow_baseline_jit_tier_up_to_optimizing_jit),
               "Enabling optimizing JIT requires enabling baseline JIT as well!");
+
+// LLVM will try to avoid using 3-ops LEA instructions (e.g., "leaq 32(%rdi,%rsi,8), %rax") by default,
+// since on Intel SandyBridge and SkyLake CPUs (and AlderLake E-cores), 3-ops LEA are costly (3 cycle latency and 1 reciprocal throughput)
+// This issue does not exist on AMD CPUs and also has been fixed for Intel since Ice Lake (but still exists on AlderLake E-core).
+//
+// Set this to true to let LLVM *use* 3-ops LEA.
+// This will save some JIT code size, and also performs better on AMD CPUs, as well as Intel CPUs that do not suffer from the problem.
+//
+// TODO: this option only applies to the generated components, and does not affect the runtime.
+//       We should modify CMake to also pass -mllvm -XXXX if this is true.
+//
+constexpr bool x_finetune_llvm_do_not_avoid_3_ops_lea_inst = true;

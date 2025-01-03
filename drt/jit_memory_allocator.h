@@ -4,6 +4,16 @@
 #include "constexpr_power_helper.h"
 #include "misc_type_helper.h"
 
+// The max possible m_dataSectionAlignment
+// We assert this at build time, so we know this must be true at runtime
+//
+constexpr size_t x_jitMaxPossibleDataSectionAlignment = 16;
+
+// For now, our codegen allocator returns 16-byte-aligned memory.
+// So if we want to support larger alignment, something additional logic must be done.
+//
+static_assert(x_jitMaxPossibleDataSectionAlignment <= 16);
+
 // A simple memory allocator for JIT memory allocation, using a segregated allocator for small allocations
 // and mmap directly for large allocations.
 //
@@ -51,14 +61,14 @@ static_assert([]() {
 //
 constexpr uint8_t WARN_UNUSED GetJitMemoryAllocatorSteppingFromSmallAllocationSize(size_t smallAllocSize)
 {
-    assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[x_jit_mem_alloc_total_steppings - 1]);
+    Assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[x_jit_mem_alloc_total_steppings - 1]);
     size_t left = 0;
     size_t right = x_jit_mem_alloc_total_steppings - 1;
     while (left != right)
     {
         // Invariant: 'right' is always an valid answer
         //
-        assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[right]);
+        Assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[right]);
 
         size_t mid = (left + right) / 2;
         if (smallAllocSize <= x_jit_mem_alloc_stepping_array[mid])
@@ -70,7 +80,7 @@ constexpr uint8_t WARN_UNUSED GetJitMemoryAllocatorSteppingFromSmallAllocationSi
             left = mid + 1;
         }
     }
-    assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[right]);
+    Assert(smallAllocSize <= x_jit_mem_alloc_stepping_array[right]);
     AssertImp(right > 0, smallAllocSize > x_jit_mem_alloc_stepping_array[right - 1]);
     return static_cast<uint8_t>(right);
 }
@@ -97,8 +107,8 @@ struct JitMemoryPageHeaderBase
 
     bool IsLargeAllocation() const
     {
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
-        assert(m_cellSize % 16 == 0);
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(m_cellSize % 16 == 0);
         return m_cellSize == 0;
     }
 
@@ -147,8 +157,8 @@ class JitMemoryPageHeader final : public JitMemoryPageHeaderBase
 public:
     void Initialize(uint8_t cellSizeStepping, JitMemoryPageHeader* nextPage)
     {
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
-        assert(cellSizeStepping < x_jit_mem_alloc_total_steppings);
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(cellSizeStepping < x_jit_mem_alloc_total_steppings);
         size_t cellSize = x_jit_mem_alloc_stepping_array[cellSizeStepping];
 
         m_cellSize = static_cast<uint16_t>(cellSize);
@@ -180,7 +190,7 @@ public:
             }
         }
 
-        assert(!IsLargeAllocation() && AsSAHeader() == this);
+        Assert(!IsLargeAllocation() && AsSAHeader() == this);
     }
 
     uint8_t GetCellSizeStepping() { return m_cellSizeStepping; }
@@ -194,18 +204,18 @@ public:
 
     void SetNextPage(JitMemoryPageHeader* nextPage)
     {
-        assert(reinterpret_cast<uint64_t>(nextPage) % x_pageSize == 0);
+        Assert(reinterpret_cast<uint64_t>(nextPage) % x_pageSize == 0);
         m_nextPage = nextPage;
     }
 
     void* WARN_UNUSED AllocateCell()
     {
-        assert(HasFreeCell());
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(HasFreeCell());
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
 
         void* res = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(this) + m_freeListHead);
         uint16_t nextFreeCell = *reinterpret_cast<uint16_t*>(res);
-        assert(nextFreeCell == 0 || (sizeof(JitMemoryPageHeader) <= nextFreeCell && nextFreeCell + m_cellSize <= x_pageSize));
+        Assert(nextFreeCell == 0 || (sizeof(JitMemoryPageHeader) <= nextFreeCell && nextFreeCell + m_cellSize <= x_pageSize));
         m_freeListHead = nextFreeCell;
         m_numAllocatedCells++;
         return res;
@@ -216,11 +226,11 @@ public:
     //
     bool WARN_UNUSED FreeCell(void* addr)
     {
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
-        assert(reinterpret_cast<uint64_t>(this) + sizeof(JitMemoryPageHeader) <= reinterpret_cast<uint64_t>(addr));
-        assert(reinterpret_cast<uint64_t>(addr) + m_cellSize <= reinterpret_cast<uint64_t>(this) + x_pageSize);
-        assert((reinterpret_cast<uint64_t>(addr) - reinterpret_cast<uint64_t>(this) - sizeof(JitMemoryPageHeader)) % m_cellSize == 0);
-        assert(m_numAllocatedCells > 0);
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(reinterpret_cast<uint64_t>(this) + sizeof(JitMemoryPageHeader) <= reinterpret_cast<uint64_t>(addr));
+        Assert(reinterpret_cast<uint64_t>(addr) + m_cellSize <= reinterpret_cast<uint64_t>(this) + x_pageSize);
+        Assert((reinterpret_cast<uint64_t>(addr) - reinterpret_cast<uint64_t>(this) - sizeof(JitMemoryPageHeader)) % m_cellSize == 0);
+        Assert(m_numAllocatedCells > 0);
         m_numAllocatedCells--;
         bool res = (m_freeListHead == 0);
         *reinterpret_cast<uint16_t*>(addr) = m_freeListHead;
@@ -257,8 +267,8 @@ public:
 
     void Initialize(size_t size, DoublyLink* anchor)
     {
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
-        assert(size % 4096 == 0);
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(size % 4096 == 0);
         m_cellSize = 0;
         m_unused1 = 0;
         m_unused2 = 0;
@@ -268,7 +278,7 @@ public:
         m_link.next = anchor->next;
         anchor->next->prev = &m_link;
         anchor->next = &m_link;
-        assert(IsLargeAllocation() && AsLAHeader() == this);
+        Assert(IsLargeAllocation() && AsLAHeader() == this);
     }
 
     // Free underlying memory to OS
@@ -281,7 +291,7 @@ public:
 
     void* GetAllocatedObject()
     {
-        assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+        Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
         return reinterpret_cast<uint8_t*>(this) + sizeof(JitMemoryLargeAllocationHeader);
     }
 };
@@ -296,13 +306,13 @@ static_assert(sizeof(JitMemoryLargeAllocationHeader) % 16 == 0);
 
 inline JitMemoryPageHeader* WARN_UNUSED JitMemoryPageHeaderBase::AsSAHeader()
 {
-    assert(!IsLargeAllocation());
+    Assert(!IsLargeAllocation());
     return static_cast<JitMemoryPageHeader*>(this);
 }
 
 inline JitMemoryLargeAllocationHeader* WARN_UNUSED JitMemoryPageHeaderBase::AsLAHeader()
 {
-    assert(IsLargeAllocation());
+    Assert(IsLargeAllocation());
     return static_cast<JitMemoryLargeAllocationHeader*>(this);
 }
 
@@ -346,15 +356,15 @@ public:
     //
     void* WARN_UNUSED AllocateGivenStepping(uint8_t wantedStepping)
     {
-        assert(wantedStepping < x_jit_mem_alloc_total_steppings);
+        Assert(wantedStepping < x_jit_mem_alloc_total_steppings);
         JitMemoryPageHeader* freelist = m_freeList[wantedStepping];
         if (unlikely(freelist == nullptr))
         {
             freelist = AllocateNewPageForStepping(wantedStepping);
         }
-        assert(freelist == m_freeList[wantedStepping]);
+        Assert(freelist == m_freeList[wantedStepping]);
 
-        assert(freelist != nullptr && freelist->HasFreeCell());
+        Assert(freelist != nullptr && freelist->HasFreeCell());
         void* res = freelist->AllocateCell();
         if (unlikely(!freelist->HasFreeCell()))
         {
@@ -366,7 +376,7 @@ public:
 
         m_totalUsedMemory += x_jit_mem_alloc_stepping_array[wantedStepping];
 
-        assert(reinterpret_cast<uint64_t>(res) % 16 == 0);
+        Assert(reinterpret_cast<uint64_t>(res) % 16 == 0);
         return res;
     }
 
@@ -381,7 +391,7 @@ public:
         else
         {
             uint8_t wantedStepping = GetJitMemoryAllocatorSteppingFromSmallAllocationSize(wantedSize);
-            assert(wantedStepping < x_jit_mem_alloc_total_steppings && x_jit_mem_alloc_stepping_array[wantedStepping] >= wantedSize);
+            Assert(wantedStepping < x_jit_mem_alloc_total_steppings && x_jit_mem_alloc_stepping_array[wantedStepping] >= wantedSize);
             return AllocateGivenStepping(wantedStepping);
         }
     }
@@ -395,25 +405,25 @@ public:
         if (unlikely(hb->IsLargeAllocation()))
         {
             JitMemoryLargeAllocationHeader* hdr = hb->AsLAHeader();
-            assert(m_totalUsedMemory >= hdr->GetSize());
+            Assert(m_totalUsedMemory >= hdr->GetSize());
             m_totalUsedMemory -= hdr->GetSize();
-            assert(m_totalOsMemoryUsage >= hdr->GetSize());
+            Assert(m_totalOsMemoryUsage >= hdr->GetSize());
             m_totalOsMemoryUsage -= hdr->GetSize();
             hdr->Destroy();
         }
         else
         {
             JitMemoryPageHeader* hdr = hb->AsSAHeader();
-            assert(m_totalUsedMemory >= hdr->m_cellSize);
+            Assert(m_totalUsedMemory >= hdr->m_cellSize);
             m_totalUsedMemory -= hdr->m_cellSize;
 
             bool shouldInsertToFreeList = hdr->FreeCell(addr);
             if (unlikely(shouldInsertToFreeList))
             {
-                assert(hdr->HasFreeCell());
+                Assert(hdr->HasFreeCell());
                 uint8_t stepping = hdr->GetCellSizeStepping();
-                assert(stepping < x_jit_mem_alloc_total_steppings);
-                assert(hdr->GetNextPage() == nullptr);
+                Assert(stepping < x_jit_mem_alloc_total_steppings);
+                Assert(hdr->GetNextPage() == nullptr);
                 hdr->SetNextPage(m_freeList[stepping]);
                 m_freeList[stepping] = hdr;
             }
@@ -437,8 +447,8 @@ private:
     //
     JitMemoryPageHeader* AllocateNewPageForStepping(uint8_t stepping)
     {
-        assert(stepping < x_jit_mem_alloc_total_steppings);
-        assert(m_freeList[stepping] == nullptr);
+        Assert(stepping < x_jit_mem_alloc_total_steppings);
+        Assert(m_freeList[stepping] == nullptr);
 
         JitMemoryPageHeader* newPage = AllocateUninitalizedPage();
         newPage->Initialize(stepping, nullptr /*nextPage*/);

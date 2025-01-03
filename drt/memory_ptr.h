@@ -17,64 +17,64 @@ inline VM* VM_GetActiveVMForCurrentThread()
     return *reinterpret_cast<HeapPtr<VM*>>(x_segmentRegisterSelfReferencingOffset);
 }
 
-inline void AssertIsSpdsPointer(void* DEBUG_ONLY(ptr))
+inline void AssertIsSpdsPointer([[maybe_unused]] void* ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     VM* vm = VM_GetActiveVMForCurrentThread();
     uintptr_t vmVoid = reinterpret_cast<uintptr_t>(vm);
     uintptr_t ptrVoid = reinterpret_cast<uintptr_t>(ptr);
-    assert(vmVoid - (1ULL << 31) <= ptrVoid && ptrVoid < vmVoid);
+    Assert(vmVoid - (1ULL << 31) <= ptrVoid && ptrVoid < vmVoid);
 #endif
 }
 
-inline void AssertIsSystemHeapPointer(void* DEBUG_ONLY(ptr))
+inline void AssertIsSystemHeapPointer([[maybe_unused]] void* ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     VM* vm = VM_GetActiveVMForCurrentThread();
     uintptr_t vmVoid = reinterpret_cast<uintptr_t>(vm);
     uintptr_t ptrVoid = reinterpret_cast<uintptr_t>(ptr);
-    assert(vmVoid <= ptrVoid && ptrVoid < vmVoid + (1ULL << 31));
+    Assert(vmVoid <= ptrVoid && ptrVoid < vmVoid + (1ULL << 31));
 #endif
 }
 
-inline void AssertIsSpdsOrSystemHeapPointer(void* DEBUG_ONLY(ptr))
+inline void AssertIsSpdsOrSystemHeapPointer([[maybe_unused]] void* ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     VM* vm = VM_GetActiveVMForCurrentThread();
     uintptr_t vmVoid = reinterpret_cast<uintptr_t>(vm);
     uintptr_t ptrVoid = reinterpret_cast<uintptr_t>(ptr);
-    assert(vmVoid - (1ULL << 31) <= ptrVoid && ptrVoid < vmVoid + (1ULL << 31));
+    Assert(vmVoid - (1ULL << 31) <= ptrVoid && ptrVoid < vmVoid + (1ULL << 31));
 #endif
 }
 
 // This excludes null
 //
-inline void AssertIsUserHeapPointer(void* DEBUG_ONLY(ptr))
+inline void AssertIsUserHeapPointer([[maybe_unused]] void* ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     VM* vm = VM_GetActiveVMForCurrentThread();
     uintptr_t vmVoid = reinterpret_cast<uintptr_t>(vm);
     uintptr_t ptrVoid = reinterpret_cast<uintptr_t>(ptr);
-    assert(vmVoid - (16ULL << 30) <= ptrVoid && ptrVoid < vmVoid - (4ULL << 30));
+    Assert(vmVoid - (16ULL << 30) <= ptrVoid && ptrVoid < vmVoid - (4ULL << 30));
 #endif
 }
 
-inline void AssertIsValidHeapPointer(void* DEBUG_ONLY(ptr))
+inline void AssertIsValidHeapPointer([[maybe_unused]] void* ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     VM* vm = VM_GetActiveVMForCurrentThread();
     uintptr_t vmVoid = reinterpret_cast<uintptr_t>(vm);
     uintptr_t ptrVoid = reinterpret_cast<uintptr_t>(ptr);
-    assert((vmVoid - (16ULL << 30) <= ptrVoid && ptrVoid < vmVoid - (4ULL << 30)) ||
+    Assert((vmVoid - (16ULL << 30) <= ptrVoid && ptrVoid < vmVoid - (4ULL << 30)) ||
            (vmVoid - (1ULL << 31) <= ptrVoid && ptrVoid < vmVoid + (1ULL << 31)));
 #endif
 }
 
-inline void AssertIsValidHeapPointer(HeapPtr<void> DEBUG_ONLY(ptr))
+inline void AssertIsValidHeapPointer([[maybe_unused]] HeapPtr<void> ptr)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     intptr_t ptrVoid = reinterpret_cast<intptr_t>(ptr);
-    assert((-(16LL << 30) <= ptrVoid && ptrVoid < -(4LL << 30)) ||
+    Assert((-(16LL << 30) <= ptrVoid && ptrVoid < -(4LL << 30)) ||
            (-(1LL << 31) <= ptrVoid && ptrVoid < (1LL << 31)));
 #endif
 }
@@ -99,7 +99,7 @@ add_heap_ptr_t<T> TranslateToHeapPtr(T ptr)
         constexpr uint32_t shift = 64 - x_vmBasePtrLog2Alignment;
         val = SignExtendedShiftRight(val << shift, shift);
         add_heap_ptr_t<T> r = reinterpret_cast<add_heap_ptr_t<T>>(val);
-        assert(TranslateToRawPointer(r) == ptr);
+        Assert(TranslateToRawPointer(r) == ptr);
         return r;
     }
 }
@@ -114,15 +114,15 @@ struct UserHeapPointer
         : m_value(reinterpret_cast<intptr_t>(value))
     {
         static_assert(TypeMayLiveInUserHeap<T>);
-        assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
-        assert(As<U>() == value);
+        Assert(m_value == 0 || (x_minValue <= m_value && m_value <= x_maxValue));
+        Assert(As<U>() == value);
     }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     UserHeapPointer(U* value)
         : UserHeapPointer(TranslateToHeapPtr(value))
     {
-        assert(TranslateToRawPointer(As<U>()) == value);
+        Assert(TranslateToRawPointer(As<U>()) == value);
     }
 
     template<typename U = T>
@@ -142,7 +142,7 @@ struct UserHeapPointer
         {
             // UserHeapPointer should only come from boxed values, so they should never be nullptr
             //
-            assert(AsNoAssert<UserHeapGcObjectHeader>()->m_type == TypeEnumForHeapObject<U>);
+            Assert(AsNoAssert<UserHeapGcObjectHeader>()->m_type == TypeEnumForHeapObject<U>);
         }
         return AsNoAssert<U>();
     }
@@ -173,7 +173,7 @@ struct SystemHeapPointer
         static_assert(TypeMayLiveInSystemHeap<T>);
         if constexpr(!std::is_same_v<T, void>)
         {
-            assert(m_value % std::alignment_of_v<T> == 0);
+            Assert(m_value % std::alignment_of_v<T> == 0);
         }
     }
 
@@ -188,7 +188,7 @@ struct SystemHeapPointer
     SystemHeapPointer(HeapPtr<U> value)
         : SystemHeapPointer(SafeIntegerCast<uint32_t>(reinterpret_cast<intptr_t>(value)))
     {
-        assert(As<U>() == value);
+        Assert(As<U>() == value);
     }
 
     template<typename U = T>
@@ -258,7 +258,7 @@ public:
     SystemHeapPointerTaggedUnion(SystemHeapPointer<T> val)
         : m_value(val.m_value | x_tagFor<T>)
     {
-        assert(val.m_value % std::alignment_of_v<T> == 0);
+        Assert(val.m_value % std::alignment_of_v<T> == 0);
     }
 
     bool IsNullPtr() { return m_value == 0; }
@@ -268,21 +268,21 @@ public:
     template<typename T>
     bool IsType()
     {
-        assert(!IsNullPtr());
+        Assert(!IsNullPtr());
         return (m_value & x_tagMask) == x_tagFor<T>;
     }
 
     template<typename T>
     void Store(SystemHeapPointer<T> value)
     {
-        assert(value.m_value % std::alignment_of_v<T> == 0);
+        Assert(value.m_value % std::alignment_of_v<T> == 0);
         m_value = value.m_value | x_tagFor<T>;
     }
 
     template<typename T>
     HeapPtr<T> As()
     {
-        assert(IsType<T>());
+        Assert(IsType<T>());
         return SystemHeapPointer<T> { m_value ^ x_tagFor<T> }.As();
     }
 
@@ -299,7 +299,7 @@ struct GeneralHeapPointer
         if constexpr(!std::is_same_v<T, void>)
         {
             static_assert(std::alignment_of_v<T> % (1 << x_shiftFromRawOffset) == 0);
-            assert(value % static_cast<int64_t>(std::alignment_of_v<T> / (1 << x_shiftFromRawOffset)) == 0);
+            Assert(value % static_cast<int64_t>(std::alignment_of_v<T> / (1 << x_shiftFromRawOffset)) == 0);
         }
         AssertImp(m_value < 0, x_negMinValue <= m_value && m_value <= x_negMaxValue);
         AssertImp(m_value >= 0, m_value <= x_posMaxValue);
@@ -309,21 +309,21 @@ struct GeneralHeapPointer
     GeneralHeapPointer(HeapPtr<U> value)
         : GeneralHeapPointer(SafeIntegerCast<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
-        assert(As<U>() == value);
+        Assert(As<U>() == value);
     }
 
     template<typename U, typename = std::enable_if_t<std::is_same_v<T, void> || std::is_same_v<T, uint8_t> || std::is_same_v<U, void> || std::is_same_v<U, uint8_t> || std::is_same_v<T, U>>>
     GeneralHeapPointer(U* value)
         : GeneralHeapPointer(BitwiseTruncateTo<int32_t>(SignExtendedShiftRight(reinterpret_cast<intptr_t>(value), x_shiftFromRawOffset)))
     {
-        assert(TranslateToRawPointer(As<U>()) == value);
+        Assert(TranslateToRawPointer(As<U>()) == value);
     }
 
     template<typename U = T>
     HeapPtr<U> WARN_UNUSED AsNoAssert() const
     {
         static_assert(TypeMayLiveInSystemHeap<U> || TypeMayLiveInUserHeap<U>);
-        return reinterpret_cast<HeapPtr<U>>(ArithmeticShiftLeft(static_cast<int64_t>(m_value), x_shiftFromRawOffset));
+        return reinterpret_cast<HeapPtr<U>>(SignExtendTo<int64_t>(m_value) << x_shiftFromRawOffset);
     }
 
     template<typename U = T>
@@ -336,20 +336,20 @@ struct GeneralHeapPointer
         HeapPtr<U> r = AsNoAssert<U>();
         if constexpr(!std::is_same_v<U, void>)
         {
-            assert(reinterpret_cast<uintptr_t>(r) % std::alignment_of_v<U> == 0);
+            Assert(reinterpret_cast<uintptr_t>(r) % std::alignment_of_v<U> == 0);
         }
         if constexpr(IsHeapObjectType<U>)
         {
             if constexpr(TypeMayLiveInSystemHeap<U>)
             {
-                assert(static_cast<int32_t>(x_minimum_valid_heap_address >> x_shiftFromRawOffset) <= m_value && m_value <= x_posMaxValue);
-                assert(reinterpret_cast<HeapPtr<SystemHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
+                Assert(static_cast<int32_t>(x_minimum_valid_heap_address >> x_shiftFromRawOffset) <= m_value && m_value <= x_posMaxValue);
+                Assert(reinterpret_cast<HeapPtr<SystemHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
             }
             else
             {
                 static_assert(TypeMayLiveInUserHeap<U>);
-                assert(x_negMinValue <= m_value && m_value <= x_negMaxValue);
-                assert(reinterpret_cast<HeapPtr<UserHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
+                Assert(x_negMinValue <= m_value && m_value <= x_negMaxValue);
+                Assert(reinterpret_cast<HeapPtr<UserHeapGcObjectHeader>>(r)->m_type == TypeEnumForHeapObject<U>);
             }
         }
         return r;
@@ -379,9 +379,9 @@ struct SpdsPtr
     {
         if constexpr(!std::is_same_v<T, void>)
         {
-            assert(m_value % static_cast<int32_t>(alignof(T)) == 0);
+            Assert(m_value % static_cast<int32_t>(alignof(T)) == 0);
         }
-        assert(m_value < static_cast<int32_t>(x_minimum_valid_heap_address));
+        Assert(m_value < static_cast<int32_t>(x_minimum_valid_heap_address));
     }
 
     // In our VM layout, the base pointer is at least 4GB aligned
@@ -404,7 +404,7 @@ struct SpdsPtr
 
     HeapPtr<T> WARN_UNUSED ALWAYS_INLINE AsPtr() const
     {
-        assert(!IsInvalidPtr());
+        Assert(!IsInvalidPtr());
         return reinterpret_cast<HeapPtr<T>>(static_cast<int64_t>(m_value));
     }
 
@@ -453,7 +453,7 @@ struct SpdsOrSystemHeapPtr
 
     HeapPtr<T> WARN_UNUSED ALWAYS_INLINE AsPtr() const
     {
-        assert(!IsInvalidPtr());
+        Assert(!IsInvalidPtr());
         return reinterpret_cast<HeapPtr<T>>(static_cast<int64_t>(m_value));
     }
 

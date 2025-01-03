@@ -2,6 +2,7 @@
 #include "runtime_utils.h"
 #include "gtest/gtest.h"
 #include "json_utils.h"
+#include "json_parse_dump.h"
 #include "test_util_helper.h"
 #include "test_vm_utils.h"
 #include "lj_parser_wrapper.h"
@@ -14,7 +15,7 @@ namespace {
 //
 TEST(JSONParser, Sanity)
 {
-    json j = json::parse("{ \"a\" : 1, \"b\" : \"cd\" }");
+    json_t j = ParseJson("{ \"a\" : 1, \"b\" : \"cd\" }");
     ReleaseAssert(j.is_object());
     ReleaseAssert(j.count("a"));
     ReleaseAssert(j["a"].is_primitive());
@@ -2351,6 +2352,21 @@ TEST(LuaTestForceBaselineJit, le_use_lt_metamethod)
 TEST(LuaTestTierUpToBaselineJit, le_use_lt_metamethod)
 {
     RunSimpleLuaTest("luatests/le_use_lt_metamethod.lua", LuaTestOption::UpToBaselineJit);
+}
+
+TEST(LuaTest, upvalue_mutability)
+{
+    RunSimpleLuaTest("luatests/upvalue_mutability.lua", LuaTestOption::ForceInterpreter);
+}
+
+TEST(LuaTestForceBaselineJit, upvalue_mutability)
+{
+    RunSimpleLuaTest("luatests/upvalue_mutability.lua", LuaTestOption::ForceBaselineJit);
+}
+
+TEST(LuaTestTierUpToBaselineJit, upvalue_mutability)
+{
+    RunSimpleLuaTest("luatests/upvalue_mutability.lua", LuaTestOption::UpToBaselineJit);
 }
 
 TEST(LuaLib, base_assert)

@@ -25,7 +25,7 @@
         }                                                                           \
         argName = macrotmp_result;                                                  \
     }                                                                               \
-    assert(true)    /* end with a statement so a comma can be added */
+    Assert(true)    /* end with a statement so a comma can be added */
 
 // Similar to above, but for math binary functions
 //
@@ -52,7 +52,7 @@
                        "' (number expected)");                                      \
         }                                                                           \
     }                                                                               \
-    assert(true)    /* end with a statement so a comma can be added */
+    Assert(true)    /* end with a statement so a comma can be added */
 
 // math.abs -- https://www.lua.org/manual/5.1/manual.html#pdf-math.abs
 //

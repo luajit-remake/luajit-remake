@@ -5,7 +5,7 @@
 
 static void NO_RETURN TableDupGeneralImpl(TValue src)
 {
-    assert(src.Is<tTable>());
+    Assert(src.Is<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
     HeapPtr<TableObject> newObject = obj->ShallowCloneTableObject(vm);
@@ -26,11 +26,17 @@ DEEGEN_DEFINE_BYTECODE(TableDupGeneral)
     Variant(
         Op("src").IsConstant<tTable>()
     );
+    DfgVariant();
+    TypeDeductionRule([](TypeMask /*src*/) -> TypeMask { return x_typeMaskFor<tTable>; });
+    RegAllocHint(
+        Op("src").RegHint(RegHint::GPR),
+        Op("output").RegHint(RegHint::GPR)
+    );
 }
 
 static void NO_RETURN TableDupSpecializedImpl(TValue src, uint8_t inlineCapacityStepping, uint8_t hasButterfly)
 {
-    assert(src.Is<tTable>());
+    Assert(src.Is<tTable>());
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* obj = TranslateToRawPointer(vm, src.As<tTable>());
     HeapPtr<TableObject> newObject = obj->ShallowCloneTableObjectForTableDup(vm, inlineCapacityStepping, static_cast<bool>(hasButterfly));
@@ -55,6 +61,10 @@ DEEGEN_DEFINE_BYTECODE(TableDup)
             Op("inlineCapacityStepping").HasValue(i),
             Op("hasButterfly").HasValue(0)
         );
+        DfgVariant(
+            Op("inlineCapacityStepping").HasValue(i),
+            Op("hasButterfly").HasValue(0)
+        );
     }
     for (uint8_t i = 0; i <= TableObject::TableDupMaxInlineCapacitySteppingForHasButterflyCase(); i++)
     {
@@ -63,7 +73,21 @@ DEEGEN_DEFINE_BYTECODE(TableDup)
             Op("inlineCapacityStepping").HasValue(i),
             Op("hasButterfly").HasValue(1)
         );
+        DfgVariant(
+            Op("inlineCapacityStepping").HasValue(i),
+            Op("hasButterfly").HasValue(1)
+        );
     }
+    TypeDeductionRule(
+        [](TypeMask /*src*/, uint8_t /*inlineCapacityStepping*/, uint8_t /*hasButterfly*/) -> TypeMask
+        {
+            return x_typeMaskFor<tTable>;
+        });
+    RegAllocHint(
+        Op("src").RegHint(RegHint::GPR),
+        Op("output").RegHint(RegHint::GPR)
+    );
+    RegAllocMayBeDisabledDespiteRegHintGiven();
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -13,9 +13,9 @@ static void NO_RETURN HandleInt64IndexNoMetamethodSlowPathPut(TValue base, TValu
 {
     double idxDbl = tvIndex.ViewAsDouble();
     int64_t index = static_cast<int64_t>(idxDbl);
-    assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
+    Assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     HeapPtr<TableObject> tableObj = base.As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* raw = TranslateToRawPointer(vm, tableObj);
@@ -30,14 +30,14 @@ static void NO_RETURN HandleInt64IndexMetamethodSlowPath(TValue base, TValue tvI
 {
     double idxDbl = tvIndex.ViewAsDouble();
     int64_t index = static_cast<int64_t>(idxDbl);
-    assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
+    Assert(UnsafeFloatEqual(idxDbl, static_cast<double>(index)));
 
     // If 'metamethod' is a function, we should invoke the metamethod.
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
     //
     while (true)
     {
-        assert(!metamethod.Is<tNil>());
+        Assert(!metamethod.Is<tNil>());
         if (likely(metamethod.Is<tHeapEntity>()))
         {
             HeapEntityType mmType = metamethod.GetHeapEntityType();
@@ -155,12 +155,12 @@ static std::pair<TValue /*metamethod*/, bool /*hasMetamethod*/> ALWAYS_INLINE Ch
 //
 static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/, TValue tvIndex, TValue valueToPut, TValue base)
 {
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
 
     if (tvIndex.Is<tDouble>())
     {
         double indexDouble = tvIndex.As<tDouble>();
-        assert(!UnsafeFloatEqual(indexDouble, static_cast<double>(static_cast<int64_t>(indexDouble))));
+        Assert(!UnsafeFloatEqual(indexDouble, static_cast<double>(static_cast<int64_t>(indexDouble))));
 
         if (unlikely(IsNaN(indexDouble)))
         {
@@ -169,7 +169,7 @@ static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/,
 
         while (true)
         {
-            assert(base.Is<tTable>());
+            Assert(base.Is<tTable>());
             HeapPtr<TableObject> tableObj = base.As<tTable>();
 
             auto [metamethod, hasMetamethod] = CheckShouldInvokeMetamethodForDoubleNotRepresentableAsInt64Index(tableObj, indexDouble);
@@ -180,7 +180,7 @@ static void NO_RETURN HandleTableObjectNotInt64IndexSlowPath(TValue /*bc_base*/,
             }
 
 double_index_handle_metamethod:
-            assert(!metamethod.Is<tNil>());
+            Assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
                 MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
@@ -211,18 +211,18 @@ double_index_handle_metamethod:
         }
         else
         {
-            assert(tvIndex.Is<tMIV>());
+            Assert(tvIndex.Is<tMIV>());
             if (unlikely(tvIndex.Is<tNil>()))
             {
                 ThrowError("table index is nil");
             }
-            assert(tvIndex.Is<tBool>());
+            Assert(tvIndex.Is<tBool>());
             key = VM_GetSpecialKeyForBoolean(tvIndex.As<tBool>()).As<void>();
         }
 
         while (true)
         {
-            assert(base.Is<tTable>());
+            Assert(base.Is<tTable>());
             HeapPtr<TableObject> tableObj = base.As<tTable>();
 
             PutByIdICInfo icInfo;
@@ -250,7 +250,7 @@ double_index_handle_metamethod:
             Return();
 
 property_index_handle_metamethod:
-            assert(!metamethod.Is<tNil>());
+            Assert(!metamethod.Is<tNil>());
             if (metamethod.Is<tFunction>())
             {
                 MakeCall(metamethod.As<tFunction>(), base, tvIndex, valueToPut, TablePutByValMetamethodCallContinuation);
@@ -280,7 +280,7 @@ static void NO_RETURN HandleNotTableObjectNotInt64IndexSlowPath(TValue /*bc_base
 {
     while (true)
     {
-        assert(!base.Is<tTable>());
+        Assert(!base.Is<tTable>());
         TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
         if (metamethod.Is<tNil>())
         {
@@ -318,7 +318,7 @@ static void NO_RETURN HandleNotInt64IndexSlowPath(TValue base, TValue /*tvIndex*
 //
 static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, TValue tvIndex, TValue /*valueToPut*/)
 {
-    assert(!base.Is<tTable>());
+    Assert(!base.Is<tTable>());
 
     double idxDbl = tvIndex.ViewAsDouble();
     int64_t index = static_cast<int64_t>(idxDbl);
@@ -385,7 +385,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                         ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
                         // DEVNOTE: when we support int32 type, we need to specialize for ValueCheckKind::Int32 as well. Same in the other places.
                         //
-                        assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                        Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                         return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                             IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                             if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
@@ -401,7 +401,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                     case IndexCheckKind::InBound:
                     {
                         ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                        assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::NoCheck);
+                        Assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::NoCheck);
                         return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                             IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::DoubleOrNil, ValueCheckKind::NoCheck);
                             if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
@@ -417,7 +417,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                     case IndexCheckKind::NoArrayPart:
                     {
                         ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                        assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                        Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                         SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                         SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                         ArrayType c_newArrayType = c_info.m_newArrayType;
@@ -463,7 +463,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                     case IndexCheckKind::Continuous:
                     {
                         ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                        assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                        Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                         return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                             IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                             // Check for metamethod call
@@ -526,7 +526,7 @@ static void NO_RETURN TablePutByValImpl(TValue base, TValue tvIndex, TValue valu
                     case IndexCheckKind::NoArrayPart:
                     {
                         ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                        assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                        Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                         SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                         SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                         ArrayType c_newArrayType = c_info.m_newArrayType;
@@ -633,6 +633,12 @@ DEEGEN_DEFINE_BYTECODE(TablePutByVal)
     Result(NoOutput);
     Implementation(TablePutByValImpl);
     Variant();
+    DfgVariant(Op("base").HasType<tTable>());
+    DfgVariant();
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR),
+        Op("index").RegHint(RegHint::FPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

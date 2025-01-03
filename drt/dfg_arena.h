@@ -41,25 +41,25 @@ public:
     {
         uintptr_t ptrv = reinterpret_cast<uintptr_t>(ptr);
         uintptr_t base = reinterpret_cast<uintptr_t>(this);
-        assert(static_cast<uint32_t>(base) == 0);
+        Assert(static_cast<uint32_t>(base) == 0);
         return base + sizeof(Arena) <= ptrv && ptrv < base + 0x80000000ULL;
     }
 
     template<typename T>
     T* WARN_UNUSED GetPtr(ArenaPtr<T> ptr)
     {
-        assert(!ptr.IsNull());
+        Assert(!ptr.IsNull());
         T* res = reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(this) + ptr.m_value);
-        assert(IsValidPtr(res));
+        Assert(IsValidPtr(res));
         return res;
     }
 
     template<typename T>
     ArenaPtr<T> WARN_UNUSED GetArenaPtr(T* ptr)
     {
-        assert(IsValidPtr(ptr));
+        Assert(IsValidPtr(ptr));
         ArenaPtr<T> res { static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ptr)) };
-        assert(GetPtr(res) == ptr);
+        Assert(GetPtr(res) == ptr);
         return res;
     }
 
@@ -69,7 +69,7 @@ public:
         static_assert(is_power_of_2(alignof(T)) && sizeof(T) % alignof(T) == 0);
         size_t allocSize = sizeof(T) * num;
         allocSize = RoundUpToPO2Alignment(allocSize, x_minimum_alignment);
-        assert(allocSize % x_minimum_alignment == 0);
+        Assert(allocSize % x_minimum_alignment == 0);
         return reinterpret_cast<T*>(AllocateWithAlignment<alignof(T)>(allocSize));
     }
 
@@ -120,14 +120,14 @@ public:
 
     __attribute__((__malloc__)) uint8_t* WARN_UNUSED ALWAYS_INLINE AllocateUninitializedMemoryWithAlignment(size_t size, size_t alignment)
     {
-        assert(is_power_of_2(alignment));
+        Assert(is_power_of_2(alignment));
         size = RoundUpToPO2Alignment(size, x_minimum_alignment);
-        assert(m_curPtr % x_minimum_alignment == 0);
-        assert(size < (1ULL << 31));
+        Assert(m_curPtr % x_minimum_alignment == 0);
+        Assert(size < (1ULL << 31));
         m_curPtr = RoundUpToPO2Alignment(m_curPtr, alignment);
-        assert(m_curPtr % x_minimum_alignment == 0 && m_curPtr % alignment == 0);
+        Assert(m_curPtr % x_minimum_alignment == 0 && m_curPtr % alignment == 0);
         void* res = AllocateImpl(size);
-        assert(reinterpret_cast<uintptr_t>(res) % alignment == 0);
+        Assert(reinterpret_cast<uintptr_t>(res) % alignment == 0);
         return reinterpret_cast<uint8_t*>(res);
     }
 
@@ -149,7 +149,7 @@ public:
             MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED,
             -1, 0);
         VM_FAIL_WITH_ERRNO_IF(tmp == MAP_FAILED, "Failed to allocate memory of size %llu", static_cast<unsigned long long>(allocSize));
-        assert(tmp == base);
+        Assert(tmp == base);
         Arena* res = reinterpret_cast<Arena*>(base);
         new (static_cast<void*>(res)) Arena();
         return res;
@@ -168,16 +168,16 @@ private:
     void* WARN_UNUSED ALWAYS_INLINE AllocateWithAlignment(size_t size)
     {
         static_assert(is_power_of_2(alignment));
-        assert(size % x_minimum_alignment == 0);
-        assert(m_curPtr % x_minimum_alignment == 0);
-        assert(size < (1ULL << 31));
+        Assert(size % x_minimum_alignment == 0);
+        Assert(m_curPtr % x_minimum_alignment == 0);
+        Assert(size < (1ULL << 31));
         if constexpr(alignment > x_minimum_alignment)
         {
             m_curPtr = RoundUpToPO2Alignment(m_curPtr, alignment);
         }
-        assert(m_curPtr % x_minimum_alignment == 0 && m_curPtr % alignment == 0);
+        Assert(m_curPtr % x_minimum_alignment == 0 && m_curPtr % alignment == 0);
         void* res = AllocateImpl(size);
-        assert(reinterpret_cast<uintptr_t>(res) % alignment == 0);
+        Assert(reinterpret_cast<uintptr_t>(res) % alignment == 0);
         return res;
     }
 
@@ -199,8 +199,8 @@ private:
 
     void NO_INLINE __attribute__((__preserve_most__)) Grow()
     {
-        assert(m_curPtr > m_boundaryPtr);
-        assert(m_boundaryPtr % 4096 == 0);
+        Assert(m_curPtr > m_boundaryPtr);
+        Assert(m_boundaryPtr % 4096 == 0);
         size_t sizeToAllocate = m_curPtr - m_boundaryPtr;
         sizeToAllocate = RoundUpToPO2Alignment(sizeToAllocate, x_allocation_chunk_size);
         VM_FAIL_IF(m_boundaryPtr + sizeToAllocate > ArenaEndAddr(), "DFG arena overflowed 2GB limit!");
@@ -211,20 +211,20 @@ private:
             MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED,
             -1, 0);
         VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED, "Failed to allocate memory of size %llu", static_cast<unsigned long long>(sizeToAllocate));
-        assert(r == reinterpret_cast<void*>(m_boundaryPtr));
+        Assert(r == reinterpret_cast<void*>(m_boundaryPtr));
         m_boundaryPtr += sizeToAllocate;
-        assert(m_curPtr <= m_boundaryPtr);
-        assert(m_boundaryPtr % 4096 == 0);
+        Assert(m_curPtr <= m_boundaryPtr);
+        Assert(m_boundaryPtr % 4096 == 0);
     }
 
     void NO_INLINE ResetImpl(bool freeMemoryToOS)
     {
         uintptr_t base = reinterpret_cast<uintptr_t>(this);
-        assert(static_cast<uint32_t>(base) == 0);
+        Assert(static_cast<uint32_t>(base) == 0);
         size_t oldBoundaryPtr = m_boundaryPtr;
         m_curPtr = base + RoundUpToPO2Alignment(sizeof(Arena), x_minimum_alignment);
         m_boundaryPtr = base + RoundUpToPO2Alignment(sizeof(Arena), 4096);
-        assert(m_curPtr <= m_boundaryPtr);
+        Assert(m_curPtr <= m_boundaryPtr);
         if (freeMemoryToOS && oldBoundaryPtr > m_boundaryPtr)
         {
             void* ptrVoid = mmap(
@@ -234,13 +234,13 @@ private:
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED,
                 -1, 0);
             LOG_WARNING_WITH_ERRNO_IF(ptrVoid == MAP_FAILED, "Failed to deallocate DFG arena");
-            assert(ptrVoid == reinterpret_cast<void*>(m_boundaryPtr));
+            Assert(ptrVoid == reinterpret_cast<void*>(m_boundaryPtr));
         }
     }
 
     static size_t WARN_UNUSED ALWAYS_INLINE RoundUpToPO2Alignment(size_t value, size_t alignment)
     {
-        assert(is_power_of_2(alignment));
+        Assert(is_power_of_2(alignment));
         value += alignment - 1;
         size_t mask = ~(alignment - 1);
         return value & mask;

@@ -53,7 +53,7 @@ static void lj_strfmt_init(FormatState* fs, const char* p, MSize len)
     fs->p = (const uint8_t*)p;
     fs->e = (const uint8_t*)p + len;
     /* Must be NUL-terminated. May have NULs inside, too. */
-    assert(*fs->e == 0 && "format not NUL-terminated");
+    Assert(*fs->e == 0 && "format not NUL-terminated");
 }
 
 /* -- Format parser ------------------------------------------------------- */
@@ -596,7 +596,7 @@ StrFmtError WARN_UNUSED StringFormatterWithLuaSemantics(SimpleTempStringStream* 
                 break;
             }
             default:
-                assert(false && "bad string format type");
+                Assert(false && "bad string format type");
                 __builtin_unreachable();
             }
         }

@@ -14,6 +14,7 @@ DEEGEN_DEFINE_BYTECODE(Ret0)
     Result(NoOutput);
     Implementation(ReturnNoneImpl);
     Variant();
+    DfgVariant();
     DeclareAsIntrinsic<Intrinsic::FunctionReturn0>({});
 }
 
@@ -37,6 +38,7 @@ DEEGEN_DEFINE_BYTECODE(Ret)
     Variant(Op("numRet").HasValue(4));
     Variant(Op("numRet").HasValue(5));
     Variant();
+    DfgVariant();
     DeclareReads(Range(Op("retStart"), Op("numRet")));
     DeclareAsIntrinsic<Intrinsic::FunctionReturn>({
         .start = Op("retStart"),
@@ -63,6 +65,7 @@ DEEGEN_DEFINE_BYTECODE(RetM)
     Variant(Op("numRet").HasValue(3));
     Variant(Op("numRet").HasValue(4));
     Variant();
+    DfgVariant();
     DeclareReads(
         Range(Op("retStart"), Op("numRet")),
         VariadicResults()

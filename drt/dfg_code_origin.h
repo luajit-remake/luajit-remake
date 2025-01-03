@@ -79,7 +79,7 @@ struct OsrExitDestination
     OsrExitDestination(bool isBranchDest, CodeOrigin dest)
     {
         ArenaPtr<InlinedCallFrame> p = dest.m_func;
-        assert((p.m_value & 1U) == 0);
+        Assert((p.m_value & 1U) == 0);
         m_compositeValue = p.m_value | (isBranchDest ? 1U : 0U);
         m_bytecodeIndex = dest.m_bytecodeIndex;
     }
@@ -93,7 +93,7 @@ struct OsrExitDestination
         TestAssert(!IsBranchDest());
         ArenaPtr<InlinedCallFrame> p;
         p.m_value = m_compositeValue;
-        assert((p.m_value & 1U) == 0);
+        Assert((p.m_value & 1U) == 0);
         return CodeOrigin(p, m_bytecodeIndex);
     }
 
@@ -102,7 +102,7 @@ struct OsrExitDestination
         TestAssert(IsBranchDest());
         ArenaPtr<InlinedCallFrame> p;
         p.m_value = m_compositeValue ^ 1U;
-        assert((p.m_value & 1U) == 0);
+        Assert((p.m_value & 1U) == 0);
         return CodeOrigin(p, m_bytecodeIndex);
     }
 

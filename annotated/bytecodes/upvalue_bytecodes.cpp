@@ -14,6 +14,8 @@ DEEGEN_DEFINE_BYTECODE(UpvalueGetMutable)
     Result(BytecodeValue);
     Implementation(MutableUpvalueGetImpl);
     Variant();
+    DfgVariant();
+    TypeDeductionRule(ValueProfile);
     DeclareAsIntrinsic<Intrinsic::UpvalueGetMutable>({
         .ord = Op("ord")
     });
@@ -32,6 +34,8 @@ DEEGEN_DEFINE_BYTECODE(UpvalueGetImmutable)
     Result(BytecodeValue);
     Implementation(ImmutableUpvalueGetImpl);
     Variant();
+    DfgVariant();
+    TypeDeductionRule(ValueProfile);
     DeclareAsIntrinsic<Intrinsic::UpvalueGetImmutable>({
         .ord = Op("ord")
     });
@@ -57,6 +61,7 @@ DEEGEN_DEFINE_BYTECODE(UpvaluePut)
     Implementation(UpvalueSetImpl);
     Variant(Op("value").IsBytecodeSlot());
     Variant(Op("value").IsConstant());
+    DfgVariant();
     DeclareAsIntrinsic<Intrinsic::UpvaluePut>({
         .ord = Op("ord"),
         .value = Op("value")
@@ -80,6 +85,7 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(UpvalueCloseOperation, bool isLoopHint)
     Implementation(UpvalueCloseImpl);
     CheckForInterpreterTierUp(isLoopHint);
     Variant();
+    DfgVariant();
     DeclareReads();
     DeclareAsIntrinsic<Intrinsic::UpvalueClose>({
         .start = Op("base")

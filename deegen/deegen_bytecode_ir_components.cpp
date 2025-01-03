@@ -110,7 +110,7 @@ BytecodeIrComponent::BytecodeIrComponent(BytecodeIrComponent::ProcessFusedInIcEf
         ReleaseAssert(func != nullptr);
         ReleaseAssert(func->empty());
         func->setLinkage(GlobalValue::InternalLinkage);
-        func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        func->addFnAttr(Attribute::AlwaysInline);
         BasicBlock* bb = BasicBlock::Create(ctx, "", func);
         ReleaseAssert(func->arg_size() == 1);
         Value* input = func->getArg(0);
@@ -125,7 +125,7 @@ BytecodeIrComponent::BytecodeIrComponent(BytecodeIrComponent::ProcessFusedInIcEf
         ReleaseAssert(func != nullptr);
         ReleaseAssert(func->empty());
         func->setLinkage(GlobalValue::InternalLinkage);
-        func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+        func->addFnAttr(Attribute::AlwaysInline);
         BasicBlock* bb = BasicBlock::Create(ctx, "", func);
         ReleaseAssert(func->arg_size() == 1);
         ReleaseAssert(llvm_value_has_type<uint8_t>(func->getArg(0)));
@@ -256,7 +256,7 @@ void BytecodeIrComponent::DoOptimization()
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 }
 
-BytecodeIrComponent::BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json& j)
+BytecodeIrComponent::BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json_t& j)
 {
     using namespace llvm;
 
@@ -288,9 +288,9 @@ BytecodeIrComponent::BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariant
     }
 }
 
-json WARN_UNUSED BytecodeIrComponent::SaveToJSON()
+json_t WARN_UNUSED BytecodeIrComponent::SaveToJSON()
 {
-    json j;
+    json_t j;
     j["kind"] = static_cast<int>(m_processKind);
     j["ident_func_name"] = m_identFuncName;
     std::string implFuncName = m_impl->getName().str();
@@ -527,7 +527,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             // The body fn should never be inlined since it's going to be called by multiple bytecodes
             //
             ic.m_bodyFn->setLinkage(GlobalValue::ExternalLinkage);
-            ic.m_bodyFn->addFnAttr(Attribute::AttrKind::NoInline);
+            ic.m_bodyFn->addFnAttr(Attribute::NoInline);
         }
         else
         {
@@ -544,7 +544,9 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
     ReleaseAssert(bytecodeDef->m_totalGenericIcEffectKinds == static_cast<size_t>(-1));
     bytecodeDef->m_totalGenericIcEffectKinds = numTotalGenericIcEffectKinds;
 
-    if (hasICFusedIntoInterpreterOpcode)
+    // If we are working for a DFG variant, no need to waste time producing the interpreter quickened IC variants as they are not needed
+    //
+    if (hasICFusedIntoInterpreterOpcode && !bytecodeDef->m_isDfgVariant)
     {
         // Create the processors for each of the specialized implementation
         //
@@ -564,7 +566,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             ReleaseAssert(func != nullptr);
             ReleaseAssert(func->empty());
             func->setLinkage(GlobalValue::InternalLinkage);
-            func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            func->addFnAttr(Attribute::AlwaysInline);
             BasicBlock* bb = BasicBlock::Create(ctx, "", func);
             ReleaseAssert(func->arg_size() == 1);
             ReleaseAssert(llvm_value_has_type<bool>(func->getArg(0)));
@@ -579,7 +581,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
             ReleaseAssert(func != nullptr);
             ReleaseAssert(func->empty());
             func->setLinkage(GlobalValue::InternalLinkage);
-            func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+            func->addFnAttr(Attribute::AlwaysInline);
             BasicBlock* bb = BasicBlock::Create(ctx, "", func);
             ReleaseAssert(func->arg_size() == 1);
             Value* input = func->getArg(0);
@@ -630,7 +632,7 @@ BytecodeIrInfo WARN_UNUSED BytecodeIrInfo::Create(BytecodeVariantDefinition* byt
     return r;
 }
 
-BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
+BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json_t& j)
 {
     ReleaseAssert(j.count("bytecode_variant_definition"));
     m_bytecodeDefHolder = std::make_unique<BytecodeVariantDefinition>(j["bytecode_variant_definition"]);
@@ -641,7 +643,7 @@ BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
     {
         ReleaseAssert(j.count("all_return_continuations") && j["all_return_continuations"].is_array());
         // TODO: avoid copy
-        std::vector<json> allRetConts = j["all_return_continuations"];
+        std::vector<json_t> allRetConts = j["all_return_continuations"];
         for (auto& it : allRetConts)
         {
             m_allRetConts.push_back(std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, it));
@@ -655,7 +657,7 @@ BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
 
     {
         ReleaseAssert(j.count("all_slow_paths") && j["all_slow_paths"].is_array());
-        std::vector<json> allSlowPaths = j["all_slow_paths"];
+        std::vector<json_t> allSlowPaths = j["all_slow_paths"];
         for (auto& it : allSlowPaths)
         {
             m_slowPaths.push_back(std::make_unique<BytecodeIrComponent>(ctx, m_bytecodeDef, it));
@@ -663,13 +665,13 @@ BytecodeIrInfo::BytecodeIrInfo(llvm::LLVMContext& ctx, json& j)
     }
 }
 
-json WARN_UNUSED BytecodeIrInfo::SaveToJSON()
+json_t WARN_UNUSED BytecodeIrInfo::SaveToJSON()
 {
-    json j;
+    json_t j;
     j["bytecode_variant_definition"] = m_bytecodeDef->SaveToJSON();
     j["jit_main_component"] = m_jitMainComponent->SaveToJSON();
     {
-        std::vector<json> allRetConts;
+        std::vector<json_t> allRetConts;
         for (auto& it : m_allRetConts)
         {
             allRetConts.push_back(it->SaveToJSON());
@@ -681,7 +683,7 @@ json WARN_UNUSED BytecodeIrInfo::SaveToJSON()
         j["quickening_slow_path"] = m_quickeningSlowPath->SaveToJSON();
     }
     {
-        std::vector<json> allSlowPaths;
+        std::vector<json_t> allSlowPaths;
         for (auto& it : m_slowPaths)
         {
             allSlowPaths.push_back(it->SaveToJSON());

@@ -45,8 +45,12 @@ DEEGEN_DEFINE_BYTECODE(ValidateIsNextAndBranch)
     Result(ConditionalBranch);
     Implementation(ValidateIsNextAndBranchImpl);
     Variant();
+    DfgVariant();
     DeclareReads(Range(Op("base"), 3));
-    DeclareWrites(Range(Op("base"), 1), Range(Op("base") + 2, 1));
+    DeclareWrites(
+        Range(Op("base"), 1).TypeDeductionRule(DoNotProfile),
+        Range(Op("base") + 2, 1).TypeDeductionRule(DoNotProfile)
+    );
 }
 
 static void NO_RETURN KVLoopIterCallReturnContinuation(TValue* base, uint8_t numRets)
@@ -98,7 +102,7 @@ static void NO_RETURN KVLoopIterImpl(TValue* base, uint8_t numRets)
         TableObjectIterator* iter = reinterpret_cast<TableObjectIterator*>(base + 2);
         HeapPtr<TableObject> table = base[1].As<tTable>();
         TableObjectIterator::KeyValuePair kv = iter->Advance(table);
-        assert(1 <= numRets && numRets <= 2);
+        Assert(1 <= numRets && numRets <= 2);
         base[3] = kv.m_key;
         if (numRets == 2)
         {
@@ -132,9 +136,14 @@ DEEGEN_DEFINE_BYTECODE(KVLoopIter)
     //
     Variant(Op("numRets").HasValue(1));
     Variant(Op("numRets").HasValue(2));
+    DfgVariant(Op("numRets").HasValue(1));
+    DfgVariant(Op("numRets").HasValue(2));
     DeclareReads(Range(Op("base"), 3));
-    DeclareWrites(Range(Op("base") + 2, Op("numRets") + 1));
-    DeclareClobbers(Range(Op("base") + Op("numRets") + 3, Infinity()));
+    DeclareWrites(
+        Range(Op("base") + 2, 1).TypeDeductionRule(DoNotProfile),
+        Range(Op("base") + 3, Op("numRets")).TypeDeductionRule(ValueProfile)
+    );
+    DeclareUsedByInPlaceCall(Op("base") + 3);
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -59,9 +59,15 @@ DEEGEN_DEFINE_BYTECODE(ForLoopIter)
     Variant(Op("numRets").HasValue(2));
     Variant(Op("numRets").HasValue(3));
     Variant();
+    DfgVariant(Op("numRets").HasValue(1));
+    DfgVariant(Op("numRets").HasValue(2));
+    DfgVariant(Op("numRets").HasValue(3));
+    DfgVariant();
     DeclareReads(Range(Op("base"), 3));
-    DeclareWrites(Range(Op("base") + 2, Op("numRets") + 1));
-    DeclareClobbers(Range(Op("base") + Op("numRets") + 3, Infinity()));
+    DeclareWrites(
+        Range(Op("base") + 2, Op("numRets") + 1).TypeDeductionRule(ValueProfile)
+    );
+    DeclareUsedByInPlaceCall(Op("base") + 3);
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

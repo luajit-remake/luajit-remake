@@ -60,14 +60,16 @@ struct BytecodeRWCDesc
     static BytecodeRWCDesc ALWAYS_INLINE CreateVarArgs()
     {
         return {
-            .m_type = BytecodeRWCDesc::VArgs
+            .m_type = BytecodeRWCDesc::VArgs,
+            .m_data = Undef<DataTy>()
         };
     }
 
     static BytecodeRWCDesc ALWAYS_INLINE CreateVarRets()
     {
         return {
-            .m_type = BytecodeRWCDesc::VRets
+            .m_type = BytecodeRWCDesc::VRets,
+            .m_data = Undef<DataTy>()
         };
     }
 

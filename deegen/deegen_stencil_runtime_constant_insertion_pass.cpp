@@ -230,7 +230,7 @@ public:
             {
                 CallInst* ci = cast<CallInst>(val);
                 Function* callee = ci->getCalledFunction();
-                if (callee != nullptr && callee->getName().startswith("__deegen_constant_placeholder_bytecode_operand_"))
+                if (callee != nullptr && callee->getName().starts_with("__deegen_constant_placeholder_bytecode_operand_"))
                 {
                     ReleaseAssert(ci->arg_size() == 0);
                     std::string labelStr = callee->getName().substr(strlen("__deegen_constant_placeholder_bytecode_operand_")).str();
@@ -960,7 +960,7 @@ end:
                     Function* callee = ci->getCalledFunction();
                     if (callee != nullptr)
                     {
-                        ReleaseAssert(!callee->getName().startswith("__deegen_constant_placeholder_bytecode_operand_"));
+                        ReleaseAssert(!callee->getName().starts_with("__deegen_constant_placeholder_bytecode_operand_"));
                     }
                 }
             }

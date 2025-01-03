@@ -2,6 +2,7 @@
 
 #include "misc_llvm_helper.h"
 #include "tvalue.h"
+#include "x64_register_info.h"
 
 namespace dast {
 
@@ -15,13 +16,7 @@ public:
         ReleaseAssert(m_target != nullptr);
     }
 
-    void AddTagRegister(llvm::Argument* arg, uint64_t value)
-    {
-        ReleaseAssert(!m_didOptimization);
-        ReleaseAssert(arg->getParent() == m_target);
-        ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
-        m_tagRegisterList.push_back(std::make_pair(arg, value));
-    }
+    void AddTagRegister(X64Reg reg, uint64_t value);
 
     void Run();
 
@@ -31,12 +26,6 @@ private:
     std::vector<std::pair<llvm::Argument*, uint64_t>> m_tagRegisterList;
 };
 
-inline void RunTagRegisterOptimizationPass(llvm::Function* func)
-{
-    TagRegisterOptimizationPass pass(func);
-    pass.AddTagRegister(func->getArg(4), TValue::x_int32Tag);
-    pass.AddTagRegister(func->getArg(9), TValue::x_mivTag);
-    pass.Run();
-}
+void RunTagRegisterOptimizationPass(llvm::Function* func);
 
 }   // namespace dast

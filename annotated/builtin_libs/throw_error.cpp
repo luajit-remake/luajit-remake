@@ -38,7 +38,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(OnProtectedCallSuccessReturn)
     // Note that we reserved local variable slot 0 as a distinguisher between pcall/xpcall, so 'retStart' must be at least at slot 1,
     // so we can overwrite 'retStart[-1]' without worrying about clobbering anything
     //
-    assert(retStart > GetStackBase());
+    Assert(retStart > GetStackBase());
     retStart[-1] = TValue::CreateBoolean(true);
     ReturnValueRange(retStart - 1, numRets + 1);
 }
@@ -77,21 +77,21 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(OnProtectedCallErrorReturn)
             break;
         }
         hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
-        assert(hdr != nullptr);
+        Assert(hdr != nullptr);
     }
 
     // Now 'hdr' is the callee of the pcall/xpcall
     // We need to return to the caller of pcall/xpcall, so we need to walk up one more frame and return from there
     //
     hdr = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
-    assert(hdr != nullptr);
+    Assert(hdr != nullptr);
 
     LongJump(hdr, stackbase /*retStart*/, 2 /*numRets*/);
 }
 
 DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_propagate_error_trampoline)
 {
-    assert(GetNumReturnValues() == 1);
+    Assert(GetNumReturnValues() == 1);
     TValue errorObject = GetReturnValuesBegin()[0];
     ThrowError(errorObject);
 }
@@ -125,6 +125,8 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         hdr = hdr - 1;
     }
 
+    // TODO: FIXME we need to properly update the interpreter tier-up counter for each stack frame that is in the interpreter tier
+    //
     if (hdr == nullptr)
     {
         // There is no pcall/xpcall on the stack
@@ -134,7 +136,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         // resumed this coroutine via coroutine.resume).
         //
         CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-        assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
+        Assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
 
         // Close all upvalues on the coroutine stack
         //
@@ -166,7 +168,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
             exit(1);
         }
 
-        assert(!parentCoro->m_coroutineStatus.IsDead() && !parentCoro->m_coroutineStatus.IsResumable());
+        Assert(!parentCoro->m_coroutineStatus.IsDead() && !parentCoro->m_coroutineStatus.IsResumable());
 
         // Set the current coroutine dead
         //
@@ -197,7 +199,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
         }
         else
         {
-            assert(dstHdr->m_numVariadicArguments == 1);
+            Assert(dstHdr->m_numVariadicArguments == 1);
             // For coroutine.wrap, the error should be propagated as an error of coroutine.wrap
             // We achieve this by set up a trampoline frame above coroutine.wrap, switch coroutine
             // and return to the trampoline, and let the trampoline throw out the error again.
@@ -222,7 +224,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
     }
 
     StackFrameHeader* protectedCallFrame = reinterpret_cast<StackFrameHeader*>(hdr->m_caller) - 1;
-    assert(protectedCallFrame != nullptr);
+    Assert(protectedCallFrame != nullptr);
 
     // Every upvalue >= the frame base of the pcall/xpcall needs to be closed
     //
@@ -232,7 +234,7 @@ DEEGEN_DEFINE_LIB_FUNC(DeegenInternal_ThrowTValueErrorImpl)
     bool isXpcall;
     {
         TValue* locals = reinterpret_cast<TValue*>(protectedCallFrame + 1);
-        assert(locals[0].IsMIV() && locals[0].AsMIV().IsBoolean());
+        Assert(locals[0].IsMIV() && locals[0].AsMIV().IsBoolean());
         isXpcall = locals[0].AsMIV().GetBooleanValue();
     }
 
@@ -381,7 +383,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_xpcall)
         // Then 'base.error' will throw out that error for us, which will be protected and invoke our error handler, as desired.
         //
         TValue baseDotError = VM_GetLibFunctionObject<VM::LibFn::BaseError>();
-        assert(baseDotError.Is<tFunction>());
+        Assert(baseDotError.Is<tFunction>());
 
         callStart[0] = baseDotError;
         callStart[x_numSlotsForStackFrameHeader] = MakeErrorMessageForUnableToCall(calleeInput);

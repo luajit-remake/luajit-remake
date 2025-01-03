@@ -16,16 +16,16 @@ deegen_enter_vm_from_c_impl:
 	#   arg 4 (%r8): cbHeapPtr
 	#
 	# The GHC calling convention callee expects:
-	#   dst 0 (%r13): CoroutineCtx
-	#   dst 1 (%rbp): stackBase
-	#   dst 2 (%r12): numArgs
-	#   dst 3 (%rbx): cbHeapPtr
-	#   dst 4 (%r14): tag register 1
+	#   dst 0 (%r13): tag register 2
+	#   dst 1 (%rbp): cbHeapPtr
+	#   dst 2 (%r12): tag register 1
+	#   dst 3 (%rbx): stackBase
+	#   dst 4 (%r14): numArgs
 	#   dst 5 (%rsi): (unused)
 	#   dst 6 (%rdi): isMustTail64 (should be 0)
 	#   dst 7 (%r8) : (unused)
 	#   dst 8 (%r9) : (unused)
-	#   dst 9 (%r15): tag register 2
+	#   dst 9 (%r15): CoroutineCtx
 	#
 	# Push all the callee-saved registers in Linux C calling convention.
 	# Note that we happen to push 48 bytes, and we are branching to the callee.
@@ -43,32 +43,32 @@ deegen_enter_vm_from_c_impl:
 	
 	# Move CoroutineCtx (%rdi)
 	#
-	movq	%rdi, %r13
+	movq	%rdi, %r15
 	
 	# Move stackBase (%rdx)
 	#
-	movq	%rdx, %rbp
+	movq	%rdx, %rbx
 	
 	# Move numArgs (%rcx)
 	#
-	movq	%rcx, %r12
+	movq	%rcx, %r14
 	
 	# Move cbHeapPtr (%r8)
 	#
-	movq	%r8, %rbx
+	movq	%r8, %rbp
 	
 	# Set isMustTail64 (%rdi) to 0
 	# Note that %rdi is originally holding CoroutineCtx, so this must be done after moving it
 	#
 	xor 	%edi, %edi
 	
-	# set up tag register 1 (%r14, x_int32Tag)
+	# set up tag register 1 (%r12, x_int32Tag)
 	#
-	movabsq	$0xfffbffff00000000, %r14
+	movabsq	$0xfffbffff00000000, %r12
 	
-	# set up tag register 2 (%r15, x_mivTag)
+	# set up tag register 2 (%r13, x_mivTag)
 	#
-	movabsq	$0xfffcffff0000007f, %r15
+	movabsq	$0xfffcffff0000007f, %r13
 	
 	# Branch to callee (%rsi)
 	# The stack is unbalanced yet, but it's fine because by design control must 
@@ -91,16 +91,16 @@ deegen_enter_vm_from_c_impl:
 	.type	deegen_internal_use_only_exit_vm_epilogue,@function
 deegen_internal_use_only_exit_vm_epilogue:  
 	# Input (GHC calling convention):
-	#   arg 0 (%r13): CoroutineCtx (unused)
-	#   arg 1 (%rbp): stackBase (unused)
-	#   arg 2 (%r12): (unused)
-	#   arg 3 (%rbx): (unused)
-	#   arg 4 (%r14): tag register 1 (unused)
+	#   arg 0 (%r13): tag register 2 (unused)
+	#   arg 1 (%rbp): (unused)
+	#   arg 2 (%r12): tag register 1 (unused)
+	#   arg 3 (%rbx): stackBase (unused)
+	#   arg 4 (%r14): (unused)
 	#   arg 5 (%rsi): retStart
 	#   arg 6 (%rdi): numRets
 	#   arg 7 (%r8) : (unused)
 	#   arg 8 (%r9) : (unused)
-	#   arg 9 (%r15): tag register 2 (unused)
+	#   arg 9 (%r15): CoroutineCtx (unused)
 	#
 	# Returns (Linux C calling convention, 'DeegenInternalEnterVMFromCReturnResults')
 	#   %rax: retStart

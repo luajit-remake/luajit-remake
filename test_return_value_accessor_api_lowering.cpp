@@ -21,11 +21,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     AstMakeCall::PreprocessModule(module.get());
 
-    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+    std::vector<BytecodeVariantCollection> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
     ReleaseAssert(defs.size() >= testcaseNum);
-    ReleaseAssert(defs[testcaseNum - 1].size() > 0);
-    auto& target = defs[testcaseNum - 1][0];
+    ReleaseAssert(defs[testcaseNum - 1].m_variants.size() > 0);
+    auto& target = defs[testcaseNum - 1].m_variants[0];
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);
@@ -49,7 +49,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_1)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 1 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_2)
@@ -58,7 +58,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_2)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 2 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_3)
@@ -67,7 +67,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_3)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 3 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_4)
@@ -76,7 +76,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_4)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 4 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_5)
@@ -85,7 +85,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_5)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 5 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_6)
@@ -94,7 +94,7 @@ TEST(DeegenAst, ReturnValueAccessorLowering_6)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 6 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }
 
 TEST(DeegenAst, ReturnValueAccessorLowering_7)
@@ -103,5 +103,5 @@ TEST(DeegenAst, ReturnValueAccessorLowering_7)
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::unique_ptr<Module> module = GetTestCase(ctx, 7 /*testCaseNum*/);
-    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()));
+    AssertIsExpectedOutput(DumpLLVMModuleAsString(module.get()), PP_STRINGIFY(BUILD_FLAVOR));
 }

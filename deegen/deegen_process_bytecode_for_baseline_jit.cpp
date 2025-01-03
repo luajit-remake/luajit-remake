@@ -11,7 +11,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
 
     // Create the main JIT logic
     //
-    res.m_baselineJitInfo = DeegenBytecodeBaselineJitInfo::Create(*bii, bcTraitAccessor);
+    res.m_baselineJitInfo = JitCodeGenLogicCreator::CreateForBaselineJIT(*bii, bcTraitAccessor);
 
     // Process each slow path and return continuation
     // We simply assume each return continuation could potentially be used by slow path,
@@ -19,7 +19,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
     //
     for (size_t i = 0; i < bii->m_slowPaths.size(); i++)
     {
-        BaselineJitImplCreator jic(*(bii->m_slowPaths[i].get()));
+        BaselineJitImplCreator jic(bii, *(bii->m_slowPaths[i].get()));
         jic.DoLowering(bii, bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPaths.push_back({ std::move(module), jic.GetResultFunctionName() });
@@ -27,7 +27,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
 
     if (bii->m_quickeningSlowPath.get() != nullptr)
     {
-        BaselineJitImplCreator jic(*(bii->m_quickeningSlowPath.get()));
+        BaselineJitImplCreator jic(bii, *(bii->m_quickeningSlowPath.get()));
         jic.DoLowering(bii, bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPaths.push_back({ std::move(module), jic.GetResultFunctionName() });
@@ -35,7 +35,7 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
 
     for (size_t i = 0; i < bii->m_allRetConts.size(); i++)
     {
-        BaselineJitImplCreator jic(BaselineJitImplCreator::SlowPathReturnContinuationTag(), *(bii->m_allRetConts[i].get()));
+        BaselineJitImplCreator jic(BaselineJitImplCreator::SlowPathReturnContinuationTag(), bii, *(bii->m_allRetConts[i].get()));
         jic.DoLowering(bii, bcTraitAccessor);
         std::unique_ptr<llvm::Module> module = CloneModule(*jic.GetModule());
         res.m_aotSlowPathReturnConts.push_back({ std::move(module), jic.GetResultFunctionName() });
@@ -75,31 +75,11 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
         std::string prefixToFind = "__deegen_bytecode_";
         std::string prefixToReplace = "__deegen_baseline_jit_op_";
 
-        auto renameFunctions = [&](Module* module)
-        {
-            std::vector<Function*> fnsToRename;
-            for (Function& fn : *module)
-            {
-                if (fn.getName().startswith(prefixToFind))
-                {
-                    fnsToRename.push_back(&fn);
-                }
-            }
-            for (Function* fn : fnsToRename)
-            {
-                std::string oldName = fn->getName().str();
-                ReleaseAssert(oldName.starts_with(prefixToFind));
-                std::string newName = prefixToReplace + oldName.substr(prefixToFind.length());
-                fn->setName(newName);
-                ReleaseAssert(fn->getName() == newName);
-            }
-        };
-
         auto renameSlowPathInfo = [&](std::vector<SlowPathInfo>& list /*inout*/)
         {
             for (auto& m : list)
             {
-                renameFunctions(m.m_module.get());
+                RenameAllFunctionsStartingWithPrefix(m.m_module.get(), prefixToFind, prefixToReplace);
                 ReleaseAssert(m.m_funcName.starts_with(prefixToFind));
                 m.m_funcName = prefixToReplace + m.m_funcName.substr(prefixToFind.length());
             }
@@ -107,7 +87,6 @@ DeegenProcessBytecodeForBaselineJitResult WARN_UNUSED DeegenProcessBytecodeForBa
 
         renameSlowPathInfo(res.m_aotSlowPaths);
         renameSlowPathInfo(res.m_aotSlowPathReturnConts);
-        renameFunctions(res.m_baselineJitInfo.m_cgMod.get());
     }
 
     return res;

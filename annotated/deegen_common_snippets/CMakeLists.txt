@@ -34,7 +34,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_num_variadic_args.cpp
   store_variadic_args_as_variadic_results.cpp
   get_variadic_results_start.cpp
-  box_function_object_to_tvalue.cpp
+  box_function_object_heap_ptr_to_tvalue.cpp
   get_cb_heap_ptr_from_tvalue.cpp
   get_func_obj_as_u64_from_tvalue.cpp
   get_immutable_upvalue.cpp
@@ -50,7 +50,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   create_new_jit_call_ic_for_closure_call_mode_site.cpp
   initialize_jit_call_ic_site.cpp
   initialize_jit_generic_ic_site.cpp
-  create_new_jit_generic_ic.cpp
+  create_new_jit_generic_ic_for_baseline_jit.cpp
   update_interpreter_tier_up_counter_for_return_or_throw.cpp
   update_interpreter_tier_up_counter_for_branch.cpp
   get_interpreter_tier_up_counter.cpp
@@ -63,6 +63,34 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_baseline_jit_codeblock_from_codeblock_heap_ptr.cpp
   get_global_object_from_baseline_code_block.cpp
   get_dfg_codeblock_from_stack_base.cpp
+  get_global_object_from_dfg_code_block.cpp
+  get_reg_spill_region_offset_from_dfg_code_block.cpp
+  apply_dfg_runtime_reg_patch_data.cpp
+  apply_dfg_runtime_reg_patch_using_slow_path_data_reg_config.cpp
+  get_dfg_physical_slot_for_ssa_input.cpp
+  get_dfg_node_physical_slot_for_output.cpp
+  get_dfg_node_physical_slot_for_br_decision.cpp
+  get_dfg_node_physical_slot_start_for_range_operand.cpp
+  get_dfg_node_reg_alloc_info_codegen_func_ord.cpp
+  get_end_of_call_frame_from_dfg_codeblock.cpp
+  create_new_jit_generic_ic_for_dfg_jit.cpp
+  get_dfg_builtin_node_input_physical_slot.cpp
+  get_dfg_builtin_node_output_physical_slot.cpp
+  get_kth_variadic_arg.cpp
+  get_kth_variadic_result.cpp
+  get_function_object_heap_ptr_from_stack_base.cpp
+  create_closed_upvalue.cpp
+  get_closed_upvalue_value.cpp
+  set_closed_upvalue_value.cpp
+  set_up_variadic_result_info.cpp
+  move_variadic_results_for_prepend.cpp
+  i64_sub_saturate_to_zero.cpp
+  create_new_closure_for_dfg_and_fill_upvalues_from_parent.cpp
+  box_function_object_raw_pointer_to_tvalue.cpp
+  get_immutable_upvalue_from_function_obj.cpp
+  get_mutable_upvalue_from_function_obj.cpp
+  put_upvalue_from_function_obj.cpp
+  move_variadic_results_for_return.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

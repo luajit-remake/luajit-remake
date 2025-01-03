@@ -120,7 +120,7 @@ public:
         SpdsOrSystemHeapPtr<Node> prev = TCGet(p->m_prev);
 #ifndef NDEBUG
         SpdsOrSystemHeapPtr<Node> next = TCGet(p->m_next);
-        assert(prev.IsInvalidPtr() == next.IsInvalidPtr());
+        Assert(prev.IsInvalidPtr() == next.IsInvalidPtr());
 #endif
         return !prev.IsInvalidPtr();
     }
@@ -128,7 +128,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CRTP>>>
     static void RemoveFromList(T nodeToRemove)
     {
-        assert(IsOnList(nodeToRemove));
+        Assert(IsOnList(nodeToRemove));
 
         using NodeT = ReinterpretCastPreservingAddressSpaceType<Node*, T>;
         NodeT p = nodeToRemove;
@@ -163,21 +163,21 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static void Initialize(T self)
     {
-        assert(TCGet(self->m_head).IsInvalidPtr());
+        Assert(TCGet(self->m_head).IsInvalidPtr());
         TCSet(self->m_head, HeadAddr(self));
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static bool IsEmpty(T self)
     {
-        assert(!TCGet(self->m_head).IsInvalidPtr());
+        Assert(!TCGet(self->m_head).IsInvalidPtr());
         return TCGet(self->m_head) == HeadAddr(self);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static bool ContainsExactlyOneElement(T self)
     {
-        assert(!IsEmpty(self));
+        Assert(!IsEmpty(self));
         return TCGet(TCGet(self->m_head)->m_next) == HeadAddr(self) &&
                TCGet(TCGet(self->m_head)->m_prev) == OneWordBeforeHeadAddr(self);
     }
@@ -185,14 +185,14 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static SpdsPtr<CRTPNodeType> GetAny(T self)
     {
-        assert(!IsEmpty(self));
+        Assert(!IsEmpty(self));
         return SpdsPtr<CRTPNodeType> { static_cast<HeapPtr<CRTPNodeType>>(TCGet(self->m_head).AsPtr()) };
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static void Insert(T self, CRTPNodeType* cp)
     {
-        assert(!TCGet(self->m_head).IsInvalidPtr());
+        Assert(!TCGet(self->m_head).IsInvalidPtr());
         Node* p = cp;
         AssertIsSpdsPointer(p);
 
@@ -216,7 +216,7 @@ public:
         else
         {
             SpdsOrSystemHeapPtr<Node> head = TCGet(self->m_head);
-            assert(TCGet(head->m_prev) == OneWordBeforeHeadAddr(self));
+            Assert(TCGet(head->m_prev) == OneWordBeforeHeadAddr(self));
             // head is pointing to the first element
             // insert before the first element
             //
@@ -234,7 +234,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, SmallHeadedUnorderedDoublyLinkedList>>>
     static void TransferAllElementsTo(T self, SmallHeadedUnorderedDoublyLinkedList<CRTPNodeType>& out)
     {
-        assert(IsEmpty(out));
+        Assert(IsEmpty(out));
         if (IsEmpty(self))
         {
             return;
@@ -261,7 +261,7 @@ public:
         }
         else
         {
-            assert(TCGet(head->m_prev) == OneWordBeforeHeadAddr(self));
+            Assert(TCGet(head->m_prev) == OneWordBeforeHeadAddr(self));
             // head is pointing to the first element
             //
             firstElement = head.AsPtr();
@@ -330,7 +330,7 @@ public:
         {
             WatchpointNodeBase::RemoveFromList(this);
         }
-        assert(!IsInstalled());
+        Assert(!IsInstalled());
     }
 
     // If true, this is a EmbeddedWatchpointNode. Otherwise this is a VTWatchpointNode
@@ -444,7 +444,7 @@ public:
     EmbeddedWatchpointNode(WatchpointEnumKind kind)
         : m_taggedKind(static_cast<uint8_t>(kind) * 2 + 1)
     {
-        assert(static_cast<uint8_t>(kind) < static_cast<uint8_t>(WatchpointEnumKind::X_END_OF_ENUM));
+        Assert(static_cast<uint8_t>(kind) < static_cast<uint8_t>(WatchpointEnumKind::X_END_OF_ENUM));
     }
 
     const char* GetHumanReadableComment() const { return x_watchpointHumanReadableComments[static_cast<size_t>(GetKind())]; }
@@ -462,13 +462,13 @@ static_assert(sizeof(EmbeddedWatchpointNode) == 9);
 
 inline EmbeddedWatchpointNode* WatchpointNodeBase::AsEmbeddedWatchpointNode()
 {
-    assert(IsEmbeddedWatchpointNode());
+    Assert(IsEmbeddedWatchpointNode());
     return static_cast<EmbeddedWatchpointNode*>(this);
 }
 
 inline VTWatchpointNode* WatchpointNodeBase::AsVTWatchpointNode()
 {
-    assert(!IsEmbeddedWatchpointNode());
+    Assert(!IsEmbeddedWatchpointNode());
     return static_cast<VTWatchpointNode*>(this);
 }
 
@@ -553,7 +553,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, WatchpointSet>>>
     static bool IsWatchedButNoWatchers(T self)
     {
-        assert(IsWatched(self));
+        Assert(IsWatched(self));
         return WatchpointList::IsEmpty(self->m_watchpoints);
     }
 
@@ -562,25 +562,25 @@ public:
     {
         if (IsClear(self)) { return WatchpointSetState::Clear; }
         if (IsInvalidated(self)) { return WatchpointSetState::Invalidated; }
-        assert(IsWatched(self));
+        Assert(IsWatched(self));
         return WatchpointSetState::Watching;
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, WatchpointSet>>>
     static void StartWatching(T self)
     {
-        assert(IsValid(self));
+        Assert(IsValid(self));
         if (IsClear(self))
         {
             WatchpointList::Initialize(&self->m_watchpoints);
         }
-        assert(GetState(self) == WatchpointSetState::Watching);
+        Assert(GetState(self) == WatchpointSetState::Watching);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, WatchpointSet>>>
     static void AddWatchpoint(T self, WatchpointNodeBase* wp)
     {
-        assert(!wp->IsInstalled());
+        Assert(!wp->IsInstalled());
         StartWatching(self);
         WatchpointList::Insert(&self->m_watchpoints, wp);
     }

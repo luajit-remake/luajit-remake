@@ -1,5 +1,7 @@
 #include "deegen_jit_slow_path_data.h"
 #include "deegen_bytecode_operand.h"
+#include "deegen_dfg_jit_impl_creator.h"
+#include "drt/dfg_slowpath_register_config_helper.h"
 
 namespace dast {
 
@@ -44,7 +46,17 @@ llvm::Value* WARN_UNUSED JitSlowPathDataJitAddress::EmitGetValueLogic(llvm::Valu
                                                                { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", insertBefore);
 
     ReleaseAssert(llvm_value_has_type<void*>(gep));
-    Value* addr32 = new LoadInst(llvm_type_of<int32_t>(ctx), gep, "", false /*isVolatile*/, Align(1), insertBefore);
+
+    return EmitGetValueFromFieldAddrLogic(gep, insertBefore);
+}
+
+llvm::Value* WARN_UNUSED JitSlowPathDataJitAddress::EmitGetValueFromFieldAddrLogic(llvm::Value* fieldAddr, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = fieldAddr->getContext();
+    ReleaseAssert(llvm_value_has_type<void*>(fieldAddr));
+
+    Value* addr32 = new LoadInst(llvm_type_of<int32_t>(ctx), fieldAddr, "", false /*isVolatile*/, Align(1), insertBefore);
 
     // ZExt/SExt doesn't matter because the address is < 2GB
     //
@@ -78,6 +90,19 @@ void JitSlowPathDataJitAddress::EmitSetValueLogic(llvm::Value* slowPathDataAddr,
     UnreachableInst* dummy = new UnreachableInst(slowPathDataAddr->getContext(), insertAtEnd);
     EmitSetValueLogic(slowPathDataAddr, value, dummy);
     dummy->eraseFromParent();
+}
+
+bool JitSlowPathDataBcOperand::IsEqualImpl(JitSlowPathDataBcOperand& other)
+{
+    CHECK(IsBaseEqual(other));
+    if (!IsValid()) { return true; }
+    CHECK(GetBcOperand()->OperandName() == other.GetBcOperand()->OperandName());
+    CHECK(GetBcOperand()->HasOperandOrdinal() == other.GetBcOperand()->HasOperandOrdinal());
+    if (GetBcOperand()->HasOperandOrdinal())
+    {
+        CHECK(GetBcOperand()->OperandOrdinal() == other.GetBcOperand()->OperandOrdinal());
+    }
+    return true;
 }
 
 llvm::Value* WARN_UNUSED JitSlowPathDataBcOperand::EmitGetValueLogic(llvm::Value* slowPathDataAddr, llvm::BasicBlock* insertAtEnd)
@@ -168,15 +193,157 @@ llvm::Value* WARN_UNUSED JitSlowPathDataRawLiteral::EmitGetValueLogic(llvm::Valu
 
 JitSlowPathDataJitAddress JitSlowPathDataLayoutBase::GetFallthroughJitAddress()
 {
-    ReleaseAssert(IsInitialized());
-    ReleaseAssert(m_totalLength != static_cast<size_t>(-1));
+    // Cannot get length of the SlowPathData unless the layout has been finalized
+    //
+    ReleaseAssert(IsInitialized() && IsLayoutFinalized());
+    size_t length = GetTotalLength();
     // Note that the jitAddr of every SlowPathData is always at offset x_opcodeSizeBytes,
     // so we can decode without knowing anything about the next SlowPathData
     //
     JitSlowPathDataJitAddress addr;
     addr.SetValid();
-    addr.SetFieldOffset(m_totalLength + BytecodeVariantDefinition::x_opcodeSizeBytes);
+    addr.SetFieldOffset(length + BytecodeVariantDefinition::x_opcodeSizeBytes);
     return addr;
+}
+
+llvm::Value* WARN_UNUSED JitSlowPathDataLayoutBase::GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::Instruction* insertBefore)
+{
+    using namespace llvm;
+    LLVMContext& ctx = module->getContext();
+
+    ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
+
+    if (module->getNamedValue(x_slow_path_data_length_placeholder_name) == nullptr)
+    {
+        GlobalVariable* gv = new GlobalVariable(
+            *module,
+            llvm_type_of<uint64_t>(ctx),
+            true /*isConstant*/,
+            GlobalValue::ExternalLinkage,
+            nullptr /*initializer*/,
+            x_slow_path_data_length_placeholder_name);
+        ReleaseAssert(gv->getName() == x_slow_path_data_length_placeholder_name);
+    }
+
+    GlobalVariable* gv = module->getGlobalVariable(x_slow_path_data_length_placeholder_name);
+    ReleaseAssert(gv != nullptr);
+    ReleaseAssert(llvm_type_has_type<uint64_t>(gv->getValueType()));
+
+    Value* slowPathDataLen = new LoadInst(llvm_type_of<uint64_t>(ctx), gv, "", insertBefore);
+    Value* offset = CreateUnsignedAddNoOverflow(slowPathDataLen, CreateLLVMConstantInt<uint64_t>(ctx, BytecodeVariantDefinition::x_opcodeSizeBytes), insertBefore);
+
+    Value* fieldAddr = GetElementPtrInst::CreateInBounds(
+        llvm_type_of<uint8_t>(ctx), slowPathDataPtr, { offset }, "", insertBefore);
+
+    Value* jitAddr = JitSlowPathDataJitAddress::EmitGetValueFromFieldAddrLogic(fieldAddr, insertBefore);
+    ReleaseAssert(llvm_value_has_type<void*>(jitAddr));
+    return jitAddr;
+}
+
+llvm::Value* WARN_UNUSED JitSlowPathDataLayoutBase::GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(module->getContext(), insertAtEnd);
+    Value* res = GetFallthroughJitAddressUsingPlaceholder(module, slowPathDataPtr, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
+// TODO: this class should be removed, and use the facilities in JitSlowPathDataLayoutBase directly
+//
+struct JitSlowPathDataLayoutBuilder
+{
+    JitSlowPathDataLayoutBuilder()
+        : m_currentOffset(0)
+        , m_totalValidFields(0)
+    { }
+
+    void AssignOffsetAndAdvance(JitSlowPathDataFieldBase& field)
+    {
+        ReleaseAssert(!field.IsValid());
+        field.SetValid();
+        field.SetFieldOffset(m_currentOffset);
+        m_currentOffset += field.GetFieldSize();
+        m_totalValidFields++;
+    }
+
+    void FinishSetup(JitSlowPathDataLayoutBase& layout)
+    {
+        ReleaseAssert(!layout.IsInitialized());
+        layout.m_totalLength = m_currentOffset;
+        layout.m_totalValidFields = m_totalValidFields;
+        ReleaseAssert(layout.IsInitialized() && !layout.IsLayoutFinalized());
+    }
+
+    size_t m_currentOffset;
+    size_t m_totalValidFields;
+};
+
+void JitSlowPathDataLayoutBase::SetupHeader(JitSlowPathDataLayoutBuilder& builder /*inout*/)
+{
+    ReleaseAssert(builder.m_currentOffset == 0);
+    builder.m_currentOffset = BytecodeVariantDefinition::x_opcodeSizeBytes;
+    builder.AssignOffsetAndAdvance(m_jitAddr);
+}
+
+void JitSlowPathDataLayoutBase::SetupOperandsAndOutput(JitSlowPathDataLayoutBuilder& builder /*inout*/, BytecodeVariantDefinition* bvd)
+{
+    auto assignForBcOperand = [&](JitSlowPathDataBcOperand& target, BcOperand* operand, size_t maxWidthBytes)
+    {
+        if (operand->IsElidedFromBytecodeStruct())
+        {
+            return;
+        }
+
+        size_t operandMaxWidth = operand->ValueFullByteLength();
+        size_t width = std::min(operandMaxWidth, maxWidthBytes);
+
+        target.SetBcOperand(operand);
+        target.SetFieldSize(width);
+        builder.AssignOffsetAndAdvance(target);
+    };
+
+    // For now for simplicity, just hardcode 2-byte operands similar to what we have assumed for the bytecode structs.
+    //
+    m_operands.resize(bvd->m_list.size());
+    for (auto& operand : bvd->m_list)
+    {
+        size_t ord = operand->OperandOrdinal();
+        ReleaseAssert(ord < m_operands.size());
+        assignForBcOperand(m_operands[ord], operand.get(), 2 /*maxWidthBytes*/);
+    }
+
+    if (bvd->m_hasOutputValue)
+    {
+        assignForBcOperand(m_outputDest, bvd->m_outputOperand.get(), 2 /*maxWidthBytes*/);
+    }
+}
+
+void JitSlowPathDataLayoutBase::SetupCallIcSiteArray(JitSlowPathDataLayoutBuilder& builder /*inout*/, size_t numCallIcSites)
+{
+    ReleaseAssert(!m_callICs.IsValid());
+    if (numCallIcSites > 0)
+    {
+        // Reserve space for each Call IC site
+        //
+        m_callICs.SetInfo(numCallIcSites, sizeof(JitCallInlineCacheSite));
+        builder.AssignOffsetAndAdvance(m_callICs);
+    }
+}
+
+void JitSlowPathDataLayoutBase::SetupGenericIcSiteArray(JitSlowPathDataLayoutBuilder& builder /*inout*/, size_t numGenericIcSites)
+{
+    ReleaseAssert(!m_genericICs.IsValid());
+    if (numGenericIcSites > 0)
+    {
+        // Reserve space for each generic IC site, and if generic IC exists, we also need to record address for JIT slow path and data section
+        //
+        builder.AssignOffsetAndAdvance(m_jitSlowPathAddr);
+        builder.AssignOffsetAndAdvance(m_jitDataSecAddr);
+
+        m_genericICs.SetInfo(numGenericIcSites, sizeof(JitGenericInlineCacheSite));
+        builder.AssignOffsetAndAdvance(m_genericICs);
+    }
 }
 
 // Currently the baseline JIT slow path data is layouted as follow:
@@ -195,22 +362,9 @@ void BaselineJitSlowPathDataLayout::ComputeLayout(BytecodeVariantDefinition* bvd
     ReleaseAssert(bvd->IsBytecodeStructLengthFinalized());
     ReleaseAssert(!IsInitialized());
 
-    size_t currentOffset = BytecodeVariantDefinition::x_opcodeSizeBytes;
-    size_t totalValidFields = 0;
+    JitSlowPathDataLayoutBuilder builder;
 
-    auto assignOffsetAndAdvance = [&](JitSlowPathDataFieldBase& field)
-    {
-        field.SetValid();
-        field.SetFieldOffset(currentOffset);
-        currentOffset += field.GetFieldSize();
-        totalValidFields++;
-    };
-
-    // Reserve space for jitAddr
-    //
-    // Must come first, a lot of places expect that
-    //
-    assignOffsetAndAdvance(m_jitAddr);
+    SetupHeader(builder /*inout*/);
 
     // Reserve space for condBrJitAddr and condBrBytecodeIndex, if needed
     //
@@ -218,69 +372,54 @@ void BaselineJitSlowPathDataLayout::ComputeLayout(BytecodeVariantDefinition* bvd
     {
         // Must be allocated adjacently in this order, baseline JIT expects that
         //
-        assignOffsetAndAdvance(m_condBrJitAddr);
-        assignOffsetAndAdvance(m_condBrBcIndex);
+        builder.AssignOffsetAndAdvance(m_condBrJitAddr);
+        builder.AssignOffsetAndAdvance(m_condBrBcIndex);
         ReleaseAssert(m_condBrJitAddr.GetFieldSize() == 4 && m_condBrBcIndex.GetFieldSize() == 4);
         ReleaseAssert(m_condBrJitAddr.GetFieldOffset() + 4 == m_condBrBcIndex.GetFieldOffset());
     }
 
-    auto assignForBcOperand = [&](JitSlowPathDataBcOperand& target, BcOperand* operand, size_t maxWidthBytes)
-    {
-        if (operand->IsElidedFromBytecodeStruct())
-        {
-            return;
-        }
+    SetupOperandsAndOutput(builder /*inout*/, bvd);
 
-        size_t operandMaxWidth = operand->ValueFullByteLength();
-        size_t width = std::min(operandMaxWidth, maxWidthBytes);
+    SetupCallIcSiteArray(builder /*inout*/, bvd->GetNumCallICsInBaselineJitTier());
+    SetupGenericIcSiteArray(builder /*inout*/, bvd->GetNumGenericICsInJitTier());
 
-        target.SetBcOperand(operand);
-        target.SetFieldSize(width);
-        assignOffsetAndAdvance(target);
-    };
+    builder.FinishSetup(*this);
+}
 
-    // For now for simplicity, just hardcode 2-byte operands similar to what we have assumed for the bytecode structs.
+void DfgJitSlowPathDataLayout::ComputeLayout(DfgJitImplCreator* ifi)
+{
+    ReleaseAssert(ifi->GetBytecodeDef()->IsBytecodeStructLengthFinalized());
+    ReleaseAssert(!IsInitialized());
+
+    JitSlowPathDataLayoutBuilder builder;
+
+    SetupHeader(builder /*inout*/);
+
+    SetupOperandsAndOutput(builder /*inout*/, ifi->GetBytecodeDef());
+
+    // Call IC is currently always disabled in DFG
     //
-    m_operands.resize(bvd->m_list.size());
-    for (auto& operand : bvd->m_list)
+    SetupCallIcSiteArray(builder /*inout*/, 0);
+
+    // TODO: we need to adapt this when we support fully-inlined monomorphic IC
+    //
+    SetupGenericIcSiteArray(builder /*inout*/, ifi->GetBytecodeDef()->GetNumGenericICsInJitTier());
+
+    if (ifi->HasBranchDecisionOutput())
     {
-        size_t ord = operand->OperandOrdinal();
-        ReleaseAssert(ord < m_operands.size());
-        assignForBcOperand(m_operands[ord], operand.get(), 2 /*maxWidthBytes*/);
+        builder.AssignOffsetAndAdvance(m_condBrDecisionSlot);
     }
 
-    if (bvd->m_hasOutputValue)
+    if (!ifi->IsFastPathRegAllocAlwaysDisabled())
     {
-        assignForBcOperand(m_outputDest, bvd->m_outputOperand.get(), 2 /*maxWidthBytes*/);
-    }
-
-    // Reserve space for each Call IC site
-    //
-    {
-        size_t numCallICs = bvd->GetNumCallICsInJitTier();
-        if (numCallICs > 0)
+        if ((m_callICs.IsValid() && m_callICs.GetNumSites() > 0) || (m_genericICs.IsValid() && m_genericICs.GetNumSites() > 0))
         {
-            m_callICs.SetInfo(numCallICs, sizeof(JitCallInlineCacheSite));
-            assignOffsetAndAdvance(m_callICs);
-        }
-    }
-
-    // Reserve space for each generic IC site, and if generic IC exists, we also need to record address for JIT slow path and data section
-    //
-    {
-        size_t numGenericICs = bvd->GetNumGenericICsInJitTier();
-        if (numGenericICs > 0)
-        {
-            assignOffsetAndAdvance(m_jitSlowPathAddr);
-            assignOffsetAndAdvance(m_jitDataSecAddr);
-
-            m_genericICs.SetInfo(numGenericICs, sizeof(JitGenericInlineCacheSite));
-            assignOffsetAndAdvance(m_genericICs);
+            m_compactRegConfig.SetFieldSize(dfg::DfgSlowPathRegConfigDataTraits::x_slowPathDataCompactRegConfigInfoSizeBytes);
+            builder.AssignOffsetAndAdvance(m_compactRegConfig);
         }
     }
 
-    m_totalLength = currentOffset;
-    m_totalValidFields = totalValidFields;
+    builder.FinishSetup(*this);
 }
 
 }   // namespace dast

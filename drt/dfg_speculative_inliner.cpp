@@ -300,11 +300,11 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         if (m_bbContext->m_currentVariadicResult->GetNodeKind() == NodeKind_CreateVariadicRes)
         {
             Node* dynNumVarRes = m_bbContext->m_currentVariadicResult->GetInputEdge(0).GetOperand();
-            if (dynNumVarRes->IsConstantNode() && dynNumVarRes->GetConstantNodeValue().m_value == 0)
+            if (dynNumVarRes->IsUnboxedConstantNode() && dynNumVarRes->GetUnboxedConstantNodeValue() == 0)
             {
                 isVariadicResStatic = true;
-                numStaticVariadicRes = dynNumVarRes->GetNodeParamAsUInt64();
-                TestAssert(numStaticVariadicRes + 1 == dynNumVarRes->GetNumInputs());
+                numStaticVariadicRes = m_bbContext->m_currentVariadicResult->GetNodeSpecificDataAsUInt64();
+                TestAssert(numStaticVariadicRes + 1 == m_bbContext->m_currentVariadicResult->GetNumInputs());
             }
         }
     }
@@ -882,7 +882,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     {
         TestAssert(getVRLengthNode != nullptr);
         int64_t valToSubtract = static_cast<int64_t>(calleeCb->m_numFixedArguments) - static_cast<int64_t>(numStaticArgs);
-        Node* numVarArgsNode = Node::CreateU64SaturateSubNode(Value(getVRLengthNode, 0 /*outputOrd*/), valToSubtract);
+        Node* numVarArgsNode = Node::CreateI64SubSaturateToZeroNode(Value(getVRLengthNode, 0 /*outputOrd*/), valToSubtract);
         m_bbContext->SetupNodeCommonInfoAndPushBack(numVarArgsNode);
         numVariadicArgumentsValue = Value(numVarArgsNode, 0 /*outputOrd*/);
     }
@@ -1387,7 +1387,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             Node* resNode = Node::CreateCreateVariadicResNode(numResults);
                             resNode->SetNumInputs(numResults + 1);
                             resNode->GetInputEdge(0) = m_graph->GetUnboxedConstant(0);
-                            resNode->SetNodeParamAsUInt64(numResults);
                             for (uint32_t i = 0; i < numResults; i++)
                             {
                                 resNode->GetInputEdge(i + 1) = terminator->GetInputEdge(i);

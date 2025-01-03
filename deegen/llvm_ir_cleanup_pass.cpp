@@ -95,6 +95,7 @@
 #include "llvm/Transforms/Scalar/SpeculativeExecution.h"
 #include "llvm/Transforms/Scalar/TailRecursionElimination.h"
 #include "llvm/Transforms/Scalar/WarnMissedTransforms.h"
+#include "llvm/Transforms/Scalar/Reg2Mem.h"
 #include "llvm/Transforms/Utils/AddDiscriminators.h"
 #include "llvm/Transforms/Utils/AssumeBundleBuilder.h"
 #include "llvm/Transforms/Utils/CanonicalizeAliases.h"
@@ -124,7 +125,7 @@ static ModulePassManager BuildModuleSimplificationPassesForDesugaring()
     FunctionPassManager EarlyFPM;
     EarlyFPM.addPass(LowerExpectIntrinsicPass());
     EarlyFPM.addPass(SimplifyCFGPass());
-    EarlyFPM.addPass(SROAPass());
+    EarlyFPM.addPass(SROAPass(SROAOptions::ModifyCFG));
     EarlyFPM.addPass(EarlyCSEPass());
     EarlyFPM.addPass(CallSiteSplittingPass());
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(EarlyFPM), true /*EagerlyInvalidateAnalyses*/));
@@ -149,7 +150,7 @@ static ModulePassManager BuildModuleSimplificationPassesForDesugaring()
 static FunctionPassManager BuildFunctionSimplificationPipelineForDesugaring()
 {
     FunctionPassManager FPM;
-    FPM.addPass(SROAPass());
+    FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
     FPM.addPass(EarlyCSEPass(true /* Enable mem-ssa. */));
     FPM.addPass(SpeculativeExecutionPass(/* OnlyIfDivergentTarget =*/true));
     FPM.addPass(JumpThreadingPass());
@@ -160,10 +161,12 @@ static FunctionPassManager BuildFunctionSimplificationPipelineForDesugaring()
     FPM.addPass(TailCallElimPass());
     FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
     FPM.addPass(ReassociatePass());
+    // TODO: LLVM introduced a new ConstraintEliminationPass() here, investigate if we need it.
     FPM.addPass(RequireAnalysisPass<OptimizationRemarkEmitterAnalysis, Function>());
     FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
     FPM.addPass(InstCombinePass());
-    FPM.addPass(SROAPass());
+    FPM.addPass(SROAPass(SROAOptions::ModifyCFG));
+    // TODO: LLVM introduced a new VectorCombinePass(/*TryEarlyFoldsOnly=*/true) here, investigate if we need it.
     FPM.addPass(MergedLoadStoreMotionPass());
     FPM.addPass(GVNPass());
     FPM.addPass(SCCPPass());
@@ -191,7 +194,7 @@ static FunctionPassManager BuildFunctionSimplificationPipelineForDesugaring()
 //
 static ModuleInlinerWrapperPass BuildInlinerPipelineForDesugaring()
 {
-    InlineParams IP =  getInlineParams(OptimizationLevel::O3.getSpeedupLevel(), OptimizationLevel::O3.getSizeLevel());
+    InlineParams IP = getInlineParams(OptimizationLevel::O3.getSpeedupLevel(), OptimizationLevel::O3.getSizeLevel());
 
     ModuleInlinerWrapperPass MIWP(
         IP, true /*PerformMandatoryInliningsFirst*/,
@@ -214,6 +217,25 @@ static ModuleInlinerWrapperPass BuildInlinerPipelineForDesugaring()
 }
 
 namespace dast {
+
+void RunDemoteRegisterToMemoryPass(llvm::Module* module)
+{
+    PassBuilder passBuilder;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+
+    passBuilder.registerModuleAnalyses(MAM);
+    passBuilder.registerCGSCCAnalyses(CGAM);
+    passBuilder.registerFunctionAnalyses(FAM);
+    passBuilder.registerLoopAnalyses(LAM);
+    passBuilder.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+    ModulePassManager MPM;
+    MPM.addPass(createModuleToFunctionPassAdaptor(RegToMemPass()));
+    MPM.run(*module, MAM);
+}
 
 // Most of the heavy-lifting logic below are stolen from llvm/lib/Passes/PassBuilder.cpp function buildPerModuleDefaultPipeline.
 // Some adaptions are made to fit our purpose.
@@ -241,11 +263,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
 
     // And then run LLVM's RegToMem pass to put everything else back to register form:
     //
-    {
-        legacy::PassManager Passes;
-        Passes.add(createDemoteRegisterToMemoryPass());
-        Passes.run(*module);
-    }
+    RunDemoteRegisterToMemoryPass(module);
 
     PassBuilder passBuilder;
     LoopAnalysisManager LAM;
@@ -289,7 +307,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         //
         for (Function& func : module->functions())
         {
-            if (func.hasFnAttribute(Attribute::AttrKind::NoInline))
+            if (func.hasFnAttribute(Attribute::NoInline))
             {
                 std::string fnName = func.getName().str();
                 ReleaseAssert(fnName != "");
@@ -330,7 +348,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
         std::unordered_set<std::string> found;
         for (Function& func : module->functions())
         {
-            if (func.hasFnAttribute(Attribute::AttrKind::NoInline))
+            if (func.hasFnAttribute(Attribute::NoInline))
             {
                 std::string fnName = func.getName().str();
                 ReleaseAssert(fnName != "");
@@ -341,7 +359,7 @@ void DesugarAndSimplifyLLVMModule(Module* module, DesugaringLevel level)
                 }
                 else
                 {
-                    func.removeFnAttr(Attribute::AttrKind::NoInline);
+                    func.removeFnAttr(Attribute::NoInline);
                 }
             }
         }

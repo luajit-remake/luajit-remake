@@ -65,8 +65,8 @@ TEST(DeegenAst, InlineCacheAPILowering_1)
 
     ValidateLLVMModule(module);
 
-    ptrGetter->addFnAttr(Attribute::AttrKind::AlwaysInline);
-    list[0].m_bodyFn->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    ptrGetter->addFnAttr(Attribute::AlwaysInline);
+    list[0].m_bodyFn->addFnAttr(Attribute::AlwaysInline);
     RunLLVMOptimizePass(module);
 
     std::unique_ptr<Module> extractedModule = ExtractFunction(module, functionName);

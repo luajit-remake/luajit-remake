@@ -76,13 +76,13 @@ struct BytecodeIrComponent
 
     // Load BytecodeIrComponent from JSON
     //
-    BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json& j);
+    BytecodeIrComponent(llvm::LLVMContext& ctx, BytecodeVariantDefinition* bytecodeDef, json_t& j);
 
     // Run the deegen-level optimization passes
     //
     void DoOptimization();
 
-    json WARN_UNUSED SaveToJSON();
+    json_t WARN_UNUSED SaveToJSON();
 };
 
 // The class that holds all the LLVM IR information about one bytecode
@@ -169,9 +169,9 @@ struct BytecodeIrInfo
     }
 
     BytecodeIrInfo() = default;
-    BytecodeIrInfo(llvm::LLVMContext& ctx, json& j);
+    BytecodeIrInfo(llvm::LLVMContext& ctx, json_t& j);
 
-    json WARN_UNUSED SaveToJSON();
+    json_t WARN_UNUSED SaveToJSON();
 };
 
 // A utility helper to find all the return continuations and slow paths in a bytecode definition

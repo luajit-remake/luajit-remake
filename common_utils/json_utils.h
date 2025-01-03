@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wcomma"
@@ -7,18 +9,22 @@
 #pragma clang diagnostic ignored "-Wtautological-overlap-compare"
 #pragma clang diagnostic ignored "-Wcovered-switch-default"
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic ignored "-Wdeprecated-literal-operator"
+
+#define JSON_ASSERT(expr) Assert(expr)
 
 #include "thirdparty_json.hpp"
 
 #pragma clang diagnostic pop
 
-using json = nlohmann::json;
+// Use json_t instead of json to avoid name collision with LLVM's json
+//
+using json_t = nlohmann::json;
 
-#include "common.h"
 #include "misc_math_helper.h"
 
 template<typename T>
-T JSONCheckedGet(json& j, const char* prop)
+T JSONCheckedGet(json_t& j, const char* prop)
 {
     static_assert(std::is_same_v<T, std::string> || std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_same_v<T, double>);
     ReleaseAssert(j.is_object());
@@ -92,7 +98,7 @@ T JSONCheckedGet(json& j, const char* prop)
 }
 
 template<typename T>
-void JSONCheckedGet(json& j, const char* prop, T& out /*out*/)
+void JSONCheckedGet(json_t& j, const char* prop, T& out /*out*/)
 {
     out = JSONCheckedGet<T>(j, prop);
 }

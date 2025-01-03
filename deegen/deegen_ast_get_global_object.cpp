@@ -21,11 +21,21 @@ struct LowerGetGlobalObjectApiPass final : public DeegenAbstractSimpleApiLowerin
         origin->eraseFromParent();
     }
 
-    virtual void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::CallInst* origin) override
+    virtual void DoLoweringForJIT(JitImplCreatorBase* ifi, llvm::CallInst* origin) override
     {
         using namespace llvm;
         ReleaseAssert(origin->arg_size() == 0);
-        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetGlobalObjectFromBaselineCodeBlock", { ifi->GetJitCodeBlock() }, origin /*insertBefore*/);
+        std::string dcsName;
+        if (ifi->IsBaselineJIT())
+        {
+            dcsName = "GetGlobalObjectFromBaselineCodeBlock";
+        }
+        else
+        {
+            ReleaseAssert(ifi->IsDfgJIT());
+            dcsName = "GetGlobalObjectFromDfgCodeBlock";
+        }
+        CallInst* replacement = CreateCallToDeegenCommonSnippet(ifi->GetModule(), dcsName, { ifi->GetJitCodeBlock() }, origin /*insertBefore*/);
         ReleaseAssert(origin->getType() == replacement->getType());
         origin->replaceAllUsesWith(replacement);
         origin->eraseFromParent();

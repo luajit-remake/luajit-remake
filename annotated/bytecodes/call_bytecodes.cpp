@@ -18,8 +18,10 @@ static void NO_RETURN CallOperationReturnContinuation(TValue* base, uint16_t /*n
 }
 
 template<bool passVariadicRes, bool storeVariadicRes>
-static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t /*numArgs*/, uint16_t /*numRets*/, TValue* argStart, uint16_t numArgs, TValue func)
+static void NO_RETURN CheckMetatableSlowPath(TValue* /*base*/, uint16_t numArgs, uint16_t /*numRets*/, TValue* argStart)
 {
+    TValue func = *(argStart - x_numSlotsForStackFrameHeader);
+
     HeapPtr<FunctionObject> callTarget = GetCallTargetViaMetatable(func);
     if (unlikely(callTarget == nullptr))
     {
@@ -54,7 +56,11 @@ static void NO_RETURN CallOperationImpl(TValue* base, uint16_t numArgs, uint16_t
         }
     }
 
-    EnterSlowPath<CheckMetatableSlowPath<passVariadicRes, storeVariadicRes>>(argStart, numArgs, func);
+    // We don't really have to pass any argument, but passing 'argStart' breaks a load chain in the slow path (load 'base' -> load 'func'),
+    // and even slightly improves fast path code (due to avoiding an LLVM deficiency in the hoisting heuristic..)
+    // But passing more stuffs will pessimize fast path code due to increased reg pressure
+    //
+    EnterSlowPath<CheckMetatableSlowPath<passVariadicRes, storeVariadicRes>>(argStart);
 }
 
 DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes, bool storeVariadicRes)
@@ -80,6 +86,10 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes, bool storeV
                     Op("numArgs").HasValue(numArgs),
                     Op("numRets").HasValue(numRets)
                 );
+                DfgVariant(
+                    Op("numArgs").HasValue(numArgs),
+                    Op("numRets").HasValue(numRets)
+                );
             }
         }
         else
@@ -88,15 +98,21 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes, bool storeV
                 Op("numArgs").HasValue(numArgs),
                 Op("numRets").HasValue(0)
             );
+            DfgVariant(
+                Op("numArgs").HasValue(numArgs),
+                Op("numRets").HasValue(0)
+            );
         }
     }
     if (!storeVariadicRes)
     {
         Variant();
+        DfgVariant();
     }
     else
     {
         Variant(Op("numRets").HasValue(0));
+        DfgVariant(Op("numRets").HasValue(0));
     }
 
     DeclareReads(
@@ -106,13 +122,15 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(CallOperation, bool passVariadicRes, bool storeV
     );
     if (!storeVariadicRes)
     {
-        DeclareWrites(Range(Op("base"), Op("numRets")));
-        DeclareClobbers(Range(Op("base") + Op("numRets"), Infinity()));
+        DeclareWrites(
+            Range(Op("base"), Op("numRets")).TypeDeductionRule(ValueProfile)
+        );
+        DeclareUsedByInPlaceCall(Op("base"));
     }
     else
     {
         DeclareWrites(VariadicResults());
-        DeclareClobbers(Range(Op("base"), Infinity()));
+        DeclareUsedByInPlaceCall(Op("base"));
     }
 }
 

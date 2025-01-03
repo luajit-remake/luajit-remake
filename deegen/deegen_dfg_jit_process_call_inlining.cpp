@@ -222,7 +222,7 @@ bool WARN_UNUSED DeegenOptJitSpeculativeInliningInfo::TryGenerateInfo()
             //
             ReleaseAssert(clonedRetContFn != nullptr);
             ReleaseAssert(!clonedRetContFn->empty());
-            if (clonedRetContFn->getBasicBlockList().size() > 1)
+            if (clonedRetContFn->size() > 1)
             {
                 return;
             }

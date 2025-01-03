@@ -8,6 +8,8 @@
 #include "deegen_parse_asm_text.h"
 #include "deegen_call_inline_cache.h"
 #include "deegen_ast_inline_cache.h"
+#include "deegen_jit_slow_path_data.h"
+#include "deegen_jit_runtime_constant_utils.h"
 
 namespace dast {
 
@@ -20,7 +22,7 @@ class JitImplCreatorBase : public DeegenBytecodeImplCreatorBase
 public:
     // This clones the input module, so that the input module is untouched
     //
-    JitImplCreatorBase(BytecodeIrComponent& bic);
+    JitImplCreatorBase(BytecodeIrInfo* bii, BytecodeIrComponent& bic);
 
     // The JIT tier needs different implementation for the fast-path return continuation (which should be JIT'ed code)
     // and the slow-path return continuation (which should be a C++ function but jumps back into JIT'ed code at the end)
@@ -29,14 +31,18 @@ public:
     // When this tag is specified, we create the code for the slow path.
     //
     struct SlowPathReturnContinuationTag { };
-    JitImplCreatorBase(SlowPathReturnContinuationTag, BytecodeIrComponent& bic);
+    JitImplCreatorBase(SlowPathReturnContinuationTag, BytecodeIrInfo* bii, BytecodeIrComponent& bic);
 
-    virtual llvm::Module* GetModule() const override { return m_module.get(); }
+    BytecodeIrInfo* GetBytecodeIrInfo() { ReleaseAssert(m_biiInfo != nullptr); return m_biiInfo; }
+    BytecodeIrComponent* GetBytecodeIrComponentInfo() { ReleaseAssert(m_bicInfo != nullptr); return m_bicInfo; }
+
     llvm::Value* GetOutputSlot() const { return m_valuePreserver.Get(x_outputSlot); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetJitSlowPathData() const { return m_valuePreserver.Get(x_jitSlowPathData); }
+    llvm::Value* GetCondBrDecisionSlot() const { return m_valuePreserver.Get(x_brDecision); }
 
     // This returns the BaselineCodeBlock for baseline JIT, or the DfgCodeBlock for DFG JIT
+    // TODO: it makes sense to split this explicitly into baseline and DFG version, to avoid accidental misuse and cause corruption
     //
     llvm::Value* GetJitCodeBlock() const { return m_valuePreserver.Get(GetJitCodeBlockLLVMVarName()); }
 
@@ -48,14 +54,24 @@ public:
 
     bool WARN_UNUSED IsJitSlowPathReturnContinuation() { return m_isSlowPathReturnContinuation; }
 
-    bool WARN_UNUSED IsMainComponent() { return m_processKind == BytecodeIrComponentKind::Main; }
-
-    // The JIT slow path (which is an AOT function) has access to the BaselineJitSlowPathData / DfgJitSlowPathData struct
+    // The AOT slow path (which is an AOT function) used by the JIT has access to the BaselineJitSlowPathData / DfgJitSlowPathData struct
+    //
+    // TODO: this should really be renamed to IsAotSlowPath...
     //
     bool WARN_UNUSED IsJitSlowPath()
     {
         return IsJitSlowPathReturnContinuation() || m_processKind == BytecodeIrComponentKind::SlowPath || m_processKind == BytecodeIrComponentKind::QuickeningSlowPath;
     }
+
+    // Return true if this is the last stencil in the bytecode, which means that it can fallthrough to the next bytecode
+    // This function doesn't make sense for AOT slow path components.
+    //
+    // Note that currently we layout all the return continuations in the same order as they show up in the BytecodeIrInfo,
+    // so for bytecode with JIT return continuations, the last return continuation in the BytecodeIrInfo is the last stencil.
+    //
+    bool WARN_UNUSED IsLastJitStencilInBytecode();
+
+    JitSlowPathDataLayoutBase* WARN_UNUSED GetJitSlowPathDataLayoutBase();
 
     // Find the stencil runtime constant placeholder name corresponding to the fallthrough to the next bytecode, or "" if not found
     // Can only be used after 'm_stencilRcDefinitions' is populated
@@ -102,7 +118,7 @@ public:
     std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd);
     std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::Instruction* insertBefore);
 
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult>& GetAllCallIcInfo()
+    std::vector<DeegenCallIcLogicCreator::JitAsmLoweringResult>& GetAllCallIcInfo()
     {
         return m_callIcInfo;
     }
@@ -112,29 +128,24 @@ public:
         return m_numGenericIcCaptures;
     }
 
-    AstInlineCache::BaselineJitFinalLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
+    AstInlineCache::JitFinalLoweringResult& WARN_UNUSED GetGenericIcLoweringResult()
     {
         return m_genericIcLoweringResult;
     }
 
-    // DFG supports register allocation, so some TValue operands may be register-allocated.
-    // (In addition, TValue ranges may be discretized, and those discretized TValues may also be register allocated,
-    // but this function is not responsible for such cases)
-    //
-    // Returns the argument ordinal in InterpreterFunctionInterface (which implicitly maps to physical register)
-    // if the operandOrd is register-allocated, or -1 if not.
-    //
-    virtual uint64_t WARN_UNUSED GetDfgRegisterSpecilaizationInfo(uint64_t /*operandOrd*/)
-    {
-        // The DFG inherited class should override this
-        //
-        ReleaseAssert(false);
-    }
+    std::string WARN_UNUSED CompileToAssemblyFileForStencilGeneration();
 
 protected:
     void CreateWrapperFunction();
-    std::unique_ptr<llvm::Module> m_module;
+
+    // For clone
+    //
+    JitImplCreatorBase(JitImplCreatorBase* other);
+
     bool m_isSlowPathReturnContinuation;
+
+    BytecodeIrInfo* m_biiInfo;
+    BytecodeIrComponent* m_bicInfo;
 
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;
@@ -145,6 +156,10 @@ protected:
 
     StencilRuntimeConstantInserter m_stencilRcInserter;
     std::vector<CPRuntimeConstantNodeBase*> m_stencilRcDefinitions;
+
+    size_t m_numGenericIcCaptures;
+
+    // TODO: move baseline JIT specific things to the baseline JIT class, everything below is currently not cloned by CloneImpl()
 
     // The rawly parsed stencil ASM file, before apply any ASM passes except the parser-applied ones (e.g., folding magic asm)
     // For audit and debugging purpose only
@@ -160,11 +175,9 @@ protected:
 
     DeegenStencil m_stencil;
 
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> m_callIcInfo;
+    std::vector<DeegenCallIcLogicCreator::JitAsmLoweringResult> m_callIcInfo;
 
-    size_t m_numGenericIcCaptures;
-
-    AstInlineCache::BaselineJitFinalLoweringResult m_genericIcLoweringResult;
+    AstInlineCache::JitFinalLoweringResult m_genericIcLoweringResult;
 
     bool m_generated;
 
@@ -186,7 +199,14 @@ protected:
 
     static constexpr const char* x_outputSlot = "outputSlot";
 
+    // For Baseline JIT only
+    //
     static constexpr const char* x_condBrDest = "condBrDest";
+
+    // For DFG JIT only, cond br decision stoarge slot
+    //
+    static constexpr const char* x_brDecision = "brDecision";
+
     static constexpr const char* x_fallthroughDest = "fallthroughDest";
 
     const char* GetJitCodeBlockLLVMVarName() const
@@ -202,30 +222,6 @@ protected:
             return "dfgCodeBlock";
         }
     }
-};
-
-// Placeholder right now
-//
-class DfgJitImplCreator final : public JitImplCreatorBase
-{
-    virtual DeegenEngineTier WARN_UNUSED GetTier() const override { return DeegenEngineTier::DfgJIT; }
-
-};
-
-struct DeegenPlaceholderUtils
-{
-    static llvm::CallInst* WARN_UNUSED CreateConstantPlaceholderForOperand(llvm::Module* module,
-                                                                           size_t ordinal,
-                                                                           llvm::Type* operandTy,
-                                                                           llvm::Instruction* insertBefore);
-
-    // Return -1 if not found
-    //
-    static size_t WARN_UNUSED FindFallthroughPlaceholderOrd(const std::vector<CPRuntimeConstantNodeBase*>& rcDef);
-
-    // Return "" if not found
-    //
-    static std::string WARN_UNUSED FindFallthroughPlaceholderSymbolName(const std::vector<CPRuntimeConstantNodeBase*>& rcDef);
 };
 
 }   // namespace dast

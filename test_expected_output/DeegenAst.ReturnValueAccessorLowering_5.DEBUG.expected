@@ -1,0 +1,114 @@
+; ModuleID = 'extracted_ir'
+source_filename = "/home/u/project/annotated/unit_test/return_value_accessor_api_lowering.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+@.str.4.4 = private unnamed_addr constant [125 x i8] c"(!(m_value >= x_minimum_valid_heap_address)) || (AsNoAssert<SystemHeapGcObjectHeader>()->m_type == TypeEnumForHeapObject<U>)\00", align 1
+@.str.5 = private unnamed_addr constant [17 x i8] c"drt/memory_ptr.h\00", align 1
+@__PRETTY_FUNCTION__._ZNK17SystemHeapPointerI14ExecutableCodeE2AsIS0_EEPU5AS256T_v.5 = private unnamed_addr constant [98 x i8] c"HeapPtr<U> SystemHeapPointer<ExecutableCode>::As() const [T = ExecutableCode, U = ExecutableCode]\00", align 1
+@__deegen_interpreter_dispatch_table = external dso_local local_unnamed_addr constant [0 x ptr], align 8
+
+; Function Attrs: mustprogress noinline noreturn nounwind uwtable
+declare dso_local void @_Z17FireReleaseAssertPKcS0_jS0_(ptr noundef, ptr noundef, i32 noundef, ptr noundef) local_unnamed_addr #0
+
+; Function Attrs: nounwind
+define dso_local ghccc void @__deegen_interpreter_op_test5_0_retcont_0(i64 %0, ptr nocapture readnone %1, i64 %2, ptr nocapture readonly %3, ptr nocapture readnone %4, ptr nocapture readonly %retStart, i64 %numRet, i64 %5, i64 %6, ptr %coroutineCtx, i64 %7, i64 %8, ptr nocapture readnone %9, double %10, double %11, double %12, double %13, double %14, double %15) #1 section "deegen_interpreter_code_section_hot" {
+  %17 = getelementptr inbounds i8, ptr %3, i64 -24
+  %18 = load ptr, ptr %17, align 8, !tbaa !2
+  %19 = getelementptr inbounds i8, ptr %3, i64 -8
+  %20 = load i32, ptr %19, align 4, !tbaa !9
+  %21 = load ptr, ptr addrspace(256) null, align 4294967296, !tbaa !10
+  %22 = getelementptr inbounds i8, ptr %18, i64 -32
+  %23 = load ptr addrspace(256), ptr %22, align 8, !tbaa !11
+  %.sroa.0.0.copyload.i = load i32, ptr addrspace(256) %23, align 1, !tbaa !12
+  %24 = icmp ugt i32 %.sroa.0.0.copyload.i, 63
+  %25 = zext i32 %.sroa.0.0.copyload.i to i64
+  br i1 %24, label %26, label %__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit
+
+26:                                               ; preds = %16
+  %27 = inttoptr i64 %25 to ptr addrspace(256)
+  %28 = load i8, ptr addrspace(256) %27, align 1, !tbaa !13
+  %29 = icmp eq i8 %28, 8
+  br i1 %29, label %__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit, label %30
+
+30:                                               ; preds = %26
+  tail call void @_Z17FireReleaseAssertPKcS0_jS0_(ptr noundef nonnull @.str.4.4, ptr noundef nonnull @.str.5, i32 noundef 211, ptr noundef nonnull @__PRETTY_FUNCTION__._ZNK17SystemHeapPointerI14ExecutableCodeE2AsIS0_EEPU5AS256T_v.5) #5
+  unreachable
+
+__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit: ; preds = %26, %16
+  %31 = tail call noundef ptr @_Z2d1v() #6
+  %32 = tail call noundef i64 @_Z2a1v() #6
+  %33 = icmp ugt i64 %32, %numRet
+  %.sroa.speculated.i = tail call i64 @llvm.umin.i64(i64 %numRet, i64 %32)
+  %34 = shl i64 %.sroa.speculated.i, 3
+  tail call void @llvm.memmove.p0.p0.i64(ptr align 8 %31, ptr readonly align 8 %retStart, i64 %34, i1 false)
+  br i1 %33, label %.preheader.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit
+
+.preheader.i:                                     ; preds = %.preheader.i, %__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit
+  %.014.reg2mem.0.i = phi i64 [ %36, %.preheader.i ], [ %numRet, %__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit ]
+  %35 = getelementptr inbounds i64, ptr %31, i64 %.014.reg2mem.0.i
+  store i64 %0, ptr %35, align 8, !tbaa !17
+  %36 = add nuw i64 %.014.reg2mem.0.i, 1
+  %exitcond.not.i = icmp eq i64 %36, %32
+  br i1 %exitcond.not.i, label %__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit, label %.preheader.i, !llvm.loop !19
+
+__DeegenImpl_CommonSnippetLib_StoreFirstKReturnValuesPaddingNil.exit: ; preds = %.preheader.i, %__DeegenImpl_CommonSnippetLib_GetCodeBlockFromStackBase.exit
+  %37 = ptrtoint ptr %21 to i64
+  %38 = add i64 %25, %37
+  %39 = inttoptr i64 %38 to ptr
+  %40 = zext i32 %20 to i64
+  %41 = add i64 %37, %40
+  %42 = inttoptr i64 %41 to ptr
+  %43 = getelementptr inbounds i8, ptr %42, i64 6
+  %44 = load i16, ptr %43, align 1
+  %45 = zext i16 %44 to i64
+  %46 = getelementptr inbounds [0 x ptr], ptr @__deegen_interpreter_dispatch_table, i64 0, i64 %45
+  %47 = load ptr, ptr %46, align 8
+  musttail call ghccc void %47(i64 %0, ptr %39, i64 %2, ptr %18, ptr nonnull %43, ptr undef, i64 undef, i64 undef, i64 undef, ptr %coroutineCtx, i64 undef, i64 undef, ptr undef, double undef, double undef, double undef, double undef, double undef, double undef) #6
+  ret void
+}
+
+declare dso_local noundef ptr @_Z2d1v() local_unnamed_addr #2
+
+declare dso_local noundef i64 @_Z2a1v() local_unnamed_addr #2
+
+; Function Attrs: mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare i64 @llvm.umin.i64(i64, i64) #3
+
+; Function Attrs: mustprogress nocallback nofree nounwind willreturn memory(argmem: readwrite)
+declare void @llvm.memmove.p0.p0.i64(ptr nocapture writeonly, ptr nocapture readonly, i64, i1 immarg) #4
+
+attributes #0 = { mustprogress noinline noreturn nounwind uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #1 = { nounwind "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #2 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #3 = { mustprogress nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #4 = { mustprogress nocallback nofree nounwind willreturn memory(argmem: readwrite) }
+attributes #5 = { noreturn }
+attributes #6 = { nounwind }
+
+!llvm.linker.options = !{}
+!llvm.module.flags = !{!0, !1}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!3, !4, i64 8}
+!3 = !{!"_ZTS16StackFrameHeader", !4, i64 0, !4, i64 8, !4, i64 16, !7, i64 24, !8, i64 28}
+!4 = !{!"any pointer", !5, i64 0}
+!5 = !{!"omnipotent char", !6, i64 0}
+!6 = !{!"Simple C++ TBAA"}
+!7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
+!8 = !{!"int", !5, i64 0}
+!9 = !{!7, !8, i64 0}
+!10 = !{!4, !4, i64 0}
+!11 = !{!3, !4, i64 0}
+!12 = !{!5, !5, i64 0}
+!13 = !{!14, !15, i64 0}
+!14 = !{!"_ZTS24SystemHeapGcObjectHeader", !15, i64 0, !16, i64 1}
+!15 = !{!"_ZTS14HeapEntityType", !5, i64 0}
+!16 = !{!"_ZTS11GcCellState", !5, i64 0}
+!17 = !{!18, !18, i64 0}
+!18 = !{!"long", !5, i64 0}
+!19 = distinct !{!19, !20, !21, !22}
+!20 = !{!"llvm.loop.mustprogress"}
+!21 = !{!"llvm.loop.unroll.disable"}
+!22 = !{!"llvm.loop.vectorize.width", i32 1}

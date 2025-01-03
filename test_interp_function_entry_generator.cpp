@@ -33,14 +33,51 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_t* bytecode, CodeBlock* codeBlock, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t /*unused4*/, uint64_t tagRegister2)
+void ResultChecker(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3,
+                   uint64_t arg4, uint64_t arg5, uint64_t arg6, uint64_t arg7,
+                   uint64_t arg8, uint64_t arg9, uint64_t arg10, uint64_t arg11,
+                   uint64_t arg12,
+                   double arg13, double arg14, double arg15, double arg16, double arg17, double arg18)
 {
-    ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
-    ReleaseAssert(tagRegister2 == TValue::x_mivTag);
+    std::vector<uint64_t> args;
+    args.push_back(arg0); args.push_back(arg1); args.push_back(arg2); args.push_back(arg3);
+    args.push_back(arg4); args.push_back(arg5); args.push_back(arg6); args.push_back(arg7);
+    args.push_back(arg8); args.push_back(arg9); args.push_back(arg10); args.push_back(arg11);
+    args.push_back(arg12);
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg13)); args.push_back(cxx2a_bit_cast<uint64_t>(arg14));
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg15)); args.push_back(cxx2a_bit_cast<uint64_t>(arg16));
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg17)); args.push_back(cxx2a_bit_cast<uint64_t>(arg18));
+
+    ReleaseAssert(args.size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
+
+    auto getValAsI64 = [&](X64Reg reg)
+    {
+        size_t argOrd = RegisterPinningScheme::GetArgumentOrdinalForRegister(reg);
+        ReleaseAssert(argOrd < args.size());
+        return args[argOrd];
+    };
+
+    auto checkValEqual = [&]<typename ValTy>(X64Reg reg, ValTy value)
+    {
+        ReleaseAssert(sizeof(ValTy) == 8);
+        uint8_t valBytes[8];
+        memcpy(valBytes, &value, 8);
+        uint64_t valI64 = UnalignedLoad<uint64_t>(valBytes);
+
+        ReleaseAssert(getValAsI64(reg) == valI64);
+    };
+
+    checkValEqual(RPV_TagRegister1::Reg(), TValue::x_int32Tag);
+    checkValEqual(RPV_TagRegister2::Reg(), TValue::x_mivTag);
+    checkValEqual(RPV_CoroContext::Reg(), g_expectedResult.m_expectedCoroCtx);
+    checkValEqual(RPV_CodeBlock::Reg(), g_expectedResult.m_expectedCodeBlock);
+    checkValEqual(RPV_CurBytecode::Reg(), g_expectedResult.m_expectedCodeBlock->m_bytecodeStream);
+
+    uint64_t* stackBase = reinterpret_cast<uint64_t*>(getValAsI64(RPV_StackBase::Reg()));
+
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
 
-    ReleaseAssert(g_expectedResult.m_expectedCoroCtx == coroCtx);
     StackFrameHeader* hdr = reinterpret_cast<StackFrameHeader*>(stackBase) - 1;
     ReleaseAssert(hdr->m_numVariadicArguments == g_expectedResult.m_expectedNumVarArgs);
     if (!g_expectedResult.m_calleeAcceptsVarArgs)
@@ -52,9 +89,6 @@ void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint8_
     {
         ReleaseAssert(g_expectedResult.m_previousCallFrameEnd == stackBase - x_numSlotsForStackFrameHeader - hdr->m_numVariadicArguments);
     }
-
-    ReleaseAssert(codeBlock == g_expectedResult.m_expectedCodeBlock);
-    ReleaseAssert(bytecode == reinterpret_cast<uint8_t*>(g_expectedResult.m_expectedCodeBlock->m_bytecodeStream));
 
     ReleaseAssert(reinterpret_cast<uint64_t>(hdr->m_func) == 12345678987654321ULL);
     ReleaseAssert(hdr->m_caller == g_expectedResult.m_callerStackFrameBase);
@@ -165,19 +199,46 @@ void TestOneCase(bool calleeAcceptsVarArgs, uint64_t numFixedArgs, bool isTailCa
 
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
 
-    using EntryFnType = void(*)(
-        CoroutineRuntimeContext* /*coroCtx*/,
-        uint64_t* /*sb*/,
-        uint64_t /*numArgs*/,
-        uint64_t /*cbHeapPtrAsU64*/,
-        uint64_t /*tagRegister1*/,
-        uint64_t /*unused*/,
-        uint64_t /*isMustTail64*/,
-        uint64_t /*unused*/,
-        uint64_t /*unused*/,
-        uint64_t /*tagRegister2*/);
+    std::vector<uint64_t> params;
+    params.resize(RegisterPinningScheme::GetFunctionTypeNumArguments(), 0 /*value*/);
+    auto setParam = [&]<typename ValTy>(X64Reg reg, ValTy value)
+    {
+        ReleaseAssert(sizeof(ValTy) == 8);
+        uint8_t valBytes[8];
+        memcpy(valBytes, &value, 8);
+        uint64_t valI64 = UnalignedLoad<uint64_t>(valBytes);
+
+        size_t argOrd = RegisterPinningScheme::GetArgumentOrdinalForRegister(reg);
+        ReleaseAssert(argOrd < params.size());
+        params[argOrd] = valI64;
+    };
+
     HeapPtr<CodeBlock> calleeCbHeapPtr = TranslateToHeapPtr(calleeCb);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, numProvidedArgs, reinterpret_cast<uint64_t>(calleeCbHeapPtr), TValue::x_int32Tag, 0, static_cast<uint64_t>(isTailCall), 0, 0, TValue::x_mivTag);
+
+    setParam(RPV_TagRegister1::Reg(), TValue::x_int32Tag);
+    setParam(RPV_TagRegister2::Reg(), TValue::x_mivTag);
+    setParam(RPV_CodeBlock::Reg(), calleeCbHeapPtr);
+    setParam(RPV_StackBase::Reg(), callerLocalsBegin);
+    setParam(RPV_NumArgsAsPtr::Reg(), numProvidedArgs);
+    setParam(RPV_IsMustTailCall::Reg(), static_cast<uint64_t>(isTailCall));
+    setParam(RPV_CoroContext::Reg(), coroCtx);
+
+    using EntryFnType = void(*)(
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t,
+        double, double, double, double, double, double);
+
+    ReleaseAssert(params.size() == 19);
+    reinterpret_cast<EntryFnType>(testFnAddr)(
+        params[0], params[1], params[2], params[3],
+        params[4], params[5], params[6], params[7],
+        params[8], params[9], params[10], params[11],
+        params[12],
+        cxx2a_bit_cast<double>(params[13]), cxx2a_bit_cast<double>(params[14]),
+        cxx2a_bit_cast<double>(params[15]), cxx2a_bit_cast<double>(params[16]),
+        cxx2a_bit_cast<double>(params[17]), cxx2a_bit_cast<double>(params[18]));
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }
@@ -192,7 +253,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
     Function* func = module->getFunction(ifi.GetFunctionName());
     ReleaseAssert(func != nullptr);
     ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
-    ReleaseAssert(func->arg_size() == 16);
+    ReleaseAssert(func->arg_size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
     func->setCallingConv(CallingConv::C);
 
     for (BasicBlock& bb : *func)
@@ -207,7 +268,7 @@ void TestModule(bool calleeAcceptsVarArgs, size_t specializedNumFixedParams)
                     ReleaseAssert(callInst->getCalledFunction() == nullptr ||
                                   callInst->getCalledFunction()->getName() == "__deegen_interpreter_tier_up_into_baseline_jit");
                     ReleaseAssert(callInst->isMustTailCall());
-                    ReleaseAssert(callInst->arg_size() == 16);
+                    ReleaseAssert(callInst->arg_size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
                     callInst->setCallingConv(CallingConv::C);
                 }
             }

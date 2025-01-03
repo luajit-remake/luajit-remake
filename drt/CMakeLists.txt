@@ -17,6 +17,10 @@ add_library(deegen_rt
 	dfg_construct_block_local_ssa.cpp
 	dfg_trivial_cfg_cleanup.cpp
 	dfg_phantom_insertion.cpp
+	dfg_codegen_register_renamer.cpp
+	dfg_slowpath_register_config_helper.cpp
+	deegen_internal_dfg_c_wrapper_shared_stub.s
+	jit_inline_cache_utils.cpp
 )
 
 add_dependencies(deegen_rt 

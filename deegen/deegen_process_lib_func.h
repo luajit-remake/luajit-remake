@@ -1,6 +1,7 @@
 #pragma once
 
 #include "misc_llvm_helper.h"
+#include "deegen_register_pinning_scheme.h"
 
 namespace dast
 {
@@ -27,6 +28,12 @@ public:
     llvm::Value* GetRetStart() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_retStart); }
     llvm::Value* GetNumRet() const { ReleaseAssert(m_isReturnContinuation); return m_valuePreserver.Get(x_numRet); }
 
+    ExecutorFunctionContext* GetFuncContext()
+    {
+        ReleaseAssert(m_funcCtx.get() != nullptr);
+        return m_funcCtx.get();
+    }
+
 private:
     static constexpr const char* x_coroutineCtx = "coroutineCtx";
     static constexpr const char* x_stackBase = "stackBase";
@@ -35,6 +42,7 @@ private:
     static constexpr const char* x_numRet = "numRet";
 
     LLVMValuePreserver m_valuePreserver;
+    std::unique_ptr<ExecutorFunctionContext> m_funcCtx;
     llvm::Module* m_module;
     llvm::Function* m_impl;
     llvm::Function* m_target;

@@ -13,7 +13,7 @@ PP_FOR_EACH(macro, WATCHPOINT_KIND_LIST)
 template<WatchpointEnumKind kind>
 void EmbeddedWatchpointOnFireDispatcher(HeapPtrTranslator translator, EmbeddedWatchpointNode* wp)
 {
-    assert(wp->GetKind() == kind);
+    Assert(wp->GetKind() == kind);
     constexpr size_t offset = x_watchpointClassOffsetForWatchpointKind[static_cast<size_t>(kind)];
     using T = WatchpointClassForWatchpointEnumKind<kind>;
     T* holder = reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(wp) - offset);
@@ -23,7 +23,7 @@ void EmbeddedWatchpointOnFireDispatcher(HeapPtrTranslator translator, EmbeddedWa
 template<WatchpointEnumKind kind>
 void EmbeddedWatchpointOnWatchpointSetDestructDispatcher(HeapPtrTranslator translator, EmbeddedWatchpointNode* wp)
 {
-    assert(wp->GetKind() == kind);
+    Assert(wp->GetKind() == kind);
     constexpr size_t offset = x_watchpointClassOffsetForWatchpointKind[static_cast<size_t>(kind)];
     using T = WatchpointClassForWatchpointEnumKind<kind>;
     T* holder = reinterpret_cast<T*>(reinterpret_cast<uint8_t*>(wp) - offset);
@@ -33,7 +33,7 @@ void EmbeddedWatchpointOnWatchpointSetDestructDispatcher(HeapPtrTranslator trans
 void EmbeddedWatchpointNode::OnFire(HeapPtrTranslator translator)
 {
     WatchpointEnumKind kind = GetKind();
-    assert(kind != WatchpointEnumKind::X_END_OF_ENUM);
+    Assert(kind != WatchpointEnumKind::X_END_OF_ENUM);
     switch (kind)
     {
 #define macro(ord, wpk)                                                             \
@@ -52,7 +52,7 @@ PP_FOR_EACH_UNPACK_TUPLE(macro, PP_ZIP_TWO_LISTS((PP_NATURAL_NUMBERS_LIST), (WAT
 void EmbeddedWatchpointNode::OnWatchpointSetDestruct(HeapPtrTranslator translator)
 {
     WatchpointEnumKind kind = GetKind();
-    assert(kind != WatchpointEnumKind::X_END_OF_ENUM);
+    Assert(kind != WatchpointEnumKind::X_END_OF_ENUM);
     switch (kind)
     {
 #define macro(ord, wpk)                                                                             \
@@ -70,7 +70,7 @@ PP_FOR_EACH_UNPACK_TUPLE(macro, PP_ZIP_TWO_LISTS((PP_NATURAL_NUMBERS_LIST), (WAT
 
 void WatchpointSet::InvalidateKnowingContainingOnlyOneWatchpoint()
 {
-    assert(WatchpointList::ContainsExactlyOneElement(&m_watchpoints));
+    Assert(WatchpointList::ContainsExactlyOneElement(&m_watchpoints));
     HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
     WatchpointNodeBase* wp = translator.TranslateToRawPtr(WatchpointList::GetAny(&m_watchpoints).AsPtr());
     SetStateToInvalidated(this);
@@ -84,7 +84,7 @@ void WatchpointSet::TriggerFireEvent()
 {
     HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
 
-    assert(IsWatched(this));
+    Assert(IsWatched(this));
     while (!WatchpointList::IsEmpty(&m_watchpoints))
     {
         WatchpointNodeBase* wp = translator.TranslateToRawPtr(WatchpointList::GetAny(&m_watchpoints).AsPtr());
@@ -97,7 +97,7 @@ void WatchpointSet::TriggerDestructionEvent()
 {
     HeapPtrTranslator translator = VM::GetActiveVMForCurrentThread()->GetHeapPtrTranslator();
 
-    assert(IsWatched(this));
+    Assert(IsWatched(this));
     while (!WatchpointList::IsEmpty(&m_watchpoints))
     {
         WatchpointNodeBase* wp = translator.TranslateToRawPtr(WatchpointList::GetAny(&m_watchpoints).AsPtr());

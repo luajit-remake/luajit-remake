@@ -331,7 +331,7 @@ static void FuseNaNAndCmpCheckIntoOne(llvm::Function* func)
                                 // We only proceed if the only content in 'bbIfOrdered' should be a fcmp followed by a branch,
                                 // in that case we know for certain that the flags register will survive to the end of the BB.
                                 //
-                                if (bbIfOrdered->getInstList().size() == 2)
+                                if (bbIfOrdered->sizeWithoutDebug() == 2)
                                 {
                                     Instruction* inst1 = &(*bbIfOrdered->begin());
                                     Instruction* inst2 = &(*(++(bbIfOrdered->begin())));

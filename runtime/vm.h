@@ -76,7 +76,7 @@ constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
     {
         for (size_t j = i + 1; j < x_totalLuaMetamethodKind; j++)
         {
-            assert(x_luaMetamethodHashes[i] != x_luaMetamethodHashes[j]);
+            Assert(x_luaMetamethodHashes[i] != x_luaMetamethodHashes[j]);
         }
     }
 
@@ -245,10 +245,10 @@ private:
     int32_t ALWAYS_INLINE WARN_UNUSED AllocMemory(uint32_t length)
     {
         static_assert(is_power_of_2(alignment) && alignment <= 32);
-        assert(m_curChunk <= 0 && length > 0 && length % alignment == 0);
+        Assert(m_curChunk <= 0 && length > 0 && length % alignment == 0);
 
         m_curChunk &= ~static_cast<int>(alignment - 1);
-        assert(m_curChunk % static_cast<int32_t>(alignment) == 0);
+        Assert(m_curChunk % static_cast<int32_t>(alignment) == 0);
         if (likely((static_cast<uint32_t>(m_curChunk) & (x_spdsAllocationPageSize - 1)) >= length))
         {
             m_curChunk -= length;
@@ -258,12 +258,12 @@ private:
         {
             int32_t oldChunk = (m_curChunk & (~static_cast<int>(x_spdsAllocationPageSize - 1))) + static_cast<int>(x_spdsAllocationPageSize);
             m_curChunk = m_host->SpdsAllocatePage();
-            assert(m_curChunk <= 0);
+            Assert(m_curChunk <= 0);
             if (oldChunk > 0)
             {
                 m_lastChunkInTheChain = m_curChunk;
             }
-            assert(m_curChunk % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+            Assert(m_curChunk % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
             if constexpr(isTempAlloc)
             {
                 m_curChunk -= 4;
@@ -307,7 +307,7 @@ constexpr uint32_t x_maxInlineCapacity = 253;
 //
 constexpr uint8_t ComputeOptimalInlineStorageCapacity(uint8_t elementToHold)
 {
-    assert(elementToHold <= x_maxInlineCapacity);
+    Assert(elementToHold <= x_maxInlineCapacity);
     // A simple heuristic:
     // If the object contains at least one (but not zero) property, then it's likely more are coming.
     // So give it at least a few more inline slots
@@ -324,7 +324,7 @@ constexpr uint8_t ComputeOptimalInlineStorageCapacity(uint8_t elementToHold)
     //
     r32 -= 2;
     r32 = std::min(r32, x_maxInlineCapacity);
-    assert(r32 >= elementToHold);
+    Assert(r32 >= elementToHold);
     return static_cast<uint8_t>(r32);
 }
 
@@ -334,12 +334,12 @@ constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeOptimalInlineStora
     for (uint8_t i = 0; i <= x_maxInlineCapacity; i++)
     {
         r[i] = ComputeOptimalInlineStorageCapacity(i);
-        assert(r[i] >= i);
+        Assert(r[i] >= i);
         AssertImp(i > 0, r[i] >= r[i-1]);
     }
     for (uint8_t i = 0; i <= x_maxInlineCapacity; i++)
     {
-        assert(r[r[i]] == r[i]);
+        Assert(r[r[i]] == r[i]);
     }
     return r;
 }
@@ -474,7 +474,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
     static void SetReservedWord(T self, uint8_t reservedId)
     {
-        assert(reservedId + 1 <= 63);
+        Assert(reservedId + 1 <= 63);
         uint8_t arrTy = ArrayType::x_invalidArrayType + reservedId + 1;
         TCSet(self->m_invalidArrayType, arrTy);
     }
@@ -488,10 +488,10 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, HeapString>>>
     static uint8_t WARN_UNUSED GetReservedWordOrdinal(T self)
     {
-        assert(IsReservedWord(self));
-        assert(self->m_invalidArrayType > ArrayType::x_invalidArrayType);
+        Assert(IsReservedWord(self));
+        Assert(self->m_invalidArrayType > ArrayType::x_invalidArrayType);
         uint8_t ord = static_cast<uint8_t>(self->m_invalidArrayType - ArrayType::x_invalidArrayType - 1);
-        assert(ord + 1 <= 63);
+        Assert(ord + 1 <= 63);
         return ord;
     }
 };
@@ -541,7 +541,7 @@ public:
 
     SpdsAllocImpl<VM, false /*isTempAlloc*/>& WARN_UNUSED GetSpdsAllocForCurrentThread()
     {
-        assert(!IsGCThread());
+        Assert(!IsGCThread());
         if (IsCompilerThread())
         {
             return GetCompilerThreadSpdsAlloc();
@@ -592,7 +592,7 @@ public:
     //
     UserHeapPointer<void> WARN_UNUSED AllocFromUserHeap(uint32_t length)
     {
-        assert(length > 0 && length % 8 == 0);
+        Assert(length > 0 && length % 8 == 0);
         // TODO: we currently do not have GC, so it's only a bump allocator..
         //
         m_userHeapCurPtr -= static_cast<int64_t>(length);
@@ -608,7 +608,7 @@ public:
     //
     SystemHeapPointer<void> WARN_UNUSED AllocFromSystemHeap(uint32_t length)
     {
-        assert(length > 0 && length % 8 == 0);
+        Assert(length > 0 && length % 8 == 0);
         // TODO: we currently do not have GC, so it's only a bump allocator..
         //
         uint32_t result = m_systemHeapCurPtr;
@@ -631,7 +631,7 @@ public:
         static_assert(!x_spdsAllocatableClassUseLfFreelist<T>, "unimplemented yet");
         if constexpr(!x_spdsAllocatableClassUseLfFreelist<T>)
         {
-            assert(!IsGCThread());
+            Assert(!IsGCThread());
             SpdsPtr<void>& freelist = IsCompilerThread() ?
                         m_spdsCompilerThreadFreeList[x_spdsAllocatableClassOrdinal<T>] :
                         m_spdsExecutionThreadFreeList[x_spdsAllocatableClassOrdinal<T>];
@@ -667,7 +667,7 @@ public:
         }
         if constexpr(!x_spdsAllocatableClassUseLfFreelist<T>)
         {
-            assert(!IsGCThread());
+            Assert(!IsGCThread());
             SpdsPtr<void>& freelist = IsCompilerThread() ?
                         m_spdsCompilerThreadFreeList[x_spdsAllocatableClassOrdinal<T>] :
                         m_spdsExecutionThreadFreeList[x_spdsAllocatableClassOrdinal<T>];
@@ -789,7 +789,7 @@ public:
     void ALWAYS_INLINE InitializeLibFn(TValue val)
     {
         static_assert(fn != LibFn::X_END_OF_ENUM);
-        assert(val.Is<tFunction>() || val.Is<tTable>());
+        Assert(val.Is<tFunction>() || val.Is<tTable>());
         m_vmLibFunctionObjects[static_cast<size_t>(fn)] = val;
     }
 
@@ -828,7 +828,7 @@ public:
         {
             return -1;
         }
-        assert(static_cast<size_t>(ord) < x_totalLuaMetamethodKind);
+        Assert(static_cast<size_t>(ord) < x_totalLuaMetamethodKind);
         if (likely(m_stringNameForMetatableKind[static_cast<size_t>(ord)] == stringName))
         {
             return ord;
@@ -941,7 +941,7 @@ private:
     uintptr_t VMBaseAddress() const
     {
         uintptr_t result = reinterpret_cast<uintptr_t>(this);
-        assert(result == m_self);
+        Assert(result == m_self);
         return result;
     }
 
@@ -954,7 +954,7 @@ private:
         while (true)
         {
             int32_t head = BitwiseTruncateTo<int32_t>(taggedValue);
-            assert(head % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+            Assert(head % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
             if (head == x_spdsAllocationPageSize)
             {
                 return false;
@@ -963,7 +963,7 @@ private:
 
             std::atomic<int32_t>* addr = reinterpret_cast<std::atomic<int32_t>*>(VMBaseAddress() + SignExtendTo<uint64_t>(head) - 4);
             int32_t newHead = addr->load(std::memory_order_relaxed);
-            assert(newHead % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+            Assert(newHead % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
             tag++;
             uint64_t newTaggedValue = (static_cast<uint64_t>(tag) << 32) | ZeroExtendTo<uint64_t>(newHead);
 
@@ -1022,7 +1022,7 @@ private:
     static std::mt19937* WARN_UNUSED NO_INLINE GetUserPRNGSlow()
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
-        assert(vm->m_usrPRNG == nullptr);
+        Assert(vm->m_usrPRNG == nullptr);
         vm->m_usrPRNG = new std::mt19937();
         return vm->m_usrPRNG;
     }

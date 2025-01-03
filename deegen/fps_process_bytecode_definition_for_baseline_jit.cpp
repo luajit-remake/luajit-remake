@@ -11,23 +11,20 @@
 #include "llvm_identical_function_merger.h"
 #include "deegen_global_bytecode_trait_accessor.h"
 #include "deegen_jit_slow_path_data.h"
+#include "json_parse_dump.h"
 
 using namespace dast;
-
-constexpr const char* x_baselineJitSlowPathSectionName = "deegen_baseline_jit_slow_path_section";
-constexpr const char* x_baselineJitCodegenFnSectionName = "deegen_baseline_jit_codegen_fn_section";
 
 void FPS_ProcessBytecodeDefinitionForBaselineJit()
 {
     using namespace llvm;
-    using json_t = nlohmann::json;  // unfortunately the name 'json' collides with LLVM's json...
     std::unique_ptr<LLVMContext> llvmCtxHolder = std::make_unique<llvm::LLVMContext>();
     LLVMContext& ctx = *llvmCtxHolder.get();
 
     std::string inputFileName = cl_jsonInputFilename;
     ReleaseAssert(inputFileName != "");
 
-    json_t inputJson = json_t::parse(ReadFileContentAsString(cl_jsonInputFilename));
+    json_t inputJson = ParseJsonFromFileName(cl_jsonInputFilename);
 
     BytecodeOpcodeRawValueMap byOpMap = BytecodeOpcodeRawValueMap::ParseFromCommandLineArgs();
     DeegenGlobalBytecodeTraitAccessor bcTraitAccessor = DeegenGlobalBytecodeTraitAccessor::ParseFromCommandLineArgs();
@@ -36,7 +33,8 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
     json_t& bytecodeInfoListJson = inputJson["all-bytecode-info"];
     ReleaseAssert(bytecodeInfoListJson.is_array());
 
-    std::vector<std::unique_ptr<Module>> moduleToLink;
+    ReleaseAssert(cl_jsonOutputFilename != "");
+    TransactionalOutputFile jsonOutput(cl_jsonOutputFilename);
 
     ReleaseAssert(cl_headerOutputFilename != "");
     TransactionalOutputFile hdrOutput(cl_headerOutputFilename);
@@ -44,35 +42,9 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
     FPS_EmitHeaderFileCommonHeader(hdrFp);
     fprintf(hdrFp, "#include \"drt/baseline_jit_codegen_helper.h\"\n\n");
 
-    // The list of functions that are safe to merge if identical. Currently this only means return continuations.
-    //
-    // TODO: we can also merge identical bytecode main functions, but that would require a bit more work since:
-    // (1) We need to make sure that the InterpreterDispatchTableBuilder is aware of this and builds the correct dispatch table.
-    // (2) We want to handle the case where two functions are identical except that they store different return continuation
-    //     functions (which is a common pattern), in which case we likely still want to merge the function, but we will need to
-    //     do some transform so that the merged function picks up the correct return continuation based on the opcode.
-    // This would require some work, so we leave it to the future.
-    //
-    std::vector<std::string> listOfFunctionsOkToMerge;
-
-    // We need to make sure that all the external symbols used by the JIT logic are local to the linkage unit
-    // (e.g., if the symbol is from a dynamic library, we must use its PLT address which resides in the first 2GB address range,
-    // not the real address in the dynamic library) to satisfy our small CodeModel assumption.
-    //
-    // However, it turns out that LLVM optimizer can sometimes introduce new symbols that does not have dso_local set
-    // (for example, it may rewrite 'fprintf' of a literal string to 'fwrite', and the 'fwrite' declaration is not dso_local).
-    //
-    // And it seems like if two LLVM modules are linked together using LLVM linker, a declaration would become non-dso_local
-    // if *either* module's declaration is not dso_local.
-    //
-    // So we record all the symbols needed to be made dso_local here, and after all LLVM linker work finishes, we scan the
-    // final module and change all those symbols dso_local.
-    //
-    std::unordered_set<std::string> fnNamesNeedToBeMadeDsoLocal;
-
-    // For assertion purpose only
-    //
-    std::vector<std::string> bytecodeOriginalImplFunctionNames;
+    std::vector<std::unique_ptr<Module>> allCodegenModules;
+    std::vector<std::pair<std::string /*funcName*/, std::unique_ptr<Module>>> allSlowPathModules;
+    std::vector<std::pair<std::string /*funcName*/, std::unique_ptr<Module>>> allRetContModules;
 
     for (size_t bytecodeDefOrd = 0; bytecodeDefOrd < bytecodeInfoListJson.size(); bytecodeDefOrd++)
     {
@@ -82,8 +54,6 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         bii.m_bytecodeDef->ComputeBaselineJitSlowPathDataLayout();
 
         DeegenProcessBytecodeForBaselineJitResult res = DeegenProcessBytecodeForBaselineJitResult::Create(&bii, bcTraitAccessor);
-
-        bytecodeOriginalImplFunctionNames.push_back(bii.m_bytecodeDef->m_implFunctionName);
 
         // Emit C++ code that populates the dispatch table entries
         //
@@ -119,7 +89,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             fprintf(hdrFp, "    .m_dataSectionCodeLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_dataSectionCodeLen));
             ReleaseAssert(res.m_baselineJitInfo.m_slowPathDataLen <= 65535);
             fprintf(hdrFp, "    .m_slowPathDataLen = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_slowPathDataLen));
-            ReleaseAssert(res.m_baselineJitInfo.m_dataSectionAlignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+            ReleaseAssert(res.m_baselineJitInfo.m_dataSectionAlignment <= x_jitMaxPossibleDataSectionAlignment);
             ReleaseAssert(is_power_of_2(res.m_baselineJitInfo.m_dataSectionAlignment));
             fprintf(hdrFp, "    .m_dataSectionAlignment = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_dataSectionAlignment));
             ReleaseAssert(res.m_baselineJitInfo.m_numCondBrLatePatches <= 65535);
@@ -127,7 +97,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
             fprintf(hdrFp, "    .m_bytecodeLength = %llu,\n", static_cast<unsigned long long>(bytecodeStructLength));
             ReleaseAssert(res.m_baselineJitInfo.m_numCondBrLatePatches <= 255);
             fprintf(hdrFp, "    .m_numCondBrLatePatches = %llu,\n", static_cast<unsigned long long>(res.m_baselineJitInfo.m_numCondBrLatePatches));
-            size_t numCallIcSites = res.m_bytecodeDef->GetNumCallICsInJitTier();
+            size_t numCallIcSites = res.m_bytecodeDef->GetNumCallICsInBaselineJitTier();
             ReleaseAssert(numCallIcSites <= 255);
             fprintf(hdrFp, "    .m_numCallIcSites = %llu,\n", static_cast<unsigned long long>(numCallIcSites));
             size_t callIcSiteOffsetInSlowPathData;
@@ -140,7 +110,8 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
                 callIcSiteOffsetInSlowPathData = 0;
             }
             ReleaseAssert(callIcSiteOffsetInSlowPathData <= 65535);
-            fprintf(hdrFp, "    .m_callIcSiteOffsetInSlowPathData = %llu\n", static_cast<unsigned long long>(callIcSiteOffsetInSlowPathData));
+            fprintf(hdrFp, "    .m_callIcSiteOffsetInSlowPathData = %llu\n,", static_cast<unsigned long long>(callIcSiteOffsetInSlowPathData));
+            fprintf(hdrFp, "    .m_unused = 0\n");
             fprintf(hdrFp, "};\n");
 
             for (size_t k = start; k < end; k++)
@@ -153,7 +124,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         // Emit C++ code that populates the Call IC trait table entries
         //
         {
-            using CallIcTraitDesc = DeegenBytecodeBaselineJitInfo::CallIcTraitDesc;
+            using CallIcTraitDesc = JitCodeGenLogicCreator::CallIcTraitDesc;
             std::vector<CallIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allCallIcTraitDescs;
             size_t icTraitTableLength = bcTraitAccessor.GetJitCallIcTraitTableLength();
             for (CallIcTraitDesc& icTrait : icTraitList)
@@ -191,7 +162,7 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         // Emit C++ code that populates the allocation length stepping table of generic IC
         //
         {
-            using GenericIcTraitDesc = AstInlineCache::BaselineJitFinalLoweringResult::TraitDesc;
+            using GenericIcTraitDesc = AstInlineCache::JitFinalLoweringResult::TraitDesc;
 
             std::vector<GenericIcTraitDesc> icTraitList = res.m_baselineJitInfo.m_allGenericIcTraitDescs;
             size_t icTraitTableLength = bcTraitAccessor.GetJitGenericIcEffectTraitTableLength();
@@ -220,39 +191,25 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         {
             Function* fn = m.m_module->getFunction(m.m_funcName);
             ReleaseAssert(fn != nullptr);
-            fn->setSection(x_baselineJitSlowPathSectionName);
-            moduleToLink.push_back(std::move(m.m_module));
+            fn->setSection(BaselineJitImplCreator::x_slowPathSectionName);
+            allSlowPathModules.push_back(std::make_pair(fn->getName().str(), std::move(m.m_module)));
         }
 
         for (auto& m : res.m_aotSlowPathReturnConts)
         {
             Function* fn = m.m_module->getFunction(m.m_funcName);
             ReleaseAssert(fn != nullptr);
-            fn->setSection(x_baselineJitSlowPathSectionName);
-            // Return continuations are also mergeable if identical
-            //
-            listOfFunctionsOkToMerge.push_back(m.m_funcName);
-            moduleToLink.push_back(std::move(m.m_module));
+            fn->setSection(BaselineJitImplCreator::x_slowPathSectionName);
+            allRetContModules.push_back(std::make_pair(fn->getName().str(), std::move(m.m_module)));
         }
+
+        ReleaseAssert(res.m_baselineJitInfo.m_cgMod->getFunction(res.m_baselineJitInfo.m_resultFuncName) != nullptr);
 
         // Compile the main codegen function module to ASM for audit purpose
         //
         std::string cgFnAsmForAudit = CompileLLVMModuleToAssemblyFile(res.m_baselineJitInfo.m_cgMod.get(), Reloc::Static, CodeModel::Small);
 
-        // Set up section name for main codegen function
-        //
-        {
-            Function* fn = res.m_baselineJitInfo.m_cgMod->getFunction(res.m_baselineJitInfo.m_resultFuncName);
-            ReleaseAssert(fn != nullptr);
-            fn->setSection(x_baselineJitCodegenFnSectionName);
-        }
-
-        for (Function& fn : *res.m_baselineJitInfo.m_cgMod.get())
-        {
-            fnNamesNeedToBeMadeDsoLocal.insert(fn.getName().str());
-        }
-
-        moduleToLink.push_back(std::move(res.m_baselineJitInfo.m_cgMod));
+        allCodegenModules.push_back(std::move(res.m_baselineJitInfo.m_cgMod));
 
         // Write the codegen logic audit file
         //
@@ -309,103 +266,51 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit()
         }
     }
 
-    // Parse the origin module and each additional module generated from the interpreter lowering stage
-    //
-    auto getModuleFromBase64EncodedString = [&](const std::string& str)
-    {
-        return ParseLLVMModuleFromString(ctx, "bytecode_ir_component_module" /*moduleName*/, base64_decode(str));
-    };
-
-    std::unique_ptr<Module> module = getModuleFromBase64EncodedString(JSONCheckedGet<std::string>(inputJson, "reference_module"));
-
-    ReleaseAssert(inputJson.count("bytecode_module_list"));
-    json_t& listOfInterpreterLoweringModules = inputJson["bytecode_module_list"];
-    ReleaseAssert(listOfInterpreterLoweringModules.is_array());
-    for (size_t i = 0; i < listOfInterpreterLoweringModules.size(); i++)
-    {
-        json_t& val = listOfInterpreterLoweringModules[i];
-        ReleaseAssert(val.is_string());
-        std::unique_ptr<Module> m = getModuleFromBase64EncodedString(val.get<std::string>());
-        moduleToLink.push_back(std::move(m));
-    }
-
-    // Remove the 'used' attribute of the bytecode definition globals, this should make all the implementation functions dead
-    //
-    BytecodeVariantDefinition::RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(module.get());
-
-    // Link in all the post-processed bytecode function modules
+    // Store JSON output file that contains all the generated logic for baseline JIT
     //
     {
-        DeegenPostProcessModuleLinker modLinker(std::move(module));
-        for (size_t i = 0; i < moduleToLink.size(); i++)
+        json_t j = json_t::object();
         {
-            modLinker.AddModule(std::move(moduleToLink[i]));
+            json_t list = json_t::array();
+            for (auto& m : allCodegenModules)
+            {
+                list.push_back(base64_encode(DumpLLVMModuleAsString(m.get())));
+            }
+            j["all_codegen_modules"] = std::move(list);
         }
-        modLinker.AddWhitelistedNewlyIntroducedGlobalVar("__deegen_interpreter_dispatch_table");
-        modLinker.AddWhitelistedNewlyIntroducedGlobalVar("__deegen_baseline_jit_codegen_dispatch_table");
-        module = modLinker.DoLinking();
-    }
-
-    for (const std::string& fnName : fnNamesNeedToBeMadeDsoLocal)
-    {
-        Function* fn = module->getFunction(fnName);
-        ReleaseAssert(fn != nullptr);
-        fn->setDSOLocal(true);
-    }
-
-    // Add the list of return continuations from interpreter lowering to mergeable functions list
-    //
-    ReleaseAssert(inputJson.count("return-cont-name-list"));
-    json_t& listOfReturnContFnNamesFromInterpreterLowering = inputJson["return-cont-name-list"];
-    ReleaseAssert(listOfReturnContFnNamesFromInterpreterLowering.is_array());
-    for (size_t i = 0; i < listOfReturnContFnNamesFromInterpreterLowering.size(); i++)
-    {
-        json_t& val = listOfReturnContFnNamesFromInterpreterLowering[i];
-        ReleaseAssert(val.is_string());
-        listOfFunctionsOkToMerge.push_back(val.get<std::string>());
-    }
-
-    // Try to merge identical return continuations
-    //
-    {
-        LLVMIdenticalFunctionMerger ifm;
-        ifm.SetSectionPriority(InterpreterBytecodeImplCreator::x_cold_code_section_name, 100);
-        ifm.SetSectionPriority(x_baselineJitSlowPathSectionName, 110);
-        ifm.SetSectionPriority("", 200);
-        ifm.SetSectionPriority(InterpreterBytecodeImplCreator::x_hot_code_section_name, 300);
-        for (const std::string& fnName : listOfFunctionsOkToMerge)
         {
-            Function* fn = module->getFunction(fnName);
-            ReleaseAssert(fn != nullptr);
-            ifm.AddFunction(fn);
+            json_t list = json_t::array();
+            for (auto& it : allSlowPathModules)
+            {
+                json_t element = json_t::object();
+                element["function_name"] = it.first;
+                element["base64_module"] = base64_encode(DumpLLVMModuleAsString(it.second.get()));
+                list.push_back(std::move(element));
+            }
+            j["all_aot_slow_paths"] = std::move(list);
         }
-        ifm.DoMerge();
-    }
-
-    // Assert that the bytecode definition symbols, and all the implementation functions are gone
-    //
-    BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(module.get());
-    for (auto& fnName : bytecodeOriginalImplFunctionNames)
-    {
-        ReleaseAssert(module->getNamedValue(fnName) == nullptr);
-    }
-
-    ReleaseAssert(cl_assemblyOutputFilename != "");
-    TransactionalOutputFile asmOutFile(cl_assemblyOutputFilename);
-
-    {
-        std::string contents = CompileLLVMModuleToAssemblyFile(module.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
-        asmOutFile.write(contents);
+        {
+            json_t list = json_t::array();
+            for (auto& it : allRetContModules)
+            {
+                json_t element = json_t::object();
+                element["function_name"] = it.first;
+                element["base64_module"] = base64_encode(DumpLLVMModuleAsString(it.second.get()));
+                list.push_back(std::move(element));
+            }
+            j["all_aot_return_continuations"] = std::move(list);
+        }
+        jsonOutput.write(SerializeJsonWithIndent(j, 4 /*indent*/));
     }
 
     hdrOutput.Commit();
-    asmOutFile.Commit();
+    jsonOutput.Commit();
 }
 
 static std::unique_ptr<llvm::Module> WARN_UNUSED GenerateBaselineJitHelperLogic(llvm::LLVMContext& ctx)
 {
     using namespace llvm;
-    std::unique_ptr<Module> module = std::make_unique<Module>("baseline_jit_helper_logic", ctx);
+    std::unique_ptr<Module> module = RegisterPinningScheme::CreateModule("baseline_jit_helper_logic", ctx);
 
     DeegenGenerateBaselineJitCompilerCppEntryFunction(module.get());
     DeegenGenerateBaselineJitCodegenFinishFunction(module.get());
@@ -573,16 +478,16 @@ void FPS_GenerateBytecodeOpcodeTraitTable()
 
     BytecodeOpcodeRawValueMap byOpMap = BytecodeOpcodeRawValueMap::ParseFromCommandLineArgs();
 
-    std::vector<json> allJsonInputs;
+    std::vector<json_t> allJsonInputs;
     for (auto& fileName : jsonFileNameList)
     {
-        allJsonInputs.push_back(json::parse(ReadFileContentAsString(fileName)));
+        allJsonInputs.push_back(ParseJsonFromFileName(fileName));
     }
 
     DeegenGlobalBytecodeTraitAccessor gbta = DeegenGlobalBytecodeTraitAccessor::Build(byOpMap, allJsonInputs);
 
     ReleaseAssert(cl_jsonOutputFilename != "");
     TransactionalOutputFile outFile(cl_jsonOutputFilename);
-    outFile.write(gbta.SaveToJson().dump(4 /*indent*/));
+    outFile.write(SerializeJsonWithIndent(gbta.SaveToJson(), 4 /*indent*/));
     outFile.Commit();
 }

@@ -35,7 +35,7 @@ public:
 
     void Update(char* newCurPtr)
     {
-        assert(m_bufferCur <= newCurPtr && newCurPtr <= m_bufferEnd);
+        Assert(m_bufferCur <= newCurPtr && newCurPtr <= m_bufferEnd);
         m_bufferCur = newCurPtr;
     }
 
@@ -68,7 +68,7 @@ public:
 
     size_t Len()
     {
-        assert(m_bufferCur >= m_bufferBegin);
+        Assert(m_bufferCur >= m_bufferBegin);
         return static_cast<size_t>(m_bufferCur - m_bufferBegin);
     }
 

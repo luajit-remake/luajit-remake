@@ -20,7 +20,7 @@ public:
         SpdsOrSystemHeapPtr<Node> prev = TCGet(self->m_prevNode);
 #ifndef NDEBUG
         SpdsOrSystemHeapPtr<Node> next = TCGet(self->m_nextNode);
-        assert(prev.IsInvalidPtr() == next.IsInvalidPtr());
+        Assert(prev.IsInvalidPtr() == next.IsInvalidPtr());
 #endif
         return !prev.IsInvalidPtr();
     }
@@ -30,7 +30,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, CRTP>>>
     static void RemoveFromDoublyLinkedList(T nodeToRemove)
     {
-        assert(IsOnDoublyLinkedList(nodeToRemove));
+        Assert(IsOnDoublyLinkedList(nodeToRemove));
 
         SpdsOrSystemHeapPtr<Node> prev = TCGet(nodeToRemove->m_prevNode);
         SpdsOrSystemHeapPtr<Node> next = TCGet(nodeToRemove->m_nextNode);
@@ -41,7 +41,7 @@ public:
         TCSet(nodeToRemove->m_prevNode, SpdsOrSystemHeapPtr<Node> { 0 });
         TCSet(nodeToRemove->m_nextNode, SpdsOrSystemHeapPtr<Node> { 0 });
 
-        assert(!IsOnDoublyLinkedList(nodeToRemove));
+        Assert(!IsOnDoublyLinkedList(nodeToRemove));
     }
 
     void RemoveFromDoublyLinkedList() { RemoveFromDoublyLinkedList(static_cast<CRTP*>(this)); }
@@ -73,16 +73,16 @@ public:
 
     bool IsEmpty()
     {
-        assert(!m_anchor.m_prevNode.IsInvalidPtr());
-        assert(!m_anchor.m_nextNode.IsInvalidPtr());
+        Assert(!m_anchor.m_prevNode.IsInvalidPtr());
+        Assert(!m_anchor.m_nextNode.IsInvalidPtr());
         AssertIff(m_anchor.m_prevNode == &m_anchor, m_anchor.m_nextNode == &m_anchor);
         return m_anchor.m_prevNode == &m_anchor;
     }
 
     void InsertAtHead(CRTP* p)
     {
-        assert(!m_anchor.m_prevNode.IsInvalidPtr());
-        assert(!m_anchor.m_nextNode.IsInvalidPtr());
+        Assert(!m_anchor.m_prevNode.IsInvalidPtr());
+        Assert(!m_anchor.m_nextNode.IsInvalidPtr());
         AssertIsSpdsPointer(p);
 
         SpdsOrSystemHeapPtr<Node> head = m_anchor.m_nextNode;

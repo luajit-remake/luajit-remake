@@ -1,6 +1,7 @@
 #include "deegen_ast_simple_lowering_utils.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "deegen_baseline_jit_impl_creator.h"
+#include "deegen_dfg_jit_impl_creator.h"
 
 namespace dast {
 
@@ -50,10 +51,9 @@ static DeegenAbstractSimpleApiLoweringPass* WARN_UNUSED GetPassHandlerMaybeNull(
 }
 
 template<typename Functor>
-static void ForEachUseOfDeegenSimpleApi(llvm::Function* func, const Functor& action)
+static void ForEachUseOfDeegenSimpleApiImpl(std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>>& passes, llvm::Function* func, const Functor& action)
 {
     using namespace llvm;
-    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = DeegenAllSimpleApiLoweringPasses::GetAllPasses();
     std::vector<std::pair<DeegenAbstractSimpleApiLoweringPass*, CallInst*>> allUsesInFunction;
     for (BasicBlock& bb : *func)
     {
@@ -86,10 +86,17 @@ static void ForEachUseOfDeegenSimpleApi(llvm::Function* func, const Functor& act
     }
 }
 
+template<typename Functor>
+static void ForEachUseOfDeegenSimpleApiImpl(llvm::Function* func, const Functor& action)
+{
+    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = DeegenAllSimpleApiLoweringPasses::GetAllPasses();
+    ForEachUseOfDeegenSimpleApiImpl(passes, func, action);
+}
+
 void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecodeImplCreator* ifi, llvm::Function* func)
 {
     using namespace llvm;
-    ForEachUseOfDeegenSimpleApi(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
+    ForEachUseOfDeegenSimpleApiImpl(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
         handler->DoLoweringForInterpreter(ifi, origin);
     });
 }
@@ -97,8 +104,37 @@ void DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(InterpreterBytecod
 void DeegenAllSimpleApiLoweringPasses::LowerAllForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func)
 {
     using namespace llvm;
-    ForEachUseOfDeegenSimpleApi(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
+    ForEachUseOfDeegenSimpleApiImpl(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
         handler->DoLoweringForBaselineJIT(ifi, origin);
+    });
+}
+
+void DeegenAllSimpleApiLoweringPasses::LowerAllForDfgJIT(DfgJitImplCreator* ifi, llvm::Function* func)
+{
+    using namespace llvm;
+    ForEachUseOfDeegenSimpleApiImpl(func, [&](DeegenAbstractSimpleApiLoweringPass* handler, CallInst* origin) {
+        handler->DoLoweringForDfgJIT(ifi, origin);
+    });
+}
+
+void ForEachUseOfDeegenSimpleApi(llvm::Function* func, const DeegenSimpleApiUseHandler& action)
+{
+    std::vector<std::unique_ptr<DeegenAbstractSimpleApiLoweringPass>> passes = DeegenAllSimpleApiLoweringPasses::GetAllPasses();
+
+    // This relies on that GetAllPasses() pushes all the passes in the order they are listed. Sort of fragile, but should be fine..
+    //
+    std::unordered_map<DeegenAbstractSimpleApiLoweringPass*, DeegenSimpleApiLoweringPassName> nameMap;
+#define macro(passName)                                                                                                             \
+    ReleaseAssert(static_cast<size_t>(DeegenSimpleApiLoweringPassName::passName) < passes.size());                                  \
+    nameMap[passes[static_cast<size_t>(DeegenSimpleApiLoweringPassName::passName)].get()] = DeegenSimpleApiLoweringPassName::passName;
+
+    PP_FOR_EACH(macro, DEEGEN_ALL_SIMPLE_API_LOWERING_PASS_NAMES)
+#undef macro
+
+    ReleaseAssert(nameMap.size() == passes.size());
+    ForEachUseOfDeegenSimpleApiImpl(passes, func, [&](DeegenAbstractSimpleApiLoweringPass* handler, llvm::CallInst* origin) {
+        ReleaseAssert(nameMap.count(handler));
+        action(nameMap[handler], handler, origin);
     });
 }
 
@@ -108,6 +144,16 @@ void DeegenAbstractSimpleApiLoweringPass::DoLoweringForInterpreter(InterpreterBy
 }
 
 void DeegenAbstractSimpleApiLoweringPass::DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, llvm::CallInst* origin)
+{
+    DoLoweringForJIT(ifi, origin);
+}
+
+void DeegenAbstractSimpleApiLoweringPass::DoLoweringForDfgJIT(DfgJitImplCreator* ifi, llvm::CallInst* origin)
+{
+    DoLoweringForJIT(ifi, origin);
+}
+
+void DeegenAbstractSimpleApiLoweringPass::DoLoweringForJIT(JitImplCreatorBase* ifi, llvm::CallInst* origin)
 {
     DoLowering(ifi, origin);
 }

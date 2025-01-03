@@ -63,8 +63,10 @@ void DeegenStencilFixupCrossRefHelper::RunOnFunction(llvm::Function* mainFn, llv
 
         ReleaseAssert(isa<ConstantExpr>(cst));
         ConstantExpr* ce = cast<ConstantExpr>(cst);
-        Instruction* inst = ce->getAsInstruction(insertBefore);
+        Instruction* inst = ce->getAsInstruction();
         ReleaseAssert(inst != nullptr);
+        ReleaseAssert(insertBefore != nullptr);
+        inst->insertBefore(insertBefore);
 
         // Expanding ConstantExpr should never result in cycle. Fire assert if a cycle is detected.
         //

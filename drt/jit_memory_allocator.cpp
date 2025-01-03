@@ -8,7 +8,7 @@ void JitMemoryLargeAllocationHeader::Destroy()
     DoublyLink* prev = m_link.prev;
     next->prev = prev;
     prev->next = next;
-    assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
+    Assert(reinterpret_cast<uint64_t>(this) % x_pageSize == 0);
     do_munmap(this, GetSize());
 }
 
@@ -19,20 +19,20 @@ JitMemoryPageHeader* WARN_UNUSED JitMemoryAllocator::AllocateUninitalizedPage()
     {
         void* reservedRange = do_mmap_with_custom_alignment(x_pageSize /*alignment*/, x_reserveRangeSize, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_32BIT);
         m_reservedRangeCur = reinterpret_cast<uint64_t>(reservedRange);
-        assert(m_reservedRangeCur % x_pageSize == 0);
+        Assert(m_reservedRangeCur % x_pageSize == 0);
         m_reservedRangeEnd = m_reservedRangeCur + x_reserveRangeSize;
 
         m_unmapList.push_back(reservedRange);
     }
 
-    assert(m_reservedRangeCur + x_pageSize <= m_reservedRangeEnd);
-    assert(m_reservedRangeCur % x_pageSize == 0);
+    Assert(m_reservedRangeCur + x_pageSize <= m_reservedRangeEnd);
+    Assert(m_reservedRangeCur % x_pageSize == 0);
     void* pageAddr = reinterpret_cast<void*>(m_reservedRangeCur);
     m_reservedRangeCur += x_pageSize;
 
     void* r = mmap(pageAddr, x_pageSize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
     VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED, "Failed to allocate JIT memory of size %llu", static_cast<unsigned long long>(x_pageSize));
-    assert(pageAddr == r);
+    Assert(pageAddr == r);
 
     m_totalOsMemoryUsage += x_pageSize;
 
@@ -57,7 +57,7 @@ void* WARN_UNUSED JitMemoryAllocator::DoLargeAllocation(size_t size)
     m_totalOsMemoryUsage += size;
 
     void* res = hdr->GetAllocatedObject();
-    assert(reinterpret_cast<uint64_t>(res) % 16 == 0);
+    Assert(reinterpret_cast<uint64_t>(res) % 16 == 0);
     return res;
 }
 
@@ -69,8 +69,8 @@ void JitMemoryAllocator::Shutdown()
         Free(hdr->GetAllocatedObject());
     }
 
-    assert(m_laAnchor.prev == &m_laAnchor);
-    assert(m_laAnchor.next == &m_laAnchor);
+    Assert(m_laAnchor.prev == &m_laAnchor);
+    Assert(m_laAnchor.next == &m_laAnchor);
 
     m_totalOsMemoryUsage += m_reservedRangeEnd - m_reservedRangeCur;
     for (void* ptr : m_unmapList)
@@ -79,5 +79,5 @@ void JitMemoryAllocator::Shutdown()
         m_totalOsMemoryUsage -= x_reserveRangeSize;
     }
 
-    assert(m_totalOsMemoryUsage == 0);
+    Assert(m_totalOsMemoryUsage == 0);
 }

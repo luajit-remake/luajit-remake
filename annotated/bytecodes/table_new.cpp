@@ -33,8 +33,20 @@ DEEGEN_DEFINE_BYTECODE(TableNew)
             Op("inlineStorageSizeStepping").HasValue(i),
             Op("arrayPartSizeHint").HasValue(0)
         );
+        DfgVariant(
+            Op("inlineStorageSizeStepping").HasValue(i),
+            Op("arrayPartSizeHint").HasValue(0)
+        );
     }
     Variant();
+    DfgVariant();
+    TypeDeductionRule(
+        [](uint8_t /*inlineStorageSizeStepping*/, uint16_t /*arrayPartSizeHint*/) -> TypeMask
+        {
+            return x_typeMaskFor<tTable>;
+        });
+    RegAllocHint(Op("output").RegHint(RegHint::GPR));
+    RegAllocMayBeDisabledDespiteRegHintGiven();
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

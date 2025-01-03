@@ -15,6 +15,7 @@ DEEGEN_DEFINE_BYTECODE(StoreVarArgsAsVariadicResults)
     Result(NoOutput);
     Implementation(StoreVarArgsAsVariadicResultsOpcodeImpl);
     Variant();
+    DfgVariant();
     DeclareReads(VariadicArguments());
     DeclareWrites(VariadicResults());
     DeclareAsIntrinsic<Intrinsic::GetAllVarArgsAsVarRet>({});
@@ -73,9 +74,13 @@ DEEGEN_DEFINE_BYTECODE(GetVarArgsPrefix)
     Result(NoOutput);
     Implementation(GetVarArgsPrefixImpl);
     Variant(Op("numToPut").HasValue(1));
+    DfgVariant(Op("numToPut").HasValue(1));
     Variant();
+    DfgVariant();
     DeclareReads(VariadicArguments());
-    DeclareWrites(Range(Op("base"), Op("numToPut")));
+    DeclareWrites(
+        Range(Op("base"), Op("numToPut")).TypeDeductionRule(ValueProfile)
+    );
     DeclareAsIntrinsic<Intrinsic::GetVarArgPrefix>({
         .num = Op("numToPut"),
         .dst = Op("base")

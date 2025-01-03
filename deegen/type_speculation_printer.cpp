@@ -4,7 +4,7 @@
 
 std::string DumpHumanReadableTypeSpeculationDefinitions()
 {
-    using ElementT = std::pair<TypeSpeculationMask, std::string_view>;
+    using ElementT = std::pair<TypeMaskTy, std::string_view>;
     constexpr size_t n = detail::get_type_speculation_defs<TypeSpecializationList>::count;
     std::array<ElementT, n> arr = detail::get_type_speculation_defs<TypeSpecializationList>::value;
 
@@ -31,15 +31,15 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
         if (std::popcount(arr[i].first) == 1)
         {
             int k = std::countr_zero(arr[i].first);
-            assert(0 <= k && k < static_cast<int>(n));
-            assert(names[k] == nullptr);
+            Assert(0 <= k && k < static_cast<int>(n));
+            Assert(names[k] == nullptr);
             names[k] = &arr[i].second;
             maxk = std::max(maxk, k + 1);
         }
     }
     for (int i = 0; i < maxk; i++)
     {
-        assert(names[i] != nullptr);
+        Assert(names[i] != nullptr);
     }
 
     std::stringstream ss;
@@ -69,7 +69,7 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
             bool first = true;
             for (int k = 0; k < maxk; k++)
             {
-                if (arr[i].first & (static_cast<TypeSpeculationMask>(1) << k))
+                if (arr[i].first & (static_cast<TypeMaskTy>(1) << k))
                 {
                     if (!first)
                     {
@@ -86,7 +86,7 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
     return result;
 }
 
-std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mask, bool printMaskValue)
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeMaskTy mask, bool printMaskValue)
 {
     constexpr auto arr = x_list_of_type_speculation_mask_and_name;
     constexpr size_t n = arr.size();
@@ -105,11 +105,11 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeSpeculationMask mas
     }
     else
     {
-        TypeSpeculationMask originalVal = mask;
+        TypeMaskTy originalVal = mask;
         bool first = true;
         for (size_t i = 0; i < n; i++)
         {
-            TypeSpeculationMask curMask = arr[i].first;
+            TypeMaskTy curMask = arr[i].first;
             if (curMask == 0) { continue; }
             if ((mask & curMask) == curMask)
             {

@@ -74,7 +74,7 @@ public:
 
     static uint32_t ComputeAllocationSize(uint32_t hashTableSize)
     {
-        assert(is_power_of_2(hashTableSize));
+        Assert(is_power_of_2(hashTableSize));
         size_t allocationSize = x_trailingArrayOffset + hashTableSize * sizeof(HashTableEntry);
         return static_cast<uint32_t>(allocationSize);
     }
@@ -95,7 +95,7 @@ public:
         memset(r->m_hashTable, 0, sizeof(HashTableEntry) * x_initialHashTableSize);
         bool found;
         HeapPtr<HashTableEntry> e = Find(SystemHeapPointer<StructureTransitionTable>(r).As(), key, found /*out*/);
-        assert(!found);
+        Assert(!found);
         TCSet(e->m_key, key);
         TCSet(e->m_value, value);
         return r;
@@ -109,7 +109,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureTransitionTable>>>
     static ReinterpretCastPreservingAddressSpaceType<HashTableEntry*, T> WARN_UNUSED Find(T self, int32_t key, bool& found)
     {
-        assert(key != x_key_invalid && key != x_key_deleted);
+        Assert(key != x_key_invalid && key != x_key_deleted);
         uint32_t hashMask = self->m_hashTableMask;
         uint32_t slot = static_cast<uint32_t>(HashPrimitiveTypes(key)) & hashMask;
         while (true)
@@ -131,7 +131,7 @@ public:
 
     StructureTransitionTable* WARN_UNUSED Expand(VM* vm)
     {
-        assert(ShouldResizeForThisInsertion());
+        Assert(ShouldResizeForThisInsertion());
         uint32_t newHashMask = m_hashTableMask * 2 + 1;
         StructureTransitionTable* newTable = AllocateUninitialized(vm, newHashMask + 1);
         newTable->m_hashTableMask = newHashMask;
@@ -167,7 +167,7 @@ struct StructureKeyHashHelper
     static uint32_t GetHashValueForStringKey(UserHeapPointer<HeapString> stringKey)
     {
         HeapPtr<HeapString> s = stringKey.As<HeapString>();
-        assert(s->m_type == HeapEntityType::String);
+        Assert(s->m_type == HeapEntityType::String);
         return s->m_hashLow;
     }
 
@@ -211,7 +211,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, StructureAnchorHashTable>>>
     static GeneralHeapPointer<void> GetPropertyNameAtSlot(T self, uint8_t ordinal)
     {
-        assert(ordinal < self->m_numBlocks * x_hiddenClassBlockSize);
+        Assert(ordinal < self->m_numBlocks * x_hiddenClassBlockSize);
         uint8_t blockOrd = ordinal >> x_log2_hiddenClassBlockSize;
         uint8_t offset = ordinal & static_cast<uint8_t>(x_hiddenClassBlockSize - 1);
         SystemHeapPointer<GeneralHeapPointer<void>> p = TCGet(self->m_blockPointers[blockOrd]);
@@ -242,8 +242,10 @@ public:
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
         int64_t hashSlot = static_cast<int64_t>(hashValue >> 8) | hashTableMask;
         auto hashTableEnd = GetHashTableEnd(self);
-        DEBUG_ONLY(uint32_t hashTableSize = GetHashTableSizeFromHashTableMask(self->m_hashTableMask);)
-        assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+#ifdef DEBUG_ASSERTION
+        uint32_t hashTableSize = GetHashTableSizeFromHashTableMask(self->m_hashTableMask);
+#endif
+        Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
 
         while (true)
         {
@@ -264,17 +266,17 @@ public:
             }
 
             hashSlot = (hashSlot - 1) | hashTableMask;
-            assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+            Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
         }
     }
 
     static uint32_t GetHashTableSizeFromHashTableMask(int32_t mask)
     {
-        assert(mask < 0);
+        Assert(mask < 0);
         mask = ~mask;
-        assert(mask > 0 && mask < std::numeric_limits<int32_t>::max());
+        Assert(mask > 0 && mask < std::numeric_limits<int32_t>::max());
         mask++;
-        assert(is_power_of_2(mask));
+        Assert(is_power_of_2(mask));
         return static_cast<uint32_t>(mask);
     }
 
@@ -308,7 +310,7 @@ struct ButterflyNamedStorageGrowthPolicy
 
     static uint32_t WARN_UNUSED ComputeNextButterflyCapacityImpl(uint32_t curButterflyCapacity)
     {
-        assert(curButterflyCapacity > 0);
+        Assert(curButterflyCapacity > 0);
         uint32_t capacity = curButterflyCapacity * x_butterflyNamedStorageCapacityGrowthFactor;
         return capacity;
     }
@@ -331,7 +333,7 @@ struct ButterflyNamedStorageGrowthPolicy
             //
             capacity = Butterfly::x_maxNamedStorageCapacity;
         }
-        assert(capacity > curButterflyCapacity);
+        Assert(capacity > curButterflyCapacity);
         return capacity;
     }
 
@@ -340,7 +342,7 @@ struct ButterflyNamedStorageGrowthPolicy
     {
         // It needs to grow to up to maxPropertySlots + 1: that's the real max capacity considering PolyMetatable
         //
-        assert(inlineNamedStorageCapacity <= maxPropertySlots);
+        Assert(inlineNamedStorageCapacity <= maxPropertySlots);
         uint8_t capacityLimit = maxPropertySlots + 1 - inlineNamedStorageCapacity;
         if (capacity > capacityLimit)
         {
@@ -429,25 +431,25 @@ public:
     static uint32_t ComputeHashTableSizeFromHashTableMask(uint8_t mask)
     {
         uint32_t v = static_cast<uint32_t>(mask) + 1;
-        assert(is_power_of_2(v));
+        Assert(is_power_of_2(v));
         return v;
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static GeneralHeapPointer<void> GetLastAddedKey(T self)
     {
-        assert(self->m_parentEdgeTransitionKind == TransitionKind::AddProperty ||
+        Assert(self->m_parentEdgeTransitionKind == TransitionKind::AddProperty ||
                self->m_parentEdgeTransitionKind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
-        assert(self->m_numSlots > 0);
+        Assert(self->m_numSlots > 0);
         uint8_t nonFullBlockLen = ComputeNonFullBlockLength(self->m_numSlots);
-        assert(nonFullBlockLen > 0);
+        Assert(nonFullBlockLen > 0);
         return TCGet(self->m_values[nonFullBlockLen - 1]);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static UserHeapPointer<void> WARN_UNUSED GetKeyForSlotOrdinal(T self, uint8_t slotOrdinal)
     {
-        assert(slotOrdinal < self->m_numSlots);
+        Assert(slotOrdinal < self->m_numSlots);
 
         SystemHeapPointer<StructureAnchorHashTable> p = TCGet(self->m_anchorHashTable);
         if (p.m_value != 0 && slotOrdinal < p.As()->m_numTotalSlots)
@@ -459,15 +461,15 @@ public:
         if (slotOrdinal >= lim)
         {
             uint8_t ord = slotOrdinal - lim;
-            assert(ord < x_hiddenClassBlockSize);
+            Assert(ord < x_hiddenClassBlockSize);
             return TCGet(self->m_values[ord]).As();
         }
         else
         {
-            assert(lim >= x_hiddenClassBlockSize && lim - x_hiddenClassBlockSize <= slotOrdinal);
+            Assert(lim >= x_hiddenClassBlockSize && lim - x_hiddenClassBlockSize <= slotOrdinal);
             int32_t ord = static_cast<int32_t>(slotOrdinal) - static_cast<int32_t>(lim);
-            assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
-            assert(HasFinalFullBlockPointer(self->m_numSlots));
+            Assert(-static_cast<int32_t>(x_hiddenClassBlockSize) <= ord && ord < 0);
+            Assert(HasFinalFullBlockPointer(self->m_numSlots));
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
             return TCGet(u.As()[ord]).As();
         }
@@ -546,7 +548,7 @@ public:
             return false;
         }
         uint8_t lim = self->m_numSlots & (~static_cast<uint8_t>(x_hiddenClassBlockSize - 1));
-        assert(p.As()->m_numTotalSlots == lim || p.As()->m_numTotalSlots == lim - x_hiddenClassBlockSize);
+        Assert(p.As()->m_numTotalSlots == lim || p.As()->m_numTotalSlots == lim - x_hiddenClassBlockSize);
         return p.As()->m_numTotalSlots == lim;
     }
 
@@ -571,13 +573,13 @@ public:
 
     Structure* WARN_UNUSED CreateStructureForAddPropertyTransition(VM* vm, UserHeapPointer<void> key)
     {
-        assert(key.m_value != 0);
+        Assert(key.m_value != 0);
         return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForProperty, key);
     }
 
     Structure* WARN_UNUSED CreateStructureForPolyMetatableTransition(VM* vm)
     {
-        assert(m_metatable <= 0);
+        Assert(m_metatable <= 0);
         return CreateStructureForTransitionImpl(vm, SlotAdditionKind::AddSlotForPolyMetatable, vm->GetSpecialKeyForMetadataSlot().As<void>());
     }
 
@@ -593,23 +595,23 @@ public:
 
     Structure* WARN_UNUSED CreateStructureForMonomorphicMetatableTransition(VM* vm, GeneralHeapPointer<void> metatable)
     {
-        assert(m_metatable == 0);
-        assert(metatable.m_value < 0);
+        Assert(m_metatable == 0);
+        Assert(metatable.m_value < 0);
         Structure* newStructure = CloneStructure(vm);
         newStructure->m_parentEdgeTransitionKind = TransitionKind::AddMetaTable;
         newStructure->m_metatable = metatable.m_value;
-        assert(!newStructure->m_arrayType.MayHaveMetatable());
+        Assert(!newStructure->m_arrayType.MayHaveMetatable());
         newStructure->m_arrayType.SetMayHaveMetatable(true);
         return newStructure;
     }
 
     Structure* WARN_UNUSED CreateStructureForRemoveMetatableTransition(VM* vm)
     {
-        assert(HasMonomorphicMetatable(this));
+        Assert(HasMonomorphicMetatable(this));
         Structure* newStructure = CloneStructure(vm);
         newStructure->m_parentEdgeTransitionKind = TransitionKind::RemoveMetaTable;
         newStructure->m_metatable = 0;
-        assert(newStructure->m_arrayType.MayHaveMetatable());
+        Assert(newStructure->m_arrayType.MayHaveMetatable());
         newStructure->m_arrayType.SetMayHaveMetatable(false);
         return newStructure;
     }
@@ -653,11 +655,13 @@ public:
     static bool WARN_UNUSED QueryInlineHashTable(T self, GeneralHeapPointer<void> key, uint16_t hashvalue, uint32_t& result /*out*/)
     {
         int64_t hashMask = ~ZeroExtendTo<int64_t>(self->m_inlineHashTableMask);
-        assert(hashMask < 0);
+        Assert(hashMask < 0);
         int64_t hashSlot = ZeroExtendTo<int64_t>(hashvalue >> 8) | hashMask;
 
-        DEBUG_ONLY(uint32_t hashTableSize = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask);)
-        assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+#ifdef DEBUG_ASSERTION
+        uint32_t hashTableSize = ComputeHashTableSizeFromHashTableMask(self->m_inlineHashTableMask);
+#endif
+        Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
 
         uint8_t checkHash = static_cast<uint8_t>(hashvalue);
         auto hashTableEnd = GetInlineHashTableEnd(self);
@@ -680,7 +684,7 @@ public:
                 }
             }
             hashSlot = (hashSlot - 1) | hashMask;
-            assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+            Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
         }
     }
 
@@ -692,7 +696,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static ReinterpretCastPreservingAddressSpaceType<SystemHeapPointer<GeneralHeapPointer<void>>*, T> GetFinalFullBlockPointerAddress(T self)
     {
-        assert(HasFinalFullBlockPointer(self->m_numSlots));
+        Assert(HasFinalFullBlockPointer(self->m_numSlots));
         return ReinterpretCastPreservingAddressSpace<SystemHeapPointer<GeneralHeapPointer<void>>*>(self->m_values + self->m_nonFullBlockLen);
     }
 
@@ -727,7 +731,7 @@ public:
         {
             // A non-negative offset denote the offset into the non-full block
             //
-            assert(ordinal < self->m_nonFullBlockLen);
+            Assert(ordinal < self->m_nonFullBlockLen);
             return TCGet(self->m_values[ordinal]);
         }
         else
@@ -735,8 +739,8 @@ public:
             // Ordinal [-x_hiddenClassBlockSize, 0) denote the offset into the final full block pointer
             // Note that the final full block pointer points at one past the end of the block, so we can simply index using the ordinal
             //
-            assert(HasFinalFullBlockPointer(self->m_numSlots));
-            assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal);
+            Assert(HasFinalFullBlockPointer(self->m_numSlots));
+            Assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal);
             SystemHeapPointer<GeneralHeapPointer<void>> u = GetFinalFullBlockPointer(self);
             return TCGet(u.As()[ordinal]);
         }
@@ -745,10 +749,10 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static uint32_t GetPropertySlotFromInlineHashTableOrdinal(T self, int8_t ordinal)
     {
-        assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal && ordinal < self->m_nonFullBlockLen);
+        Assert(-static_cast<int8_t>(x_hiddenClassBlockSize) <= ordinal && ordinal < self->m_nonFullBlockLen);
         AssertImp(ordinal < 0, HasFinalFullBlockPointer(self->m_numSlots));
         int result = static_cast<int>(self->m_numSlots - self->m_nonFullBlockLen) + static_cast<int>(ordinal);
-        assert(result >= 0);
+        Assert(result >= 0);
         return static_cast<uint32_t>(result);
     }
 
@@ -767,7 +771,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static int32_t WARN_UNUSED GetParentEdgeTransitionKey(T self)
     {
-        assert(self->m_parentEdgeTransitionKind != TransitionKind::BadTransitionKind);
+        Assert(self->m_parentEdgeTransitionKind != TransitionKind::BadTransitionKind);
 
         switch (self->m_parentEdgeTransitionKind)
         {
@@ -775,7 +779,7 @@ public:
         case TransitionKind::AddPropertyAndGrowPropertyStorageCapacity:
         {
             int32_t transitionKey = GetLastAddedKey(self).m_value;
-            assert(transitionKey < 0);
+            Assert(transitionKey < 0);
             return transitionKey;
         }
         case TransitionKind::AddMetaTable: [[fallthrough]];
@@ -802,9 +806,9 @@ public:
 
     StructureTransitionTable* WARN_UNUSED InitializeOutlinedTransitionTable(VM* vm, int32_t keyForOnlyChild, SystemHeapPointer<Structure> onlyChild)
     {
-        assert(m_transitionTable.IsType<Structure>());
-        assert(m_transitionTable.As<Structure>() == onlyChild.As());
-        assert(GetParentEdgeTransitionKey(m_transitionTable.As<Structure>()) == keyForOnlyChild);
+        Assert(m_transitionTable.IsType<Structure>());
+        Assert(m_transitionTable.As<Structure>() == onlyChild.As());
+        Assert(GetParentEdgeTransitionKey(m_transitionTable.As<Structure>()) == keyForOnlyChild);
         StructureTransitionTable* newTable = StructureTransitionTable::AllocateInitialTable(vm, keyForOnlyChild, onlyChild);
         m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable> { newTable });
         return newTable;
@@ -834,7 +838,7 @@ public:
         else if (likely(m_transitionTable.IsType<Structure>()))
         {
             HeapPtr<Structure> onlyChild = m_transitionTable.As<Structure>();
-            assert(TCGet(onlyChild->m_parent) == SystemHeapPointer<Structure>(this));
+            Assert(TCGet(onlyChild->m_parent) == SystemHeapPointer<Structure>(this));
             int32_t keyForOnlyChild = GetParentEdgeTransitionKey(onlyChild);
             if (keyForOnlyChild == transitionKey)
             {
@@ -848,7 +852,7 @@ public:
                 else
                 {
                     Structure* newStructure = insertOrUpsertStructureFunc(curStructure);
-                    assert(newStructure != nullptr);
+                    Assert(newStructure != nullptr);
                     m_transitionTable.Store(SystemHeapPointer<Structure> { newStructure });
                     return newStructure;
                 }
@@ -860,7 +864,7 @@ public:
                 StructureTransitionTable* newTable = InitializeOutlinedTransitionTable(vm, keyForOnlyChild, onlyChild);
                 bool found;
                 StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(newTable, transitionKey, found /*out*/);
-                assert(!found);
+                Assert(!found);
 
                 Structure* newStructure = getNewStructureForNotFoundCase();
                 e->m_key = transitionKey;
@@ -869,7 +873,7 @@ public:
 
                 // InitializeOutlinedTransitionTable updates m_transitionTable, but just to make sure
                 //
-                assert(m_transitionTable.IsType<StructureTransitionTable>() &&
+                Assert(m_transitionTable.IsType<StructureTransitionTable>() &&
                        TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>()) == newTable);
 
                 return newStructure;
@@ -877,7 +881,7 @@ public:
         }
         else
         {
-            assert(m_transitionTable.IsType<StructureTransitionTable>());
+            Assert(m_transitionTable.IsType<StructureTransitionTable>());
             StructureTransitionTable* table = TranslateToRawPointer(vm, m_transitionTable.As<StructureTransitionTable>());
             bool found;
             StructureTransitionTable::HashTableEntry* e = StructureTransitionTable::Find(table, transitionKey, found /*out*/);
@@ -892,7 +896,7 @@ public:
                 {
                     StructureTransitionTable* newTable = table->Expand(vm);
                     m_transitionTable.Store(SystemHeapPointer<StructureTransitionTable>(newTable));
-                    assert(!newTable->ShouldResizeForThisInsertion());
+                    Assert(!newTable->ShouldResizeForThisInsertion());
                     // FIXME: delete old table!
                 }
 
@@ -900,11 +904,11 @@ public:
             }
             else
             {
-                assert(e->m_key == transitionKey);
+                Assert(e->m_key == transitionKey);
                 // Found. For insert, just return. For upsert, call upsert function and update value
                 //
                 Structure* curStructure = TranslateToRawPointer(vm, e->m_value.As());
-                assert(TranslateToRawPointer(vm, curStructure->m_parent.As()) == this);
+                Assert(TranslateToRawPointer(vm, curStructure->m_parent.As()) == this);
                 if constexpr(isInsert)
                 {
                     return curStructure;
@@ -912,7 +916,7 @@ public:
                 else
                 {
                     Structure* newStructure = insertOrUpsertStructureFunc(curStructure);
-                    assert(newStructure != nullptr);
+                    Assert(newStructure != nullptr);
                     e->m_value = newStructure;
                     return newStructure;
                 }
@@ -966,14 +970,14 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static uint32_t WARN_UNUSED GetPolyMetatableSlot(T self)
     {
-        assert(IsPolyMetatable(self));
+        Assert(IsPolyMetatable(self));
         return static_cast<uint32_t>(self->m_metatable - 1);
     }
 
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, Structure>>>
     static HeapPtr<TableObject> WARN_UNUSED GetMonomorphicMetatable(T self)
     {
-        assert(HasMonomorphicMetatable(self));
+        Assert(HasMonomorphicMetatable(self));
         return GeneralHeapPointer<TableObject>(self->m_metatable).As();
     }
 
@@ -997,16 +1001,16 @@ public:
         }
 
         uint8_t stepping = internal::x_optimalInlineCapacitySteppingArray[inlineCapacity];
-        assert(stepping < x_numInlineCapacitySteppings);
-        assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
-        assert(internal::x_optimalInlineCapacityArray[internal::x_inlineStorageSizeForSteppingArray[stepping]] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
+        Assert(stepping < x_numInlineCapacitySteppings);
+        Assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
+        Assert(internal::x_optimalInlineCapacityArray[internal::x_inlineStorageSizeForSteppingArray[stepping]] == internal::x_optimalInlineCapacityArray[inlineCapacity]);
         return stepping;
     }
 
     static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForStepping(VM* vm, uint8_t stepping)
     {
         std::array<SystemHeapPointer<Structure>, x_numInlineCapacitySteppings>& arr = vm->GetInitialStructureForDifferentInlineCapacityArray();
-        assert(stepping < x_numInlineCapacitySteppings);
+        Assert(stepping < x_numInlineCapacitySteppings);
         if (likely(arr[stepping].m_value != 0))
         {
             return arr[stepping];
@@ -1020,9 +1024,9 @@ public:
 
     static SystemHeapPointer<Structure> WARN_UNUSED GetInitialStructureForSteppingKnowingAlreadyBuilt(VM* vm, uint8_t stepping)
     {
-        assert(stepping < x_numInlineCapacitySteppings);
+        Assert(stepping < x_numInlineCapacitySteppings);
         SystemHeapPointer<Structure> r = vm->GetInitialStructureForDifferentInlineCapacityArray()[stepping];
-        assert(r.m_value != 0);
+        Assert(r.m_value != 0);
         return r;
     }
 
@@ -1113,7 +1117,7 @@ public:
     StructureIterator(SystemHeapPointer<Structure> hc)
     {
         HeapPtr<Structure> hiddenClass = hc.As();
-        assert(hiddenClass->m_type == HeapEntityType::Structure);
+        Assert(hiddenClass->m_type == HeapEntityType::Structure);
         SystemHeapPointer<StructureAnchorHashTable> aht = TCGet(hiddenClass->m_anchorHashTable);
 
         m_hiddenClass = hc;
@@ -1124,7 +1128,7 @@ public:
         if (aht.m_value != 0)
         {
             HeapPtr<StructureAnchorHashTable> anchorHashTable = aht.As();
-            assert(anchorHashTable->m_numBlocks > 0);
+            Assert(anchorHashTable->m_numBlocks > 0);
             m_curPtr = TCGet(anchorHashTable->m_blockPointers[0]);
             m_anchorTableMaxOrd = anchorHashTable->m_numTotalSlots;
         }
@@ -1153,13 +1157,13 @@ public:
 
     GeneralHeapPointer<void> GetCurrentKey()
     {
-        assert(m_ord < m_maxOrd);
+        Assert(m_ord < m_maxOrd);
         return TCGet(*m_curPtr.As());
     }
 
     uint8_t GetCurrentSlotOrdinal()
     {
-        assert(m_ord < m_maxOrd);
+        Assert(m_ord < m_maxOrd);
         return m_ord;
     }
 
@@ -1185,10 +1189,10 @@ public:
                 }
                 else if (m_ord > m_anchorTableMaxOrd)
                 {
-                    assert(m_ord == m_anchorTableMaxOrd + x_hiddenClassBlockSize);
-                    assert(Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots) &&
+                    Assert(m_ord == m_anchorTableMaxOrd + x_hiddenClassBlockSize);
+                    Assert(Structure::HasFinalFullBlockPointer(hiddenClass->m_numSlots) &&
                            !Structure::IsAnchorTableContainsFinalBlock(hiddenClass));
-                    assert(m_curPtr.As() == Structure::GetFinalFullBlockPointer(hiddenClass).As() - 1);
+                    Assert(m_curPtr.As() == Structure::GetFinalFullBlockPointer(hiddenClass).As() - 1);
                     m_curPtr = m_hiddenClass.As<uint8_t>() + Structure::OffsetOfTrailingVarLengthArray();
                 }
                 else
@@ -1305,14 +1309,14 @@ public:
         if (self->m_butterflyNamedStorageCapacity == 0)
         {
             uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeInitialButterflyCapacityForDictionary(self->m_inlineNamedStorageCapacity);
-            assert(newCapacity > 0);
+            Assert(newCapacity > 0);
             return newCapacity;
         }
         else
         {
             uint32_t oldCapacity = self->m_butterflyNamedStorageCapacity;
             uint32_t newCapacity = ButterflyNamedStorageGrowthPolicy::ComputeNextButterflyCapacityForDictionaryOrFail(oldCapacity);
-            assert(newCapacity > oldCapacity);
+            Assert(newCapacity > oldCapacity);
             return newCapacity;
         }
     }
@@ -1364,8 +1368,8 @@ public:
             result.m_slot = structure->m_numSlots;
         }
 
-        assert(r->m_butterflyNamedStorageCapacity + r->m_inlineNamedStorageCapacity >= neededSlots);
-        assert(result.m_slot < neededSlots);
+        Assert(r->m_butterflyNamedStorageCapacity + r->m_inlineNamedStorageCapacity >= neededSlots);
+        Assert(result.m_slot < neededSlots);
         AssertImp(result.m_shouldGrowButterfly, r->m_butterflyNamedStorageCapacity > structure->m_butterflyNamedStorageCapacity);
         AssertImp(!result.m_shouldGrowButterfly, r->m_butterflyNamedStorageCapacity == structure->m_butterflyNamedStorageCapacity);
 
@@ -1386,11 +1390,11 @@ public:
             {
                 continue;
             }
-            assert(keySlot != result.m_slot);
+            Assert(keySlot != result.m_slot);
 
 #ifndef NDEBUG
-            assert(!showedUpKeys.count(key.m_value));
-            assert(!showedUpSlots.count(keySlot));
+            Assert(!showedUpKeys.count(key.m_value));
+            Assert(!showedUpSlots.count(keySlot));
             showedUpKeys.insert(key.m_value);
             showedUpSlots.insert(keySlot);
 #endif
@@ -1398,9 +1402,9 @@ public:
             r->InsertNonExistentPropertyForInitOrResize(key, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(key), keySlot);
         }
 
-        assert(!showedUpKeys.count(newProp.m_value));
-        assert(!showedUpSlots.count(result.m_slot));
-        assert(showedUpKeys.size() + 1 == neededSlots);
+        Assert(!showedUpKeys.count(newProp.m_value));
+        Assert(!showedUpSlots.count(result.m_slot));
+        Assert(showedUpKeys.size() + 1 == neededSlots);
 
         r->InsertNonExistentPropertyForInitOrResize(newProp, StructureKeyHashHelper::GetHashValueForMaybeNonStringKey(newProp), result.m_slot);
 
@@ -1415,7 +1419,7 @@ public:
         size_t slot = propHash & htMask;
         while (m_hashTable[slot].m_key.m_value != 0)
         {
-            assert(m_hashTable[slot].m_key.As() != prop.As());
+            Assert(m_hashTable[slot].m_key.As() != prop.As());
             slot = (slot + 1) & htMask;
         }
         m_hashTable[slot].m_key = prop.As();
@@ -1441,7 +1445,7 @@ public:
 
     void NO_INLINE ResizeImpl()
     {
-        assert(is_power_of_2(m_hashTableMask + 1));
+        Assert(is_power_of_2(m_hashTableMask + 1));
         uint32_t oldMask = m_hashTableMask;
         uint32_t newMask = oldMask * 2 + 1;
         ReleaseAssert(newMask < std::numeric_limits<uint32_t>::max());
@@ -1451,7 +1455,7 @@ public:
         m_hashTable = new HashTableEntry[newMask + 1];
         memset(m_hashTable, 0, sizeof(HashTableEntry) * (newMask + 1));
 
-        DEBUG_ONLY(uint32_t cnt = 0;)
+        DEBUG_ONLY([[maybe_unused]] uint32_t cnt = 0;)
         HashTableEntry* oldHtEnd = oldHt + oldMask + 1;
         HashTableEntry* curEntry = oldHt;
         while (curEntry < oldHtEnd)
@@ -1465,7 +1469,7 @@ public:
             }
             curEntry++;
         }
-        assert(cnt == m_slotCount);
+        Assert(cnt == m_slotCount);
 
         delete [] oldHt;
     }
@@ -1555,7 +1559,7 @@ public:
         // Slot not found
         //
         result.m_slot = self->m_slotCount;
-        assert(self->m_slotCount <= self->m_inlineNamedStorageCapacity + self->m_butterflyNamedStorageCapacity);
+        Assert(self->m_slotCount <= self->m_inlineNamedStorageCapacity + self->m_butterflyNamedStorageCapacity);
         if (self->m_slotCount == self->m_inlineNamedStorageCapacity + self->m_butterflyNamedStorageCapacity)
         {
             result.m_shouldGrowButterfly = true;
@@ -1602,13 +1606,13 @@ public:
 inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM* vm, Structure* shc)
 {
     uint8_t numElements = shc->m_numSlots;
-    assert(numElements % x_hiddenClassBlockSize == 0);
+    Assert(numElements % x_hiddenClassBlockSize == 0);
     uint8_t numBlocks = numElements >> x_log2_hiddenClassBlockSize;
 
     // Do the space calculations and allocate the struct
     //
     uint32_t hashTableSize = RoundUpToPowerOfTwo(static_cast<uint32_t>(numElements)) * 2;
-    assert(hashTableSize % 8 == 0);
+    Assert(hashTableSize % 8 == 0);
     int64_t hashTableMask = ~static_cast<int64_t>(hashTableSize - 1);
 
     uint32_t hashTableLengthBytes = hashTableSize * static_cast<uint32_t>(sizeof(HashTableEntry));
@@ -1627,7 +1631,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
     r->m_numBlocks = numBlocks;
     r->m_numTotalSlots = numElements;
     r->m_hashTableMask = static_cast<int32_t>(hashTableMask);
-    assert(GetHashTableSizeFromHashTableMask(r->m_hashTableMask) == hashTableSize);
+    Assert(GetHashTableSizeFromHashTableMask(r->m_hashTableMask) == hashTableSize);
 
     SystemHeapPointer<StructureAnchorHashTable> oldAnchorTableV = shc->m_anchorHashTable;
     AssertImp(oldAnchorTableV.m_value == 0, numElements == x_hiddenClassBlockSize);
@@ -1661,12 +1665,12 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
 
         uint8_t checkHash = static_cast<uint8_t>(hashValue);
         int64_t hashSlot = static_cast<int64_t>(hashValue >> 8) | hashTableMask;
-        assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+        Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
 
         while (hashTableEnd[hashSlot].m_ordinal != x_hashTableEmptyValue)
         {
             hashSlot = (hashSlot - 1) | hashTableMask;
-            assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
+            Assert(-static_cast<int64_t>(hashTableSize) <= hashSlot && hashSlot < 0);
         }
 
         hashTableEnd[hashSlot].m_ordinal = static_cast<uint8_t>(numElements - x_hiddenClassBlockSize + i);
@@ -1734,7 +1738,7 @@ inline StructureAnchorHashTable* WARN_UNUSED StructureAnchorHashTable::Create(VM
 inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable::HashTableEntry* htStart, uint32_t htSize)
 {
     uint32_t selfHtSize = GetHashTableSizeFromHashTableMask(m_hashTableMask);
-    assert(htSize >= selfHtSize);
+    Assert(htSize >= selfHtSize);
 
     if (htSize == selfHtSize)
     {
@@ -1748,10 +1752,10 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
         //
         memset(htStart, x_hashTableEmptyValue, sizeof(HashTableEntry) * htSize);
 
-        assert(is_power_of_2(htSize));
+        Assert(is_power_of_2(htSize));
         HashTableEntry* htEnd = htStart + htSize;
         int64_t htMask = ~ZeroExtendTo<int64_t>(htSize - 1);
-        assert(htMask < 0);
+        Assert(htMask < 0);
         for (uint8_t blockOrd = 0; blockOrd < m_numBlocks; blockOrd++)
         {
             HeapPtr<GeneralHeapPointer<void>> p = m_blockPointers[blockOrd].As();
@@ -1763,12 +1767,12 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
 
                 uint8_t checkHash = static_cast<uint8_t>(hashValue);
                 int64_t hashSlot = static_cast<int64_t>(hashValue >> 8) | htMask;
-                assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
+                Assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
 
                 while (htEnd[hashSlot].m_ordinal != x_hashTableEmptyValue)
                 {
                     hashSlot = (hashSlot - 1) | htMask;
-                    assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
+                    Assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
                 }
 
                 htEnd[hashSlot].m_ordinal = static_cast<uint8_t>((blockOrd << x_log2_hiddenClassBlockSize) | offset);
@@ -1781,8 +1785,8 @@ inline void StructureAnchorHashTable::CloneHashTableTo(StructureAnchorHashTable:
 template<typename T, typename>
 SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildNewAnchorTableIfNecessary(T self)
 {
-    assert(self->m_nonFullBlockLen == x_hiddenClassBlockSize);
-    assert(self->m_numSlots > 0 && self->m_numSlots % x_hiddenClassBlockSize == 0);
+    Assert(self->m_nonFullBlockLen == x_hiddenClassBlockSize);
+    Assert(self->m_numSlots > 0 && self->m_numSlots % x_hiddenClassBlockSize == 0);
     SystemHeapPointer<StructureAnchorHashTable> anchorHt = TCGet(self->m_anchorHashTable);
     AssertIff(!IsAnchorTableContainsFinalBlock(self), anchorHt.m_value == 0 || anchorHt.As()->m_numTotalSlots != self->m_numSlots);
     if (!IsAnchorTableContainsFinalBlock(self))
@@ -1803,7 +1807,7 @@ SystemHeapPointer<StructureAnchorHashTable> WARN_UNUSED Structure::BuildNewAncho
         memset(ht, x_inlineHashTableEmptyValue, htLengthBytes);
     }
 
-    assert(anchorHt.As()->m_numTotalSlots == self->m_numSlots);
+    Assert(anchorHt.As()->m_numTotalSlots == self->m_numSlots);
     return anchorHt;
 }
 
@@ -1818,8 +1822,8 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
     AssertImp(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable, m_metatable <= 0);
 
     AssertImp(shouldAddKey, m_numSlots < x_maxNumSlots || (m_numSlots == x_maxNumSlots && slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable));
-    assert(m_numSlots <= static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity);
-    assert(m_nonFullBlockLen <= x_hiddenClassBlockSize);
+    Assert(m_numSlots <= static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity);
+    Assert(m_nonFullBlockLen <= x_hiddenClassBlockSize);
 
     // Work out various properties of the new hidden class
     //
@@ -1843,7 +1847,7 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
             {
                 SystemHeapPointer<Structure> anchorTargetHiddenClass = GetHiddenClassOfFullBlockPointer(this);
                 anchorTableForNewNode = BuildNewAnchorTableIfNecessary(anchorTargetHiddenClass.As());
-                assert(anchorTableForNewNode.m_value != 0);
+                Assert(anchorTableForNewNode.m_value != 0);
             }
             else
             {
@@ -1910,8 +1914,8 @@ inline Structure* WARN_UNUSED Structure::CreateStructureForTransitionImpl(VM* vm
             if (hasFinalBlockPointer)
             {
                 HeapPtr<Structure> anchorClass = GetHiddenClassOfFullBlockPointer(this).As<Structure>();
-                assert(anchorClass->m_numSlots > 0 && anchorClass->m_numSlots % x_hiddenClassBlockSize == 0);
-                assert(anchorClass->m_numSlots == m_numSlots - m_nonFullBlockLen);
+                Assert(anchorClass->m_numSlots > 0 && anchorClass->m_numSlots % x_hiddenClassBlockSize == 0);
+                Assert(anchorClass->m_numSlots == m_numSlots - m_nonFullBlockLen);
                 if (IsAnchorTableContainsFinalBlock(anchorClass))
                 {
                     useUpdatedAnchor = true;
@@ -1940,14 +1944,14 @@ end_setup:
 
     // Check if a butterfly space expansion is needed
     //
-    assert(m_inlineNamedStorageCapacity <= x_maxNumSlots);
+    Assert(m_inlineNamedStorageCapacity <= x_maxNumSlots);
     bool needButterflyExpansion = false;
     uint8_t expandedButterflyCapacity = 0;
     if (shouldAddKey)
     {
         if (m_butterflyNamedStorageCapacity == 0)
         {
-            assert(m_numSlots <= m_inlineNamedStorageCapacity);
+            Assert(m_numSlots <= m_inlineNamedStorageCapacity);
             if (m_numSlots == m_inlineNamedStorageCapacity)
             {
                 needButterflyExpansion = true;
@@ -1956,9 +1960,9 @@ end_setup:
         }
         else
         {
-            assert(m_numSlots > m_inlineNamedStorageCapacity);
+            Assert(m_numSlots > m_inlineNamedStorageCapacity);
             uint8_t usedLen = m_numSlots - m_inlineNamedStorageCapacity;
-            assert(usedLen <= m_butterflyNamedStorageCapacity);
+            Assert(usedLen <= m_butterflyNamedStorageCapacity);
             if (usedLen == m_butterflyNamedStorageCapacity)
             {
                 needButterflyExpansion = true;
@@ -1970,7 +1974,7 @@ end_setup:
     }
     else
     {
-        assert(static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity >= m_numSlots);
+        Assert(static_cast<uint32_t>(m_inlineNamedStorageCapacity) + m_butterflyNamedStorageCapacity >= m_numSlots);
     }
 
     // Work out the space needed for the new hidden class and perform allocation
@@ -1986,7 +1990,7 @@ end_setup:
     }
     else
     {
-        assert(!shouldAddKey);
+        Assert(!shouldAddKey);
         numElementsInInlineHashTable = 0;
         if (!IsAnchorTableContainsFinalBlock(this))
         {
@@ -1996,11 +2000,11 @@ end_setup:
 
     uint32_t htSize = RoundUpToPowerOfTwo(numElementsInInlineHashTable) * 2;
     if (htSize < 8) { htSize = 8; }
-    assert(htSize <= 256);
+    Assert(htSize <= 256);
 
     uint8_t htMaskToStore = static_cast<uint8_t>(htSize - 1);
     int64_t htMask = ~ZeroExtendTo<int64_t>(htMaskToStore);
-    assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
+    Assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
 
     uint8_t newNumSlots = m_numSlots + static_cast<uint8_t>(shouldAddKey);
     AssertIff(hasFinalBlockPointer, HasFinalFullBlockPointer(newNumSlots));
@@ -2023,7 +2027,7 @@ end_setup:
     SystemHeapGcObjectHeader::Populate(r);
     r->m_numSlots = newNumSlots;
     r->m_nonFullBlockLen = nonFullBlockCopyLengthForNewNode + static_cast<uint8_t>(shouldAddKey);
-    assert(r->m_nonFullBlockLen == ComputeNonFullBlockLength(r->m_numSlots));
+    Assert(r->m_nonFullBlockLen == ComputeNonFullBlockLength(r->m_numSlots));
     r->m_arrayType = m_arrayType;
     if (slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable)
     {
@@ -2039,7 +2043,7 @@ end_setup:
         if (unlikely(metamethodOrd != -1))
         {
             LuaMetamethodBitVectorT mask = static_cast<LuaMetamethodBitVectorT>(static_cast<LuaMetamethodBitVectorT>(1) << metamethodOrd);
-            assert(r->m_knownNonexistentMetamethods & mask);
+            Assert(r->m_knownNonexistentMetamethods & mask);
             r->m_knownNonexistentMetamethods &= ~mask;
         }
     }
@@ -2053,7 +2057,7 @@ end_setup:
         }
         else
         {
-            assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
+            Assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
             r->m_parentEdgeTransitionKind = TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity;
         }
     }
@@ -2072,11 +2076,11 @@ end_setup:
         }
         else
         {
-            assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
+            Assert(slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable);
             r->m_parentEdgeTransitionKind = TransitionKind::TransitToPolyMetaTable;
         }
     }
-    assert(static_cast<uint32_t>(r->m_inlineNamedStorageCapacity) + r->m_butterflyNamedStorageCapacity <= x_maxNumSlots + 1);
+    Assert(static_cast<uint32_t>(r->m_inlineNamedStorageCapacity) + r->m_butterflyNamedStorageCapacity <= x_maxNumSlots + 1);
 
     r->m_parent = this;
     if (slotAdditionKind == SlotAdditionKind::AddSlotForPolyMetatable)
@@ -2121,11 +2125,11 @@ end_setup:
         uint8_t checkHash = static_cast<uint8_t>(hashOfElement);
         int64_t hashSlot = ZeroExtendTo<int64_t>(hashOfElement >> 8) | htMask;
 
-        assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
+        Assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
         while (htEnd[hashSlot].m_ordinal != x_inlineHashTableEmptyValue)
         {
             hashSlot = (hashSlot - 1) | htMask;
-            assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
+            Assert(-static_cast<int64_t>(htSize) <= hashSlot && hashSlot < 0);
         }
 
         htEnd[hashSlot].m_ordinal = ordinalOfElement;
@@ -2140,7 +2144,7 @@ end_setup:
     //
     if (mayMemcpyOldInlineHashTable && htMaskToStore == m_inlineHashTableMask)
     {
-        assert(ComputeHashTableSizeFromHashTableMask(m_inlineHashTableMask) == htSize);
+        Assert(ComputeHashTableSizeFromHashTableMask(m_inlineHashTableMask) == htSize);
         SafeMemcpy(htBegin, GetInlineHashTableBegin(this), hashTableLengthBytes);
 
         if (shouldAddKey)
@@ -2159,7 +2163,7 @@ end_setup:
         // First insert the final block if needed
         //
         AssertImp(nonFullBlockCopyLengthForNewNode == x_hiddenClassBlockSize, !inlineHashTableMustContainFinalBlock);
-        DEBUG_ONLY(uint32_t elementsInserted = 0;)
+        DEBUG_ONLY([[maybe_unused]] uint32_t elementsInserted = 0;)
         if (inlineHashTableMustContainFinalBlock)
         {
             HeapPtr<GeneralHeapPointer<void>> p = GetFinalFullBlockPointer(r).As();
@@ -2175,7 +2179,7 @@ end_setup:
         //
         if (nonFullBlockCopyLengthForNewNode == x_hiddenClassBlockSize && IsAnchorTableContainsFinalBlock(this))
         {
-            assert(!shouldAddKey && numElementsInInlineHashTable == 0);
+            Assert(!shouldAddKey && numElementsInInlineHashTable == 0);
         }
         else
         {
@@ -2187,7 +2191,7 @@ end_setup:
                 DEBUG_ONLY(elementsInserted++;)
             }
         }
-        assert(elementsInserted == numElementsInInlineHashTable);
+        Assert(elementsInserted == numElementsInInlineHashTable);
     }
 
     // In debug mode, check that the new node contains all the expected elements, no more and no less
@@ -2305,13 +2309,13 @@ end_setup:
 
 inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t inlineCapacity)
 {
-    assert(inlineCapacity <= x_maxNumSlots + 1);
+    Assert(inlineCapacity <= x_maxNumSlots + 1);
 
     // Work out the space needed for the new hidden class and perform allocation
     //
     uint32_t htSize = 8;
     uint8_t htMaskToStore = static_cast<uint8_t>(htSize - 1);
-    assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
+    Assert(htSize == ComputeHashTableSizeFromHashTableMask(htMaskToStore));
 
     uint32_t hashTableLengthBytes = static_cast<uint32_t>(sizeof(InlineHashTableEntry)) * htSize;
     uint32_t trailingVarLenArrayLengthBytes = ComputeTrailingVarLengthArrayLengthBytes(0 /*numSlots*/);
@@ -2349,12 +2353,12 @@ inline Structure* WARN_UNUSED Structure::CreateInitialStructure(VM* vm, uint8_t 
 
 inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key, AddNewPropertyResult& result /*out*/)
 {
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     // Confirm that the key doesn't exist
     //
     {
         uint32_t tmp;
-        assert(GetSlotOrdinalFromMaybeNonStringProperty(this, key, tmp /*out*/) == false);
+        Assert(GetSlotOrdinalFromMaybeNonStringProperty(this, key, tmp /*out*/) == false);
     }
 #endif
 
@@ -2369,41 +2373,41 @@ inline void Structure::AddNonExistentProperty(VM* vm, UserHeapPointer<void> key,
     }
 
     int32_t transitionKey = GeneralHeapPointer<void>(key.As()).m_value;
-    assert(transitionKey < 0);
+    Assert(transitionKey < 0);
 
     // Get the structure after transition, creating it and insert it into transition table if needed
     //
     Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
         return CreateStructureForAddPropertyTransition(vm, key);
     });
-    assert(transitionStructure != nullptr);
+    Assert(transitionStructure != nullptr);
     // Make sure we didn't botch the transition: the exact structure should be returned if we query the same key again
     //
-    assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+    Assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
 
     TransitionKind tkind = transitionStructure->m_parentEdgeTransitionKind;
-    assert(tkind == TransitionKind::AddProperty || tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
+    Assert(tkind == TransitionKind::AddProperty || tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
 
     result.m_shouldTransitionToDictionaryMode = false;
     result.m_shouldGrowButterfly = (tkind == TransitionKind::AddPropertyAndGrowPropertyStorageCapacity);
-    assert(transitionStructure->m_numSlots == m_numSlots + 1);
+    Assert(transitionStructure->m_numSlots == m_numSlots + 1);
     result.m_slotOrdinal = m_numSlots;
     result.m_newStructure = transitionStructure;
 
-#ifndef NDEBUG
+#ifdef DEBUG_ASSERTION
     // Confirm that the key exists in the new structure
     //
     {
         uint32_t tmp;
-        assert(GetSlotOrdinalFromMaybeNonStringProperty(transitionStructure, key, tmp /*out*/) == true);
-        assert(tmp == result.m_slotOrdinal);
+        Assert(GetSlotOrdinalFromMaybeNonStringProperty(transitionStructure, key, tmp /*out*/) == true);
+        Assert(tmp == result.m_slotOrdinal);
     }
 #endif
 }
 
 inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetatableResult& result /*out*/)
 {
-    assert(key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
+    Assert(key.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
     GeneralHeapPointer<void> metatable { key.As() };
     constexpr int32_t transitionKey = StructureTransitionTable::x_key_add_or_to_poly_metatable;
     Structure* transitionStructure;
@@ -2423,7 +2427,7 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
                 //
                 return CreateStructureForMonomorphicMetatableTransition(vm, metatable);
             }
-            assert(oldStructure->m_metatable != 0);
+            Assert(oldStructure->m_metatable != 0);
             if (HasMonomorphicMetatable(oldStructure))
             {
                 if (likely(oldStructure->m_metatable == metatable.m_value))
@@ -2441,14 +2445,14 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             }
             else
             {
-                assert(IsPolyMetatable(oldStructure));
+                Assert(IsPolyMetatable(oldStructure));
                 // Already PolyMetatable, we should just transit to it
                 //
                 return oldStructure;
             }
         });
-        assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        Assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+        Assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
     }
     else if (IsPolyMetatable(this))
     {
@@ -2463,9 +2467,9 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
     }
     else
     {
-        assert(HasMonomorphicMetatable(this));
-        assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTable);
-        assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
+        Assert(HasMonomorphicMetatable(this));
+        Assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTable);
+        Assert(m_parentEdgeTransitionKind != TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
         if (metatable.m_value == m_metatable)
         {
             // SetMetatable attempted to set the same monomorphic metatable as we already have, so no-op
@@ -2478,27 +2482,27 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
 
         if (m_parentEdgeTransitionKind == TransitionKind::AddMetaTable)
         {
-            assert(HasMonomorphicMetatable(this));
+            Assert(HasMonomorphicMetatable(this));
             // Our parent transit to us by adding a different metatable
             // so we should make parent's AddMetatable operation transit to PolyMetatable instead
             //
             Structure* base = TranslateToRawPointer(vm, m_parent.As());
             transitionStructure = base->QueryTransitionTableAndUpsert(vm, transitionKey, [&](Structure* oldStructure) -> Structure* {
-                assert(oldStructure != nullptr);
+                Assert(oldStructure != nullptr);
                 if (oldStructure == this)
                 {
-                    assert(!IsPolyMetatable(oldStructure));
+                    Assert(!IsPolyMetatable(oldStructure));
                     return base->CreateStructureForPolyMetatableTransition(vm);
                 }
                 else
                 {
-                    assert(IsPolyMetatable(oldStructure));
+                    Assert(IsPolyMetatable(oldStructure));
                     return oldStructure;
                 }
             });
-            assert(IsPolyMetatable(transitionStructure));
-            assert(base->QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == base);
+            Assert(IsPolyMetatable(transitionStructure));
+            Assert(base->QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+            Assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == base);
         }
         else
         {
@@ -2507,20 +2511,20 @@ inline void Structure::SetMetatable(VM* vm, UserHeapPointer<void> key, AddMetata
             //
             // Note that if the transition exists, it must be a PolyMetatable transition so we don't need to overwrite it
             //
-            assert(HasMonomorphicMetatable(this));
-            assert(m_metatable != metatable.m_value);
+            Assert(HasMonomorphicMetatable(this));
+            Assert(m_metatable != metatable.m_value);
             transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
                 return CreateStructureForPolyMetatableTransition(vm);
             });
-            assert(IsPolyMetatable(transitionStructure));
-            assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
-            assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+            Assert(IsPolyMetatable(transitionStructure));
+            Assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+            Assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
         }
     }
 
-    assert(transitionStructure != nullptr);
+    Assert(transitionStructure != nullptr);
     TransitionKind transitionKind = transitionStructure->m_parentEdgeTransitionKind;
-    assert(transitionKind == TransitionKind::AddMetaTable ||
+    Assert(transitionKind == TransitionKind::AddMetaTable ||
            transitionKind == TransitionKind::TransitToPolyMetaTable ||
            transitionKind == TransitionKind::TransitToPolyMetaTableAndGrowPropertyStorageCapacity);
 
@@ -2549,7 +2553,7 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
     }
     else if (m_parentEdgeTransitionKind == TransitionKind::AddMetaTable)
     {
-        assert(HasMonomorphicMetatable(this) && HasNoMetatable(m_parent.As()));
+        Assert(HasMonomorphicMetatable(this) && HasNoMetatable(m_parent.As()));
         // We can simply transit back to parent. Note that we only do this for monomorphic case,
         // since PolyMetatable may have involved a butterfly expansion. Just make things simple for now.
         //
@@ -2566,18 +2570,18 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
     }
     else
     {
-        assert(HasMonomorphicMetatable(this));
+        Assert(HasMonomorphicMetatable(this));
         // We are in monomorphic metatable mode, perform a RemoveMetatable transition
         //
         constexpr int32_t transitionKey = StructureTransitionTable::x_key_remove_metatable;
         Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
             return CreateStructureForRemoveMetatableTransition(vm);
         });
-        assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+        Assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
 
-        assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
-        assert(transitionStructure->m_metatable == 0);
-        assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::RemoveMetaTable);
+        Assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+        Assert(transitionStructure->m_metatable == 0);
+        Assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::RemoveMetaTable);
 
         result.m_shouldInsertMetatable = false;
         result.m_newStructure = transitionStructure;
@@ -2586,9 +2590,9 @@ inline void Structure::RemoveMetatable(VM* vm, RemoveMetatableResult& result /*o
 
 inline Structure* WARN_UNUSED Structure::UpdateArrayType(VM* vm, ArrayType newArrayType)
 {
-    assert(m_arrayType.m_asValue <= ArrayType::x_usefulBitsMask);
-    assert(newArrayType.m_asValue <= ArrayType::x_usefulBitsMask);
-    assert(m_arrayType.m_asValue != newArrayType.m_asValue);
+    Assert(m_arrayType.m_asValue <= ArrayType::x_usefulBitsMask);
+    Assert(newArrayType.m_asValue <= ArrayType::x_usefulBitsMask);
+    Assert(m_arrayType.m_asValue != newArrayType.m_asValue);
 
     int32_t transitionKey = StructureTransitionTable::x_key_change_array_type_tag | static_cast<int32_t>(newArrayType.m_asValue);
     Structure* transitionStructure = QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* {
@@ -2597,10 +2601,10 @@ inline Structure* WARN_UNUSED Structure::UpdateArrayType(VM* vm, ArrayType newAr
         newStructure->m_arrayType.m_asValue = newArrayType.m_asValue;
         return newStructure;
     });
-    assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
+    Assert(QueryTransitionTableAndInsert(vm, transitionKey, [&]() -> Structure* { ReleaseAssert(false); }) == transitionStructure);
 
-    assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
-    assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::UpdateArrayType);
-    assert(transitionStructure->m_arrayType.m_asValue == newArrayType.m_asValue);
+    Assert(TranslateToRawPointer(vm, transitionStructure->m_parent.As()) == this);
+    Assert(transitionStructure->m_parentEdgeTransitionKind == TransitionKind::UpdateArrayType);
+    Assert(transitionStructure->m_arrayType.m_asValue == newArrayType.m_asValue);
     return transitionStructure;
 }

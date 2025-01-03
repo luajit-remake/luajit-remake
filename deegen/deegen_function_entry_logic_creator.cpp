@@ -1,5 +1,5 @@
 #include "deegen_function_entry_logic_creator.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_ast_return.h"
 #include "deegen_options.h"
@@ -48,37 +48,38 @@ std::string DeegenFunctionEntryLogicCreator::GetFunctionName()
 std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::GenerateInterpreterTierUpOrOsrEntryImplementation(llvm::LLVMContext& ctx, bool isTierUp)
 {
     using namespace llvm;
-    std::unique_ptr<Module> module = std::make_unique<Module>("generated_function_entry_logic", ctx);
+    std::unique_ptr<Module> module = RegisterPinningScheme::CreateModule("generated_function_entry_logic", ctx);
 
     std::string funcName = (isTierUp ? "__deegen_interpreter_tier_up_into_baseline_jit" : "__deegen_interpreter_osr_entry_into_baseline_jit");
-    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), funcName);
 
+    // The tier up function has function entry interface (since it is entered from a call),
+    // but the OSR entry function has interpreter bytecode interface (since it is entered from a bytecode)
+    //
+    std::unique_ptr<ExecutorFunctionContext> funcCtx;
+    if (isTierUp)
     {
-        // Just pull in some C++ function so we can set up the attributes..
-        //
-        Function* tmp = LinkInDeegenCommonSnippet(module.get(), "SimpleLeftToRightCopyMayOvercopy");
-        func->addFnAttr(Attribute::AttrKind::NoUnwind);
-        CopyFunctionAttributes(func /*dst*/, tmp /*src*/);
+        funcCtx = ExecutorFunctionContext::CreateForFunctionEntry(DeegenEngineTier::Interpreter);
     }
-
-    ReleaseAssert(func->arg_size() == 16);
+    else
+    {
+        funcCtx = ExecutorFunctionContext::Create(
+            DeegenEngineTier::Interpreter, false /*isJitCode*/, false /*isRetCont*/);
+    }
+    Function* func = funcCtx->CreateFunction(module.get(), funcName);
 
     if (isTierUp)
     {
-        Value* coroutineCtx = func->getArg(0);
+        Value* coroutineCtx = funcCtx->GetValueAtEntry<RPV_CoroContext>();
         coroutineCtx->setName("coroCtx");
-        Value* preFixupStackBase = func->getArg(1);
+        Value* preFixupStackBase = funcCtx->GetValueAtEntry<RPV_StackBase>();
         preFixupStackBase->setName("preFixupStackBase");
-        Value* numArgsAsPtr = func->getArg(2);
-        Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
-        Value* isMustTail64 = func->getArg(6);
+        Value* numArgsAsPtr = funcCtx->GetValueAtEntry<RPV_NumArgsAsPtr>();
+        Value* calleeCodeBlockHeapPtrAsNormalPtr = funcCtx->GetValueAtEntry<RPV_InterpCodeBlockHeapPtrAsPtr>();
+        Value* isMustTail64 = funcCtx->GetValueAtEntry<RPV_IsMustTailCall>();
 
         BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
 
         ReleaseAssert(llvm_value_has_type<void*>(numArgsAsPtr));
-        Value* numArgs = new PtrToIntInst(numArgsAsPtr, llvm_type_of<uint64_t>(ctx), "", entryBB);
-        numArgs->setName("numProvidedArgs");
-
         ReleaseAssert(llvm_value_has_type<void*>(calleeCodeBlockHeapPtrAsNormalPtr));
         Value* calleeCodeBlockHeapPtr = new AddrSpaceCastInst(calleeCodeBlockHeapPtrAsNormalPtr, llvm_type_of<HeapPtr<void>>(ctx), "", entryBB);
 
@@ -93,31 +94,27 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
-
-        InterpreterFunctionInterface::CreateDispatchToCallee(
-            codePointer,
-            coroutineCtx,
-            preFixupStackBase,
-            calleeCodeBlockHeapPtr,
-            numArgs,
-            isMustTail64,
-            dummyInst /*insertBefore*/);
-
-        dummyInst->eraseFromParent();
+        // Dispatch to the generated JIT function entry
+        //
+        funcCtx->PrepareDispatch<FunctionEntryInterface>()
+            .Set<RPV_StackBase>(preFixupStackBase)
+            .Set<RPV_NumArgsAsPtr>(numArgsAsPtr)
+            .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCodeBlockHeapPtrAsNormalPtr)
+            .Set<RPV_IsMustTailCall>(isMustTail64)
+            .Dispatch(codePointer, entryBB /*insertAtEnd*/);
     }
     else
     {
-        Value* coroCtx = func->getArg(0);
+        Value* coroCtx = funcCtx->GetValueAtEntry<RPV_CoroContext>();
         coroCtx->setName("coroCtx");
 
-        Value* stackBase = func->getArg(1);
+        Value* stackBase = funcCtx->GetValueAtEntry<RPV_StackBase>();
         stackBase->setName("stackBase");
 
-        Value* curBytecode = func->getArg(2);
+        Value* curBytecode = funcCtx->GetValueAtEntry<RPV_CurBytecode>();
         curBytecode->setName("curBytecode");
 
-        Value* codeBlock = func->getArg(3);
+        Value* codeBlock = funcCtx->GetValueAtEntry<RPV_CodeBlock>();
         codeBlock->setName("codeBlock");
 
         BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
@@ -131,17 +128,12 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenFunctionEntryLogicCreator::Gener
         Value* codePointer = ExtractValueInst::Create(bcbAndCodePointer, { 1 /*idx*/ }, "", entryBB);
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        UnreachableInst* dummyInst = new UnreachableInst(ctx, entryBB);
-
-        InterpreterFunctionInterface::CreateDispatchToBytecode(
-            codePointer,
-            coroCtx,
-            stackBase,
-            UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
-            bcb,
-            dummyInst);
-
-        dummyInst->eraseFromParent();
+        // Dispatch to the JIT code corresponding to the given bytecode, so the interface is JIT code interface
+        //
+        funcCtx->PrepareDispatch<JitGeneratedCodeInterface>()
+            .Set<RPV_StackBase>(stackBase)
+            .Set<RPV_CodeBlock>(bcb)
+            .Dispatch(codePointer, entryBB /*insertAtEnd*/);
     }
 
     RunLLVMOptimizePass(module.get());
@@ -154,7 +146,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     m_generated = true;
 
     using namespace llvm;
-    std::unique_ptr<Module> module = std::make_unique<Module>("generated_function_entry_logic", ctx);
+    std::unique_ptr<Module> module = RegisterPinningScheme::CreateModule("generated_function_entry_logic", ctx);
 
     std::string funcName = GetFunctionName();
     if (m_tier == DeegenEngineTier::BaselineJIT)
@@ -163,27 +155,20 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
         //
         funcName = "baseline_jit_fn_entry_logic_tmp";
     }
-    Function* func = InterpreterFunctionInterface::CreateFunction(module.get(), funcName);
 
-    {
-        // Just pull in some C++ function so we can set up the attributes..
-        //
-        Function* tmp = LinkInDeegenCommonSnippet(module.get(), "SimpleLeftToRightCopyMayOvercopy");
-        func->addFnAttr(Attribute::AttrKind::NoUnwind);
-        CopyFunctionAttributes(func /*dst*/, tmp /*src*/);
-    }
+    std::unique_ptr<ExecutorFunctionContext> funcCtx = ExecutorFunctionContext::CreateForFunctionEntry(m_tier);
+    Function* func = funcCtx->CreateFunction(module.get(), funcName);
 
     // TODO: add parameter attributes
     //
 
-    ReleaseAssert(func->arg_size() == 16);
-    Value* coroutineCtx = func->getArg(0);
+    Value* coroutineCtx = funcCtx->GetValueAtEntry<RPV_CoroContext>();
     coroutineCtx->setName("coroCtx");
-    Value* preFixupStackBase = func->getArg(1);
+    Value* preFixupStackBase = funcCtx->GetValueAtEntry<RPV_StackBase>();
     preFixupStackBase->setName("preFixupStackBase");
-    Value* numArgsAsPtr = func->getArg(2);
-    Value* calleeCodeBlockHeapPtrAsNormalPtr = func->getArg(3);
-    Value* isMustTail64 = func->getArg(6);
+    Value* numArgsAsPtr = funcCtx->GetValueAtEntry<RPV_NumArgsAsPtr>();
+    Value* calleeCodeBlockHeapPtrAsNormalPtr = funcCtx->GetValueAtEntry<RPV_InterpCodeBlockHeapPtrAsPtr>();
+    Value* isMustTail64 = funcCtx->GetValueAtEntry<RPV_IsMustTailCall>();
 
     BasicBlock* entryBB = BasicBlock::Create(ctx, "", func);
 
@@ -206,7 +191,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
             Value* tierUpCounter = CreateCallToDeegenCommonSnippet(module.get(), "GetInterpreterTierUpCounterFromCbHeapPtr", { calleeCodeBlockHeapPtr }, entryBB);
             ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
 
-            Value* shouldTierUp = new ICmpInst(*entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
+            Value* shouldTierUp = new ICmpInst(entryBB, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
             Function* expectIntrin = Intrinsic::getDeclaration(module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
             shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", entryBB);
 
@@ -215,20 +200,14 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
             BranchInst::Create(tierUpBB, normalBB, shouldTierUp, entryBB);
 
-            Function* tierUpImpl = InterpreterFunctionInterface::CreateFunction(module.get(), "__deegen_interpreter_tier_up_into_baseline_jit");
+            Function* tierUpImpl = RegisterPinningScheme::CreateFunction(module.get(), "__deegen_interpreter_tier_up_into_baseline_jit");
 
-            UnreachableInst* dummyInst = new UnreachableInst(ctx, tierUpBB);
-
-            InterpreterFunctionInterface::CreateDispatchToCallee(
-                tierUpImpl,
-                coroutineCtx,
-                preFixupStackBase,
-                calleeCodeBlockHeapPtr,
-                numArgs,
-                isMustTail64,
-                dummyInst /*insertBefore*/);
-
-            dummyInst->eraseFromParent();
+            funcCtx->PrepareDispatch<FunctionEntryInterface>()
+                .Set<RPV_StackBase>(preFixupStackBase)
+                .Set<RPV_NumArgsAsPtr>(numArgsAsPtr)
+                .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCodeBlockHeapPtrAsNormalPtr)
+                .Set<RPV_IsMustTailCall>(isMustTail64)
+                .Dispatch(tierUpImpl, tierUpBB /*insertAtEnd*/);
         }
         else
         {
@@ -326,13 +305,11 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
         Value* targetFunction = GetInterpreterFunctionFromInterpreterOpcode(module.get(), opcode, dummyInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(targetFunction));
 
-        InterpreterFunctionInterface::CreateDispatchToBytecode(
-            targetFunction,
-            coroutineCtx,
-            stackBaseAfterFixUp,
-            bytecodePtr,
-            calleeCodeBlock,
-            dummyInst /*insertBefore*/);
+        funcCtx->PrepareDispatch<InterpreterInterface>()
+            .Set<RPV_StackBase>(stackBaseAfterFixUp)
+            .Set<RPV_CodeBlock>(calleeCodeBlock)
+            .Set<RPV_CurBytecode>(bytecodePtr)
+            .Dispatch(targetFunction, dummyInst /*insertBefore*/);
 
         dummyInst->eraseFromParent();
     }
@@ -351,13 +328,10 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
 
         Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
 
-        InterpreterFunctionInterface::CreateDispatchToBytecode(
-            target,
-            coroutineCtx,
-            stackBaseAfterFixUp,
-            UndefValue::get(llvm_type_of<void*>(ctx)) /*bytecodePtr*/,
-            baselineCodeBlock,
-            dummyInst /*insertBefore*/);
+        funcCtx->PrepareDispatch<JitGeneratedCodeInterface>()
+            .Set<RPV_StackBase>(stackBaseAfterFixUp)
+            .Set<RPV_CodeBlock>(baselineCodeBlock)
+            .Dispatch(target, dummyInst /*insertBefore*/);
 
         dummyInst->eraseFromParent();
     }
@@ -415,11 +389,15 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     RunLLVMOptimizePass(srcModule.get());
 
-    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(func, DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(rcDef));
+    // The function entry logic always consists of only one stencil, so we can always fallthrough to the next bytecode (i.e., the first bytecode of the function)
+    //
+    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(
+        func, true /*isLastStencilInBytecode*/, DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(rcDef));
 
     std::string asmFile = CompileLLVMModuleToAssemblyFileForStencilGeneration(srcModule.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
 
-    slPass.RunAsmRewritePhase(asmFile);
+    slPass.ParseAsmFile(asmFile);
+    slPass.RunAsmRewritePhase();
     asmFile = slPass.m_primaryPostTransformAsmFile;
 
     // Save contents for audit
@@ -441,10 +419,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     }
 
     std::string objectFile = CompileAssemblyFileToObjectFile(asmFile, " -fno-pic -fno-pie ");
-    DeegenStencil stencil = DeegenStencil::ParseMainLogic(ctx, objectFile);
+    DeegenStencil stencil = DeegenStencil::ParseMainLogic(ctx, true /*isLastStencilInBytecode*/, objectFile);
 
-    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(true /*mayAttemptToEliminateJmpToFallthrough*/,
-                                                                     0 /*numBytecodeOperands*/,
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(0 /*numBytecodeOperands*/,
                                                                      0 /*numGenericIcTotalCaptures*/,
                                                                      rcDef);
     // The codegen result must have no late CondBr patches
@@ -457,7 +434,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     // the data section pointer is always at offset 0 with assumed max alignment.
     // So we don't need to worry about aligning the data section pointer here, just assert that it doesn't exceed our assumed max alignment
     //
-    ReleaseAssert(cgRes.m_dataSecAlignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+    ReleaseAssert(cgRes.m_dataSecAlignment <= x_jitMaxPossibleDataSectionAlignment);
     ReleaseAssert(is_power_of_2(cgRes.m_dataSecAlignment));
 
     std::unique_ptr<llvm::Module> cgMod = cgRes.GenerateCodegenLogicLLVMModule(srcModule.get() /*originModule*/);
@@ -480,9 +457,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     constexpr size_t x_numArgsBeforeBytecodeOperands = 6;
 
-    // Currently patch functions takes 4 fixed operands even if they don't exists (placeholder ordinal 100, 101, 103, 104)
+    // Currently patch functions takes 5 fixed operands even if they don't exists (placeholder ordinal 100, 101, 103, 104, 105)
     //
-    constexpr size_t x_numExpectedArgsInPatchFn = x_numArgsBeforeBytecodeOperands + 4;
+    constexpr size_t x_numExpectedArgsInPatchFn = x_numArgsBeforeBytecodeOperands + 5;
     auto validatePatchFnProto = [&](Function* f)
     {
         ReleaseAssert(f->arg_size() == x_numExpectedArgsInPatchFn);
@@ -515,9 +492,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     // Note that we don't have to align the data section pointer since it is at offset 0 and must already be aligned
     //
-    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_fastPathPreFixupCode, fastPathAddr, "deegen_fastpath_prefixup_code", bb /*insertAtEnd*/);
-    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_slowPathPreFixupCode, slowPathAddr, "deegen_slowpath_prefixup_code", bb /*insertAtEnd*/);
-    EmitCopyLogicForBaselineJitCodeGen(cgMod.get(), cgRes.m_dataSecPreFixupCode, dataSecAddr, "deegen_datasec_prefixup_code", bb /*insertAtEnd*/);
+    EmitCopyLogicForJitCodeGen(cgMod.get(), cgRes.m_fastPathPreFixupCode, fastPathAddr, "deegen_fastpath_prefixup_code", bb /*insertAtEnd*/, false /*mustBeExact*/);
+    EmitCopyLogicForJitCodeGen(cgMod.get(), cgRes.m_slowPathPreFixupCode, slowPathAddr, "deegen_slowpath_prefixup_code", bb /*insertAtEnd*/, false /*mustBeExact*/);
+    EmitCopyLogicForJitCodeGen(cgMod.get(), cgRes.m_dataSecPreFixupCode, dataSecAddr, "deegen_datasec_prefixup_code", bb /*insertAtEnd*/, false /*mustBeExact*/);
 
     Value* fastPathAddrI64 = new PtrToIntInst(fastPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
     Value* slowPathAddrI64 = new PtrToIntInst(slowPathAddr, llvm_type_of<uint64_t>(ctx), "", bb);
@@ -539,6 +516,7 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
         args.push_back(fastPathEndI64);                                 // ordinal 101
         args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 103
         args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 104
+        args.push_back(UndefValue::get(llvm_type_of<uint64_t>(ctx)));   // ordinal 105
         ReleaseAssert(args.size() == x_numExpectedArgsInPatchFn);
         CallInst::Create(target, args, "", bb);
     };

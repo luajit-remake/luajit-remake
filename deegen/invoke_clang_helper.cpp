@@ -58,8 +58,10 @@ std::string WARN_UNUSED CompileAssemblyFileToObjectFile(const std::string& asmFi
 
     ReleaseAssert(!IsFileExists(objFilePath.c_str()));
 
+    // -O3 is unused by Clang for compiling an ASM file. Do not pass it, to avoid triggering unused command line arg errors.
+    //
     std::string cmd =
-        std::string("clang -O3 -Weverything -Werror ")
+        std::string("clang -Weverything -Werror ")
         + extraCmdlineArgs
         + " -o " + objFilePath
         + " -c "
@@ -132,9 +134,9 @@ static std::string WARN_UNUSED CompileCppFileToObjectFileOrLLVMBitcodeImpl(const
 
     std::string cmd =
         std::string("ccache clang++ -O3 -fno-pic -fno-pie -mfsgsbase -mbmi -msse4 "
-        " -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-padded "
+        " -Weverything -Wno-unknown-warning-option -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-padded "
         " -Wno-missing-prototypes -Wno-zero-length-array -Wno-reserved-identifier -Wno-disabled-macro-expansion "
-        " -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Werror "
+        " -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Wno-unsafe-buffer-usage -Werror "
         " -c -std=c++20 ")
         + (compileToLLVMIR ? " -emit-llvm " : "")
         + " -o " + resFilePath + " "

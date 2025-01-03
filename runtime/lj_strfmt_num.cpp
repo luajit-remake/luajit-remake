@@ -318,7 +318,7 @@ static int nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, uint32_t hilen
     } else {
         prec -= hilen - 9;
     }
-    assert(prec < 9 && "bad precision");
+    Assert(prec < 9 && "bad precision");
     lj_strfmt_wuint9(nd9, nd[ndhi]);
     lj_strfmt_wuint9(ref9, *ref);
     return !memcmp(nd9, ref9, prec) && (nd9[prec] < '5') == (ref9[prec] < '5');
@@ -491,7 +491,7 @@ load_t_lo:
                 int32_t eidx = e + 70 + (ND_MUL2K_MAX_SHIFT < 29)
                         + (t.u32.lo >= 0xfffffffe && !(~t.u32.hi << 12));
                 const int8_t *m_e = four_ulp_m_e + eidx * 2;
-                assert(0 <= eidx && eidx < 128 && "bad eidx");
+                Assert(0 <= eidx && eidx < 128 && "bad eidx");
                 nd[33] = nd[ndhi];
                 nd[32] = nd[(ndhi - 1) & 0x3f];
                 nd[31] = nd[(ndhi - 2) & 0x3f];

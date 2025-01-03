@@ -39,14 +39,14 @@ struct BitVectorImpl
 
     void SetBit(size_t loc)
     {
-        assert(loc < m_length);
+        Assert(loc < m_length);
         uint64_t& val = m_data[loc / 64];
         val |= static_cast<uint64_t>(1) << (loc % 64);
     }
 
     void ClearBit(size_t loc)
     {
-        assert(loc < m_length);
+        Assert(loc < m_length);
         uint64_t& val = m_data[loc / 64];
         val &= ~(static_cast<uint64_t>(1) << (loc % 64));
     }
@@ -58,7 +58,7 @@ struct BitVectorImpl
 
     bool IsSet(size_t loc) const
     {
-        assert(loc < m_length);
+        Assert(loc < m_length);
         uint64_t val = m_data[loc / 64];
         return (val & static_cast<uint64_t>(1) << (loc % 64));
     }
@@ -94,7 +94,7 @@ struct BitVectorImpl
             uint64_t exprVal = exprFunc(m_data[i], (others.m_data[i])...);
             while (exprVal != 0)
             {
-                uint32_t lowestSetBit = static_cast<uint32_t>(__builtin_ctzll(exprVal));
+                uint32_t lowestSetBit = CountTrailingZeros(exprVal);
                 TestAssert((exprVal & (static_cast<uint64_t>(1) << lowestSetBit)) != 0);
                 exprVal ^= static_cast<uint64_t>(1) << lowestSetBit;
                 actionFunc(lowestSetBit + baseOrd);

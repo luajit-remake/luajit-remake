@@ -201,7 +201,7 @@ public:
 
     __attribute__((__malloc__)) void* WARN_UNUSED ALWAYS_INLINE AllocateWithAlignment(size_t alignment, size_t size)
     {
-        assert(alignment <= 4096 && is_power_of_2(alignment));
+        Assert(alignment <= 4096 && is_power_of_2(alignment));
         AlignCurrentAddress(alignment);
         if (likely(m_currentAddress + size <= m_currentAddressEnd))
         {
@@ -308,7 +308,7 @@ private:
 
     void* WARN_UNUSED NO_INLINE __attribute__((__preserve_most__)) AllocateWithAlignmentSlowPath(size_t alignment, size_t size)
     {
-        assert(alignment <= 4096 && is_power_of_2(alignment) && size % alignment == 0);
+        Assert(alignment <= 4096 && is_power_of_2(alignment) && size % alignment == 0);
         if (size > x_tempArenaAllocatorPageSize - 4096)
         {
             // For large allocations that cannot be supported by the memory pool, directly allocate it.
@@ -330,7 +330,7 @@ private:
 
     void ALWAYS_INLINE AlignCurrentAddress(size_t alignment)
     {
-        assert(alignment <= 4096 && is_power_of_2(alignment));
+        Assert(alignment <= 4096 && is_power_of_2(alignment));
         size_t mask = alignment - 1;
         m_currentAddress += mask;
         m_currentAddress &= ~mask;

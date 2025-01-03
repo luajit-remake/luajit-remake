@@ -124,7 +124,7 @@ struct alignas(alignment) DeegenMetadata
 
     static DeegenMetadata* WARN_UNUSED CastFromAddr(void* addr)
     {
-        assert(reinterpret_cast<uintptr_t>(addr) % alignment == 0);
+        Assert(reinterpret_cast<uintptr_t>(addr) % alignment == 0);
         return reinterpret_cast<DeegenMetadata*>(addr);
     }
 

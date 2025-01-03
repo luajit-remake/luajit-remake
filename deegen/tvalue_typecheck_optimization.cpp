@@ -1,17 +1,17 @@
 #include "tvalue_typecheck_optimization.h"
 #include "llvm/Transforms/Utils/SCCPSolver.h"
 #include "llvm/Transforms/Utils/Local.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Analysis/ValueLattice.h"
 
 #include "deegen_bytecode_operand.h"
 
 namespace dast {
 
-static TypeSpeculationMask WARN_UNUSED ParseTypeSpeculationMaskFromCppTypeName(std::string tplName)
+static TypeMaskTy WARN_UNUSED ParseTypeMaskFromCppTypeName(std::string tplName)
 {
     bool found = false;
-    TypeSpeculationMask res = 0;
+    TypeMaskTy res = 0;
     constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
     for (size_t i = 0; i < defs.size(); i++)
     {
@@ -26,7 +26,7 @@ static TypeSpeculationMask WARN_UNUSED ParseTypeSpeculationMaskFromCppTypeName(s
     return res;
 }
 
-bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
+bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeMaskTy* typeMask /*out*/)
 {
     std::string fnName = func->getName().str();
     ReleaseAssert(fnName != "");
@@ -43,7 +43,7 @@ bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typ
         {
             demangledName = demangledName.substr(strlen(expected_prefix));
             demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
-            *typeMask = ParseTypeSpeculationMaskFromCppTypeName(demangledName);
+            *typeMask = ParseTypeMaskFromCppTypeName(demangledName);
         }
         return true;
     }
@@ -53,7 +53,7 @@ bool IsTValueTypeCheckAPIFunction(llvm::Function* func, TypeSpeculationMask* typ
     }
 }
 
-bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMask /*out*/)
+bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeMaskTy* typeMask /*out*/)
 {
     std::string fnName = func->getName().str();
     ReleaseAssert(fnName != "");
@@ -70,7 +70,7 @@ bool IsTValueDecodeAPIFunction(llvm::Function* func, TypeSpeculationMask* typeMa
         {
             demangledName = demangledName.substr(strlen(expected_prefix));
             demangledName = demangledName.substr(0, demangledName.length() - strlen(expected_suffix));
-            *typeMask = ParseTypeSpeculationMaskFromCppTypeName(demangledName);
+            *typeMask = ParseTypeMaskFromCppTypeName(demangledName);
         }
         return true;
     }
@@ -152,7 +152,7 @@ class TValueTypecheckInstData
     MAKE_NONCOPYABLE(TValueTypecheckInstData);
     MAKE_NONMOVABLE(TValueTypecheckInstData);
 public:
-    TValueTypecheckInstData(llvm::CallInst* inst, TypeSpeculationMask mask)
+    TValueTypecheckInstData(llvm::CallInst* inst, TypeMaskTy mask)
         : m_inst(inst)
         , m_trueReplacement(nullptr)
         , m_falseReplacement(nullptr)
@@ -191,7 +191,7 @@ public:
         delete m_falseReplacement;
     }
 
-    TypeSpeculationMask GetMask()
+    TypeMaskTy GetMask()
     {
         return m_mask;
     }
@@ -249,9 +249,7 @@ private:
         ReleaseAssert(fromInst->getParent() != nullptr);
         ReleaseAssert(toInst->getParent() == nullptr);
 
-        BasicBlock::iterator bi(fromInst);
-        BasicBlock::InstListType& bil = fromInst->getParent()->getInstList();
-        bil.insert(bi, toInst);
+        toInst->insertBefore(fromInst);
 
         fromInst->replaceAllUsesWith(toInst);
         fromInst->removeFromParent();
@@ -275,7 +273,7 @@ private:
     bool m_isReplacedByTrue;
     // The type mask being checked
     //
-    TypeSpeculationMask m_mask;
+    TypeMaskTy m_mask;
 };
 
 // logic stolen from Scalar_SCCP.cpp: isConstant
@@ -331,7 +329,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
     LLVMContext& ctx = m_targetFunction->getContext();
 
-    constexpr size_t numTypes = x_numUsefulBitsInTypeSpeculationMask;
+    constexpr size_t numTypes = x_numUsefulBitsInTypeMask;
     size_t enumMax = 1;
     for (size_t i = 0; i < m_operandList.size(); i++)
     {
@@ -367,7 +365,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
                 {
                     continue;
                 }
-                TypeSpeculationMask mask;
+                TypeMaskTy mask;
                 if (IsTValueTypeCheckAPIFunction(callee, &mask /*out*/))
                 {
                     ReleaseAssert(callee->arg_size() == 1);
@@ -407,11 +405,11 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     // Map from each BasicBlock to a vector of length m_typeInfo.size()
     // The i-th element denotes the possible type mask of m_typeInfo[i] at the start of the basic block
     //
-    std::unordered_map<BasicBlock*, std::vector<TypeSpeculationMask>> possibleMasks;
+    std::unordered_map<BasicBlock*, std::vector<TypeMaskTy>> possibleMasks;
     for (BasicBlock& bb : *m_targetFunction)
     {
         ReleaseAssert(!possibleMasks.count(&bb));
-        std::vector<TypeSpeculationMask>& v = possibleMasks[&bb];
+        std::vector<TypeMaskTy>& v = possibleMasks[&bb];
         v.resize(m_operandList.size());
         for (size_t i = 0; i < m_operandList.size(); i++)
         {
@@ -442,7 +440,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
             {
                 ValueLatticeElement V = IVs[i];
                 ConstVals.push_back(LLVMValueLatticeElementIsConstant(V)
-                                        ? solver.getConstant(V)
+                                        ? solver.getConstant(V, ST->getElementType(i))
                                         : UndefValue::get(ST->getElementType(i)));
             }
             result = ConstantStruct::get(ST, ConstVals);
@@ -455,7 +453,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
                 return nullptr;
             }
 
-            result = LLVMValueLatticeElementIsConstant(IV) ? solver.getConstant(IV) : UndefValue::get(inst->getType());
+            result = LLVMValueLatticeElementIsConstant(IV) ? solver.getConstant(IV, inst->getType()) : UndefValue::get(inst->getType());
         }
         ReleaseAssert(result != nullptr);
 
@@ -541,19 +539,19 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
         isBasicBlockReachable[&bb] = false;
     }
 
-    std::vector<TypeSpeculationMask> currentComb;
+    std::vector<TypeMaskTy> currentComb;
     currentComb.resize(m_operandList.size());
     for (size_t curCombVal = 0; curCombVal < enumMax; curCombVal++)
     {
         // Create the current type combination to test
         //
         {
-            std::unordered_map<uint32_t, TypeSpeculationMask> val;
+            std::unordered_map<uint32_t, TypeMaskTy> val;
             size_t tmp = curCombVal;
             for (size_t i = 0; i < currentComb.size(); i++)
             {
                 size_t curTypeOrd = tmp % numTypes;
-                currentComb[i] = SingletonBitmask<TypeSpeculationMask>(curTypeOrd);
+                currentComb[i] = SingletonBitmask<TypeMaskTy>(curTypeOrd);
                 tmp /= numTypes;
                 val[m_operandList[i]] = currentComb[i];
             }
@@ -569,12 +567,12 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
         //
         for (size_t listOrd = 0; listOrd < m_operandList.size(); listOrd++)
         {
-            TypeSpeculationMask currentTyMask = currentComb[listOrd];
+            TypeMaskTy currentTyMask = currentComb[listOrd];
 
             std::vector<TValueTypecheckInstData*>& q = targetedAPICalls[listOrd];
             for (TValueTypecheckInstData* item : q)
             {
-                TypeSpeculationMask passed = item->GetMask() & currentTyMask;
+                TypeMaskTy passed = item->GetMask() & currentTyMask;
                 ReleaseAssert(passed == 0 || passed == currentTyMask);
                 bool shouldReplaceToTrue = (passed == currentTyMask);
                 item->TemporarilyReplaceToBoolean(shouldReplaceToTrue);
@@ -614,7 +612,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
                 // Update 'possibleMasks'
                 //
                 ReleaseAssert(possibleMasks.count(&bb));
-                std::vector<TypeSpeculationMask>& dst = possibleMasks[&bb];
+                std::vector<TypeMaskTy>& dst = possibleMasks[&bb];
                 ReleaseAssert(dst.size() == currentComb.size());
                 for (size_t i = 0; i < currentComb.size(); i++)
                 {
@@ -693,8 +691,8 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
             ReleaseAssert(isBasicBlockReachable.count(bb));
 
             ReleaseAssert(listOrd < possibleMasks[bb].size());
-            TypeSpeculationMask possibleMaskForThisInst = possibleMasks[bb][listOrd];
-            ReleaseAssert(0 <= possibleMaskForThisInst && possibleMaskForThisInst <= x_typeSpeculationMaskFor<tTop>);
+            TypeMaskTy possibleMaskForThisInst = possibleMasks[bb][listOrd];
+            ReleaseAssert(0 <= possibleMaskForThisInst && possibleMaskForThisInst <= x_typeMaskFor<tTop>);
 
             ReleaseAssertIff(possibleMaskForThisInst == 0, !isBasicBlockReachable[bb]);
 
@@ -718,10 +716,10 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
     for (auto& it : possibleMasks)
     {
         BasicBlock* bb = it.first;
-        std::vector<TypeSpeculationMask>& maskList = it.second;
+        std::vector<TypeMaskTy>& maskList = it.second;
         bool foundNonZeroMask = false;
         bool foundZeroMask = false;
-        for (TypeSpeculationMask mask : maskList)
+        for (TypeMaskTy mask : maskList)
         {
             if (mask == 0)
             {
@@ -754,12 +752,12 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
 struct TypecheckStrengthReductionCandidate
 {
-    TypeSpeculationMask m_checkedMask;
-    TypeSpeculationMask m_precondMask;
+    TypeMaskTy m_checkedMask;
+    TypeMaskTy m_precondMask;
     llvm::Function* m_func;
     size_t m_estimatedCost;
 
-    bool WARN_UNUSED CanBeUsedToImplement(TypeSpeculationMask desiredCheckedMask, TypeSpeculationMask knownPreconditionMask)
+    bool WARN_UNUSED CanBeUsedToImplement(TypeMaskTy desiredCheckedMask, TypeMaskTy knownPreconditionMask)
     {
         ReleaseAssert((desiredCheckedMask & knownPreconditionMask) == desiredCheckedMask);
         ReleaseAssert(desiredCheckedMask > 0);
@@ -798,8 +796,8 @@ static std::vector<TypecheckStrengthReductionCandidate> WARN_UNUSED ParseTypeche
     for (size_t i = 0; i < totalElements; i++)
     {
         LLVMConstantStructReader reader(module, listReader.Get<tvalue_typecheck_strength_reduction_rule>(i));
-        TypeSpeculationMask checkedMask = reader.GetValue<&tvalue_typecheck_strength_reduction_rule::m_typeToCheck>();
-        TypeSpeculationMask precondMask = reader.GetValue<&tvalue_typecheck_strength_reduction_rule::m_typePrecondition>();
+        TypeMaskTy checkedMask = reader.GetValue<&tvalue_typecheck_strength_reduction_rule::m_typeToCheck>();
+        TypeMaskTy precondMask = reader.GetValue<&tvalue_typecheck_strength_reduction_rule::m_typePrecondition>();
         Constant* impl = reader.Get<&tvalue_typecheck_strength_reduction_rule::m_implementation>();
         Function* implFunc = dyn_cast<Function>(impl);
         ReleaseAssert(implFunc != nullptr);
@@ -832,7 +830,7 @@ TypeCheckFunctionSelector::~TypeCheckFunctionSelector() { }
 
 // This function only handles the case where the check cannot be reduced to false to true
 //
-std::pair<llvm::Function*, size_t /*cost*/> TypeCheckFunctionSelector::FindBestStrengthReduction(TypeSpeculationMask checkedMask, TypeSpeculationMask precondMask)
+std::pair<llvm::Function*, size_t /*cost*/> TypeCheckFunctionSelector::FindBestStrengthReduction(TypeMaskTy checkedMask, TypeMaskTy precondMask)
 {
     using namespace llvm;
     ReleaseAssert((checkedMask & precondMask) == checkedMask);
@@ -853,7 +851,7 @@ std::pair<llvm::Function*, size_t /*cost*/> TypeCheckFunctionSelector::FindBestS
     return std::make_pair(result, minimumCost);
 }
 
-TypeCheckFunctionSelector::QueryResult WARN_UNUSED TypeCheckFunctionSelector::Query(TypeSpeculationMask maskToCheck, TypeSpeculationMask preconditionMask)
+TypeCheckFunctionSelector::QueryResult WARN_UNUSED TypeCheckFunctionSelector::Query(TypeMaskTy maskToCheck, TypeMaskTy preconditionMask)
 {
     using namespace llvm;
     maskToCheck &= preconditionMask;
@@ -913,14 +911,14 @@ void TValueTypecheckOptimizationPass::DoOptimization()
     for (auto& it : m_provenPreconditionForTypeChecks)
     {
         CallInst* callInst = it.first;
-        TypeSpeculationMask provenPreconditionMask = it.second;
+        TypeMaskTy provenPreconditionMask = it.second;
 
         ReleaseAssert(callInst->getCalledFunction() != nullptr);
         ReleaseAssert(llvm_type_has_type<bool>(callInst->getCalledFunction()->getReturnType()));
         ReleaseAssert(callInst->getCalledFunction()->arg_size() == 1);
         ReleaseAssert(llvm_type_has_type<uint64_t>(callInst->getCalledFunction()->getArg(0)->getType()));
 
-        TypeSpeculationMask checkedMask;
+        TypeMaskTy checkedMask;
         ReleaseAssert(IsTValueTypeCheckAPIFunction(callInst->getCalledFunction(), &checkedMask /*out*/));
 
         TypeCheckFunctionSelector::QueryResult res = tcFnSelector.Query(checkedMask, provenPreconditionMask);
@@ -990,17 +988,26 @@ void TValueTypecheckOptimizationPass::DoOptimization()
         changeToUnreachable(bb->getFirstNonPHI());
     }
 
+
     // Remove infeasible control flow edges
     //
+    // Collect all basic block beforehand, because we may create a new "default.unreachable" BB and invalidate iterators
+    //
     BasicBlock* defaultUnreachableBB = nullptr;
+    std::vector<BasicBlock*> bbWorkList;
     for (BasicBlock& bb : *m_targetFunction)
     {
-        ReleaseAssert(m_isControlFlowEdgeFeasible.count(&bb));
-        auto& info = m_isControlFlowEdgeFeasible[&bb];
+        bbWorkList.push_back(&bb);
+    }
+
+    for (BasicBlock* bb : bbWorkList)
+    {
+        ReleaseAssert(m_isControlFlowEdgeFeasible.count(bb));
+        auto& info = m_isControlFlowEdgeFeasible[bb];
 
         std::unordered_set<BasicBlock*> feasibleSuccs;
         bool hasNonFeasibleEdges = false;
-        for (BasicBlock* succ : successors(&bb))
+        for (BasicBlock* succ : successors(bb))
         {
             ReleaseAssert(info.count(succ));
             if (info[succ])
@@ -1022,19 +1029,19 @@ void TValueTypecheckOptimizationPass::DoOptimization()
         //
         // SCCP can only determine non-feasible edges for br, switch and indirectbr.
         //
-        Instruction* ti = bb.getTerminator();
+        Instruction* ti = bb->getTerminator();
         ReleaseAssert(isa<BranchInst>(ti) || isa<SwitchInst>(ti) || isa<IndirectBrInst>(ti));
 
         if (feasibleSuccs.size() == 0)
         {
             // Branch on undef/poison, replace with unreachable.
             //
-            for (BasicBlock *Succ : successors(&bb))
+            for (BasicBlock *Succ : successors(bb))
             {
-                Succ->removePredecessor(&bb);
+                Succ->removePredecessor(bb);
             }
             ti->eraseFromParent();
-            new UnreachableInst(ctx, &bb);
+            new UnreachableInst(ctx, bb);
         }
         else if (feasibleSuccs.size() == 1)
         {
@@ -1042,16 +1049,16 @@ void TValueTypecheckOptimizationPass::DoOptimization()
             //
             BasicBlock* onlyFeasibleSuccessor = *feasibleSuccs.begin();
             bool haveSeenOnlyFeasibleSuccessor = false;
-            for (BasicBlock* succ : successors(&bb))
+            for (BasicBlock* succ : successors(bb))
             {
                 if (succ == onlyFeasibleSuccessor && !haveSeenOnlyFeasibleSuccessor)
                 {
                     haveSeenOnlyFeasibleSuccessor = true;
                     continue;
                 }
-                succ->removePredecessor(&bb);
+                succ->removePredecessor(bb);
             }
-            BranchInst::Create(onlyFeasibleSuccessor, &bb);
+            BranchInst::Create(onlyFeasibleSuccessor, bb);
             ti->eraseFromParent();
         }
         else if (feasibleSuccs.size() > 1)
@@ -1082,7 +1089,7 @@ void TValueTypecheckOptimizationPass::DoOptimization()
                 }
 
                 BasicBlock* succ = ci->getCaseSuccessor();
-                succ->removePredecessor(&bb);
+                succ->removePredecessor(bb);
                 si.removeCase(ci);
                 // Don't increment CI, as we removed a case.
             }
@@ -1137,19 +1144,29 @@ static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariant
             continue;
         }
 
-        TypeSpeculationMask baseMask;
+        TypeMaskTy baseMask;
         if (operand->GetKind() == BcOperandKind::Constant)
         {
+            ReleaseAssert(!bvd->m_isDfgVariant);
+
             BcOpConstant* op = assert_cast<BcOpConstant*>(operand.get());
             baseMask = op->m_typeMask;
         }
         else
         {
             ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
-            baseMask = x_typeSpeculationMaskFor<tTop>;
+            baseMask = x_typeMaskFor<tTop>;
+
+            BcOpSlot* op = assert_cast<BcOpSlot*>(operand.get());
+            if (op->HasDfgSpeculation())
+            {
+                ReleaseAssert(bvd->m_isDfgVariant);
+                baseMask = op->GetDfgSpecMask();
+                ReleaseAssert(baseMask <= x_typeMaskFor<tTop>);
+            }
         }
 
-        TypeSpeculationMask quickeningMask;
+        TypeMaskTy quickeningMask;
         bool hasQuickeningData = false;
 
         if (forQuickeningFastPath)
@@ -1172,7 +1189,7 @@ static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariant
         //
         if (!hasQuickeningData)
         {
-            if (addConstraintForTop || baseMask != x_typeSpeculationMaskFor<tTop>)
+            if (addConstraintForTop || baseMask != x_typeMaskFor<tTop>)
             {
                 constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), baseMask /*allowedMask*/));
                 operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
@@ -1258,10 +1275,10 @@ void TValueTypecheckOptimizationPass::DoOptimizationForBytecodeQuickeningSlowPat
     pass.Run();
 }
 
-TypeSpeculationMask WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func)
+TypeMaskTy WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* func)
 {
     using namespace llvm;
-    TypeSpeculationMask res = 0;
+    TypeMaskTy res = 0;
     if (IsTValueTypeCheckAPIFunction(func, &res /*out*/))
     {
         return res;

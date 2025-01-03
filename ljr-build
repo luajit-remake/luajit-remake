@@ -1,10 +1,13 @@
 #!/usr/bin/python3 
 
+import time
 import os
 import sys
 import shutil
 import multiprocessing
 from subprocess import Popen
+
+script_start_time = time.time()
 
 path = os.path.realpath(__file__)
 base_dir = os.path.dirname(path)
@@ -15,7 +18,7 @@ script_name = os.path.basename(__file__)
 #
 docker_image_version_major = "0"
 docker_image_version_minor = "0"
-docker_image_version_build = "5"
+docker_image_version_build = "7"
 
 # The DockerHub username that hosts the image 
 #
@@ -246,8 +249,24 @@ if (op == 'make'):
         dst = os.path.join(base_dir, "luajitr")
         p = Popen(['cp', '-p', '--preserve', src, dst])
         p.wait()
-        print('Build completed successfully.') 
         
+        script_end_time = time.time()
+        script_elapsed_time = round(script_end_time - script_start_time)
+        
+        time_str = ""
+        if script_elapsed_time >= 10:
+            script_elapsed_time_min = script_elapsed_time // 60
+            script_elapsed_time_sec = script_elapsed_time - script_elapsed_time_min * 60
+
+            if script_elapsed_time_min > 0:
+                time_str = "%dm%ds" % (script_elapsed_time_min, script_elapsed_time_sec)
+            else:
+                time_str = "%ds" % (script_elapsed_time_sec)
+        
+            time_str = " in " + time_str
+            
+        print('Build completed successfully%s.' % (time_str)) 
+
     sys.exit(0)
 
 assert(False)

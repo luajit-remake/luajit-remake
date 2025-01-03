@@ -47,13 +47,13 @@ TValue WARN_UNUSED MakeErrorMessageForUnableToCall(TValue badValue)
         }
         else
         {
-            assert(miv.IsBoolean());
+            Assert(miv.IsBoolean());
             makeMsg("boolean");
         }
     }
     else
     {
-        assert(badValue.IsPointer());
+        Assert(badValue.IsPointer());
         UserHeapGcObjectHeader* p = TranslateToRawPointer(badValue.AsPointer<UserHeapGcObjectHeader>().As());
         if (p->m_type == HeapEntityType::String)
         {
@@ -88,7 +88,7 @@ void* WARN_UNUSED UnlinkedCodeBlock::GetInterpreterEntryPoint()
 
 CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHeapPointer<TableObject> globalObject)
 {
-    assert(ucb->m_bytecodeMetadataLength % 8 == 0);
+    Assert(ucb->m_bytecodeMetadataLength % 8 == 0);
     size_t sizeToAllocate = GetTrailingArrayOffset() + ucb->m_bytecodeMetadataLength + sizeof(TValue) * ucb->m_cstTableLength + RoundUpToMultipleOf<8>(ucb->m_bytecodeLengthIncludingTailPadding);
     uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(sizeToAllocate)).AsNoAssert<uint8_t>());
     memcpy(addressBegin, ucb->m_cstTable, sizeof(TValue) * ucb->m_cstTableLength);
@@ -130,9 +130,9 @@ CodeBlock* WARN_UNUSED CodeBlock::Create(VM* vm, UnlinkedCodeBlock* ucb, UserHea
     if (vm->IsEngineStartingTierBaselineJit())
     {
         BaselineCodeBlock* bcb = deegen_baseline_jit_do_codegen(cb);
-        assert(cb->m_baselineCodeBlock == bcb);
-        assert(cb->m_bestEntryPoint != ucb->GetInterpreterEntryPoint());
-        assert(cb->m_bestEntryPoint == bcb->m_jitCodeEntry);
+        Assert(cb->m_baselineCodeBlock == bcb);
+        Assert(cb->m_bestEntryPoint != ucb->GetInterpreterEntryPoint());
+        Assert(cb->m_bestEntryPoint == bcb->m_jitCodeEntry);
         std::ignore = bcb;
     }
 
@@ -157,7 +157,7 @@ void CodeBlock::UpdateBestEntryPoint(void* newEntryPoint)
             }
             // We rely on the ABI layout that the codePtr resides right before the doubly link
             //
-            assert(UnalignedLoad<void*>(curAnchor - 8) == oldBestEntryPoint);
+            Assert(UnalignedLoad<void*>(curAnchor - 8) == oldBestEntryPoint);
             UnalignedStore<void*>(curAnchor - 8, newEntryPoint);
         }
     }
@@ -183,18 +183,19 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
     return DeegenEnterVMFromC(rc, module->m_defaultEntryPoint.As(), rc->m_stackBegin);
 }
 
-UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
+UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(
+    CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
 {
     UnlinkedCodeBlock* ucb = cb->m_owner;
     HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
-    assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
-    assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
+    Assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
+    Assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
     UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
     for (uint32_t ord = 0; ord < numUpvalues; ord++)
     {
         UpvalueMetadata& uvmt = upvalueInfo[ord];
-        assert(uvmt.m_immutabilityFieldFinalized);
+        Assert(uvmt.m_immutabilityFieldFinalized);
         TValue uv;
         if (uvmt.m_isParentLocal)
         {
@@ -225,6 +226,35 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     return r;
 }
 
+FunctionObject* WARN_UNUSED NO_INLINE FunctionObject::CreateForDfgAndFillUpvaluesFromParent(
+    UnlinkedCodeBlock* ucb, HeapPtr<FunctionObject> parent)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    ExecutableCode* parentEc = TranslateToRawPointer(vm, TCGet(parent->m_executable).As());
+    TestAssert(parentEc->IsBytecodeFunction());
+    CodeBlock* parentCb = static_cast<CodeBlock*>(parentEc);
+    CodeBlock* cb = ucb->GetCodeBlock(parentCb->m_globalObject);
+    TestAssert(cb->m_owner == ucb);
+    TestAssert(ucb->m_parent == parentCb->m_owner);
+
+    FunctionObject* r = TranslateToRawPointer(vm, Create(vm, cb).As());
+
+    uint32_t numUpvalues = cb->m_numUpvalues;
+    UpvalueMetadata* upvalueInfo = ucb->m_upvalueInfo;
+    for (uint32_t ord = 0; ord < numUpvalues; ord++)
+    {
+        UpvalueMetadata& uvmt = upvalueInfo[ord];
+        Assert(uvmt.m_immutabilityFieldFinalized);
+        if (!uvmt.m_isParentLocal)
+        {
+            TValue uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
+            TestAssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
+            r->m_upvalues[ord] = uv;
+        }
+    }
+    return r;
+}
+
 CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer<TableObject> globalObject, size_t numStackSlots)
 {
     CoroutineRuntimeContext* r = TranslateToRawPointer(vm, vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(CoroutineRuntimeContext))).AsNoAssert<CoroutineRuntimeContext>());
@@ -233,7 +263,7 @@ CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer
     r->m_coroutineStatus = CoroutineStatus::CreateInitStatus();
     r->m_globalObject = globalObject;
     r->m_numVariadicRets = 0;
-    r->m_variadicRetSlotBegin = 0;
+    r->m_variadicRetStart = nullptr;
     r->m_upvalueList.m_value = 0;
     size_t bytesToAllocate = numStackSlots * sizeof(TValue);
     bytesToAllocate = RoundUpToMultipleOf<VM::x_pageSize>(bytesToAllocate);
@@ -247,7 +277,7 @@ CoroutineRuntimeContext* CoroutineRuntimeContext::Create(VM* vm, UserHeapPointer
                            bytesToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
     VM_FAIL_WITH_ERRNO_IF(stackArea == MAP_FAILED,
                           "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(bytesToAllocate));
-    assert(stackArea == reinterpret_cast<uint8_t*>(stackAreaWithOverflowProtection) + x_stackOverflowProtectionAreaSize);
+    Assert(stackArea == reinterpret_cast<uint8_t*>(stackAreaWithOverflowProtection) + x_stackOverflowProtectionAreaSize);
     r->m_stackBegin = reinterpret_cast<TValue*>(stackArea);
     return r;
 }
@@ -296,7 +326,7 @@ JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
     ConstructInPlace(entry);
     entry->m_callSiteNextNode = callSiteNextNode;
     entry->m_entity = entity;
-    assert(icTraitKind <= std::numeric_limits<uint16_t>::max());
+    Assert(icTraitKind <= std::numeric_limits<uint16_t>::max());
     const JitCallInlineCacheTraits* trait = deegen_jit_call_inline_cache_trait_table[icTraitKind];
 
     AssertImp(trait->m_isDirectCallMode, entry->m_entity.IsUserHeapPointer() && entry->m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
@@ -305,18 +335,18 @@ JitCallInlineCacheEntry* WARN_UNUSED JitCallInlineCacheEntry::Create(VM* vm,
 
     void* regionVoidPtr = vm->GetJITMemoryAlloc()->AllocateGivenStepping(trait->m_jitCodeAllocationLengthStepping);
 
-    assert(reinterpret_cast<uint64_t>(regionVoidPtr) < (1ULL << 48));
+    Assert(reinterpret_cast<uint64_t>(regionVoidPtr) < (1ULL << 48));
     entry->m_taggedPtr = reinterpret_cast<uint64_t>(regionVoidPtr) | (static_cast<uint64_t>(icTraitKind) << 48);
 
-    assert(entry->GetJitRegionStart() == regionVoidPtr);
-    assert(entry->GetIcTrait() == trait);
+    Assert(entry->GetJitRegionStart() == regionVoidPtr);
+    Assert(entry->GetIcTrait() == trait);
 
-    assert(!entry->IsOnDoublyLinkedList());
+    Assert(!entry->IsOnDoublyLinkedList());
     if (targetExecutableCode->IsBytecodeFunction())
     {
         CodeBlock* targetCb = static_cast<CodeBlock*>(targetExecutableCode);
         targetCb->m_jitCallIcList.InsertAtHead(entry);
-        assert(entry->IsOnDoublyLinkedList());
+        Assert(entry->IsOnDoublyLinkedList());
     }
 
     return entry;
@@ -335,9 +365,9 @@ void JitCallInlineCacheEntry::Destroy(VM* vm)
 
 void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTraitKind, TValue tv, uint8_t* transitedToCCMode /*out*/)
 {
-    assert(m_numEntries < x_maxEntries);
-    assert(m_mode == Mode::DirectCall);
-    assert(tv.Is<tFunction>());
+    Assert(m_numEntries < x_maxEntries);
+    Assert(m_mode == Mode::DirectCall);
+    Assert(tv.Is<tFunction>());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
 
@@ -360,10 +390,10 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         SpdsPtr<JitCallInlineCacheEntry> linkListNode = TCGet(m_linkedListHead);
         // if the IC site is empty, m_bloomFilter should be 0 and the above check shall never pass
         //
-        assert(!linkListNode.IsInvalidPtr());
+        Assert(!linkListNode.IsInvalidPtr());
         do {
             JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
-            assert(entry->GetIcTraitKind() == dcIcTraitKind);
+            Assert(entry->GetIcTraitKind() == dcIcTraitKind);
             if (entry->GetTargetExecutableCodeKnowingDirectCall(vm) == targetEc)
             {
                 shouldTransitToCCMode = true;
@@ -384,17 +414,17 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         while (!linkListNode.IsInvalidPtr())
         {
             JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
-            assert(entry->GetIcTraitKind() == dcIcTraitKind);
+            Assert(entry->GetIcTraitKind() == dcIcTraitKind);
 
             // We should never reach here if the IC ought to hit
             //
-            assert(entry->m_entity.IsUserHeapPointer());
-            assert(entry->m_entity.As() != tv.As<tFunction>());
+            Assert(entry->m_entity.IsUserHeapPointer());
+            Assert(entry->m_entity.As() != tv.As<tFunction>());
 
             // All the ExecutableCode in the IC list should be distinct
             //
             ExecutableCode* ec = entry->GetTargetExecutableCodeKnowingDirectCall(vm);
-            assert(!checkUnique.count(ec));
+            Assert(!checkUnique.count(ec));
             checkUnique.insert(ec);
 
             if (ec == targetEc)
@@ -404,8 +434,8 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
 
             linkListNode = TCGet(entry->m_callSiteNextNode);
         }
-        assert(checkUnique.size() == m_numEntries);
-        assert(goldDecision == shouldTransitToCCMode);
+        Assert(checkUnique.size() == m_numEntries);
+        Assert(goldDecision == shouldTransitToCCMode);
     }
 #endif
 
@@ -433,7 +463,7 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
         // Invalidate all existing ICs
         //
         SpdsPtr<JitCallInlineCacheEntry> node = TCGet(m_linkedListHead);
-        assert(!node.IsInvalidPtr());
+        Assert(!node.IsInvalidPtr());
         do {
             JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, node.AsPtr());
             node = TCGet(entry->m_callSiteNextNode);
@@ -459,9 +489,9 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInDirectCallMode(uint16_t dcIcTr
 
 void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcTraitKind, TValue tv)
 {
-    assert(m_numEntries < x_maxEntries);
-    assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
-    assert(tv.Is<tFunction>());
+    Assert(m_numEntries < x_maxEntries);
+    Assert(m_mode == Mode::ClosureCall || m_mode == Mode::ClosureCallWithMoreThanOneTargetObserved);
+    Assert(tv.Is<tFunction>());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     ExecutableCode* targetEc = TranslateToRawPointer(vm, TCGet(tv.As<tFunction>()->m_executable).As());
@@ -475,22 +505,22 @@ void* WARN_UNUSED JitCallInlineCacheSite::InsertInClosureCallMode(uint16_t dcIcT
         while (!linkListNode.IsInvalidPtr())
         {
             JitCallInlineCacheEntry* entry = TranslateToRawPointer(vm, linkListNode.AsPtr());
-            assert(entry->GetIcTraitKind() == dcIcTraitKind + 1);
-            assert(!entry->GetIcTrait()->m_isDirectCallMode);
+            Assert(entry->GetIcTraitKind() == dcIcTraitKind + 1);
+            Assert(!entry->GetIcTrait()->m_isDirectCallMode);
 
             // We should never reach here if the IC ought to hit
             //
             ExecutableCode* ec = entry->GetTargetExecutableCode(vm);
-            assert(ec != targetEc);
+            Assert(ec != targetEc);
 
             // All the ExecutableCode in the IC list should be distinct
             //
-            assert(!checkUnique.count(ec));
+            Assert(!checkUnique.count(ec));
             checkUnique.insert(ec);
 
             linkListNode = TCGet(entry->m_callSiteNextNode);
         }
-        assert(checkUnique.size() == m_numEntries);
+        Assert(checkUnique.size() == m_numEntries);
     }
 #endif
 

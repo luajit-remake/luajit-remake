@@ -62,7 +62,7 @@ Value WARN_UNUSED DfgBuildBasicBlockContext::GetLocalVariableValue(size_t localO
         }
 
         Value capturedVar = m_valueAtTail[localOrd];
-        assert(!capturedVar.IsNull());
+        Assert(!capturedVar.IsNull());
         TestAssert(capturedVar.GetOperand()->GetNodeKind() == NodeKind_CreateCapturedVar ||
                    capturedVar.GetOperand()->GetNodeKind() == NodeKind_GetLocal);
 
@@ -96,7 +96,7 @@ Node* DfgBuildBasicBlockContext::SetLocalVariableValue(size_t localOrd, Value va
         }
 
         Value capturedVar = m_valueAtTail[localOrd];
-        assert(!capturedVar.IsNull());
+        Assert(!capturedVar.IsNull());
         TestAssert(capturedVar.GetOperand()->GetNodeKind() == NodeKind_CreateCapturedVar ||
                    capturedVar.GetOperand()->GetNodeKind() == NodeKind_GetLocal);
 
@@ -166,38 +166,49 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
         BytecodeRWCInfo inputs = m_decoder.GetDataFlowReadInfo(curBytecodeOffset);
 
         size_t numNodeInputs = 0;
-        for (size_t itemOrd = 0; itemOrd < inputs.GetNumItems(); itemOrd++)
         {
-            BytecodeRWCDesc item = inputs.GetDesc(itemOrd);
-            if (item.IsLocal() || item.IsConstant())
+#ifdef TESTBUILD
+            bool hasSeenRangeInputs = false;
+#endif
+            for (size_t itemOrd = 0; itemOrd < inputs.GetNumItems(); itemOrd++)
             {
-                numNodeInputs++;
-            }
-            else if (item.IsRange())
-            {
-                // Infinite range is only allowed in clobber declaration
-                //
-                TestAssert(item.GetRangeLength() >= 0);
-                numNodeInputs += static_cast<size_t>(item.GetRangeLength());
-            }
-            else if (item.IsVarRets())
-            {
-                // If the currentVR is marked as clobbered, it means that this bytecode is not preceded
-                // by a byteocode that produces variadic result, so the bytecode is illegal.
-                // Note that if this bytecode is the first in the BB, the check will pass here, but we
-                // can still detect this case when we build block-local SSA.
-                //
-                TestAssert(reinterpret_cast<uint64_t>(m_currentVariadicResult) != 1);
-                if (m_currentVariadicResult == nullptr)
+                BytecodeRWCDesc item = inputs.GetDesc(itemOrd);
+                if (item.IsLocal() || item.IsConstant())
                 {
-                    Node* vrNode = Node::CreatePrependVariadicResNode(nullptr);
-                    vrNode->SetNumInputs(0);
-                    SetupNodeCommonInfoAndPushBack(vrNode);
-                    m_currentVariadicResult = vrNode;
+                    // The range-operand reads must come after all the normal operands
+                    //
+                    TestAssert(!hasSeenRangeInputs);
+                    numNodeInputs++;
                 }
+                else if (item.IsRange())
+                {
+                    // Infinite range is only allowed in clobber declaration
+                    //
+                    TestAssert(item.GetRangeLength() >= 0);
+                    numNodeInputs += static_cast<size_t>(item.GetRangeLength());
+#ifdef TESTBUILD
+                    hasSeenRangeInputs = true;
+#endif
+                }
+                else if (item.IsVarRets())
+                {
+                    // If the currentVR is marked as clobbered, it means that this bytecode is not preceded
+                    // by a byteocode that produces variadic result, so the bytecode is illegal.
+                    // Note that if this bytecode is the first in the BB, the check will pass here, but we
+                    // can still detect this case when we build block-local SSA.
+                    //
+                    TestAssert(reinterpret_cast<uint64_t>(m_currentVariadicResult) != 1);
+                    if (m_currentVariadicResult == nullptr)
+                    {
+                        Node* vrNode = Node::CreatePrependVariadicResNode(nullptr);
+                        vrNode->SetNumInputs(0);
+                        SetupNodeCommonInfoAndPushBack(vrNode);
+                        m_currentVariadicResult = vrNode;
+                    }
 
-                node->SetNodeAccessesVR(true);
-                node->SetVariadicResultInputNode(m_currentVariadicResult);
+                    node->SetNodeAccessesVR(true);
+                    node->SetVariadicResultInputNode(m_currentVariadicResult);
+                }
             }
         }
 
@@ -360,9 +371,15 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                     else
                     {
                         TestAssertIff(localOrd == destLocalOrd, uvOrd == selfReferenceUvOrd);
+                        // The local must not be captured. If it were, this indicates a bug in the user-written parser,
+                        // since immmutability is a per-local property, not a per-closure-and-local property.
+                        // (That is, even if closure A captures but never modify local X, if local X is captured and modified by
+                        // another closure B, then X is also mutable for closure A, since B may modify it.)
+                        //
+                        TestAssert(!m_isLocalCaptured[localOrd]);
                         if (uvOrd != selfReferenceUvOrd)
                         {
-                            // We need to pass the actual value of this local to the node, even if it's captured
+                            // We need to pass the value of the local to the node
                             //
                             TestAssert(curInputOrd < numNodeInputs);
                             node->GetInputEdge(curInputOrd) = GetLocalVariableValue(localOrd);
@@ -373,7 +390,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             }
 
             TestAssert(curInputOrd == numNodeInputs);
-            node->SetNodeParamAsUInt64(selfReferenceUvOrd);
+            node->SetNodeSpecificDataAsUInt64(selfReferenceUvOrd);
 
             skipStandardInputGenerationStep = true;
         }
@@ -386,10 +403,10 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             uint32_t upvalueGetOrdinal = SafeIntegerCast<uint32_t>(info.ord.AsNumber());
 
             TestAssert(numNodeInputs == 0);
-            node->m_nodeKind = NodeKind_GetUpvalue;
+            node->m_nodeKind = NodeKind_GetUpvalueImmutable;
             node->SetNumInputs(1);
             node->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = GetCurrentFunctionObject();
-            node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal, .m_isImmutable = true };
+            node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal };
             skipStandardInputGenerationStep = true;
         }
         else if (m_decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::UpvalueGetMutable>(curBytecodeOffset))
@@ -401,10 +418,10 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             uint32_t upvalueGetOrdinal = SafeIntegerCast<uint32_t>(info.ord.AsNumber());
 
             TestAssert(numNodeInputs == 0);
-            node->m_nodeKind = NodeKind_GetUpvalue;
+            node->m_nodeKind = NodeKind_GetUpvalueMutable;
             node->SetNumInputs(1);
             node->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = GetCurrentFunctionObject();
-            node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal, .m_isImmutable = false };
+            node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal };
             skipStandardInputGenerationStep = true;
         }
         else if (m_decoder.IsBytecodeIntrinsic<BytecodeIntrinsicInfo::UpvaluePut>(curBytecodeOffset))
@@ -432,7 +449,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             node->SetNumInputs(2);
             node->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = GetCurrentFunctionObject();
             node->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = valueToPut;
-            node->SetNodeParamAsUInt64(upvalueGetOrdinal);
+            node->SetNodeSpecificDataAsUInt64(upvalueGetOrdinal);
 
             skipStandardInputGenerationStep = true;
         }
@@ -488,7 +505,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                     size_t numVarArgs = m_inlinedCallFrame->GetNumVarArgs();
                     node->SetNumInputs(numVarArgs + 1);
                     node->GetInputEdge(0) = m_graph->GetUnboxedConstant(0);
-                    node->SetNodeParamAsUInt64(numVarArgs);
+                    node->SetNodeSpecificDataAsUInt64(numVarArgs);
                     for (uint32_t i = 0; i < numVarArgs; i++)
                     {
                         node->GetInputEdge(i + 1) = GetVariadicArgument(i);
@@ -503,7 +520,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                     {
                         node->GetInputEdge(i + 1) = GetVariadicArgument(i);
                     }
-                    node->SetNodeParamAsUInt64(0);
+                    node->SetNodeSpecificDataAsUInt64(0);
                 }
 
                 skipStandardInputGenerationStep = true;
@@ -633,6 +650,8 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
     // Execute the store effects
     //
     {
+        bool hasDirectOutput = m_decoder.BytecodeHasOutputOperand(curBytecodeOffset);
+
         BytecodeRWCInfo outputs = m_decoder.GetDataFlowWriteInfo(curBytecodeOffset);
         size_t numNodeOutputs = 0;
         for (size_t itemOrd = 0; itemOrd < outputs.GetNumItems(); itemOrd++)
@@ -640,6 +659,9 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             BytecodeRWCDesc item = outputs.GetDesc(itemOrd);
             if (item.IsLocal())
             {
+                // The Local() corresponds to the output, it should only show up once and at the start
+                //
+                TestAssert(itemOrd == 0 && hasDirectOutput);
                 numNodeOutputs++;
             }
             else if (item.IsRange())
@@ -657,10 +679,16 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             }
         }
 
-        bool hasDirectOutput = m_decoder.BytecodeHasOutputOperand(curBytecodeOffset);
         TestAssertImp(hasDirectOutput, numNodeOutputs > 0);
         size_t numExtraOutputs = numNodeOutputs - (hasDirectOutput ? 1 : 0);
         node->SetNumOutputs(hasDirectOutput, numExtraOutputs);
+
+        size_t directOutputSlot = static_cast<size_t>(-1);
+        if (hasDirectOutput)
+        {
+            TestAssert(outputs.GetNumItems() > 0 && outputs.GetDesc(0).IsLocal());
+            directOutputSlot = outputs.GetDesc(0).GetLocalOrd();
+        }
 
         // Since SetLocal can OSR-exit, the ordering of storing the outputs of a node to locals is tricky:
         // 1. All the stores into the CapturedVar must come first
@@ -724,6 +752,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                 if (item.IsLocal())
                 {
                     TestAssert(curOutputOrd <= numExtraOutputs);
+                    TestAssert(itemOrd == 0 && hasDirectOutput);
                     emitImpl(item.GetLocalOrd(), Value(node, SafeIntegerCast<uint16_t>(curOutputOrd)));
                     curOutputOrd++;
                 }
@@ -735,7 +764,14 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                     for (size_t i = rangeBegin; i < rangeBegin + static_cast<size_t>(rangeLen); i++)
                     {
                         TestAssert(curOutputOrd <= numExtraOutputs);
-                        emitImpl(i, Value(node, SafeIntegerCast<uint16_t>(curOutputOrd)));
+                        // If the bytecode writes to a range-operand slot that is also the output slot,
+                        // the output slot always wins (since the output slot is always written at the end of the bytecode logic)
+                        // So here if the slot equals the output slot, the write has no effect. We must not emit anything.
+                        //
+                        if (i != directOutputSlot)
+                        {
+                            emitImpl(i, Value(node, SafeIntegerCast<uint16_t>(curOutputOrd)));
+                        }
                         curOutputOrd++;
                     }
                 }

@@ -1,0 +1,58 @@
+; ModuleID = 'extracted_ir'
+source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+; Function Attrs: nounwind
+declare dso_local ghccc void @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1(i64, ptr nocapture readnone, i64, ptr nocapture readonly, ptr nocapture readnone, ptr nocapture readonly, i64, i64, i64, ptr, i64, i64, ptr nocapture readnone, double, double, double, double, double, double) #0
+
+; Function Attrs: nounwind
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn7(i64 %0, ptr nocapture readnone %1, i64 %2, ptr %3, ptr nocapture readnone %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, ptr %9, i64 %10, i64 %11, ptr nocapture readnone %12, double %13, double %14, double %15, double %16, double %17, double %18) local_unnamed_addr #0 {
+  %20 = getelementptr inbounds i8, ptr %3, i64 32
+  %21 = getelementptr inbounds i8, ptr %3, i64 16
+  store ptr @DeegenInternal_UserLibFunctionReturnContinuationTrueEntryPoint_testcont1, ptr %21, align 8, !tbaa !2
+  %22 = getelementptr inbounds i8, ptr %3, i64 8
+  store ptr %3, ptr %22, align 8, !tbaa !9
+  %23 = getelementptr inbounds i8, ptr %3, i64 24
+  store i32 0, ptr %23, align 8, !tbaa !10
+  %24 = getelementptr inbounds i8, ptr %3, i64 28
+  store i32 0, ptr %24, align 4, !tbaa !11
+  %25 = load i64, ptr %3, align 8
+  %26 = inttoptr i64 %25 to ptr addrspace(256)
+  %.sroa.0.0.copyload.i = load i32, ptr addrspace(256) %26, align 1, !tbaa !12
+  %27 = zext i32 %.sroa.0.0.copyload.i to i64
+  %28 = inttoptr i64 %27 to ptr addrspace(256)
+  %29 = getelementptr inbounds i8, ptr addrspace(256) %28, i64 8
+  %30 = load ptr, ptr addrspace(256) %29, align 8, !tbaa !13
+  %31 = addrspacecast ptr addrspace(256) %28 to ptr
+  musttail call ghccc void %30(i64 %0, ptr %31, i64 %2, ptr nonnull %20, ptr null, ptr undef, i64 0, i64 undef, i64 undef, ptr %9, i64 undef, i64 undef, ptr undef, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  ret void
+}
+
+attributes #0 = { nounwind "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #1 = { nounwind }
+
+!llvm.linker.options = !{}
+!llvm.module.flags = !{!0, !1}
+
+!0 = !{i32 1, !"wchar_size", i32 4}
+!1 = !{i32 7, !"uwtable", i32 2}
+!2 = !{!3, !4, i64 16}
+!3 = !{!"_ZTS16StackFrameHeader", !4, i64 0, !4, i64 8, !4, i64 16, !7, i64 24, !8, i64 28}
+!4 = !{!"any pointer", !5, i64 0}
+!5 = !{!"omnipotent char", !6, i64 0}
+!6 = !{!"Simple C++ TBAA"}
+!7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
+!8 = !{!"int", !5, i64 0}
+!9 = !{!3, !4, i64 8}
+!10 = !{!8, !8, i64 0}
+!11 = !{!3, !8, i64 28}
+!12 = !{!5, !5, i64 0}
+!13 = !{!14, !4, i64 8}
+!14 = !{!"_ZTS14ExecutableCode", !15, i64 0, !18, i64 2, !19, i64 3, !8, i64 4, !4, i64 8, !20, i64 16}
+!15 = !{!"_ZTS24SystemHeapGcObjectHeader", !16, i64 0, !17, i64 1}
+!16 = !{!"_ZTS14HeapEntityType", !5, i64 0}
+!17 = !{!"_ZTS11GcCellState", !5, i64 0}
+!18 = !{!"_ZTSN14ExecutableCode4KindE", !5, i64 0}
+!19 = !{!"bool", !5, i64 0}
+!20 = !{!"_ZTSN14ExecutableCode23InterpreterCallIcAnchorE", !8, i64 0, !8, i64 4}

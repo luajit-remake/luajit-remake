@@ -1,5 +1,5 @@
 #include "tag_register_optimization.h"
-
+#include "deegen_register_pinning_scheme.h"
 #include "misc_llvm_helper.h"
 
 namespace dast {
@@ -52,6 +52,26 @@ static llvm::Value* WARN_UNUSED TryReplaceConstantByTagRegister(llvm::Constant* 
             return replaceImpl(cstVal);
         }
 
+        return nullptr;
+    }
+
+    if (isa<ConstantFP>(c))
+    {
+        if (llvm_value_has_type<double>(c))
+        {
+            APInt apVal = cast<ConstantFP>(c)->getValueAPF().bitcastToAPInt();
+            ReleaseAssert(apVal.getBitWidth() == 64);
+            uint64_t cstVal = apVal.getZExtValue();
+            Value* replacementVal = replaceImpl(cstVal);
+            if (replacementVal == nullptr)
+            {
+                return nullptr;
+            }
+            ReleaseAssert(llvm_value_has_type<uint64_t>(replacementVal));
+            Instruction* castInst = new BitCastInst(replacementVal, llvm_type_of<double>(ctx), "");
+            insertionSet.push_back(castInst);
+            return castInst;
+        }
         return nullptr;
     }
 
@@ -162,6 +182,18 @@ static void TransformConstantToTagRegister(llvm::Function* target, llvm::Argumen
     ValidateLLVMFunction(target);
 }
 
+void TagRegisterOptimizationPass::AddTagRegister(X64Reg reg, uint64_t value)
+{
+    using namespace llvm;
+
+    ReleaseAssert(!m_didOptimization);
+    uint32_t argOrd = RegisterPinningScheme::GetArgumentOrdinalForRegister(reg);
+    ReleaseAssert(argOrd < m_target->arg_size());
+    Argument* arg = m_target->getArg(argOrd);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(arg));
+    m_tagRegisterList.push_back(std::make_pair(arg, value));
+}
+
 void TagRegisterOptimizationPass::Run()
 {
     using namespace llvm;
@@ -173,6 +205,14 @@ void TagRegisterOptimizationPass::Run()
         uint64_t tagRegisterValue = it.second;
         TransformConstantToTagRegister(m_target, tagRegister, tagRegisterValue);
     }
+}
+
+void RunTagRegisterOptimizationPass(llvm::Function* func)
+{
+    TagRegisterOptimizationPass pass(func);
+    pass.AddTagRegister(RPV_TagRegister1::Reg(), TValue::x_int32Tag);
+    pass.AddTagRegister(RPV_TagRegister2::Reg(), TValue::x_mivTag);
+    pass.Run();
 }
 
 }   // namespace dast

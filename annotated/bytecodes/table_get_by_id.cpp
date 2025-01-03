@@ -17,7 +17,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_tv
 //
 static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_index*/, TValue base)
 {
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
@@ -38,7 +38,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, TValue /*bc_ind
 //
 static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, TValue /*bc_tvIndex*/, TValue base)
 {
-    assert(!base.Is<tTable>());
+    Assert(!base.Is<tTable>());
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
     if (metamethod.Is<tNil>())
     {
@@ -67,7 +67,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, TValue tvIndex
         EnterSlowPath<HandleNotTableObjectSlowPath>(base);
     }
 
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
 
     HeapPtr<TableObject> tableObj = base.As<tTable>();
@@ -90,7 +90,7 @@ enum class TableGetByIdIcResultKind
 
 static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
 {
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
 
     // Note that we only check HeapEntity here (instead of tTable) since it's one less pointer dereference
@@ -120,7 +120,7 @@ static void NO_RETURN TableGetByIdImpl(TValue base, TValue tvIndex)
             {
             case GetByIdICInfo::ICKind::UncachableDictionary:
             {
-                assert(false && "unimplemented");
+                Assert(false && "unimplemented");
                 __builtin_unreachable();
             }
             case GetByIdICInfo::ICKind::MustBeNil:
@@ -193,6 +193,13 @@ DEEGEN_DEFINE_BYTECODE(TableGetById)
     Implementation(TableGetByIdImpl);
     Variant(
         Op("index").IsConstant<tString>()
+    );
+    DfgVariant(Op("base").HasType<tTable>());
+    DfgVariant();
+    TypeDeductionRule(ValueProfile);
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR),
+        Op("index").RegHint(RegHint::GPR)
     );
 }
 

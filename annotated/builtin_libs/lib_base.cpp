@@ -76,16 +76,16 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_dofile_read_stdin_continuation)
 {
     // We need to execute the result returned by 'load', or throw out error if 'load' failed.
     //
-    assert(GetNumReturnValues() >= 1);
+    Assert(GetNumReturnValues() >= 1);
     TValue r1 = GetReturnValuesBegin()[0];
     if (r1.Is<tNil>())
     {
-        assert(GetNumReturnValues() == 2);
+        Assert(GetNumReturnValues() == 2);
         TValue errMsg = GetReturnValuesBegin()[1];
         ThrowError(errMsg);
     }
 
-    assert(r1.Is<tFunction>());
+    Assert(r1.Is<tFunction>());
     TValue* callFrame = GetStackBase();
     callFrame[0] = r1;
     MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_dofile_continuation));
@@ -164,10 +164,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_getmetatable)
     else
     {
         HeapPtr<TableObject> tableObj = metatableMaybeNull.As<TableObject>();
-        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(tableObj, prop, icInfo /*out*/);
-        TValue result = TableObject::GetById(tableObj, prop.As<void>(), icInfo);
+        TValue result = GetMetamethodFromMetatable(tableObj, LuaMetamethodKind::ProtectedMt);
         if (result.Is<tNil>())
         {
             Return(TValue::Create<tTable>(tableObj));
@@ -276,18 +273,18 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
             }
         }
 
-        assert(v.Is<tString>());
+        Assert(v.Is<tString>());
         if (v.As<tString>()->m_length == 0)
         {
             goto iter_end;
         }
 
         TValue* sb = GetStackBase();
-        assert(sb[2].Is<tTable>());
+        Assert(sb[2].Is<tTable>());
         HeapPtr<TableObject> tab = sb[2].As<tTable>();
-        assert(sb[3].Is<tInt32>());
+        Assert(sb[3].Is<tInt32>());
         int32_t ord = sb[3].As<tInt32>();
-        assert(ord >= 0);
+        Assert(ord >= 0);
         if (ord >= 1000000)
         {
             TValue errMsg = TValue::Create<tString>(vm->CreateStringObjectFromRawCString("'load' returned too many (>1000000) code pieces"));
@@ -298,7 +295,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_load_continuation)
         sb[3] = TValue::Create<tInt32>(ord);
 
         TValue* callFrame = sb + 4;
-        assert(sb[0].Is<tFunction>());
+        Assert(sb[0].Is<tFunction>());
         callFrame[0] = sb[0];
         MakeInPlaceCall(callFrame + x_numSlotsForStackFrameHeader, 0 /*numArgs*/, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(base_load_continuation));
     }
@@ -308,11 +305,11 @@ iter_end:
 
     {
         TValue* sb = GetStackBase();
-        assert(sb[2].Is<tTable>());
+        Assert(sb[2].Is<tTable>());
         HeapPtr<TableObject> tab = sb[2].As<tTable>();
-        assert(sb[3].Is<tInt32>());
+        Assert(sb[3].Is<tInt32>());
         int32_t len = sb[3].As<tInt32>();
-        assert(len >= 0);
+        Assert(len >= 0);
 
         ParseResult res = ParseLuaScript(GetCurrentCoroutine(), tab, static_cast<uint32_t>(len));
         if (res.m_scriptModule.get() == nullptr)
@@ -500,7 +497,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_next)
     //
     if (kv.m_key.Is<tNil>())
     {
-        assert(kv.m_value.Is<tNil>());
+        Assert(kv.m_value.Is<tNil>());
         Return(TValue::Create<tNil>());
     }
     else
@@ -548,7 +545,7 @@ static bool WARN_UNUSED HasNoExoticToStringMetamethodForStringType(VM* vm)
         return true;
     }
     HeapPtr<TableObject> tab = vm->m_metatableForString.As<TableObject>();
-    assert(tab->m_type == HeapEntityType::Table);
+    Assert(tab->m_type == HeapEntityType::Table);
     SystemHeapPointer<void> hiddenClass = TCGet(tab->m_hiddenClass);
     return hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value;
 }
@@ -584,7 +581,7 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
         }
         else
         {
-            assert(miv.IsBoolean());
+            Assert(miv.IsBoolean());
             if (unlikely(vm->m_metatableForBoolean.m_value != 0))
             {
                 return false;
@@ -594,7 +591,7 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
         return true;
     }
 
-    assert(tv.Is<tHeapEntity>());
+    Assert(tv.Is<tHeapEntity>());
     HeapEntityType ty = tv.GetHeapEntityType();
     void* p = TranslateToRawPointer(vm, tv.As<tHeapEntity>());
     if (ty == HeapEntityType::String)
@@ -628,11 +625,11 @@ static bool WARN_UNUSED TryPrintUsingFastPath(VM* vm, FILE* fp, TValue tv)
     {
         // TODO: support userdata
         //
-        assert(false && "unimplemented");
+        Assert(false && "unimplemented");
         __builtin_unreachable();
     }
 
-    assert(ty == HeapEntityType::Table);
+    Assert(ty == HeapEntityType::Table);
     HeapPtr<TableObject> tableObj = tv.As<tTable>();
     UserHeapPointer<void> mt = TableObject::GetMetatable(tableObj).m_result;
     if (unlikely(mt.m_value != 0))
@@ -678,11 +675,11 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(base_print_continuation)
     // Load the information from the call frame to figure out what we should print next.
     //
     TValue* sb = GetStackBase();
-    assert(sb[0].Is<tInt32>());
+    Assert(sb[0].Is<tInt32>());
     size_t numElementsToPrint = static_cast<size_t>(sb[0].As<tInt32>());
-    assert(sb[numElementsToPrint].Is<tInt32>());
+    Assert(sb[numElementsToPrint].Is<tInt32>());
     size_t curElementToPrint = static_cast<size_t>(sb[numElementsToPrint].As<tInt32>());
-    assert(0 < curElementToPrint && curElementToPrint <= numElementsToPrint);
+    Assert(0 < curElementToPrint && curElementToPrint <= numElementsToPrint);
     if (curElementToPrint == numElementsToPrint)
     {
         fprintf(fp, "\n");
@@ -913,13 +910,11 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawget)
     }
     else if (index.Is<tHeapEntity>())
     {
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(tableObj, UserHeapPointer<void> { index.As<tHeapEntity>() }, icInfo /*out*/);
-        result = TableObject::GetById(tableObj, index.As<tHeapEntity>(), icInfo);
+        result = RawGetAnyHeapEntityMaybeNonStringPropertyFromTableObject(tableObj, index.As<tHeapEntity>()).m_value;
     }
     else
     {
-        assert(index.Is<tMIV>());
+        Assert(index.Is<tMIV>());
         if (index.Is<tNil>())
         {
             // Indexing a table by 'nil' for read is not an error, but always results in nil,
@@ -929,12 +924,11 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawget)
         }
         else
         {
-            assert(index.Is<tBool>());
-            UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(index.As<tBool>());
-
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(tableObj, specialKey, icInfo /*out*/);
-            result = TableObject::GetById(tableObj, specialKey.As<void>(), icInfo);
+            Assert(index.Is<tBool>());
+            // Note that the special keys are HeapString (they are special HeapStrings that don't get put into
+            // the global string table, but are strings nevertheless), so we can use RawGetStringPropertyFromTableObject
+            //
+            result = RawGetStringPropertyFromTableObject(tableObj, VM_GetSpecialKeyForBoolean(index.As<tBool>()).As());
         }
     }
 
@@ -990,12 +984,12 @@ DEEGEN_DEFINE_LIB_FUNC(base_rawset)
     }
     else
     {
-        assert(index.Is<tMIV>());
+        Assert(index.Is<tMIV>());
         if (unlikely(index.Is<tNil>()))
         {
             ThrowError("table index is nil");
         }
-        assert(index.Is<tBool>());
+        Assert(index.Is<tBool>());
         UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(index.As<tBool>());
 
         PutByIdICInfo icInfo;
@@ -1139,10 +1133,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_setmetatable)
     if (metatableMaybeNull.m_value != 0)
     {
         HeapPtr<TableObject> existingMetatable = metatableMaybeNull.As<TableObject>();
-        UserHeapPointer<HeapString> prop = VM_GetStringNameForMetatableKind(LuaMetamethodKind::ProtectedMt);
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(existingMetatable, prop, icInfo /*out*/);
-        TValue result = TableObject::GetById(existingMetatable, prop.As<void>(), icInfo);
+        TValue result = GetMetamethodFromMetatable(existingMetatable, LuaMetamethodKind::ProtectedMt);
         if (unlikely(!result.Is<tNil>()))
         {
             ThrowError("cannot change a protected metatable");
@@ -1231,7 +1222,7 @@ base_10_conversion:
         }
         else
         {
-            assert(res.fmt == STRSCAN_NUM);
+            Assert(res.fmt == STRSCAN_NUM);
             Return(TValue::Create<tDouble>(res.d));
         }
     }
@@ -1253,7 +1244,7 @@ base_10_conversion:
         }
         else
         {
-            assert(res.fmt == STRSCAN_NUM);
+            Assert(res.fmt == STRSCAN_NUM);
             Return(TValue::Create<tDouble>(res.d));
         }
     }
@@ -1277,7 +1268,7 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
         }
         else
         {
-            assert(miv.IsBoolean());
+            Assert(miv.IsBoolean());
             if (miv.GetBooleanValue())
             {
                 return TValue::Create<tString>(vm->CreateStringObjectFromRawCString("true"));
@@ -1290,7 +1281,7 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
     }
     else
     {
-        assert(value.Is<tHeapEntity>());
+        Assert(value.Is<tHeapEntity>());
         if (value.Is<tString>())
         {
             return value;
@@ -1314,8 +1305,8 @@ static TValue WARN_UNUSED LuaDefaultStringifyValue(VM* vm, TValue value)
         {
             // TODO: support userdata
             //
-            assert(p->m_type == HeapEntityType::Userdata);
-            assert(false && "unimplemented");
+            Assert(p->m_type == HeapEntityType::Userdata);
+            Assert(false && "unimplemented");
             __builtin_unreachable();
         }
 
@@ -1359,10 +1350,8 @@ DEEGEN_DEFINE_LIB_FUNC(base_tostring)
     }
 
     HeapPtr<TableObject> metatable = mt.As<TableObject>();
-    assert(metatable->m_type == HeapEntityType::Table);
-    GetByIdICInfo info;
-    TableObject::PrepareGetById(metatable, vm->m_stringNameForToStringMetamethod, info /*out*/);
-    TValue metamethod = TableObject::GetById(metatable, vm->m_stringNameForToStringMetamethod.As(), info);
+    Assert(metatable->m_type == HeapEntityType::Table);
+    TValue metamethod = RawGetStringPropertyFromTableObject(metatable, vm->m_stringNameForToStringMetamethod.As());
 
     if (likely(metamethod.Is<tNil>()))
     {
@@ -1418,7 +1407,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_type)
     }
     else
     {
-        assert(arg.Is<tHeapEntity>());
+        Assert(arg.Is<tHeapEntity>());
         HeapEntityType ty = arg.GetHeapEntityType();
         switch (ty)
         {
@@ -1444,7 +1433,7 @@ DEEGEN_DEFINE_LIB_FUNC(base_type)
         }
         default:
         {
-            assert(false);
+            Assert(false);
             __builtin_unreachable();
         }
         }   /* switch ty*/

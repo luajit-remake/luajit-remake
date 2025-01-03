@@ -30,6 +30,8 @@ enum class DeegenSpecializationKind : uint8_t
     BytecodeConstantWithType
 };
 
+extern "C" TypeMaskTy DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(void*, size_t);
+
 namespace detail
 {
 
@@ -60,8 +62,8 @@ constexpr bool DeegenBytecodeOperandIsLiteralType(DeegenBytecodeOperandType valu
 struct DeegenFrontendBytecodeDefinitionDescriptor
 {
     constexpr static size_t x_maxOperands = 10;
-    constexpr static size_t x_maxQuickenings = 10;
-    constexpr static size_t x_maxVariants = 100;
+    constexpr static size_t x_maxQuickenings = 1;   // currently only hot-cold splitting supported
+    constexpr static size_t x_maxVariants = 50;
 
     struct Operand
     {
@@ -127,10 +129,62 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         return Operand { name, DeegenBytecodeOperandType::BytecodeRangeRW };
     }
 
+    enum class RegHint : uint8_t
+    {
+        // The operand should be put into GPR
+        //
+        GPR,
+        // The operand should be put into FPR
+        //
+        FPR,
+        X_END_OF_ENUM
+    };
+
+    struct OperandRegPriorityInfo
+    {
+        constexpr OperandRegPriorityInfo() : m_numTerms(static_cast<uint8_t>(-1)), m_priorityList() { }
+
+        static constexpr size_t x_maxTerms = static_cast<size_t>(RegHint::X_END_OF_ENUM);
+
+        consteval void Append(RegHint value)
+        {
+            ReleaseAssert(m_numTerms < x_maxTerms);
+            m_priorityList[m_numTerms] = value;
+            m_numTerms++;
+        }
+
+        uint8_t m_numTerms;
+        RegHint m_priorityList[x_maxTerms];
+    };
+
+    struct RegPriorityInfo
+    {
+        constexpr RegPriorityInfo() : m_data() { }
+
+        consteval void Set(size_t ord, OperandRegPriorityInfo info)
+        {
+            ReleaseAssert(ord < x_maxOperands);
+            ReleaseAssert(info.m_numTerms != static_cast<size_t>(-1));
+            ReleaseAssert(info.m_numTerms <= info.x_maxTerms);
+            for (size_t i = 0; i < info.m_numTerms; i++)
+            {
+                ReleaseAssert(info.m_priorityList[i] != RegHint::X_END_OF_ENUM);
+                for (size_t j = i + 1; j < info.m_numTerms; j++)
+                {
+                    ReleaseAssert(info.m_priorityList[i] != info.m_priorityList[j]);
+                }
+            }
+            m_data[ord] = info;
+        }
+
+        OperandRegPriorityInfo m_data[x_maxOperands];
+    };
+
     struct SpecializedOperand
     {
-        constexpr SpecializedOperand() : m_kind(DeegenSpecializationKind::NotSpecialized), m_value(0) { }
-        constexpr SpecializedOperand(DeegenSpecializationKind kind, uint64_t value) : m_kind(kind), m_value(value) { }
+        constexpr SpecializedOperand() : m_kind(DeegenSpecializationKind::NotSpecialized), m_value(0), m_regHint() { }
+        constexpr SpecializedOperand(DeegenSpecializationKind kind, uint64_t value) : m_kind(kind), m_value(value), m_regHint() { }
+        constexpr SpecializedOperand(OperandRegPriorityInfo regHint) : SpecializedOperand() { m_regHint = regHint; }
 
         DeegenSpecializationKind m_kind;
         // The interpretation of 'm_value' depends on 'm_kind'
@@ -140,10 +194,29 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         // m_kind == BytecodeConstantWithType: m_value is the type speculation mask
         //
         uint64_t m_value;
+        OperandRegPriorityInfo m_regHint;
     };
 
     struct SpecializedOperandRef
     {
+        template<typename... Args>
+        consteval SpecializedOperandRef WARN_UNUSED RegHint(Args... args)
+        {
+            constexpr size_t nargs = sizeof...(args);
+            std::array<DeegenFrontendBytecodeDefinitionDescriptor::RegHint, nargs> arr { args... };
+            OperandRegPriorityInfo info;
+            ReleaseAssert(nargs <= OperandRegPriorityInfo::x_maxTerms);
+            info.m_numTerms = nargs;
+            for (size_t i = 0; i < nargs; i++)
+            {
+                info.m_priorityList[i] = arr[i];
+            }
+            SpecializedOperandRef ret = *this;
+            ReleaseAssert(ret.m_operand.m_regHint.m_numTerms == static_cast<uint8_t>(-1));
+            ret.m_operand.m_regHint = info;
+            return ret;
+        }
+
         SpecializedOperand m_operand;
         size_t m_ord;
     };
@@ -151,40 +224,69 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     struct OperandRef
     {
         template<typename T>
-        consteval SpecializedOperandRef HasValue(T val)
+        consteval SpecializedOperandRef WARN_UNUSED HasValue(T val)
         {
             static_assert(std::is_integral_v<T>);
+            ReleaseAssert(m_ord != static_cast<size_t>(-1));
             ReleaseAssert(detail::DeegenBytecodeOperandIsLiteralType(m_operand.m_type));
             uint64_t spVal64 = static_cast<uint64_t>(static_cast<std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>>(val));
             return { .m_operand = { DeegenSpecializationKind::Literal, spVal64 }, .m_ord = m_ord };
         }
 
-        template<typename T>
-        consteval SpecializedOperandRef HasType()
+        consteval SpecializedOperandRef WARN_UNUSED HasType(TypeMaskTy typeMask)
         {
-            static_assert(IsValidTypeSpecialization<T>);
+            ReleaseAssert(m_ord != static_cast<size_t>(-1));
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
-            return { .m_operand = { DeegenSpecializationKind::SpeculatedTypeForOptimizer, x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+            return { .m_operand = { DeegenSpecializationKind::SpeculatedTypeForOptimizer, typeMask }, .m_ord = m_ord };
         }
 
-        consteval SpecializedOperandRef IsBytecodeSlot()
+        template<typename T>
+        consteval SpecializedOperandRef WARN_UNUSED HasType()
         {
+            static_assert(IsValidTypeSpecialization<T>);
+            return HasType(x_typeMaskFor<T>);
+        }
+
+        consteval SpecializedOperandRef WARN_UNUSED IsBytecodeSlot()
+        {
+            ReleaseAssert(m_ord != static_cast<size_t>(-1));
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant);
             return { .m_operand = { DeegenSpecializationKind::BytecodeSlot, 0 }, .m_ord = m_ord };
         }
 
         template<typename T = tTop>
-        consteval SpecializedOperandRef IsConstant()
+        consteval SpecializedOperandRef WARN_UNUSED IsConstant()
         {
             static_assert(IsValidTypeSpecialization<T>);
+            ReleaseAssert(m_ord != static_cast<size_t>(-1));
             ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::Constant);
-            return { .m_operand = { DeegenSpecializationKind::BytecodeConstantWithType, x_typeSpeculationMaskFor<T> }, .m_ord = m_ord };
+            return { .m_operand = { DeegenSpecializationKind::BytecodeConstantWithType, x_typeMaskFor<T> }, .m_ord = m_ord };
+        }
+
+        // Specify the register kind(s) (GPR/FPR) an operand should reside in for reg alloc
+        // Order matters: earlier option has higher priority
+        //
+        template<typename... Args>
+        consteval SpecializedOperandRef WARN_UNUSED RegHint(Args... args)
+        {
+            constexpr size_t nargs = sizeof...(args);
+            std::array<DeegenFrontendBytecodeDefinitionDescriptor::RegHint, nargs> arr { args... };
+            OperandRegPriorityInfo info;
+            ReleaseAssert(nargs <= OperandRegPriorityInfo::x_maxTerms);
+            info.m_numTerms = nargs;
+            for (size_t i = 0; i < nargs; i++)
+            {
+                info.m_priorityList[i] = arr[i];
+            }
+            return { .m_operand = { info }, .m_ord = m_ord };
         }
 
         size_t m_ord;
         Operand m_operand;
     };
 
+    // This struct must not contain any pointers!
+    //
     struct OperandExprNode
     {
         enum Kind
@@ -197,7 +299,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             BadKind
         };
 
-        consteval OperandExprNode() : m_kind(Kind::BadKind), m_left(0), m_right(0), m_operandName(nullptr), m_number(0) { }
+        consteval OperandExprNode() : m_kind(Kind::BadKind), m_left(0), m_right(0), m_number(0)
+        {
+            for (size_t i = 0; i < x_maxOperandNameLength; i++) { m_operandName[i] = '\0'; }
+        }
 
         consteval bool HasLeftChild()
         {
@@ -243,13 +348,16 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             }   /*switch*/
         }
 
+        static constexpr size_t x_maxOperandNameLength = 32;
         Kind m_kind;
         size_t m_left;
         size_t m_right;
-        const char* m_operandName;
+        char m_operandName[x_maxOperandNameLength];
         int64_t m_number;
     };
 
+    // This struct must not contain any pointers!
+    //
     struct OperandExpr
     {
         constexpr OperandExpr()
@@ -303,7 +411,13 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             OperandExpr res;
             res.m_numNodes = 1;
             res.m_nodes[0].m_kind = OperandExprNode::Operand;
-            res.m_nodes[0].m_operandName = name;
+            std::string_view strName { name };
+            ReleaseAssert(strName.length() < OperandExprNode::x_maxOperandNameLength);
+            for (size_t i = 0; i < strName.length(); i++)
+            {
+                res.m_nodes[0].m_operandName[i] = strName[i];
+            }
+            res.m_nodes[0].m_operandName[strName.length()] = '\0';
             return res;
         }
 
@@ -337,11 +451,20 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
     struct Range
     {
-        consteval Range() = default;
+        consteval Range()
+            : m_start()
+            , m_len()
+            , m_typeDeductionRuleFn(nullptr)
+            , m_shouldValueProfileRange(false)
+            , m_isExplicitlyNoProfile(false)
+        { }
 
         consteval Range(OperandExpr start, OperandExpr len)
             : m_start(start)
             , m_len(len)
+            , m_typeDeductionRuleFn(nullptr)
+            , m_shouldValueProfileRange(false)
+            , m_isExplicitlyNoProfile(false)
         { }
 
         consteval Range(OperandExpr start, OperandRef len)
@@ -352,11 +475,6 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         consteval Range(OperandExpr start, int64_t len)
             : Range(start,
                     OperandExpr::ConstructNumber(len))
-        { }
-
-        consteval Range(OperandExpr start, Infinity /*unused*/)
-            : Range(start,
-                    OperandExpr::ConstructInfinity())
         { }
 
         consteval Range(OperandRef start, OperandExpr len)
@@ -374,11 +492,6 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                     OperandExpr::ConstructNumber(len))
         { }
 
-        consteval Range(OperandRef start, Infinity /*unused*/)
-            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
-                    OperandExpr::ConstructInfinity())
-        { }
-
         consteval Range(int64_t start, OperandExpr len)
             : Range(OperandExpr::ConstructNumber(start),
                     len)
@@ -394,13 +507,41 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                     OperandExpr::ConstructNumber(len))
         { }
 
+        // For internal use only
+        //
+        consteval Range(OperandExpr start, Infinity /*unused*/)
+            : Range(start,
+                    OperandExpr::ConstructInfinity())
+        { }
+
+        // For internal use only
+        //
+        consteval Range(OperandRef start, Infinity /*unused*/)
+            : Range(OperandExpr::ConstructOperandRef(start.m_operand.m_name),
+                    OperandExpr::ConstructInfinity())
+        { }
+
+        // For internal use only
+        //
         consteval Range(int64_t start, Infinity /*unused*/)
             : Range(OperandExpr::ConstructNumber(start),
                     OperandExpr::ConstructInfinity())
         { }
 
+        // Specify the type deduction rule for the range of values written by the bytecode
+        // The function should start with a 'size_t ord' parameter, and returns the type mask for ordinal 'ord' of the range
+        //
+        template<typename T>
+        consteval std::pair<Range, T> WARN_UNUSED TypeDeductionRule(T v)
+        {
+            return std::make_pair(*this, v);
+        }
+
         OperandExpr m_start;
         OperandExpr m_len;
+        void* m_typeDeductionRuleFn;
+        bool m_shouldValueProfileRange;
+        bool m_isExplicitlyNoProfile;
     };
 
     struct VariadicArguments
@@ -419,15 +560,16 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
     struct DeclareRWCInfo
     {
-        constexpr DeclareRWCInfo()
+        constexpr DeclareRWCInfo(bool isForWriteDecl)
             : m_apiCalled(false)
+            , m_isForWriteDecl(isForWriteDecl)
             , m_accessesVariadicArgs(false)
             , m_accessesVariadicResults(false)
             , m_numRanges(0)
         { }
 
         template<typename... Args>
-        consteval void Process(VariadicArguments va, Args... args)
+        consteval void Process(DeegenFrontendBytecodeDefinitionDescriptor* owner, VariadicArguments va, Args... args)
         {
             m_apiCalled = true;
             if (va.m_value)
@@ -435,11 +577,11 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 ReleaseAssert(!m_accessesVariadicArgs);
                 m_accessesVariadicArgs = true;
             }
-            Process(args...);
+            Process(owner, args...);
         }
 
         template<typename... Args>
-        consteval void Process(VariadicResults vr, Args... args)
+        consteval void Process(DeegenFrontendBytecodeDefinitionDescriptor* owner, VariadicResults vr, Args... args)
         {
             m_apiCalled = true;
             if (vr.m_value)
@@ -447,24 +589,53 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 ReleaseAssert(!m_accessesVariadicResults);
                 m_accessesVariadicResults = true;
             }
-            Process(args...);
+            Process(owner, args...);
         }
 
         template<typename... Args>
-        consteval void Process(Range range, Args... args)
+        consteval void Process(DeegenFrontendBytecodeDefinitionDescriptor* owner, Range range, Args... args)
         {
             m_apiCalled = true;
             ReleaseAssert(m_numRanges < x_maxRangeAnnotations && "too many read ranges, please raise x_maxRangeAnnotations");
             m_ranges[m_numRanges] = range;
             m_numRanges++;
-            Process(args...);
+            Process(owner, args...);
         }
 
-        consteval void Process() { m_apiCalled = true; }
+        template<typename T, typename... Args>
+        consteval void Process(DeegenFrontendBytecodeDefinitionDescriptor* owner, std::pair<Range, T> rangeWithTDR, Args... args)
+        {
+            m_apiCalled = true;
+            ReleaseAssert(m_numRanges < x_maxRangeAnnotations && "too many read ranges, please raise x_maxRangeAnnotations");
+            ReleaseAssert(m_isForWriteDecl && "TypeDeductionRule should only be specified for DeclareWrite!");
+            m_ranges[m_numRanges] = rangeWithTDR.first;
+            if constexpr(std::is_same_v<T, ValueProfileTagEnum>)
+            {
+                if (rangeWithTDR.second == ValueProfile)
+                {
+                    m_ranges[m_numRanges].m_shouldValueProfileRange = true;
+                }
+                else
+                {
+                    ReleaseAssert(rangeWithTDR.second == DoNotProfile);
+                    m_ranges[m_numRanges].m_isExplicitlyNoProfile = true;
+                }
+            }
+            else
+            {
+                owner->ValidateTypeDeductionRulePrototype<true /*forRange*/>(rangeWithTDR.second);
+                m_ranges[m_numRanges].m_typeDeductionRuleFn = FOLD_CONSTEXPR(reinterpret_cast<void*>(+(rangeWithTDR.second)));
+            }
+            m_numRanges++;
+            Process(owner, args...);
+        }
+
+        consteval void Process(DeegenFrontendBytecodeDefinitionDescriptor*) { m_apiCalled = true; }
 
         static constexpr size_t x_maxRangeAnnotations = 4;      // Raise as necessary
 
         bool m_apiCalled;
+        bool m_isForWriteDecl;
         bool m_accessesVariadicArgs;
         bool m_accessesVariadicResults;
         size_t m_numRanges;
@@ -508,39 +679,13 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             return *this;
         }
 
-        // Declare all the locals that may be read by this bytecode
-        // All reads must be declared here (except the operands that are already locals, which are obviously read)
-        //
-        template<typename... Args>
-        consteval SpecializedVariant& DeclareReads(Args... args)
-        {
-            m_variantDeclareReadsInfo.Process(args...);
-            return *this;
-        }
-
-        template<typename... Args>
-        consteval SpecializedVariant& DeclareWrites(Args... args)
-        {
-            m_variantDeclareWritesInfo.Process(args...);
-            return *this;
-        }
-
-        template<typename... Args>
-        consteval SpecializedVariant& DeclareClobbers(Args... args)
-        {
-            m_variantDeclareClobbersInfo.Process(args...);
-            return *this;
-        }
-
         bool m_enableHCS;
         size_t m_numQuickenings;
         size_t m_numOperands;
         DeegenBytecodeOperandType m_operandTypes[x_maxOperands];
         SpecializedOperand m_base[x_maxOperands];
+        OperandRegPriorityInfo m_baseOutputRegPriority;
         Quickening m_quickenings[x_maxQuickenings];
-        DeclareRWCInfo m_variantDeclareReadsInfo;
-        DeclareRWCInfo m_variantDeclareWritesInfo;
-        DeclareRWCInfo m_variantDeclareClobbersInfo;
 
     private:
         template<typename... Args>
@@ -564,7 +709,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             for (size_t i = 0; i < n; i++)
             {
                 ReleaseAssert(arr[i].m_ord < m_numOperands);
-                ReleaseAssert(arr[i].m_operand.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                ReleaseAssert(arr[i].m_operand.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer ||
+                              arr[i].m_operand.m_kind == DeegenSpecializationKind::NotSpecialized);
                 size_t ord = arr[i].m_ord;
                 DeegenBytecodeOperandType originalOperandType = m_operandTypes[ord];
                 ReleaseAssert(originalOperandType == DeegenBytecodeOperandType::BytecodeSlot ||
@@ -576,8 +722,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         }
     };
 
-    template<typename... Args>
-    consteval SpecializedVariant& Variant(Args... args)
+    template<bool forDfg, typename... Args>
+    consteval SpecializedVariant& AddVariantImpl(Args... args)
     {
         ReleaseAssert(m_operandTypeListInitialized);
 
@@ -592,9 +738,25 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             }
         }
 
-        ReleaseAssert(m_numVariants < x_maxVariants);
-        SpecializedVariant& r = m_variants[m_numVariants];
-        m_numVariants++;
+        if (forDfg)
+        {
+            ReleaseAssert(m_numDfgVariants < x_maxVariants);
+        }
+        else
+        {
+            ReleaseAssert(m_numVariants < x_maxVariants);
+        }
+
+        SpecializedVariant& r = forDfg ? m_dfgVariants[m_numDfgVariants] : m_variants[m_numVariants];
+
+        if (forDfg)
+        {
+            m_numDfgVariants++;
+        }
+        else
+        {
+            m_numVariants++;
+        }
 
         r.m_numOperands = m_numOperands;
         for (size_t i = 0; i < m_numOperands; i++)
@@ -604,8 +766,16 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
 
         for (size_t i = 0; i < n; i++)
         {
-            ReleaseAssert(arr[i].m_ord < m_numOperands);
-            r.m_base[arr[i].m_ord] = arr[i].m_operand;
+            if (arr[i].m_ord == static_cast<size_t>(-1))
+            {
+                ReleaseAssert(arr[i].m_operand.m_kind == DeegenSpecializationKind::NotSpecialized);
+                r.m_baseOutputRegPriority = arr[i].m_operand.m_regHint;
+            }
+            else
+            {
+                ReleaseAssert(arr[i].m_ord < m_numOperands);
+                r.m_base[arr[i].m_ord] = arr[i].m_operand;
+            }
         }
 
         for (size_t i = 0; i < m_numOperands; i++)
@@ -620,17 +790,38 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             }
             case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
             {
-                ReleaseAssert((o.m_kind == DeegenSpecializationKind::BytecodeSlot || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType) && "All BytecodeSlotOrConstant must be specialized in each variant");
+                if (forDfg)
+                {
+                    ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                }
+                else
+                {
+                    ReleaseAssert((o.m_kind == DeegenSpecializationKind::BytecodeSlot || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType) && "All BytecodeSlotOrConstant must be specialized in each variant");
+                }
                 break;
             }
             case DeegenBytecodeOperandType::BytecodeSlot:
             {
-                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized);
+                if (forDfg)
+                {
+                    ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                }
+                else
+                {
+                    ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized);
+                }
                 break;
             }
             case DeegenBytecodeOperandType::Constant:
             {
-                ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType);
+                if (forDfg)
+                {
+                    ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
+                }
+                else
+                {
+                    ReleaseAssert(o.m_kind == DeegenSpecializationKind::NotSpecialized || o.m_kind == DeegenSpecializationKind::BytecodeConstantWithType);
+                }
                 break;
             }
             case DeegenBytecodeOperandType::BytecodeRangeRO:
@@ -656,6 +847,18 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     }
 
     template<typename... Args>
+    consteval SpecializedVariant& Variant(Args... args)
+    {
+        return AddVariantImpl<false /*forDfg*/>(args...);
+    }
+
+    template<typename... Args>
+    consteval SpecializedVariant& DfgVariant(Args... args)
+    {
+        return AddVariantImpl<true /*forDfg*/>(args...);
+    }
+
+    template<typename... Args>
     consteval void Operands(Args... args)
     {
         ReleaseAssert(!m_operandTypeListInitialized);
@@ -674,6 +877,145 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             }
             ReleaseAssert(arr[i].m_type != DeegenBytecodeOperandType::INVALID_TYPE);
             m_operandTypes[i] = arr[i];
+        }
+    }
+
+    struct RangedInputTypeMaskGetter
+    {
+        // ordInRange must be valid (declared to be read by the range using DeclareReads)!
+        //
+        TypeMask WARN_UNUSED ALWAYS_INLINE Get(size_t ordInRange)
+        {
+            return TypeMask(DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(this, ordInRange));
+        }
+    };
+
+    // The type deduction rule function should have the following prototype based on the bytecode operands:
+    //   TValue operand -> TypeMask
+    //   Range operand -> RangeTsmGetter*
+    //   Literal operand -> the literal type
+    //
+    // If the rule is for an output range, a size_t should come preceding all the operands,
+    // which is the ordinal of the value in the range to query
+    //
+    template<bool forRange, size_t bcOperandOrd, typename T>
+    consteval void ValidateTypeDeductionRulePrototypeImpl()
+    {
+        constexpr size_t argOrd = bcOperandOrd + (forRange ? 1 : 0);
+        static_assert(argOrd <= num_args_in_function<T>);
+        if constexpr(argOrd == num_args_in_function<T>)
+        {
+            ReleaseAssert(bcOperandOrd == m_numOperands);
+            return;
+        }
+        else
+        {
+            ReleaseAssert(bcOperandOrd < m_numOperands);
+            using Arg = arg_nth_t<T, argOrd>;
+            DeegenBytecodeOperandType opType = m_operandTypes[bcOperandOrd].m_type;
+            switch (opType)
+            {
+            case DeegenBytecodeOperandType::BytecodeSlotOrConstant:
+            case DeegenBytecodeOperandType::BytecodeSlot:
+            case DeegenBytecodeOperandType::Constant:
+            {
+                ReleaseAssert((std::is_same_v<Arg, TypeMask>));
+                break;
+            }
+            case DeegenBytecodeOperandType::BytecodeRangeRO:
+            case DeegenBytecodeOperandType::BytecodeRangeRW:
+            {
+                ReleaseAssert((std::is_same_v<Arg, RangedInputTypeMaskGetter*>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int8:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int8_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt8:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint8_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int16:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int16_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt16:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint16_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::Int32:
+            {
+                ReleaseAssert((std::is_same_v<Arg, int32_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::UInt32:
+            {
+                ReleaseAssert((std::is_same_v<Arg, uint32_t>));
+                break;
+            }
+            case DeegenBytecodeOperandType::INVALID_TYPE:
+                ReleaseAssert(false);
+            }
+            ValidateTypeDeductionRulePrototypeImpl<forRange, bcOperandOrd + 1, T>();
+        }
+    }
+
+    template<bool forRange, typename T>
+    consteval void ValidateTypeDeductionRulePrototype(T v)
+    {
+        // +v forces a cast to plain function pointer if v is a lambda
+        // https://stackoverflow.com/questions/18889028/a-positive-lambda-what-sorcery-is-this
+        //
+        if constexpr(forRange)
+        {
+            static_assert(std::is_same_v<arg_nth_t<decltype(+v), 0>, size_t>, "Range output deduction rule should start with a size_t argument");
+            ReleaseAssert(num_args_in_function<decltype(+v)> == m_numOperands + 1 && "Range output deduction rule should have #operands+1 arguments");
+        }
+        else
+        {
+            ReleaseAssert(num_args_in_function<decltype(+v)> == m_numOperands && "Output deduction rule should have #operands arguments");
+        }
+
+        ValidateTypeDeductionRulePrototypeImpl<forRange, 0, decltype(+v)>();
+        static_assert(std::is_same_v<function_return_type_t<decltype(+v)>, TypeMask>);
+        std::ignore = v;
+    }
+
+    enum ValueProfileTagEnum
+    {
+        ValueProfile,
+        // Explicitly specify to not profile or speculate on the type of the value
+        //
+        DoNotProfile
+    };
+
+    // Specify output type deduction rule
+    //
+    template<typename T>
+    consteval void TypeDeductionRule(T func)
+    {
+        ReleaseAssert(m_hasTValueOutput);
+        if constexpr(std::is_same_v<T, ValueProfileTagEnum>)
+        {
+            if (func == ValueProfile)
+            {
+                m_outputShouldBeValueProfiled = true;
+            }
+            else
+            {
+                ReleaseAssert(func == DoNotProfile);
+                m_outputShouldExplicitlyNotProfiled = true;
+            }
+        }
+        else
+        {
+            ValidateTypeDeductionRulePrototype<false /*forRange*/>(func);
+            m_outputTypeDeductionRule = FOLD_CONSTEXPR(reinterpret_cast<void*>(+func));
         }
     }
 
@@ -792,6 +1134,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             case DeegenBytecodeOperandType::INVALID_TYPE:
                 ReleaseAssert(false);
             }
+            ValidateImplementationPrototype<ord + 1, T>();
         }
     }
 
@@ -816,6 +1159,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     consteval OperandRef Op(std::string_view name)
     {
         ReleaseAssert(m_operandTypeListInitialized);
+        if (name == "output")
+        {
+            return { .m_ord = static_cast<size_t>(-1), .m_operand = { "output", DeegenBytecodeOperandType::BytecodeSlot }};
+        }
         for (size_t i = 0; i < m_numOperands; i++)
         {
             if (std::string_view { m_operandTypes[i].m_name } == name)
@@ -832,19 +1179,68 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     template<typename... Args>
     consteval void DeclareReads(Args... args)
     {
-        m_bcDeclareReadsInfo.Process(args...);
+        m_bcDeclareReadsInfo.Process(this, args...);
     }
 
     template<typename... Args>
     consteval void DeclareWrites(Args... args)
     {
-        m_bcDeclareWritesInfo.Process(args...);
+        m_bcDeclareWritesInfo.Process(this, args...);
     }
 
+    // Declare that the bytecode execution may clobber certain locations in the range (i.e., these locations
+    // will have garbage values after execution), not considering in-place call
+    //
+    // Note that properly declaring clobbers is required for correctness, since it could affect the maximum
+    // length of the range used by the bytecode. For example, if the bytecode reads and writes range[0],
+    // but clobbers range[1], without the clobber declaration, the runtime would incorrectly assume that
+    // a range of length 1 would satisfy the bytecode, while actually it wouldn't.
+    //
     template<typename... Args>
     consteval void DeclareClobbers(Args... args)
     {
-        m_bcDeclareClobbersInfo.Process(args...);
+        m_bcDeclareClobbersInfo.Process(this, args...);
+    }
+
+    // Declare that an in-place call may happen at >= startLoc, so everything >= it could be implicitly clobbered by the in-place call
+    //
+    template<typename Arg>
+    consteval void DeclareUsedByInPlaceCall(Arg startLoc)
+    {
+        DeclareClobbers(Range(startLoc, Infinity()));
+    }
+
+    consteval void DeclareImplicitClobbersDueToTailCall()
+    {
+        DeclareClobbers(VariadicArguments(), Range(0, Infinity()));
+    }
+
+    template<typename... Args>
+    consteval void RegAllocHint(Args... args)
+    {
+        constexpr size_t nargs = sizeof...(args);
+        std::array<SpecializedOperandRef, nargs> arr = { args... };
+        for (size_t i = 0; i < nargs; i++)
+        {
+            SpecializedOperandRef& op = arr[i];
+            ReleaseAssert(op.m_operand.m_kind == DeegenSpecializationKind::NotSpecialized);
+            ReleaseAssert(op.m_operand.m_regHint.m_numTerms != static_cast<uint8_t>(-1));
+            if (op.m_ord == static_cast<size_t>(-1))
+            {
+                ReleaseAssert(m_hasTValueOutput);
+                m_outputRegPriorityInfo = op.m_operand.m_regHint;
+            }
+            else
+            {
+                ReleaseAssert(op.m_ord < m_numOperands);
+                m_bcRegPriorityInfo.Set(op.m_ord, op.m_operand.m_regHint);
+            }
+        }
+    }
+
+    consteval void RegAllocMayBeDisabledDespiteRegHintGiven()
+    {
+        m_disableRegAllocMustBeEnabledAssert = true;
     }
 
     struct Intrinsic
@@ -898,18 +1294,26 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         , m_hasVariadicResOutput(false)
         , m_canPerformBranch(false)
         , m_isInterpreterTierUpPoint(false)
+        , m_disableRegAllocMustBeEnabledAssert(false)
         , m_implementationFn(nullptr)
         , m_bcLevelDeclareReadsCalled(false)
+        , m_outputShouldBeValueProfiled(false)
+        , m_outputShouldExplicitlyNotProfiled(false)
         , m_numOperands(0)
         , m_numVariants(0)
+        , m_numDfgVariants(0)
         , m_operandTypes()
         , m_variants()
-        , m_bcDeclareReadsInfo()
-        , m_bcDeclareWritesInfo()
-        , m_bcDeclareClobbersInfo()
+        , m_dfgVariants()
+        , m_bcDeclareReadsInfo(false /*isForWriteDecl*/)
+        , m_bcDeclareWritesInfo(true /*isForWriteDecl*/)
+        , m_bcDeclareClobbersInfo(false /*isForWriteDecl*/)
+        , m_bcRegPriorityInfo()
+        , m_outputRegPriorityInfo()
         , m_intrinsicOrd(static_cast<size_t>(-1))
         , m_numIntrinsicArgs(0)
         , m_intrinsicArgOperandOrd()
+        , m_outputTypeDeductionRule(nullptr)
     { }
 
     bool m_operandTypeListInitialized;
@@ -919,18 +1323,26 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     bool m_hasVariadicResOutput;
     bool m_canPerformBranch;
     bool m_isInterpreterTierUpPoint;
+    bool m_disableRegAllocMustBeEnabledAssert;
     void* m_implementationFn;
     bool m_bcLevelDeclareReadsCalled;
+    bool m_outputShouldBeValueProfiled;
+    bool m_outputShouldExplicitlyNotProfiled;
     size_t m_numOperands;
     size_t m_numVariants;
+    size_t m_numDfgVariants;
     Operand m_operandTypes[x_maxOperands];
     SpecializedVariant m_variants[x_maxVariants];
+    SpecializedVariant m_dfgVariants[x_maxVariants];
     DeclareRWCInfo m_bcDeclareReadsInfo;
     DeclareRWCInfo m_bcDeclareWritesInfo;
     DeclareRWCInfo m_bcDeclareClobbersInfo;
+    RegPriorityInfo m_bcRegPriorityInfo;
+    OperandRegPriorityInfo m_outputRegPriorityInfo;
     size_t m_intrinsicOrd;
     size_t m_numIntrinsicArgs;
     size_t m_intrinsicArgOperandOrd[x_maxIntrinsicArgCount];
+    void* m_outputTypeDeductionRule;
 };
 
 using DFBDD = DeegenFrontendBytecodeDefinitionDescriptor;
@@ -1044,26 +1456,27 @@ template<> struct deegen_bytecode_same_length_constraint_info<-1> {
 };
 
 template<typename T>
-struct deegen_get_bytecode_def_list_impl;
-
-template<>
-struct deegen_get_bytecode_def_list_impl<std::tuple<>>
+struct deegen_get_bytecode_def_list_impl
 {
-    static constexpr std::array<DeegenFrontendBytecodeDefinitionDescriptor, 0> value { };
-};
+    static constexpr size_t numElements = std::tuple_size_v<T>;
 
-template<typename Arg1, typename... Args>
-struct deegen_get_bytecode_def_list_impl<std::tuple<Arg1, Args...>>
-{
-    static constexpr Arg1 curv {};
+    using ArrTy = std::array<DeegenFrontendBytecodeDefinitionDescriptor, numElements>;
+    static constexpr ArrTy value = []()
+    {
+        constexpr auto get_array = [](auto&& ... x) { return ArrTy { std::forward<decltype(x)>(x) ... }; };
+        return std::apply(get_array, T());
+    }();
 
-    static_assert(std::is_base_of_v<DeegenFrontendBytecodeDefinitionDescriptor, Arg1>);
-    static_assert(curv.m_operandTypeListInitialized);
-    static_assert(curv.m_implementationInitialized);
-    static_assert(curv.m_resultKindInitialized);
-    static_assert(curv.m_numVariants > 0);
-
-    static constexpr auto value = constexpr_std_array_concat(std::array<DeegenFrontendBytecodeDefinitionDescriptor, 1> { curv }, deegen_get_bytecode_def_list_impl<std::tuple<Args...>>::value);
+    static_assert([](){
+        for (size_t i = 0; i < numElements; i++)
+        {
+            ReleaseAssert(value[i].m_operandTypeListInitialized);
+            ReleaseAssert(value[i].m_implementationInitialized);
+            ReleaseAssert(value[i].m_resultKindInitialized);
+            ReleaseAssert(value[i].m_numVariants > 0);
+        }
+        return true;
+    }());
 };
 
 }   // namespace detail

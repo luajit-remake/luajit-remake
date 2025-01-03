@@ -24,11 +24,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
     AstMakeCall::PreprocessModule(module.get());
 
-    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+    std::vector<BytecodeVariantCollection> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
     ReleaseAssert(defs.size() >= testcaseNum);
-    ReleaseAssert(defs[testcaseNum - 1].size() > 0);
-    auto& target = defs[testcaseNum - 1][0];
+    ReleaseAssert(defs[testcaseNum - 1].m_variants.size() > 0);
+    auto& target = defs[testcaseNum - 1].m_variants[0];
     target->m_isInterpreterCallIcExplicitlyDisabled = true;
     target->SetMaxOperandWidthBytes(4);
 
@@ -51,15 +51,43 @@ struct ExpectedResult
 
 ExpectedResult g_expectedResult;
 
-void ResultChecker(CoroutineRuntimeContext* coroCtx, uint64_t* stackBase, uint64_t numArgs, uint64_t cbHeapPtr, uint64_t tagRegister1, uint64_t /*unused1*/, uint64_t isMustTail, uint64_t /*unused2*/, uint64_t /*unused3*/, uint64_t tagRegister2)
+void ResultChecker(uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3,
+                   uint64_t arg4, uint64_t arg5, uint64_t arg6, uint64_t arg7,
+                   uint64_t arg8, uint64_t arg9, uint64_t arg10, uint64_t arg11,
+                   uint64_t arg12,
+                   double arg13, double arg14, double arg15, double arg16, double arg17, double arg18)
 {
-    ReleaseAssert(tagRegister1 == TValue::x_int32Tag);
-    ReleaseAssert(tagRegister2 == TValue::x_mivTag);
-    ReleaseAssert(g_expectedResult.m_expectedCoroCtx == coroCtx);
-    ReleaseAssert(g_expectedResult.m_expectedCallFrameBase == stackBase);
-    ReleaseAssert(g_expectedResult.m_expectedNumArgs == numArgs);
-    ReleaseAssert(g_expectedResult.m_expectedCbHeapPtr == cbHeapPtr);
-    ReleaseAssert(g_expectedResult.m_expectedIsMustTail == isMustTail);
+    std::vector<uint64_t> args;
+    args.push_back(arg0); args.push_back(arg1); args.push_back(arg2); args.push_back(arg3);
+    args.push_back(arg4); args.push_back(arg5); args.push_back(arg6); args.push_back(arg7);
+    args.push_back(arg8); args.push_back(arg9); args.push_back(arg10); args.push_back(arg11);
+    args.push_back(arg12);
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg13)); args.push_back(cxx2a_bit_cast<uint64_t>(arg14));
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg15)); args.push_back(cxx2a_bit_cast<uint64_t>(arg16));
+    args.push_back(cxx2a_bit_cast<uint64_t>(arg17)); args.push_back(cxx2a_bit_cast<uint64_t>(arg18));
+
+    ReleaseAssert(args.size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
+
+    auto checkValEqual = [&]<typename ValTy>(X64Reg reg, ValTy value)
+    {
+        ReleaseAssert(sizeof(ValTy) == 8);
+        uint8_t valBytes[8];
+        memcpy(valBytes, &value, 8);
+        uint64_t valI64 = UnalignedLoad<uint64_t>(valBytes);
+
+        size_t argOrd = RegisterPinningScheme::GetArgumentOrdinalForRegister(reg);
+        ReleaseAssert(argOrd < args.size());
+        ReleaseAssert(args[argOrd] == valI64);
+    };
+
+    checkValEqual(RPV_TagRegister1::Reg(), TValue::x_int32Tag);
+    checkValEqual(RPV_TagRegister2::Reg(), TValue::x_mivTag);
+    checkValEqual(RPV_CoroContext::Reg(), g_expectedResult.m_expectedCoroCtx);
+    checkValEqual(RPV_StackBase::Reg(), g_expectedResult.m_expectedCallFrameBase);
+    checkValEqual(RPV_NumArgsAsPtr::Reg(), g_expectedResult.m_expectedNumArgs);
+    checkValEqual(RPV_CodeBlock::Reg(), g_expectedResult.m_expectedCbHeapPtr);
+    checkValEqual(RPV_IsMustTailCall::Reg(), g_expectedResult.m_expectedIsMustTail);
+
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
     g_expectedResult.m_checkerFnCalled = true;
 
@@ -94,7 +122,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     LLVMContext& ctx = module->getContext();
     Function* func = module->getFunction(expectedFnName);
     ReleaseAssert(func != nullptr);
-    ReleaseAssert(func->arg_size() == 16);
+    ReleaseAssert(func->arg_size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
     ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
     func->setCallingConv(CallingConv::C);
 
@@ -160,7 +188,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
                         }
                         else if (demangledName == "r1()")
                         {
-                            Argument* sb = func->getArg(1);
+                            Value* sb = RegisterPinningScheme::GetRegisterValueAtEntry(func, RPV_StackBase::Reg());
                             ReleaseAssert(sb->getName().str() == "stackBase");
                             Instruction* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx) /*pointeeType*/, sb, { CreateLLVMConstantInt<uint64_t>(ctx, reinterpret_cast<uint64_t>(argRangeBegin)) });
                             ReleaseAssert(inst.getType() == gep->getType());
@@ -181,7 +209,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
                 {
                     ReleaseAssert(callee == nullptr);
                     ReleaseAssert(callInst->isMustTailCall());
-                    ReleaseAssert(callInst->arg_size() == 16);
+                    ReleaseAssert(callInst->arg_size() == RegisterPinningScheme::GetFunctionTypeNumArguments());
                     callInst->setCallingConv(CallingConv::C);
                 }
             }
@@ -220,6 +248,7 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     jit.AllowAccessWhitelistedHostSymbolsOnly();
     jit.AddAllowedHostSymbol("memcpy");
     jit.AddAllowedHostSymbol("memmove");
+    jit.AddAllowedHostSymbol("_Z17FireReleaseAssertPKcS0_jS0_");
     void* testFnAddr = jit.GetFunction(expectedFnName);
     void* rcFnAddr = nullptr;
     if (!isMustTail)
@@ -231,7 +260,6 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     //
     CoroutineRuntimeContext* coroCtx = CoroutineRuntimeContext::Create(vm, UserHeapPointer<TableObject> {} /*globalObject*/);
     coroCtx->m_numVariadicRets = static_cast<uint32_t>(numVarRes);
-    coroCtx->m_variadicRetSlotBegin = SafeIntegerCast<int32_t>(varResStartOffset);
 
     uint64_t* stack = reinterpret_cast<uint64_t*>(coroCtx->m_stackBegin);
 
@@ -262,6 +290,8 @@ void TestModuleOneCase(llvm::Module* moduleIn,
     callerSfh->m_numVariadicArguments = static_cast<uint32_t>(numVarArgs);
 
     uint64_t* callerLocalsBegin = reinterpret_cast<uint64_t*>(callerSfh + 1);
+
+    coroCtx->m_variadicRetStart = reinterpret_cast<TValue*>(callerLocalsBegin + varResStartOffset);
 
     for (size_t i = 0; i < numLocals; i++)
     {
@@ -377,18 +407,43 @@ void TestModuleOneCase(llvm::Module* moduleIn,
 
     ReleaseAssert(!g_expectedResult.m_checkerFnCalled);
 
+    std::vector<uint64_t> params;
+    params.resize(RegisterPinningScheme::GetFunctionTypeNumArguments(), 0 /*value*/);
+    auto setParam = [&]<typename ValTy>(X64Reg reg, ValTy value)
+    {
+        ReleaseAssert(sizeof(ValTy) == 8);
+        uint8_t valBytes[8];
+        memcpy(valBytes, &value, 8);
+        uint64_t valI64 = UnalignedLoad<uint64_t>(valBytes);
+
+        size_t argOrd = RegisterPinningScheme::GetArgumentOrdinalForRegister(reg);
+        ReleaseAssert(argOrd < params.size());
+        params[argOrd] = valI64;
+    };
+
+    setParam(RPV_TagRegister1::Reg(), TValue::x_int32Tag);
+    setParam(RPV_TagRegister2::Reg(), TValue::x_mivTag);
+    setParam(RPV_CodeBlock::Reg(), callerCb);
+    setParam(RPV_StackBase::Reg(), callerLocalsBegin);
+    setParam(RPV_CurBytecode::Reg(), curBytecode);
+    setParam(RPV_CoroContext::Reg(), coroCtx);
+
     using EntryFnType = void(*)(
-        CoroutineRuntimeContext* /*coroCtx*/,
-        uint64_t* /*sb*/,
-        uint8_t* /*curbytecode*/,
-        CodeBlock* /*cb*/,
-        uint64_t /*tagRegister1*/,
-        uint64_t /*unused*/,
-        uint64_t /*unused*/,
-        uint64_t /*unused*/,
-        uint64_t /*unused*/,
-        uint64_t /*tagRegister2*/);
-    reinterpret_cast<EntryFnType>(testFnAddr)(coroCtx, callerLocalsBegin, curBytecode, callerCb, TValue::x_int32Tag, 0, 0, 0, 0, TValue::x_mivTag);
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t, uint64_t, uint64_t, uint64_t,
+        uint64_t,
+        double, double, double, double, double, double);
+
+    ReleaseAssert(params.size() == 19);
+    reinterpret_cast<EntryFnType>(testFnAddr)(
+        params[0], params[1], params[2], params[3],
+        params[4], params[5], params[6], params[7],
+        params[8], params[9], params[10], params[11],
+        params[12],
+        cxx2a_bit_cast<double>(params[13]), cxx2a_bit_cast<double>(params[14]),
+        cxx2a_bit_cast<double>(params[15]), cxx2a_bit_cast<double>(params[16]),
+        cxx2a_bit_cast<double>(params[17]), cxx2a_bit_cast<double>(params[18]));
 
     ReleaseAssert(g_expectedResult.m_checkerFnCalled);
 }

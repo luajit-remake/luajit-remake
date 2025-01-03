@@ -44,8 +44,8 @@ public:
 
     void SetInitValueCI(llvm::ConstantInt* initVal)
     {
-        ReleaseAssert(initVal->getType()->getBitWidth() <= 64);
-        ReleaseAssert(m_size * 8 == initVal->getType()->getBitWidth());
+        ReleaseAssert(initVal->getIntegerType()->getBitWidth() <= 64);
+        ReleaseAssert(m_size * 8 == initVal->getIntegerType()->getBitWidth());
         uint64_t val = initVal->getZExtValue();
         if (m_size == 1) {
             SetInitValue<uint8_t>(BitwiseTruncateTo<uint8_t>(val));

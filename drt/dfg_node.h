@@ -6,6 +6,7 @@
 #include "dfg_logical_variable_info.h"
 #include "dfg_virtual_register.h"
 #include "dfg_code_origin.h"
+#include "dfg_builtin_nodes.h"
 
 namespace DeegenBytecodeBuilder {
 
@@ -21,296 +22,8 @@ namespace dfg
 using BCKind = DeegenBytecodeBuilder::BCKind;
 extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 
-// The list of built-in DFG node types. Below are the explanation for each of the node type.
-//
-// Constant:
-//     Input: none
-//     Output: 1, the constant value
-//     Param: the TValue constant
-//
-//     Represents a constant boxed value, never put into a basic block
-//
-// UnboxedConstant:
-//     Input: none
-//     Output: 1, the unboxed constant value
-//     Param: a uint64_t integer
-//
-//     Represents a raw unboxed 64-bit constant value, never put into a basic block
-//
-// UndefValue:
-//     Input: none
-//     Output: 1, an uninitialized value
-//     Param: none
-//
-//     Represents an uninitialized value, never put into a basic block
-//
-// Argument:
-//     Input: none
-//     Output: 1, the argument value
-//     Param: the argument ordinal
-//
-//     Represents the value of an function argument, never put into a basic block
-//
-// GetNumVariadicArgs:
-//     Input: none
-//     Output: 1, an unboxed uint64_t
-//     Param: none.
-//
-//     Returns the number of variadic arguments of the root function, never put into a basic block.
-//
-// GetFunctionObject:
-//     Input: none
-//     Output: 1, an unboxed HeapPtr
-//     Param: none
-//
-//     Returns the function object of the root function as an unboxed HeapPtr, never put into a basic block.
-//
-// Nop:
-//     Input: >=0
-//     Output: none
-//     Param: none
-//
-//     The node itself does nothing.
-//     However, a Nop node may take any number of input edges, and those edges may require checks.
-//     (Input edges that does not require a check can be freely removed)
-//     Therefore, a Nop is only truly a no-op if it doesn't have any input edge that requires a check.
-//
-// GetLocal:
-//     Input: none
-//     Output: 1, the value stored in the local
-//     Param: the DFG local ordinal
-//
-//     Get the value of the specified DFG local variable.
-//
-//     Standard load-store forwarding rules apply:
-//     1. A GetLocal preceded by another GetLocal can be replaced by the earlier GetLocal.
-//     2. A GetLocal preceded by a SetLocal can be replaced by the value stored by the SetLocal.
-//     3. A GetLocal with no users can be removed.
-//
-// SetLocal:
-//     Input: 1, the value to store
-//     Output: none
-//     Param: the DFG local ordinal
-//
-//     Store the value into the specified DFG local variable.
-//     The interpreter slot corresponding to this DFG local must contain the same value at this time point.
-//
-//     If a SetLocal is followed by another SetLocal in the same BB, the SetLocal can be removed (of course, you need to
-//     replace all the GetLocals that sees this SetLocal to the value stored by this SetLocal).
-//
-//     A dead SetLocal that is the last SetLocal to a local in a BB can only be removed if the interpreter slot
-//     corresponding to the DFG local is dead at the head of every successor block.
-//     Precisely, "slot" is dead at the BeforeUse point of bytecode m_bcForInterpreterStateAtBBStart for every successor block.
-//
-//     See ShadowStore for reason.
-//
-// ShadowStore:
-//     Input: 1, the value to store
-//     Output: none
-//     Param: the interpreter stack slot ordinal
-//
-//     A ShadowStore represents an imaginary store to the imaginary interpreter stack frame.
-//     That is, a ShadowStore of value V to slot X states that, if we were to OSR exit right now,
-//     slot X in the interpreter stack frame needs to have value V.
-//
-//     Therefore, a ShadowStore generates no code, but only an OSR event in the OSR stackmap.
-//
-//     At the end of any basic block, it is required that for each *live* interpreter slot X (a slot is live
-//     if it is live at the head of any successor block), the value in slot X of the imaginary interpreter stack
-//     frame (as set by ShadowStore) is equal to the value in the DFG local corresponding to slot X (as set by SetLocal).
-//
-//     The DFG frontend will always generate a SetLocal after a ShadowStore, which satisfies this invariant.
-//     To maintain this invariant, one may only remove a SetLocal if the corresponding interpreter slot is dead at the
-//     head of every successor basic block.
-//
-// ShadowStoreUndefToRange:
-//     Input: none
-//     Output: none
-//     Param: a range of interpreter stack slots
-//
-//     Equivalent to ShadowStore(UndefValue) to every interpreter slot in the given range.
-//     This is used in favor of a bunch of ShadowStores to reduce the total number of IR nodes.
-//
-// Phantom:
-//     Input: 1
-//     Output: none
-//     Param: none
-//
-//     States that the input SSA value is potentially required for the purpose of OSR exit until this point,
-//     so the SSA value must be kept available in the machine state until this point.
-//
-//     A Phantom generates no code nor OSR event, it is merely needed so that register allocation knows when
-//     it is truly safe to free a SSA value.
-//
-//     Phantoms are systematically and automatically inserted at the beginning of the backend pipeline, so
-//     the frontend and optimizer do not need to think about this node.
-//
-// CreateCapturedVar:
-//     Input: 1, the initial value of the captured variable
-//     Output: 1, the created CapturedVar object, which is a closed Upvalue (which is required. It must
-//                be interoperable with the lower tiers since the lower tier logic could access it)
-//     Param: none
-//
-//     Create a CapturedVar object. See CapturedVarInfo for more detail.
-//
-// GetCapturedVar:
-//     Input: 1, the CapturedVar object
-//     Output: 1, the value stored in the CapturedVar object
-//     Param: none
-//
-//     Get the value stored in the CapturedVar object.
-//
-// SetCapturedVar:
-//     Input: 2, the CapturedVar object and the value to store
-//     Output: none
-//     Param: none
-//
-//     Store the value into the CaptureVar object
-//
-// GetKthVariadicRes:
-//     Input: 1, a constant C
-//     Output: 1, the kth value in the variadic results, or the constant C if k is too large.
-//     Param: k, the ordinal to access
-//
-//     Get the kth value in the variadic results, or nil if k is too large.
-//     This node will only show up due to speculatively inlining calls that passes variadic results as arguments.
-//
-// GetNumVariadicRes:
-//     Input: VariadicResults
-//     Output: 1, an unboxed uint64_t value, the # of variadic results
-//     Param: none
-//
-//     Get the number of variadic results.
-//     This node will only show up due to speculatively inlining calls that passes variadic results as arguments.
-//
-// CreateVariadicRes:
-//     Input: >=1. Input #0 must be an unboxed integer.
-//     Output: VariadicResults
-//     Param: k, the number of fixed values
-//
-//     Get a varadic result consists of input [1, k + #0], #0 must be an unboxed uint64_t value that represents a valid index.
-//     This node will only show up due to speculatively inlining calls that passes variadic results as arguments or
-//     returns variadic results. Due to how this node is used, it is guaranteed that all the input nodes in range
-//     [k + 1, k + #0] are GetKthVariadicRes nodes, so [k + #0 + 1, end) must all be nil values.
-//
-// PrependVariadicRes:
-//     Input: >=0 values, VariadicResults
-//     Output: VariadicResults
-//     Param: none
-//
-//     Get a variadic result by prepending values to the existing variadic result.
-//     A PrependVariadicRes with no input and a nullptr VariadicResults is also used to "initialize" the variadic
-//     result if no preceding node produces a varaidic result in this basic block (which means the variadic result
-//     is created by nodes in the control flow predecessor)
-//
-// CheckU64InBound:
-//     Input: an unboxed uint64_t value
-//     Output: none
-//     Param: a uint64_t value "bound".
-//
-//     Check if input <= bound. If not, causes an OSR exit.
-//
-// U64SaturateSub:
-//     Input: an unboxed uint64_t value "input"
-//     Output: an unboxed uint64_t value
-//     Param: a int64_t value "valToSub"   <-- note that it's a int64_t, not uint64_t!
-//
-//     Returns 0 if valToSub >= 0 && input < valToSub, otherwise returns input - valToSub.
-//
-// GetKthVariadicArg:
-//     Input: none
-//     Output: 1, the value of the variadic argument, or nil if k is too large
-//     Param: k.
-//
-//     Returns the k-th variadic argument of the root function.
-//
-// GetUpvalue:
-//     Input: 1, the function object (an unboxed HeapPtr) to retrieve the upvalue from
-//     Output: 1, the value of the requested upvalue
-//     Param: the upvalue ordinal, and whether the upvalue is immutable
-//
-//     Get the value of an upvalue from the given function object.
-//
-// CreateFunctionObject:
-//     Input: >=2 (see below).
-//     Output: 1, the newly created function object as a boxed value
-//     Param: a uint64_t value k (see below)
-//
-//     Creates a new function object.
-//     Input 0 is the parent function object.
-//     Input 1 is the prototype (an unboxed value, the UnlinkedCodeBlock pointer)
-//     The rest of the inputs are all the values captured in the parent stack frame, in the same order as what is described in
-//     the UnlinkedCodeBlock's metadata. There is one exception though: if the capture is an immutable self-reference, the value
-//     will not show up in the input (since its value should be the result of the CreateFunctionObject, which is a chicken-and-egg
-//     problem). In that case, the param 'k' will indicate that the k-th upvalue in the UnlinkedCodeBlock's metadata is a
-//     self-reference. Otherwise, 'k' is -1.
-//
-// SetUpvalue:
-//     Input: 2, the function object (an unboxed HeapPtr), and the value to put
-//     Output: 0
-//     Param: the upvalue ordinal
-//
-//     Stores the value into the given upvalue of the given function object.
-//
-// Return:
-//     Input: any number of nodes, potentially VariadicResults as well
-//     Output: 0
-//     Param: none
-//
-//     Function return with the input nodes as return values, also appending variadic results if given.
-//
-// Phi:
-//     This is not a Node! If nodeKind is Phi, it means that this object actually has type Phi
-//     Phi nodes are auxillary. They are meant to supplement information but are safe to drop.
-//
-#define DFG_BUILTIN_NODE_KIND_LIST                  \
-    (Constant)                                      \
-  , (UnboxedConstant)                               \
-  , (UndefValue)                                    \
-  , (Argument)                                      \
-  , (GetNumVariadicArgs)                            \
-  , (GetKthVariadicArg)                             \
-  , (GetFunctionObject)                             \
-  , (Nop)                                           \
-  , (GetLocal)                                      \
-  , (SetLocal)                                      \
-  , (ShadowStore)                                   \
-  , (ShadowStoreUndefToRange)                       \
-  , (Phantom)                                       \
-  , (CreateCapturedVar)                             \
-  , (GetCapturedVar)                                \
-  , (SetCapturedVar)                                \
-  , (GetKthVariadicRes)                             \
-  , (GetNumVariadicRes)                             \
-  , (CreateVariadicRes)                             \
-  , (PrependVariadicRes)                            \
-  , (CheckU64InBound)                               \
-  , (U64SaturateSub)                                \
-  , (CreateFunctionObject)                          \
-  , (GetUpvalue)                                    \
-  , (SetUpvalue)                                    \
-  , (Return)                                        \
-  , (Phi)                                           \
-
-enum NodeKind : uint16_t
-{
-#define macro(e) PP_CAT(NodeKind_, PP_TUPLE_GET_1(e)) ,
-    PP_FOR_EACH(macro, DFG_BUILTIN_NODE_KIND_LIST)
-#undef macro
-    NodeKind_FirstAvailableGuestLanguageNodeKind
-};
-
-inline const char* GetDfgBuiltinNodeKindName(NodeKind kind)
-{
-    TestAssert(kind < NodeKind_FirstAvailableGuestLanguageNodeKind);
-    switch (kind)
-    {
-#define macro(e) case PP_CAT(NodeKind_, PP_TUPLE_GET_1(e)): return PP_STRINGIFY(PP_TUPLE_GET_1(e));
-        PP_FOR_EACH(macro, DFG_BUILTIN_NODE_KIND_LIST)
-#undef macro
-    default: __builtin_unreachable();
-    }
-}
+enum class DfgVariantId : uint16_t;
+extern const DfgVariantId x_dfgVariantIdEndOfEnum;
 
 enum UseKind : uint16_t
 {
@@ -438,7 +151,7 @@ public:
     //
     bool HasOutlinedInput()
     {
-        assert(m_initializedNumInputs);
+        Assert(m_initializedNumInputs);
         return Flags_NumInlinedOperands::Get(m_flags) == (x_maxInlineOperands + 1);
     }
 
@@ -446,7 +159,7 @@ public:
     //
     using Flags_HasDirectOutput = BitFieldMember<FlagsTy, bool, 3 /*start*/, 1 /*width*/>;
 
-    bool HasDirectOutput() { assert(m_initializedNumOutputs); return Flags_HasDirectOutput::Get(m_flags); }
+    bool HasDirectOutput() { Assert(m_initializedNumOutputs); return Flags_HasDirectOutput::Get(m_flags); }
 
     // Whether this node has outlined node-specific data
     //
@@ -662,7 +375,7 @@ public:
         Edge(Value value, UseKind useKind = UseKind_Untyped, bool isStaticallyKnownNoCheckNeeded = false)
         {
             AssertImp(value.m_outputOrd == 0, value.GetOperand()->HasDirectOutput());
-            assert(value.m_outputOrd <= value.GetOperand()->m_numExtraOutputs);
+            Assert(value.m_outputOrd <= value.GetOperand()->m_numExtraOutputs);
             m_operand = value.m_node;
             m_outputOrd = value.m_outputOrd;
             uint16_t encodedVal = 0;
@@ -775,7 +488,10 @@ public:
     //
     bool IsConstantLikeNode()
     {
-        return IsConstantNode() || IsUnboxedConstantNode() || IsUndefValueNode() || IsArgumentNode() || IsGetFunctionObjectNode() || IsGetNumVarArgsNode() || IsGetKthVarArgNode();
+#define macro(e) +1
+        constexpr uint16_t x_numConstantLikeNodeKinds =  PP_FOR_EACH(macro, DFG_CONSTANT_LIKE_NODE_KIND_LIST);
+#undef macro
+        return static_cast<uint16_t>(GetNodeKind()) < x_numConstantLikeNodeKinds;
     }
 
     // The NodeKind, must be first member!
@@ -822,7 +538,7 @@ private:
 public:
     void SetNumInputs(size_t numInputs)
     {
-        assert(!m_initializedNumInputs);
+        Assert(!m_initializedNumInputs);
 #ifndef NDEBUG
         m_initializedNumInputs = true;
 #endif
@@ -841,18 +557,18 @@ public:
 
     uint32_t GetNumInputs()
     {
-        assert(m_initializedNumInputs);
+        Assert(m_initializedNumInputs);
         if (likely(!HasOutlinedInput()))
         {
             uint32_t numInlineOperands = Flags_NumInlinedOperands::Get(m_flags);
-            assert(numInlineOperands <= x_maxInlineOperands);
+            Assert(numInlineOperands <= x_maxInlineOperands);
             __builtin_assume(numInlineOperands <= x_maxInlineOperands);
             return numInlineOperands;
         }
         else
         {
             uint32_t numOutlinedEdges = m_inlineOperands[x_maxInlineOperands - 1].m_numOutlinedEdges;
-            assert(numOutlinedEdges > 1);
+            Assert(numOutlinedEdges > 1);
             uint32_t numTotalEdges = numOutlinedEdges + static_cast<uint32_t>(x_maxInlineOperands - 1);
             __builtin_assume(numTotalEdges > x_maxInlineOperands);
             return numTotalEdges;
@@ -862,22 +578,22 @@ public:
 private:
     Edge* ALWAYS_INLINE GetOutlinedEdgeArray()
     {
-        assert(HasOutlinedInput());
+        Assert(HasOutlinedInput());
         return DfgAlloc()->GetPtr(m_inlineOperands[x_maxInlineOperands - 1].m_outlinedEdgeArray);
     }
 
     Edge& ALWAYS_INLINE GetInlinedInputImpl(uint32_t inputOrd)
     {
-        assert(inputOrd < GetNumInputs());
-        assert(inputOrd < x_maxInlineOperands - 1 || (inputOrd == x_maxInlineOperands - 1 && !HasOutlinedInput()));
+        Assert(inputOrd < GetNumInputs());
+        Assert(inputOrd < x_maxInlineOperands - 1 || (inputOrd == x_maxInlineOperands - 1 && !HasOutlinedInput()));
         return m_inlineOperands[inputOrd].m_edge;
     }
 
     Edge& ALWAYS_INLINE GetOutlinedInputImpl(uint32_t inputOrd)
     {
-        assert(inputOrd < GetNumInputs());
-        assert(HasOutlinedInput());
-        assert(inputOrd >= x_maxInlineOperands - 1);
+        Assert(inputOrd < GetNumInputs());
+        Assert(HasOutlinedInput());
+        Assert(inputOrd >= x_maxInlineOperands - 1);
         return GetOutlinedEdgeArray()[inputOrd - (x_maxInlineOperands - 1)];
     }
 
@@ -887,11 +603,11 @@ public:
     template<size_t numFixedInputs>
     Edge& ALWAYS_INLINE GetInputEdgeForNodeWithFixedNumInputs(uint32_t inputOrd)
     {
-        assert(m_initializedNumInputs);
+        Assert(m_initializedNumInputs);
         TestAssert(GetNumInputs() == numFixedInputs);
         if constexpr(numFixedInputs > x_maxInlineOperands)
         {
-            assert(HasOutlinedInput());
+            Assert(HasOutlinedInput());
             if (inputOrd < x_maxInlineOperands - 1)
             {
                 return GetInlinedInputImpl(inputOrd);
@@ -903,8 +619,8 @@ public:
         }
         else
         {
-            assert(!HasOutlinedInput());
-            assert(inputOrd < numFixedInputs);
+            Assert(!HasOutlinedInput());
+            Assert(inputOrd < numFixedInputs);
             return GetInlinedInputImpl(inputOrd);
         }
     }
@@ -913,7 +629,7 @@ public:
     //
     Edge& ALWAYS_INLINE GetInputEdge(uint32_t inputOrd)
     {
-        assert(m_initializedNumInputs);
+        Assert(m_initializedNumInputs);
         if (inputOrd < x_maxInlineOperands - 1 || !HasOutlinedInput())
         {
             return GetInlinedInputImpl(inputOrd);
@@ -973,13 +689,13 @@ private:
             m_outputInfoArray.m_value = 0;
         }
 
-        assert(HasDirectOutput() == hasDirectOutput);
+        Assert(HasDirectOutput() == hasDirectOutput);
     }
 
 public:
     void SetNumOutputs(bool hasDirectOutput, size_t numExtraOutputs)
     {
-        assert(!m_initializedNumOutputs);
+        Assert(!m_initializedNumOutputs);
 #ifndef NDEBUG
         m_initializedNumOutputs = true;
 #endif
@@ -1000,11 +716,11 @@ public:
     {
         // The type speculation
         //
-        TypeSpeculationMask m_speculation;
+        TypeMaskTy m_speculation;
     };
 
-    bool HasExtraOutput() { assert(m_initializedNumOutputs); return m_numExtraOutputs > 0; }
-    size_t GetNumExtraOutputs() { assert(m_initializedNumOutputs); return m_numExtraOutputs; }
+    bool HasExtraOutput() { Assert(m_initializedNumOutputs); return m_numExtraOutputs > 0; }
+    size_t GetNumExtraOutputs() { Assert(m_initializedNumOutputs); return m_numExtraOutputs; }
 
     size_t GetNumTotalOutputs()
     {
@@ -1020,21 +736,21 @@ public:
 
     OutputInfo& GetDirectOutputInfo()
     {
-        assert(m_initializedNumOutputs);
+        Assert(m_initializedNumOutputs);
         TestAssert(HasDirectOutput());
         return DfgAlloc()->GetPtr(m_outputInfoArray)[0];
     }
 
     OutputInfo& GetExtraOutputInfo(size_t outputOrd)
     {
-        assert(m_initializedNumOutputs);
+        Assert(m_initializedNumOutputs);
         TestAssert(1 <= outputOrd && outputOrd <= m_numExtraOutputs);
         return DfgAlloc()->GetPtr(m_outputInfoArray)[outputOrd];
     }
 
     OutputInfo& GetOutputInfo(size_t outputOrd)
     {
-        assert(m_initializedNumOutputs);
+        Assert(m_initializedNumOutputs);
         TestAssert((outputOrd == 0 && HasDirectOutput()) || (1 <= outputOrd && outputOrd <= m_numExtraOutputs));
         return DfgAlloc()->GetPtr(m_outputInfoArray)[outputOrd];
     }
@@ -1057,70 +773,6 @@ public:
         return edgeHasCheck;
     }
 
-    // Some notes about Captured Variables:
-    //
-    // Lua's upvalue mechanism is handy for interpreter and baseline JIT, but very problematic for optimizing JIT.
-    // The bytecode does not distinguish normal local variables and local variables that are captured by upvalues.
-    // While this is simple and handy for the interpreter and the baseline JIT, this means that after any innocent
-    // operation (which can almost always make a call in a slow path), all the local variables that are captured by
-    // a upvalue may change value, which is very bad for us to reason about the code.
-    //
-    // For example, even for simple code 'a + b + a' where 'a' is captured by a upvalue:
-    //     %1 = GetLocal('a')
-    //     %2 = GetLocal('b')
-    //     %3 = Add(%1, %2)
-    //     %4 = GetLocal('a')
-    //     %5 = Add(%3, %4)
-    //
-    // '%1' doesn't necessarily alias with '%4' since 'a' might change value as 'a + b' may result in a call that can
-    // change the value of 'a'!
-    //
-    // As such, it's necessary to distinguish "normal local variables" and "local variables captured by a upvalue" in the
-    // optimizing JIT.
-    //
-    // So in the optimizing JIT, we use CapturedVar to implement upvalue.
-    //
-    // CaptureVar and upvalues are very similar, except with one difference: the source of truth of a CapturedVar is always
-    // stored inside the upvalue (never on the stack), even when the upvalue is still open. It is also not put into the
-    // open upvalue list.
-    //
-    // That is, even if accessed from the main function (i.e., where the upvalue is defined), we still must use LoadCapturedVar
-    // to access its value.
-    //
-    // So the code 'a + b + a + b' where 'a' is captured by a upvalue while 'b' is not would generate the following code:
-    //     %1 = GetClosureVar('a')
-    //     %2 = GetLocal('b')
-    //     %3 = Add(%1, %2)
-    //     %4 = GetClosureVar('a')
-    //     %5 = Add(%3, %4)
-    //     %6 = GetLocal('b')
-    //     %7 = Add(%5, %7)
-    //
-    // Adn we can reason (as one would normally expect) that '%6' must alias with '%2' (as they both GetLocal 'b' and there is
-    // no SetLocal 'b' in between) but '%1' doesn't necessarily alias with '%4' (as the 'Add' executed in between may result
-    // in a call, unless we speculate that the call doesn't happen).
-    //
-    // At implementation level, a CapturedVar is just a closed upvalue, so outside code (i.e. code outside the function being
-    // compiled) can still access the upvalue normally (as they don't care if the upvalue is closed or not). For logic inside the
-    // function being compiled, we need to properly generate GetLocal/GetClosureVar depending on whether the local is being
-    // captured or not, and UpvalueClose is now a no-op (since the CaptureVar does not live on the open upvalue list). When
-    // an OSR-exit happens, we also need to restore the stack frame and upvalue linked list to what is expected by the lower tiers.
-    //
-    struct CapturedVarInfo
-    {
-        // When an OSR-exit happens, we must flush the values of the still-opening CapturedVar back to the stack frame.
-        //
-        uint32_t m_localOrdForOsrExit;
-    };
-    static_assert(sizeof(CapturedVarInfo) <= 8);
-
-    struct UpvalueInfo
-    {
-        uint32_t m_ordinal;
-        bool m_isImmutable;
-    };
-    static_assert(sizeof(UpvalueInfo) <= 8);
-
 private:
     // Information about the outputs
     //
@@ -1130,26 +782,76 @@ private:
     //
     ArenaPtr<Node> m_variadicResultInput;
 
-    struct InterpreterSlotRangeInfo
-    {
-        uint32_t m_slotStart;
-        uint32_t m_numSlots;
-    };
-
-    // Stores node-specific data which interpretation depends on the node type
-    // This mainly includes all sorts of immediate constants in the bytecode
-    // Make sure to not exceed 8 bytes!
+public:
+    // Whether accessing m_inlinedNodeSpecifcData or m_outlinedNodeSpecificData makes sense
     //
-    union {
-        uint8_t* m_outlinedNodeSpecificData;
-        uint8_t m_inlinedNodeSpecifcData[8];
-        TValue m_constantNodeConstantValue;                 // used only for constant node
-        CapturedVarInfo m_capturedVarInfo;                  // used only for CreateCapturedVar node
-        UpvalueInfo m_upvalueInfo;                          // used only for GetUpvalue node
-        Phi* m_getLocalDataFlowInfo;                        // used only for GetLocal node
-        InterpreterSlotRangeInfo m_interpSlotRangeInfo;     // used only for ShadowStoreUndefToRange node
-        uint64_t m_nsdAsU64;
+    static constexpr bool NodeHasNodeSpecificData(NodeKind nodeKind)
+    {
+        if (nodeKind >= NodeKind_FirstAvailableGuestLanguageNodeKind)
+        {
+            return true;
+        }
+        return DfgBuiltinNodeHasNsd(nodeKind);
+    }
+
+    bool MayAccessGenericNodeSpecificData()
+    {
+        return NodeHasNodeSpecificData(GetNodeKind());
+    }
+
+private:
+    struct NodeSpecificData
+    {
+        template<typename T>
+        T* UnsafeGetInlinedNsdAs()
+        {
+            static_assert(!std::is_same_v<T, void>);
+            static_assert(sizeof(T) <= x_maxInlinedNsdSize && alignof(T) <= 8);
+            return std::launder<T>(reinterpret_cast<T*>(m_inlinedNsd));
+        }
+
+        void UnsafeAllocateOutlined(size_t length, size_t alignment)
+        {
+            TestAssert(is_power_of_2(alignment) && length % alignment == 0);
+            m_outlinedNsd = DfgAlloc()->AllocateUninitializedMemoryWithAlignment(length, alignment);
+        }
+
+        static constexpr size_t x_maxInlinedNsdSize = 8;
+
+        union {
+            // This is always allocated by DfgAlloc() so no memory free is required
+            //
+            uint8_t* m_outlinedNsd;
+            alignas(8) uint8_t m_inlinedNsd[x_maxInlinedNsdSize];
+        };
     };
+    static_assert(sizeof(NodeSpecificData) == 8);
+
+    // Sanity check all built-in nodes which claims to have inlined Nsd fits the inlined size
+    //
+    static_assert([]() {
+#define macro(e)                                                                                                                \
+        if constexpr(PP_TUPLE_GET_3(e)) {                                                                                       \
+            ReleaseAssert(sizeof(std::conditional_t<!std::is_same_v<void, PP_TUPLE_GET_2(e)>, PP_TUPLE_GET_2(e), uint8_t>)      \
+                <= NodeSpecificData::x_maxInlinedNsdSize);                                                                      \
+        }
+
+        PP_FOR_EACH(macro, DFG_BUILTIN_NODE_KIND_LIST)
+#undef macro
+        return true;
+    }());
+
+public:
+    static constexpr size_t x_maxNodeSpecificDataSizeToStoreInline = NodeSpecificData::x_maxInlinedNsdSize;
+
+private:
+    // Stores node-specific data which interpretation depends on the node type
+    //   For guest language nodes, this is a byte array that includes e.g., all sorts of immediate
+    //     constants in the bytecode, and BytecodeDecoder can decode this to structured information.
+    //   For built-in nodes, this stores the parameters and other things, which can be directly cast
+    //     to a C++ type depending on the node kind of the built-in node.
+    //
+    NodeSpecificData m_nsd;
 
     // Where this node comes from in the bytecode
     //
@@ -1181,36 +883,68 @@ public:
 
     uint8_t* GetNodeSpecificData()
     {
+        TestAssert(MayAccessGenericNodeSpecificData());
         if (HasOutlinedNodeSpecificData())
         {
-            return m_outlinedNodeSpecificData;
+            return GetNodeSpecificDataMustOutlined();
         }
         else
         {
-            return m_inlinedNodeSpecifcData;
+            return GetNodeSpecificDataMustInlined();
         }
     }
 
-private:
-    void SetOutlinedNodeSpecificDataRegion(uint8_t* region)
+    uint8_t* GetNodeSpecificDataMustInlined()
     {
-        assert(!HasOutlinedNodeSpecificData());
-        m_outlinedNodeSpecificData = region;
+        TestAssert(MayAccessGenericNodeSpecificData());
+        TestAssertImp(IsBuiltinNodeKind(), DfgBuiltinNodeHasInlinedNsd(GetNodeKind()));
+        TestAssert(!HasOutlinedNodeSpecificData());
+        return m_nsd.m_inlinedNsd;
+    }
+
+    uint8_t* GetNodeSpecificDataMustOutlined()
+    {
+        TestAssert(MayAccessGenericNodeSpecificData());
+        TestAssertImp(IsBuiltinNodeKind(), !DfgBuiltinNodeHasInlinedNsd(GetNodeKind()));
+        TestAssert(HasOutlinedNodeSpecificData());
+        return m_nsd.m_outlinedNsd;
+    }
+
+    // This is a safe get that asserts that the node is a built-in node and its nsd is indeed inlined and has type T
+    //
+    template<typename T>
+    T& WARN_UNUSED GetBuiltinNodeInlinedNsdRefAs()
+    {
+        TestAssert(IsBuiltinNodeKind());
+        TestAssert(DfgBuiltinNodeHasInlinedNsd(GetNodeKind()));
+        TestAssert(DfgNodeIsBuiltinNodeWithInlinedNsdType<T>(GetNodeKind()));
+        TestAssert(!HasOutlinedNodeSpecificData());
+        return *m_nsd.UnsafeGetInlinedNsdAs<T>();
+    }
+
+private:
+    void AllocateAndSetOutlinedNodeSpecificData(size_t length, size_t alignment)
+    {
+        Assert(!HasOutlinedNodeSpecificData());
+        AssertImp(IsBuiltinNodeKind(), !DfgBuiltinNodeHasInlinedNsd(GetNodeKind()));
+        m_nsd.UnsafeAllocateOutlined(length, alignment);
         Flags_HasOutlinedNodeSpecificData::Set(m_flags, true);
-        assert(HasOutlinedNodeSpecificData() && GetNodeSpecificData() == region);
+        Assert(HasOutlinedNodeSpecificData());
     }
 
 public:
     void SetNodeSpecificDataLength(size_t length, size_t alignment = 1)
     {
+        TestAssert(MayAccessGenericNodeSpecificData());
         TestAssert(!IsBuiltinNodeKind());
         TestAssert(is_power_of_2(alignment));
         TestAssert(length % alignment == 0);
-        if (length <= 8 && alignment <= 8)
+        if (length <= x_maxNodeSpecificDataSizeToStoreInline)
         {
+            TestAssert(alignment <= 8);
             return;
         }
-        SetOutlinedNodeSpecificDataRegion(DfgAlloc()->AllocateUninitializedMemoryWithAlignment(length, alignment));
+        AllocateAndSetOutlinedNodeSpecificData(length, alignment);
     }
 
     // Does not initialize anything other than NodeKind
@@ -1230,13 +964,51 @@ public:
     bool IsGetKthVarArgNode() { return m_nodeKind == NodeKind_GetKthVariadicArg; }
 
 private:
+    // The TValue of the constant takes the slot of input 0
+    //
+    TValue& WARN_UNUSED GetConstantNodeValueRef()
+    {
+        TestAssert(IsConstantNode());
+        return *std::launder<TValue>(reinterpret_cast<TValue*>(m_inlineOperands));
+    }
+
     static Node* WARN_UNUSED CreateConstantNode(TValue constantValue)
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_Constant);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_constantNodeConstantValue = constantValue;
+        r->GetConstantNodeValueRef() = constantValue;
+        r->GetBuiltinNodeInlinedNsdRefAs<int64_t>() = 0;
         return r;
+    }
+
+public:
+    // Only works for Constant node or UnboxedConstant node
+    // Returns whether the node has been assigned an ordinal in the constant table
+    //
+    bool IsOrdInConstantTableAssigned()
+    {
+        TestAssert(IsConstantNode() || IsUnboxedConstantNode());
+        int64_t ord = GetBuiltinNodeInlinedNsdRefAs<int64_t>();
+        TestAssert(ord <= 0);
+        return ord < 0;
+    }
+
+    void AssignConstantNodeOrdInConstantTable(int64_t ord)
+    {
+        TestAssert(IsConstantNode() || IsUnboxedConstantNode());
+        TestAssert(!IsOrdInConstantTableAssigned());
+        TestAssert(ord < 0);
+        GetBuiltinNodeInlinedNsdRefAs<int64_t>() = ord;
+    }
+
+private:
+    // The uint64_t value of the UnboxedConstant node takes the slot of input 0
+    //
+    uint64_t& WARN_UNUSED GetUnboxedConstantNodeValueRef()
+    {
+        TestAssert(IsUnboxedConstantNode());
+        return *std::launder<uint64_t>(reinterpret_cast<uint64_t*>(m_inlineOperands));
     }
 
     static Node* WARN_UNUSED CreateUnboxedConstantNode(uint64_t value)
@@ -1244,7 +1016,8 @@ private:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_UnboxedConstant);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_nsdAsU64 = value;
+        r->GetUnboxedConstantNodeValueRef() = value;
+        r->GetBuiltinNodeInlinedNsdRefAs<int64_t>() = 0;
         return r;
     }
 
@@ -1261,7 +1034,7 @@ private:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_Argument);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_nsdAsU64 = argOrd;
+        r->SetNodeSpecificDataAsUInt64(argOrd);
         return r;
     }
 
@@ -1286,26 +1059,26 @@ private:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_GetKthVariadicArg);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_nsdAsU64 = k;
+        r->SetNodeSpecificDataAsUInt64(k);
         return r;
     }
 
 public:
-    bool IsGetUpvalueNode() { return m_nodeKind == NodeKind_GetUpvalue; }
+    bool IsGetUpvalueNode() { return m_nodeKind == NodeKind_GetUpvalueImmutable || m_nodeKind == NodeKind_GetUpvalueMutable; }
 
-    UpvalueInfo& GetInfoForGetUpvalue()
+    Nsd_UpvalueInfo& GetInfoForGetUpvalue()
     {
         TestAssert(IsGetUpvalueNode());
-        return m_upvalueInfo;
+        return GetBuiltinNodeInlinedNsdRefAs<Nsd_UpvalueInfo>();
     }
 
     static Node* WARN_UNUSED CreateGetUpvalueNode(Value functionObject, uint32_t upvalueOrd, bool isImmutable)
     {
-        Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_GetUpvalue);
+        Node* r = DfgAlloc()->AllocateObject<Node>(isImmutable ? NodeKind_GetUpvalueImmutable : NodeKind_GetUpvalueMutable);
         r->SetNumInputs(1);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = functionObject;
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_upvalueInfo = UpvalueInfo { .m_ordinal = upvalueOrd, .m_isImmutable = isImmutable };
+        r->GetBuiltinNodeInlinedNsdRefAs<Nsd_UpvalueInfo>() = { .m_ordinal = upvalueOrd };
         return r;
     }
 
@@ -1318,30 +1091,36 @@ public:
         r->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = functionObject;
         r->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = valueToSet;
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_nsdAsU64 = upvalueOrd;
+        r->SetNodeSpecificDataAsUInt64(upvalueOrd);
         return r;
     }
 
     TValue GetConstantNodeValue()
     {
         TestAssert(IsConstantNode());
-        return m_constantNodeConstantValue;
+        return GetConstantNodeValueRef();
+    }
+
+    uint64_t GetUnboxedConstantNodeValue()
+    {
+        TestAssert(IsUnboxedConstantNode());
+        return GetUnboxedConstantNodeValueRef();
     }
 
     uint32_t GetArgumentOrdinal()
     {
         TestAssert(IsArgumentNode());
-        return SafeIntegerCast<uint32_t>(m_nsdAsU64);
+        return SafeIntegerCast<uint32_t>(GetNodeSpecificDataAsUInt64());
     }
 
-    void SetNodeParamAsUInt64(uint64_t val)
+    void SetNodeSpecificDataAsUInt64(uint64_t val)
     {
-        m_nsdAsU64 = val;
+        GetBuiltinNodeInlinedNsdRefAs<uint64_t>() = val;
     }
 
-    uint64_t GetNodeParamAsUInt64()
+    uint64_t GetNodeSpecificDataAsUInt64()
     {
-        return m_nsdAsU64;
+        return GetBuiltinNodeInlinedNsdRefAs<uint64_t>();
     }
 
     bool IsGetLocalNode() { return m_nodeKind == NodeKind_GetLocal; }
@@ -1405,6 +1184,25 @@ public:
         return IsGetLocalNode() || IsSetLocalNode();
     }
 
+private:
+    LocalVarAccessInfo& WARN_UNUSED GetLocalVarAccessInfo()
+    {
+        // The LocalVarAccessInfo is a 16-byte struct that is stored in input slot 1-2
+        //
+        static_assert(x_maxInlineOperands >= 3);
+        TestAssert(HasLogicalVariableInfo());
+        return *std::launder<LocalVarAccessInfo>(reinterpret_cast<LocalVarAccessInfo*>(m_inlineOperands + 1));
+    }
+
+    // The input slot 0 for GetLocal is used to store the Phi* dataflow info node, when the graph is in BlockLocalSSA form
+    //
+    Phi*& WARN_UNUSED GetDataFlowInfoRefForGetLocal()
+    {
+        TestAssert(IsGetLocalNode());
+        return *std::launder<Phi*>(reinterpret_cast<Phi**>(m_inlineOperands));
+    }
+
+public:
     // After unification pass, it's faster to get this info from LogicalVariable
     //
     VirtualRegister GetLocalOperationVirtualRegisterSlow()
@@ -1441,25 +1239,16 @@ public:
     Phi* GetDataFlowInfoForGetLocal()
     {
         TestAssert(IsGetLocalNode());
-        return m_getLocalDataFlowInfo;
+        return GetDataFlowInfoRefForGetLocal();
     }
 
     void SetDataFlowInfoForGetLocal(Phi* info)
     {
         TestAssert(IsGetLocalNode());
-        m_getLocalDataFlowInfo = info;
+        GetDataFlowInfoRefForGetLocal() = info;
     }
 
 private:
-    LocalVarAccessInfo& GetLocalVarAccessInfo()
-    {
-        // The LocalVarAccessInfo is a 16-byte struct that is stored in input slot 1-2
-        //
-        static_assert(x_maxInlineOperands >= 3);
-        TestAssert(HasLogicalVariableInfo());
-        return *reinterpret_cast<LocalVarAccessInfo*>(m_inlineOperands + 1);
-    }
-
     Node* WARN_UNUSED LogicalVariableAccessDsuFindRoot()
     {
         TestAssert(HasLogicalVariableInfo());
@@ -1591,7 +1380,9 @@ public:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_GetLocal);
         r->SetNumInputs(0);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
+        r->GetDataFlowInfoRefForGetLocal() = nullptr;
         r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
+        r->GetBuiltinNodeInlinedNsdRefAs<uint64_t>() = static_cast<uint64_t>(-1);
         return r;
     }
 
@@ -1603,6 +1394,7 @@ public:
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(valueToStore);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
+        r->GetBuiltinNodeInlinedNsdRefAs<uint64_t>() = static_cast<uint64_t>(-1);
         return r;
     }
 
@@ -1634,6 +1426,8 @@ public:
         return r;
     }
 
+    // TODO FIXME: populate m_capturedVarInfo
+    //
     static Node* WARN_UNUSED CreateCreateCapturedVarNode(Value value)
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_CreateCapturedVar);
@@ -1649,7 +1443,7 @@ public:
         r->SetNumInputs(1);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_nsdAsU64 = interpreterSlotOrd.Value();
+        r->SetNodeSpecificDataAsUInt64(interpreterSlotOrd.Value());
         return r;
     }
 
@@ -1658,7 +1452,7 @@ public:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_ShadowStoreUndefToRange);
         r->SetNumInputs(0);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->m_interpSlotRangeInfo = {
+        r->GetBuiltinNodeInlinedNsdRefAs<Nsd_InterpSlotRange>() = {
             .m_slotStart = SafeIntegerCast<uint32_t>(interpSlotStart.Value()),
             .m_numSlots = SafeIntegerCast<uint32_t>(numSlots)
         };
@@ -1674,7 +1468,7 @@ public:
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->SetNodeAccessesVR(true);
         r->m_variadicResultInput = vrProducer;
-        r->m_nsdAsU64 = k;
+        r->SetNodeSpecificDataAsUInt64(k);
         return r;
     }
 
@@ -1698,7 +1492,7 @@ public:
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->SetNodeGeneratesVR(true);
         r->SetNodeClobbersVR(true);
-        r->m_nsdAsU64 = numFixedTerms;
+        r->SetNodeSpecificDataAsUInt64(numFixedTerms);
         return r;
     }
 
@@ -1731,18 +1525,26 @@ public:
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = value;
         r->SetMayOsrExit(true);
-        r->m_nsdAsU64 = bound;
+        r->SetNodeSpecificDataAsUInt64(bound);
         return r;
     }
 
-    static Node* WARN_UNUSED CreateU64SaturateSubNode(Value value, int64_t valueToSub)
+    static Node* WARN_UNUSED CreateI64SubSaturateToZeroNode(Value value, int64_t valueToSub)
     {
-        Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_U64SaturateSub);
+        Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_I64SubSaturateToZero);
         r->SetNumInputs(1);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = value;
-        r->m_nsdAsU64 = static_cast<uint64_t>(valueToSub);
+        r->GetBuiltinNodeInlinedNsdRefAs<int64_t>() = valueToSub;
         return r;
+    }
+
+    bool IsI64SubSaturateToZeroNode() { return m_nodeKind == NodeKind_I64SubSaturateToZero; }
+
+    int64_t GetI64SubSaturateToZeroNodeOperand()
+    {
+        TestAssert(IsI64SubSaturateToZeroNode());
+        return GetBuiltinNodeInlinedNsdRefAs<int64_t>();
     }
 
     bool IsShadowStoreNode() { return m_nodeKind == NodeKind_ShadowStore; }
@@ -1751,24 +1553,24 @@ public:
     InterpreterSlot WARN_UNUSED GetShadowStoreInterpreterSlotOrd()
     {
         TestAssert(IsShadowStoreNode());
-        return InterpreterSlot(m_nsdAsU64);
+        return InterpreterSlot(GetNodeSpecificDataAsUInt64());
     }
 
     InterpreterSlot WARN_UNUSED GetShadowStoreUndefToRangeStartInterpSlotOrd()
     {
         TestAssert(IsShadowStoreUndefToRangeNode());
-        return InterpreterSlot(m_interpSlotRangeInfo.m_slotStart);
+        return InterpreterSlot(GetBuiltinNodeInlinedNsdRefAs<Nsd_InterpSlotRange>().m_slotStart);
     }
 
     size_t WARN_UNUSED GetShadowStoreUndefToRangeRangeLength()
     {
         TestAssert(IsShadowStoreUndefToRangeNode());
-        return m_interpSlotRangeInfo.m_numSlots;
+        return GetBuiltinNodeInlinedNsdRefAs<Nsd_InterpSlotRange>().m_numSlots;
     }
 
     void SetNodeOrigin(CodeOrigin origin)
     {
-        assert(!m_initializedNodeOrigin);
+        Assert(!m_initializedNodeOrigin);
 #ifndef NDEBUG
         m_initializedNodeOrigin = true;
 #endif
@@ -1776,7 +1578,7 @@ public:
         m_nodeOrigin = origin;
     }
 
-    CodeOrigin GetNodeOrigin() { assert(m_initializedNodeOrigin && !m_nodeOrigin.IsInvalid()); return m_nodeOrigin; }
+    CodeOrigin GetNodeOrigin() { Assert(m_initializedNodeOrigin && !m_nodeOrigin.IsInvalid()); return m_nodeOrigin; }
 
     // Note that all nodes must have an OSR exit destination even if !IsExitOK() or !MayOSRExit(),
     // since it is also used to represent the current semantical program location in bytecode.
@@ -1970,6 +1772,47 @@ inline bool Value::IsConstantValue()
     TestAssertImp(node->IsConstantLikeNode(), m_outputOrd == 0);
     return node->IsConstantLikeNode();
 }
+
+// Gives information on how the SSA input/output values of a node gets mapped to the RangeOperand taken by the bytecode
+//
+struct NodeRangeOperandInfoDecoder
+{
+    NodeRangeOperandInfoDecoder(TempArenaAllocator& alloc)
+        : m_inputResultBuffer(alloc)
+        , m_outputResultBuffer(alloc)
+    {
+        m_inputOffsets = nullptr;
+        m_outputOffsets = nullptr;
+    }
+
+    // Populates various fields below
+    //
+    void Query(Node* node);
+
+    // Whether the node has a range operand
+    //
+    bool m_nodeHasRangeOperand;
+
+    // The *last* m_numInputs SSA inputs of the node belongs to the RangeOperand
+    // m_inputOffsets[k] is the offset into the RangeOperand for the k-th of them (i.e., it should be stored into range[m_inputOffsets[k]] for codegen)
+    //
+    uint32_t* m_inputOffsets;
+    size_t m_numInputs;
+
+    // The *last* m_numOutputs SSA oututs of the node comes from the RangeOperand
+    // m_outputOffsets[k] is the offset into the RangeOperand for the k-th of them (i.e., it should be retrieved from range[m_outputOffset[k]])
+    //
+    uint32_t* m_outputOffsets;
+    size_t m_numOutputs;
+
+    // The RangeOperand must be given a size of this length for correct codegen
+    //
+    size_t m_requiredRangeSize;
+
+private:
+    TempVector<uint32_t> m_inputResultBuffer;
+    TempVector<uint32_t> m_outputResultBuffer;
+};
 
 struct BasicBlock;
 
@@ -2643,7 +2486,7 @@ public:
         {
             r = Node::CreateConstantNode(value);
         }
-        assert(r != nullptr);
+        Assert(r != nullptr);
         return Value(r, 0 /*outputOrd*/);
     }
 
@@ -2654,7 +2497,7 @@ public:
         {
             r = Node::CreateUnboxedConstantNode(value);
         }
-        assert(r != nullptr);
+        Assert(r != nullptr);
         return Value(r, 0 /*outputOrd*/);
     }
 
@@ -2664,7 +2507,7 @@ public:
         {
             m_argumentCacheMap.resize(argOrd + 1, nullptr);
         }
-        assert(argOrd < m_argumentCacheMap.size());
+        Assert(argOrd < m_argumentCacheMap.size());
         if (m_argumentCacheMap[argOrd] == nullptr)
         {
             m_argumentCacheMap[argOrd] = Node::CreateArgumentNode(argOrd);
@@ -2697,7 +2540,7 @@ public:
         {
             m_variadicArgumentCacheMap.resize(varArgOrd + 1, nullptr);
         }
-        assert(varArgOrd < m_variadicArgumentCacheMap.size());
+        Assert(varArgOrd < m_variadicArgumentCacheMap.size());
         if (m_variadicArgumentCacheMap[varArgOrd] == nullptr)
         {
             m_variadicArgumentCacheMap[varArgOrd] = Node::CreateGetKthVariadicArgNode(varArgOrd);

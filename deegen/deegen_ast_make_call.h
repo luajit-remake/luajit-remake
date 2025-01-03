@@ -10,6 +10,8 @@ namespace dast {
 class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
 class BaselineJitImplCreator;
+class DfgJitImplCreator;
+class JitImplCreatorBase;
 
 class AstMakeCall
 {
@@ -108,9 +110,18 @@ public:
         ValidateLLVMFunction(func);
     }
 
+    // Create logic that computes the CallSiteInfo field for the call
+    // Return nullptr for tail call since it's not needed
+    //
+    llvm::Value* EmitCallSiteInfoForJitCall(JitImplCreatorBase* ifi, llvm::Instruction* insertBefore);
+
     void DoLoweringForBaselineJIT(BaselineJitImplCreator* ifi, size_t uniqueOrd);
 
     static void LowerForBaselineJIT(BaselineJitImplCreator* ifi, llvm::Function* func);
+
+    void DoLoweringForDfgJIT(DfgJitImplCreator* ifi);
+
+    static void LowerAllForDfgJIT(DfgJitImplCreator* ifi, llvm::Function* func);
 
 private:
     static llvm::Function* WARN_UNUSED CreatePlaceholderFunction(llvm::Module* module, const std::vector<bool /*isArgRange*/>& argDesc);

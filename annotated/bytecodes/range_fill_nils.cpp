@@ -23,15 +23,21 @@ DEEGEN_DEFINE_BYTECODE(RangeFillNils)
     );
     Result(NoOutput);
     Implementation(RangeFillNilsImpl);
-    Variant(Op("numToPut").HasValue(1));
-    Variant(Op("numToPut").HasValue(2));
-    Variant(Op("numToPut").HasValue(3));
-    Variant(Op("numToPut").HasValue(4));
-    Variant(Op("numToPut").HasValue(5));
-    Variant(Op("numToPut").HasValue(6));
+    for (size_t k = 1; k <= 6; k++)
+    {
+        Variant(Op("numToPut").HasValue(k));
+        DfgVariant(Op("numToPut").HasValue(k));
+    }
     Variant();
+    DfgVariant();
     DeclareReads();
-    DeclareWrites(Range(Op("base"), Op("numToPut")));
+    DeclareWrites(
+        Range(Op("base"), Op("numToPut")).TypeDeductionRule(
+            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/, uint16_t /*numToPut*/) -> TypeMask
+            {
+                return x_typeMaskFor<tNil>;
+            })
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

@@ -11,9 +11,9 @@ inline DeferredWatchpointFire::DeferredWatchpointFire()
 
 inline DeferredWatchpointFire::~DeferredWatchpointFire()
 {
-    assert(m_set != nullptr);
+    Assert(m_set != nullptr);
     m_set->TriggerFireEvent();
-    assert(WatchpointSet::IsWatchedButNoWatchers(m_set));
+    Assert(WatchpointSet::IsWatchedButNoWatchers(m_set));
     VM::GetActiveVMForCurrentThread()->DeallocateSpdsRegionObject(m_set);
     m_set = nullptr;
 }

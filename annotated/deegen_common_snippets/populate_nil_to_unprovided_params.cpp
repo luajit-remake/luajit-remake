@@ -1,5 +1,3 @@
-#include "force_release_build.h"
-
 #include "define_deegen_common_snippet.h"
 
 static void DeegenSnippet_PopulateNilToUnprovidedParams(uint64_t* paramStart, uint64_t numProvidedParams, uint64_t numNeededParams, uint64_t nilValue)

@@ -54,9 +54,7 @@ static void NO_RETURN ArithmeticOperationImpl(TValue lhs, TValue rhs)
             if (result.m_result.m_value != 0)
             {
                 HeapPtr<TableObject> metatable = result.m_result.As<TableObject>();
-                GetByIdICInfo icInfo;
-                TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(opKind), icInfo /*out*/);
-                metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(opKind).As<void>(), icInfo);
+                metamethod = GetMetamethodFromMetatable(metatable, opKind);
                 if (likely(!metamethod.Is<tNil>()))
                 {
                     goto do_metamethod_call;
@@ -128,6 +126,37 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ArithmeticOperation, LuaMetamethodKind opKind)
         Op("rhs").IsConstant<tDoubleNotNaN>()
     ).EnableHotColdSplitting(
         Op("lhs").HasType<tDoubleNotNaN>()
+    );
+    // DFG speculations:
+    // 1. Speculate for <tDouble, tDouble>
+    // 2. No speculation, but still move non-double case to AOT slow path
+    //
+    DfgVariant(
+        Op("lhs").HasType<tDouble>(),
+        Op("rhs").HasType<tDouble>()
+    );
+    DfgVariant().EnableHotColdSplitting(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
+    );
+    // Output type deduction: <double, double> -> double, otherwise top
+    //
+    TypeDeductionRule(
+        [](TypeMask lhs, TypeMask rhs) -> TypeMask
+        {
+            if (lhs.SubsetOf<tDouble>() && rhs.SubsetOf<tDouble>())
+            {
+                return x_typeMaskFor<tDouble>;
+            }
+            else
+            {
+                return x_typeMaskFor<tTop>;
+            }
+        });
+    RegAllocHint(
+        Op("lhs").RegHint(RegHint::FPR),
+        Op("rhs").RegHint(RegHint::FPR),
+        Op("output").RegHint(RegHint::FPR)
     );
 }
 

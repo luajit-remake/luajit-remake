@@ -13,21 +13,21 @@ TEST(Deegen, DumpTypeSpeculation)
 {
     std::string s;
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tBottom>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tBottom>);
     ReleaseAssert(s == "tBottom");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tTop>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tTop>);
     ReleaseAssert(s == "tTop");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tTable>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tTable>);
     ReleaseAssert(s == "tTable");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tNil> | x_typeSpeculationMaskFor<tDouble>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tNil> | x_typeMaskFor<tDouble>);
     ReleaseAssert(s == "tDouble | tNil");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tDouble>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tDouble>);
     ReleaseAssert(s == "tDouble");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeSpeculationMaskFor<tNil> | x_typeSpeculationMaskFor<tDouble> | x_typeSpeculationMaskFor<tTable>);
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tNil> | x_typeMaskFor<tDouble> | x_typeMaskFor<tTable>);
     ReleaseAssert(s == "tTable | tDouble | tNil");
 }

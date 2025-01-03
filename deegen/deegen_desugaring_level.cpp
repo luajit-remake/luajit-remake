@@ -8,14 +8,14 @@ namespace dast
 static DesugarDecision WARN_UNUSED AlwaysInlineAndNoInlineChecker(llvm::Function* func, DesugaringLevel /*level*/)
 {
     using namespace llvm;
-    if (func->hasFnAttribute(Attribute::AttrKind::AlwaysInline))
+    if (func->hasFnAttribute(Attribute::AlwaysInline))
     {
-        ReleaseAssert(!func->hasFnAttribute(Attribute::AttrKind::NoInline));
+        ReleaseAssert(!func->hasFnAttribute(Attribute::NoInline));
         return DesugarDecision::MustInline;
     }
-    if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
+    if (func->hasFnAttribute(Attribute::NoInline))
     {
-        ReleaseAssert(!func->hasFnAttribute(Attribute::AttrKind::AlwaysInline));
+        ReleaseAssert(!func->hasFnAttribute(Attribute::AlwaysInline));
         return DesugarDecision::MustNotInline;
     }
     return DesugarDecision::DontCare;
@@ -65,13 +65,13 @@ void AddLLVMInliningAttributesForDesugaringLevel(llvm::Module* module, Desugarin
         DesugarDecision decision = GetDesugarDecisionForFunction(&func, level);
         if (decision == DesugarDecision::MustInline)
         {
-            ReleaseAssert(!func.hasFnAttribute(Attribute::AttrKind::NoInline));
-            func.addFnAttr(Attribute::AttrKind::AlwaysInline);
+            ReleaseAssert(!func.hasFnAttribute(Attribute::NoInline));
+            func.addFnAttr(Attribute::AlwaysInline);
         }
         else if (decision == DesugarDecision::MustNotInline)
         {
-            ReleaseAssert(!func.hasFnAttribute(Attribute::AttrKind::AlwaysInline));
-            func.addFnAttr(Attribute::AttrKind::NoInline);
+            ReleaseAssert(!func.hasFnAttribute(Attribute::AlwaysInline));
+            func.addFnAttr(Attribute::NoInline);
         }
         else
         {

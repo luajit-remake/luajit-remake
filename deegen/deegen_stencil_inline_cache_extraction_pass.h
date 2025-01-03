@@ -14,6 +14,11 @@ struct DeegenStencilExtractedICAsm
         return m_blocks[0]->m_normalizedLabelName;
     }
 
+    size_t WARN_UNUSED GetNumAsmLines()
+    {
+        return X64AsmFile::CountEffectiveNumInstructionsInBlockList(m_blocks);
+    }
+
     std::vector<X64AsmBlock*> m_blocks;
     X64AsmFile* m_owner;
 };

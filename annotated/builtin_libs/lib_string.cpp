@@ -123,13 +123,13 @@ DEEGEN_DEFINE_LIB_FUNC(string_char)
                 }
                 else
                 {
-                    assert(i64 == -2);
+                    Assert(i64 == -2);
                     ss.Destroy();
                     ThrowError("bad argument to 'char' (invalid value)");
                 }
             }
         }
-        assert(0 <= i64 && i64 <= 255);
+        Assert(0 <= i64 && i64 <= 255);
         ptr[i] = static_cast<uint8_t>(i64);
     }
     ptr[numArgs] = 0;
@@ -218,7 +218,7 @@ DEEGEN_DEFINE_LIB_FUNC(string_format)
     case StrFmtError_NotString:
         ThrowError("bad argument to 'format' (string expected)");
     case StrFmtNoError:
-        assert(false);
+        Assert(false);
         __builtin_unreachable();
     }   /* switch resKind */
 }
@@ -441,7 +441,7 @@ static void ALWAYS_INLINE FastToUpperOrLower(const char* ptrIn, size_t length, c
 #ifndef NDEBUG
         for (size_t i = 0; i < length; i++)
         {
-            assert(ptrOut[i] == static_cast<char>(stdImplFn(static_cast<unsigned char>(ptrIn[i]))));
+            Assert(ptrOut[i] == static_cast<char>(stdImplFn(static_cast<unsigned char>(ptrIn[i]))));
         }
 #endif
     }

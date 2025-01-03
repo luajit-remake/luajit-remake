@@ -69,7 +69,7 @@ public:
 
     void NO_INLINE ResizeImpl()
     {
-        assert(is_power_of_2(m_hashMask + 1));
+        Assert(is_power_of_2(m_hashMask + 1));
         uint32_t oldMask = m_hashMask;
         uint32_t newMask = oldMask * 2 + 1;
         ReleaseAssert(newMask < std::numeric_limits<uint32_t>::max());
@@ -82,7 +82,7 @@ public:
              m_hashTable[i].m_key = std::numeric_limits<double>::quiet_NaN();
         }
 
-        DEBUG_ONLY(uint32_t cnt = 0;)
+        DEBUG_ONLY([[maybe_unused]] uint32_t cnt = 0;)
         uint32_t nonNilElement = 0;
         HashTableEntry* oldHtEnd = oldHt + oldMask + 1;
         HashTableEntry* curEntry = oldHt;
@@ -97,7 +97,7 @@ public:
                     size_t slot = HashPrimitiveTypes(key) & newMask;
                     while (!IsNaN(m_hashTable[slot].m_key))
                     {
-                        assert(!UnsafeFloatEqual(m_hashTable[slot].m_key, key));
+                        Assert(!UnsafeFloatEqual(m_hashTable[slot].m_key, key));
                         slot = (slot + 1) & newMask;
                     }
                     m_hashTable[slot].m_key = key;
@@ -108,7 +108,7 @@ public:
             }
             curEntry++;
         }
-        assert(cnt == m_elementCount);
+        Assert(cnt == m_elementCount);
         m_elementCount = nonNilElement;
 
         delete [] oldHt;
@@ -157,7 +157,7 @@ public:
 
     void Insert(double key, TValue value)
     {
-        assert(!IsNaN(key));
+        Assert(!IsNaN(key));
         size_t hashMask = m_hashMask;
         size_t slot = HashPrimitiveTypes(key) & hashMask;
         while (true)
@@ -374,7 +374,7 @@ public:
         //
         if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
         {
-            assert(ignoreAssert || !arrType.HasSparseMap());
+            Assert(ignoreAssert || !arrType.HasSparseMap());
             return GetByIntegerIndexICInfo::ICKind::NoArrayPart;
         }
 
@@ -413,7 +413,7 @@ public:
             arrType.m_asValue = mask;
             GetByIntegerIndexICInfo::ICKind kind = NaiveComputeGetByIntegerIndexIcKindFromArrayType<true /*ignoreAssert*/>(arrType);
             uint64_t k64 = static_cast<uint64_t>(kind);
-            assert(k64 < 4);
+            Assert(k64 < 4);
             result |= k64 << (mask * 2);
         }
         return result;
@@ -423,7 +423,7 @@ public:
     {
         constexpr uint64_t x_result_bitvector = ComputeGetByIntegerIndexIcBitVectorForNonContinuousArray();
         GetByIntegerIndexICInfo::ICKind result = static_cast<GetByIntegerIndexICInfo::ICKind>((x_result_bitvector >> ((arrType.m_asValue * 2) & 63)) & 3);
-        assert(result == NaiveComputeGetByIntegerIndexIcKindFromArrayType(arrType));
+        Assert(result == NaiveComputeGetByIntegerIndexIcKindFromArrayType(arrType));
         return result;
     }
 
@@ -445,7 +445,7 @@ public:
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);
 #endif
-        assert(arrType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+        Assert(arrType.ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
         if (likely(self->m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx)))
         {
             TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
@@ -466,12 +466,12 @@ public:
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);
 #endif
-        assert(arrType.IsContinuous());
+        Assert(arrType.IsContinuous());
         if (likely(self->m_butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(idx)))
         {
 #ifndef NDEBUG
             TValue res = *(self->m_butterfly->UnsafeGetInVectorIndexAddr(idx));
-            assert(!res.Is<tNil>());
+            Assert(!res.Is<tNil>());
             AssertImp(arrType.ArrayKind() == ArrayType::Kind::Int32, res.Is<tInt32>());
             AssertImp(arrType.ArrayKind() == ArrayType::Kind::Double, res.Is<tDouble>());
 #endif
@@ -496,7 +496,7 @@ public:
 
         if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::NoArrayPart)
         {
-            assert(!arrType.HasSparseMap());
+            Assert(!arrType.HasSparseMap());
             return TValue::Nil();
         }
 
@@ -528,7 +528,7 @@ public:
         {
             if (idx < ArrayGrowthPolicy::x_arrayBaseOrd || idx > ArrayGrowthPolicy::x_unconditionallySparseMapCutoff)
             {
-                assert(arrType.HasSparseMap());
+                Assert(arrType.HasSparseMap());
                 return QueryArraySparseMap(self, static_cast<double>(idx));
             }
             else
@@ -540,7 +540,7 @@ public:
         }
         case GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap:
         {
-            assert(arrType.HasSparseMap());
+            Assert(arrType.HasSparseMap());
             return QueryArraySparseMap(self, static_cast<double>(idx));
         }
         }
@@ -557,7 +557,7 @@ public:
     {
         // This function expects that 'idx' is not NaN
         //
-        assert(!IsNaN(idx));
+        Assert(!IsNaN(idx));
 
         {
             int64_t idx64;
@@ -573,7 +573,7 @@ public:
         if (icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageOrSparseMap ||
             icInfo.m_icKind == GetByIntegerIndexICInfo::ICKind::VectorStorageXorSparseMap)
         {
-            assert(TCGet(self->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
+            Assert(TCGet(self->m_arrayType).ArrayKind() != ArrayType::Kind::NoButterflyArrayPart);
             return QueryArraySparseMap(self, idx);
         }
         else
@@ -587,7 +587,7 @@ public:
     {
 #ifndef NDEBUG
         ArrayType arrType = TCGet(self->m_arrayType);
-        assert(arrType.HasSparseMap());
+        Assert(arrType.HasSparseMap());
 #endif
         HeapPtr<ArraySparseMap> sparseMap = self->m_butterfly->GetHeader()->GetSparseMap();
         TValue res = TranslateToRawPointer(sparseMap)->GetByVal(idx);
@@ -599,9 +599,9 @@ public:
     }
 
     template<typename U>
-    static void PrepareGetByIdImplForStructure(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIdImplForStructure(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
-        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
 
         HeapPtr<Structure> structure = hiddenClass.As<Structure>();
         icInfo.m_mayHaveMetatable = (structure->m_metatable != 0);
@@ -638,9 +638,9 @@ public:
     }
 
     template<typename U>
-    static void PrepareGetByIdImplForCacheableDictionary(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIdImplForCacheableDictionary(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
-        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        Assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
 
         HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
         icInfo.m_mayHaveMetatable = (dict->m_metatable.m_value != 0);
@@ -679,12 +679,12 @@ public:
     }
 
     template<typename U>
-    static void PrepareGetByIdImpl(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIdImpl(SystemHeapPointer<void> hiddenClass, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
         HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         if (likely(ty == HeapEntityType::Structure))
         {
@@ -698,19 +698,19 @@ public:
         {
             // TODO: support UncacheableDictionary
             //
-            assert(false && "unimplemented");
+            Assert(false && "unimplemented");
             __builtin_unreachable();
         }
     }
 
     template<typename U>
-    static void PrepareGetById(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetById(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         return PrepareGetByIdImpl(self->m_hiddenClass, propertyName, icInfo /*out*/);
     }
 
     template<typename U>
-    static void PrepareGetById(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetById(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         return PrepareGetByIdImpl(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
     }
@@ -719,13 +719,13 @@ public:
     // Global object is guaranteed to be a CacheableDictionary so we can remove a branch
     //
     template<typename U>
-    static void PrepareGetByIdForGlobalObject(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIdForGlobalObject(TableObject* self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         return PrepareGetByIdImplForCacheableDictionary(self->m_hiddenClass, propertyName, icInfo /*out*/);
     }
 
     template<typename U>
-    static void PrepareGetByIdForGlobalObject(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
+    static void ALWAYS_INLINE PrepareGetByIdForGlobalObject(HeapPtr<TableObject> self, UserHeapPointer<U> propertyName, GetByIdICInfo& icInfo /*out*/)
     {
         return PrepareGetByIdImplForCacheableDictionary(TCGet(self->m_hiddenClass), propertyName, icInfo /*out*/);
     }
@@ -749,15 +749,15 @@ public:
         }
 
         // TODO: support UncacheableDictionary
-        assert(false && "not implemented");
+        Assert(false && "not implemented");
         __builtin_unreachable();
     }
 
     template<typename T, typename U, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void PreparePutByIdForCacheableDictionary(T self, HeapPtr<CacheableDictionary> dict, UserHeapPointer<U> propertyName, PutByIdICInfo& icInfo /*out*/)
     {
-        assert(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
-        assert(TCGet(self->m_hiddenClass).template As<CacheableDictionary>() == dict);
+        Assert(TCGet(self->m_hiddenClass).template As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        Assert(TCGet(self->m_hiddenClass).template As<CacheableDictionary>() == dict);
         CacheableDictionary::PutByIdResult res;
         if constexpr(std::is_same_v<U, HeapString>)
         {
@@ -773,7 +773,7 @@ public:
         if (unlikely(res.m_shouldGrowButterfly))
         {
             TableObject* rawSelf = TranslateToRawPointer(self);
-            assert(dict->m_butterflyNamedStorageCapacity < res.m_newButterflyCapacity);
+            Assert(dict->m_butterflyNamedStorageCapacity < res.m_newButterflyCapacity);
             rawSelf->GrowButterflyKnowingNamedStorageCapacity<true /*isGrowNamedStorage*/>(dict->m_butterflyNamedStorageCapacity, res.m_newButterflyCapacity);
             dict->m_butterflyNamedStorageCapacity = res.m_newButterflyCapacity;
         }
@@ -804,7 +804,7 @@ public:
         }
         else
         {
-            assert(slotOrd < dict->m_slotCount);
+            Assert(slotOrd < dict->m_slotCount);
             icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
             icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
         }
@@ -866,7 +866,7 @@ public:
                 }
                 else
                 {
-                    assert(slotOrd < icInfo.m_newStructure.As()->m_numSlots);
+                    Assert(slotOrd < icInfo.m_newStructure.As()->m_numSlots);
                     icInfo.m_icKind = PutByIdICInfo::ICKind::OutlinedStorage;
                     icInfo.m_slot = Butterfly::GetOutlineStorageIndex(slotOrd, inlineStorageCapacity);
                 }
@@ -881,7 +881,7 @@ public:
 
         SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
         HeapEntityType ty = hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         if (likely(ty == HeapEntityType::Structure))
         {
@@ -897,7 +897,7 @@ public:
         {
             // icInfo.m_isInlineCacheable = false;
             // TODO: support UncacheableDictionary
-            assert(false && "unimplemented");
+            Assert(false && "unimplemented");
             __builtin_unreachable();
         }
     }
@@ -911,7 +911,7 @@ public:
         static_assert(std::is_same_v<U, void> || std::is_same_v<U, HeapString>);
 
         SystemHeapPointer<void> hiddenClass = TCGet(self->m_hiddenClass);
-        assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
+        Assert(hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary);
 
         HeapPtr<CacheableDictionary> dict = hiddenClass.As<CacheableDictionary>();
         PreparePutByIdForCacheableDictionary(self, dict, propertyName, icInfo /*out*/);
@@ -932,7 +932,7 @@ public:
 
         // Now we need to determine if the property is nil
         //
-        assert(icInfo.m_icKind != PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
+        Assert(icInfo.m_icKind != PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
         if (icInfo.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
         {
             TValue val = TCGet(self->m_inlineStorage[icInfo.m_slot]);
@@ -940,7 +940,7 @@ public:
         }
         else
         {
-            assert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+            Assert(icInfo.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
             TValue val = TCGet(*self->m_butterfly->GetNamedPropertyAddr(icInfo.m_slot));
             return val.IsNil();
         }
@@ -963,15 +963,15 @@ public:
     template<bool isGrowNamedStorage>
     void GrowButterflyFromNull(uint32_t newCapacity)
     {
-        assert(m_butterfly == nullptr);
+        Assert(m_butterfly == nullptr);
 #ifndef NDEBUG
         if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
         {
-            assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
+            Assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
         }
         else if (m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::CacheableDictionary)
         {
-            assert(m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity == 0);
+            Assert(m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity == 0);
         }
         else
         {
@@ -1039,17 +1039,17 @@ public:
             HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
             if (hiddenClassTy == HeapEntityType::Structure)
             {
-                assert(oldNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
+                Assert(oldNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
             }
             else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
             {
-                assert(oldNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
+                Assert(oldNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
             }
             else
             {
-                assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
+                Assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
                 // TODO: support UncacheableDictionary
-                assert(false && "unimplemented");
+                Assert(false && "unimplemented");
             }
 #endif
             uint32_t oldButterflySlots = oldArrayStorageCapacity + oldNamedStorageCapacity + 1;
@@ -1061,18 +1061,18 @@ public:
             uint32_t newButterflyNamedStorageCapacity;
             if constexpr(isGrowNamedStorage)
             {
-                assert(newCapacity > oldNamedStorageCapacity);
+                Assert(newCapacity > oldNamedStorageCapacity);
                 newButterflySlots = newCapacity + oldArrayStorageCapacity + 1;
                 newButterflyNamedStorageCapacity = newCapacity;
             }
             else
             {
-                assert(newCapacity > oldArrayStorageCapacity);
+                Assert(newCapacity > oldArrayStorageCapacity);
                 newButterflySlots = oldNamedStorageCapacity + newCapacity + 1;
                 newButterflyNamedStorageCapacity = oldNamedStorageCapacity;
             }
 
-            assert(newButterflySlots > oldButterflySlots);
+            Assert(newButterflySlots > oldButterflySlots);
 
             uint64_t* newButterflyStart = new uint64_t[newButterflySlots];
             if constexpr(isGrowNamedStorage)
@@ -1126,9 +1126,9 @@ public:
         }
         else
         {
-            assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
+            Assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
             // TODO: support UncacheableDictionary
-            assert(false && "unimplemented");
+            Assert(false && "unimplemented");
             __builtin_unreachable();
         }
         GrowButterflyKnowingNamedStorageCapacity<isGrowNamedStorage>(oldNamedStorageCapacity, newCapacity);
@@ -1157,7 +1157,7 @@ public:
     void PutByIdTransitionToDictionaryImpl(VM* vm, UserHeapPointer<void> prop, TValue newValue)
     {
         CacheableDictionary::CreateFromStructureResult res;
-        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
         Structure* structure = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>());
         CacheableDictionary::CreateFromStructure(vm, this, structure, prop, res /*out*/);
         CacheableDictionary* dictionary = res.m_dictionary;
@@ -1167,9 +1167,9 @@ public:
         }
         else
         {
-            assert(structure->m_butterflyNamedStorageCapacity == dictionary->m_butterflyNamedStorageCapacity);
+            Assert(structure->m_butterflyNamedStorageCapacity == dictionary->m_butterflyNamedStorageCapacity);
         }
-        assert(res.m_slot < dictionary->m_inlineNamedStorageCapacity + dictionary->m_butterflyNamedStorageCapacity);
+        Assert(res.m_slot < dictionary->m_inlineNamedStorageCapacity + dictionary->m_butterflyNamedStorageCapacity);
         if (res.m_slot < dictionary->m_inlineNamedStorageCapacity)
         {
             m_inlineStorage[res.m_slot] = newValue;
@@ -1195,7 +1195,7 @@ public:
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
         TableObject* rawSelf = TranslateToRawPointer(vm, self);
-        assert(rawSelf->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Assert(rawSelf->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
         rawSelf->PutByIdTransitionToDictionaryImpl(vm, propertyName, newValue);
     }
 
@@ -1278,7 +1278,7 @@ public:
                 }
                 else
                 {
-                    assert(false && "unimplemented");
+                    Assert(false && "unimplemented");
                 }
                 icInfo.m_newArrayType = newArrType;
             };
@@ -1329,7 +1329,7 @@ public:
             }
             case ArrayType::Kind::NoButterflyArrayPart:
             {
-                assert(false);
+                Assert(false);
                 __builtin_unreachable();
             }
             }
@@ -1358,7 +1358,7 @@ public:
             }
             case ArrayType::Kind::NoButterflyArrayPart:
             {
-                assert(false);
+                Assert(false);
                 __builtin_unreachable();
             }
             }
@@ -1422,7 +1422,7 @@ public:
     {
         // For the continuous case, a nil value should always fail the value check above
         //
-        assert(!value.IsNil());
+        Assert(!value.IsNil());
         Butterfly* butterfly = self->m_butterfly;
         if (likely(butterfly->GetHeader()->CanUseFastPathGetForContinuousArray(index)))
         {
@@ -1435,7 +1435,7 @@ public:
         {
             // The put will extend the array length by 1. We can do it as long as we have enough capacity
             //
-            assert(index <= static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
+            Assert(index <= static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd);
             if (unlikely(index == static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity) + ArrayGrowthPolicy::x_arrayBaseOrd))
             {
                 return false;
@@ -1506,7 +1506,7 @@ public:
             {
                 *butterfly->UnsafeGetInVectorIndexAddr(ArrayGrowthPolicy::x_arrayBaseOrd) = value;
                 butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
-                assert(TCGet(self->m_hiddenClass).m_value == icInfo.m_hiddenClass.m_value);
+                Assert(TCGet(self->m_hiddenClass).m_value == icInfo.m_hiddenClass.m_value);
                 TCSet(self->m_arrayType, icInfo.m_newArrayType);
                 TCSet(self->m_hiddenClass, icInfo.m_newHiddenClass);
                 return true;
@@ -1533,7 +1533,7 @@ public:
 
         // This debug variable validates that we did not enter this slow-path for no reason (i.e. the fast path should have handled the case it ought to handle)
         //
-        DEBUG_ONLY(bool didSomethingNontrivial = false;)
+        DEBUG_ONLY([[maybe_unused]] bool didSomethingNontrivial = false;)
 
         int32_t index = static_cast<int32_t>(index64);
         ArrayType arrType = m_arrayType;
@@ -1594,7 +1594,7 @@ public:
             if (index == ArrayGrowthPolicy::x_arrayBaseOrd)
             {
                 newArrayType.SetIsContinuous(true);
-                assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
+                Assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous == 0);
                 m_butterfly->GetHeader()->m_arrayLengthIfContinuous = 1;
 
                 // Even if the array is continuous afterwards, we could still be hitting this path because the hidden class is different
@@ -1611,7 +1611,7 @@ public:
                 DEBUG_ONLY(didSomethingNontrivial = true;)
             }
 
-            assert(didSomethingNontrivial);
+            Assert(didSomethingNontrivial);
 
             // Update the ArrayType Kind
             //
@@ -1625,14 +1625,14 @@ public:
             }
             else
             {
-                assert(!value.IsNil());
+                Assert(!value.IsNil());
                 newArrayType.SetArrayKind(ArrayType::Kind::Any);
             }
         }
         else
         {
             Butterfly* butterfly = m_butterfly;
-            assert(butterfly != nullptr);
+            Assert(butterfly != nullptr);
             int64_t currentCapacity = static_cast<int64_t>(butterfly->GetHeader()->m_arrayStorageCapacity);
 
             if (index >= currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd)
@@ -1667,7 +1667,7 @@ public:
                 // is continuous and the put is one past the end of the continuous vector storage
                 //
                 bool isContinuous = arrType.IsContinuous();
-                DEBUG_ONLY(bool shouldIncrementContinuousLength = false;)
+                DEBUG_ONLY([[maybe_unused]] bool shouldIncrementContinuousLength = false;)
                 if (isContinuous)
                 {
                     if (index != butterfly->GetHeader()->m_arrayLengthIfContinuous + ArrayGrowthPolicy::x_arrayBaseOrd)
@@ -1676,7 +1676,7 @@ public:
                     }
                     else
                     {
-                        assert(index == currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd);
+                        Assert(index == currentCapacity + ArrayGrowthPolicy::x_arrayBaseOrd);
                         DEBUG_ONLY(shouldIncrementContinuousLength = true;)
                     }
                 }
@@ -1729,7 +1729,7 @@ public:
                 newArrayType.SetIsContinuous(isContinuous);
                 if (isContinuous)
                 {
-                    assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
+                    Assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
                     m_butterfly->GetHeader()->m_arrayLengthIfContinuous++;
                 }
                 else
@@ -1738,7 +1738,7 @@ public:
                     {
                         // We just turned from continuous to discontinuous
                         //
-                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
+                        Assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
                         m_butterfly->GetHeader()->m_arrayLengthIfContinuous = -1;
                     }
                 }
@@ -1803,7 +1803,7 @@ public:
                     {
                         // We just turned from continuous to discontinuous
                         //
-                        assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
+                        Assert(m_butterfly->GetHeader()->m_arrayLengthIfContinuous >= 0);
                         m_butterfly->GetHeader()->m_arrayLengthIfContinuous = -1;
                     }
                 }
@@ -1838,7 +1838,7 @@ public:
         if (arrType.m_asValue != newArrayType.m_asValue)
         {
             HeapEntityType hiddenClassType = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hiddenClassType == HeapEntityType::Structure || hiddenClassType == HeapEntityType::CacheableDictionary || hiddenClassType == HeapEntityType::UncacheableDictionary);
+            Assert(hiddenClassType == HeapEntityType::Structure || hiddenClassType == HeapEntityType::CacheableDictionary || hiddenClassType == HeapEntityType::UncacheableDictionary);
             if (hiddenClassType == HeapEntityType::Structure)
             {
                 Structure* structure = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>());
@@ -1856,13 +1856,13 @@ public:
             DEBUG_ONLY(didSomethingNontrivial = true;)
         }
 
-        assert(didSomethingNontrivial);
+        Assert(didSomethingNontrivial);
     }
 
     ArraySparseMap* WARN_UNUSED AllocateNewArraySparseMap(VM* vm)
     {
-        assert(m_butterfly != nullptr);
-        assert(!m_butterfly->GetHeader()->HasSparseMap());
+        Assert(m_butterfly != nullptr);
+        Assert(!m_butterfly->GetHeader()->HasSparseMap());
         ArraySparseMap* sparseMap = ArraySparseMap::AllocateEmptyArraySparseMap(vm);
         m_butterfly->GetHeader()->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(sparseMap).m_value;
         return sparseMap;
@@ -1915,17 +1915,17 @@ public:
                 //
                 if (isVectorQualifyingIndex && m_butterfly)
                 {
-                    assert(!m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64));
+                    Assert(!m_butterfly->GetHeader()->IndexFitsInVectorCapacity(idx64));
                 }
             }
             else
             {
-                assert(!isVectorQualifyingIndex);
+                Assert(!isVectorQualifyingIndex);
             }
         }
 #endif
 
-        assert(!IsNaN(index));
+        Assert(!IsNaN(index));
 
         ArrayType arrType = m_arrayType;
         ArrayType newArrayType = arrType;
@@ -1946,7 +1946,7 @@ public:
         if (arrType.m_asValue != newArrayType.m_asValue)
         {
             HeapEntityType ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-            assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+            Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
             if (ty == HeapEntityType::Structure)
             {
                 m_hiddenClass = TranslateToRawPointer(vm, m_hiddenClass.As<Structure>())->UpdateArrayType(vm, newArrayType);
@@ -1996,7 +1996,7 @@ public:
             }
             case ArrayType::Kind::NoButterflyArrayPart:
             {
-                assert(false);
+                Assert(false);
                 __builtin_unreachable();
             }
             }
@@ -2038,7 +2038,7 @@ public:
             }
             case ArrayType::Kind::NoButterflyArrayPart:
             {
-                assert(false);
+                Assert(false);
                 __builtin_unreachable();
             }
             }
@@ -2061,7 +2061,7 @@ public:
     template<typename T, typename = std::enable_if_t<IsPtrOrHeapPtr<T, TableObject>>>
     static void RawPutByValDoubleIndex(T self, double index, TValue value)
     {
-        assert(!IsNaN(index));
+        Assert(!IsNaN(index));
         int64_t idx64;
         if (likely(IsInt64Index(index, idx64 /*out*/)))
         {
@@ -2095,12 +2095,12 @@ public:
 
     static HeapPtr<TableObject> WARN_UNUSED CreateEmptyTableObjectImpl(VM* vm, Structure* emptyStructure, uint8_t inlineCapacity, uint32_t initialButterflyArrayPartCapacity)
     {
-        assert(emptyStructure->m_numSlots == 0);
-        assert(emptyStructure->m_metatable == 0);
-        assert(emptyStructure->m_arrayType.m_asValue == 0);
-        assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
+        Assert(emptyStructure->m_numSlots == 0);
+        Assert(emptyStructure->m_metatable == 0);
+        Assert(emptyStructure->m_arrayType.m_asValue == 0);
+        Assert(emptyStructure->m_butterflyNamedStorageCapacity == 0);
 
-        assert(inlineCapacity == emptyStructure->m_inlineNamedStorageCapacity);
+        Assert(inlineCapacity == emptyStructure->m_inlineNamedStorageCapacity);
         HeapPtr<TableObject> r = AllocateObjectImpl(vm, inlineCapacity);
         TCSet(r->m_hiddenClass, SystemHeapPointer<void> { emptyStructure });
         // Initialize the butterfly storage
@@ -2149,21 +2149,21 @@ public:
 
     Butterfly* WARN_UNUSED CloneButterfly(uint32_t butterflyNamedStorageCapacity)
     {
-        assert(m_butterfly != nullptr);
+        Assert(m_butterfly != nullptr);
         uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
 #ifndef NDEBUG
         HeapEntityType hiddenClassTy = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
         if (hiddenClassTy == HeapEntityType::Structure)
         {
-            assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
+            Assert(butterflyNamedStorageCapacity == m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity);
         }
         else if (hiddenClassTy == HeapEntityType::CacheableDictionary)
         {
-            assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
+            Assert(butterflyNamedStorageCapacity == m_hiddenClass.As<CacheableDictionary>()->m_butterflyNamedStorageCapacity);
         }
         else
         {
-            assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
+            Assert(hiddenClassTy == HeapEntityType::UncacheableDictionary);
             // TODO: support UncacheableDictionary
             ReleaseAssert(false && "unimplemented");
         }
@@ -2186,7 +2186,7 @@ public:
             ArraySparseMap* oldSparseMap = TranslateToRawPointer(vm, hdr->GetSparseMap());
             ArraySparseMap* newSparseMap = oldSparseMap->Clone(vm);
             hdr->m_arrayLengthIfContinuous = GeneralHeapPointer<ArraySparseMap>(newSparseMap).m_value;
-            assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
+            Assert(hdr->HasSparseMap() && TranslateToRawPointer(hdr->GetSparseMap()) == newSparseMap);
         }
 
         return butterflyPtr;
@@ -2195,7 +2195,7 @@ public:
     HeapPtr<TableObject> WARN_UNUSED ShallowCloneTableObject(VM* vm)
     {
         HeapEntityType ty = m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         SystemHeapPointer<void> newHiddenClass;
         uint8_t inlineCapacity;
@@ -2242,17 +2242,17 @@ public:
     //
     Butterfly* WARN_UNUSED CloneButterflyForTableDup()
     {
-        assert(m_butterfly != nullptr);
+        Assert(m_butterfly != nullptr);
         uint32_t arrayStorageCapacity = m_butterfly->GetHeader()->m_arrayStorageCapacity;
-        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-        assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
+        Assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Assert(m_hiddenClass.As<Structure>()->m_butterflyNamedStorageCapacity == 0);
         uint32_t butterflySlots = arrayStorageCapacity + 1;
         uint32_t butterflyStartOffset = static_cast<uint32_t>(1 - ArrayGrowthPolicy::x_arrayBaseOrd);
         uint64_t* butterflyStart = reinterpret_cast<uint64_t*>(m_butterfly) - butterflyStartOffset;
         uint64_t* butterflyCopy = new uint64_t[butterflySlots];
         memcpy(butterflyCopy, butterflyStart, sizeof(uint64_t) * butterflySlots);
         Butterfly* butterflyPtr = reinterpret_cast<Butterfly*>(butterflyCopy + butterflyStartOffset);
-        assert(!butterflyPtr->GetHeader()->HasSparseMap());
+        Assert(!butterflyPtr->GetHeader()->HasSparseMap());
         return butterflyPtr;
     }
 
@@ -2272,11 +2272,11 @@ public:
     //
     HeapPtr<TableObject> WARN_UNUSED ALWAYS_INLINE ShallowCloneTableObjectForTableDup(VM* vm, uint8_t inlineCapacityStepping, bool hasButterfly)
     {
-        assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+        Assert(m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
         [[maybe_unused]] Structure* structure = TranslateToRawPointer(m_hiddenClass.As<Structure>());
         uint8_t inlineCapacity = internal::x_inlineStorageSizeForSteppingArray[inlineCapacityStepping];
-        assert(inlineCapacity == structure->m_inlineNamedStorageCapacity);
-        assert(structure->m_butterflyNamedStorageCapacity == 0);
+        Assert(inlineCapacity == structure->m_inlineNamedStorageCapacity);
+        Assert(structure->m_butterflyNamedStorageCapacity == 0);
 
         uint32_t allocationSize = ComputeObjectAllocationSize(inlineCapacity);
         HeapPtr<TableObject> hr = vm->AllocFromUserHeap(allocationSize).AsNoAssert<TableObject>();
@@ -2292,7 +2292,7 @@ public:
         }
         else
         {
-            assert(r->m_butterfly == nullptr);
+            Assert(r->m_butterfly == nullptr);
         }
         return hr;
     }
@@ -2312,7 +2312,7 @@ public:
     {
         SystemHeapPointer<void> hc = TCGet(self->m_hiddenClass);
         HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         if (likely(ty == HeapEntityType::Structure))
         {
@@ -2337,7 +2337,7 @@ public:
             }
             else
             {
-                assert(Structure::IsPolyMetatable(structure));
+                Assert(Structure::IsPolyMetatable(structure));
                 UserHeapPointer<void> res = GetPolyMetatableFromObjectWithStructureHiddenClass(TranslateToRawPointer(self), Structure::GetPolyMetatableSlot(structure), structure->m_inlineNamedStorageCapacity);
                 return GetMetatableResult {
                     .m_result = res,
@@ -2362,10 +2362,10 @@ public:
 
     void SetMetatable(VM* vm, UserHeapPointer<void> newMetatable)
     {
-        assert(newMetatable.m_value != 0);
+        Assert(newMetatable.m_value != 0);
         SystemHeapPointer<void> hc = m_hiddenClass;
         HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         if (likely(ty == HeapEntityType::Structure))
         {
@@ -2388,13 +2388,13 @@ public:
                 }
                 else
                 {
-                    assert(m_butterfly != nullptr);
+                    Assert(m_butterfly != nullptr);
                     *m_butterfly->GetNamedPropertyAddr(Butterfly::GetOutlineStorageIndex(result.m_slotOrdinal, inlineStorageCapacity)) = TValue::CreatePointer(newMetatable);
                 }
             }
             m_hiddenClass = result.m_newStructure.As();
             m_arrayType = TCGet(result.m_newStructure.As()->m_arrayType);
-            assert(m_arrayType.MayHaveMetatable());
+            Assert(m_arrayType.MayHaveMetatable());
         }
         else if (ty == HeapEntityType::CacheableDictionary)
         {
@@ -2422,7 +2422,7 @@ public:
     {
         SystemHeapPointer<void> hc = m_hiddenClass;
         HeapEntityType ty = hc.As<SystemHeapGcObjectHeader>()->m_type;
-        assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
+        Assert(ty == HeapEntityType::Structure || ty == HeapEntityType::CacheableDictionary || ty == HeapEntityType::UncacheableDictionary);
 
         if (likely(ty == HeapEntityType::Structure))
         {
@@ -2440,7 +2440,7 @@ public:
                 }
                 else
                 {
-                    assert(m_butterfly != nullptr);
+                    Assert(m_butterfly != nullptr);
                     *m_butterfly->GetNamedPropertyAddr(Butterfly::GetOutlineStorageIndex(result.m_slotOrdinal, inlineStorageCapacity)) = TValue::Nil();
                 }
             }
@@ -2488,7 +2488,7 @@ public:
 
     static uint32_t WARN_UNUSED NO_INLINE GetTableLengthWithLuaSemanticsSlowPathSlowPath(ArraySparseMap* sparseMap, uint32_t existentLb)
     {
-        assert(existentLb > 0);
+        Assert(existentLb > 0);
         uint32_t ub = existentLb;
         while (true)
         {
@@ -2518,7 +2518,7 @@ public:
         // The invariant is that at any moment, our range [l,r] satisfies slot 'l' is not nil and slot 'r' is nil
         //
         uint32_t lb = existentLb;
-        assert(lb < ub && sparseMap->GetByVal(ub).IsNil());
+        Assert(lb < ub && sparseMap->GetByVal(ub).IsNil());
         while (lb + 1 < ub)
         {
             uint32_t mid = static_cast<uint32_t>((static_cast<uint64_t>(lb) + ub) / 2);
@@ -2526,7 +2526,7 @@ public:
             // There is a tricky thing here: existentLb doesn't necessarily exist in sparse map! (because it can be in vector part)
             // but fortunately due to how we write this binary search, mid should always be > existentLb. But for sanity, still assert this.
             //
-            assert(existentLb < mid);
+            Assert(existentLb < mid);
             if (sparseMap->GetByVal(mid).IsNil())
             {
                 ub = mid;
@@ -2536,7 +2536,7 @@ public:
                 lb = mid;
             }
         }
-        assert(lb + 1 == ub);
+        Assert(lb + 1 == ub);
         return lb;
     }
 
@@ -2576,8 +2576,8 @@ public:
                         lb = mid;
                     }
                 }
-                assert(lb + 1 == ub);
-                assert(!tv[lb].IsNil() && tv[lb + 1].IsNil());
+                Assert(lb + 1 == ub);
+                Assert(!tv[lb].IsNil() && tv[lb + 1].IsNil());
                 return lb;
             }
             // Case 3: the last slot 'cap' is not nil, we are not guaranteed to find an empty slot in vector range.
@@ -2632,7 +2632,7 @@ public:
             // Fast path: the array is continuous
             //
             int32_t val = self->m_butterfly->GetHeader()->m_arrayLengthIfContinuous;
-            assert(val >= 0);
+            Assert(val >= 0);
             return std::make_pair(true /*success*/, static_cast<uint32_t>(val - 1 + ArrayGrowthPolicy::x_arrayBaseOrd));
         }
         else if (arrType.ArrayKind() == ArrayType::Kind::NoButterflyArrayPart)
@@ -2674,6 +2674,39 @@ public:
 };
 static_assert(sizeof(TableObject) == 16);
 
+struct RawGetFromTableObjectResult
+{
+    TValue m_value;
+    GetByIdICInfo m_icInfo;
+};
+static_assert(sizeof(RawGetFromTableObjectResult) == 16);
+
+inline TValue WARN_UNUSED NO_INLINE RawGetStringPropertyFromTableObject(HeapPtr<TableObject> object, HeapPtr<HeapString> prop)
+{
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(object, UserHeapPointer<HeapString> { prop }, icInfo /*out*/);
+    return TableObject::GetById(object, prop, icInfo);
+}
+
+inline TValue WARN_UNUSED ALWAYS_INLINE GetMetamethodFromMetatable(HeapPtr<TableObject> metatable, LuaMetamethodKind mtKind)
+{
+    return RawGetStringPropertyFromTableObject(metatable, VM_GetStringNameForMetatableKind(mtKind).As());
+}
+
+// 'prop' is not necessarily a string, but still must be a heap entity
+// Caller should always use 'RawGetStringPropertyFromTableObject' instead if the 'prop' is known to be a string!
+//
+inline RawGetFromTableObjectResult WARN_UNUSED NO_INLINE RawGetAnyHeapEntityMaybeNonStringPropertyFromTableObject(
+    HeapPtr<TableObject> object, HeapPtr<void> prop)
+{
+    GetByIdICInfo icInfo;
+    TableObject::PrepareGetById(object, UserHeapPointer<void> { prop }, icInfo /*out*/);
+    return {
+        .m_value = TableObject::GetById(object, prop, icInfo),
+        .m_icInfo = icInfo
+    };
+}
+
 inline UserHeapPointer<void> GetMetatableForValue(TValue value)
 {
     if (likely(value.IsPointer()))
@@ -2714,12 +2747,12 @@ inline UserHeapPointer<void> GetMetatableForValue(TValue value)
         }
         else
         {
-            assert(value.AsMIV().IsBoolean());
+            Assert(value.AsMIV().IsBoolean());
             return VM::GetActiveVMForCurrentThread()->m_metatableForBoolean;
         }
     }
 
-    assert(value.IsDouble() || value.IsInt32());
+    Assert(value.IsDouble() || value.IsInt32());
     return VM::GetActiveVMForCurrentThread()->m_metatableForNumber;
 }
 
@@ -2729,11 +2762,9 @@ inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointe
     {
         return nullptr;
     }
-    assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
+    Assert(metatableMaybeNull.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Table);
     HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
-    GetByIdICInfo icInfo;
-    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call), icInfo /*out*/);
-    TValue target = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Call).As<void>(), icInfo);
+    TValue target = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Call);
     if (likely(target.Is<tFunction>()))
     {
         return target.As<tFunction>();
@@ -2756,12 +2787,12 @@ inline HeapPtr<FunctionObject> GetCallMetamethodFromMetatableImpl(UserHeapPointe
 //
 inline HeapPtr<FunctionObject> WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(TValue value)
 {
-    assert(!value.Is<tFunction>());
+    Assert(!value.Is<tFunction>());
 
     if (likely(value.Is<tHeapEntity>()))
     {
         HeapEntityType ty = value.GetHeapEntityType();
-        assert(ty != HeapEntityType::Function);
+        Assert(ty != HeapEntityType::Function);
 
         if (likely(ty == HeapEntityType::Table))
         {
@@ -2790,11 +2821,11 @@ inline HeapPtr<FunctionObject> WARN_UNUSED NO_INLINE GetCallTargetViaMetatable(T
     }
     else if (value.Is<tMIV>())
     {
-        assert(value.Is<tBool>());
+        Assert(value.Is<tBool>());
         return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForBoolean);
     }
 
-    assert(value.Is<tDouble>() || value.Is<tInt32>());
+    Assert(value.Is<tDouble>() || value.Is<tInt32>());
     return GetCallMetamethodFromMetatableImpl(VM::GetActiveVMForCurrentThread()->m_metatableForNumber);
 }
 
@@ -2848,7 +2879,7 @@ struct TableObjectIterator
         if (unlikely(m_state == IteratorState::Uninitialized))
         {
             hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
+            Assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
             if (hcType == HeapEntityType::Structure)
             {
                 structure = TCGet(obj->m_hiddenClass).As<Structure>();
@@ -2870,7 +2901,7 @@ struct TableObjectIterator
             else
             {
                 // TODO: support UncacheableDictionary
-                assert(false && "unimplemented");
+                Assert(false && "unimplemented");
                 __builtin_unreachable();
             }
         }
@@ -2878,7 +2909,7 @@ struct TableObjectIterator
         if (m_state == IteratorState::NamedProperty)
         {
             hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
+            Assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
 
             if (likely(hcType == HeapEntityType::Structure))
             {
@@ -2954,7 +2985,7 @@ try_find_and_get_cd_prop:
             else
             {
                 // TODO: support UncacheableDictionary
-                assert(false && "unimplemented");
+                Assert(false && "unimplemented");
                 __builtin_unreachable();
             }
 
@@ -3001,7 +3032,7 @@ try_find_next_vector_entry:
             goto finished_iteration;
         }
 
-        assert(m_state == IteratorState::SparseMap);
+        Assert(m_state == IteratorState::SparseMap);
         sparseMap = TranslateToRawPointer(obj->m_butterfly->GetHeader()->GetSparseMap());
         m_sparseMapOrd++;
 
@@ -3058,7 +3089,7 @@ finished_iteration:
             {
                 return false;
             }
-            assert(miv.IsBoolean());
+            Assert(miv.IsBoolean());
             key = TValue::CreatePointer(VM_GetSpecialKeyForBoolean(miv.GetBooleanValue()));
         }
 
@@ -3067,7 +3098,7 @@ finished_iteration:
             // Input key is a pointer, locate its slot ordinal and iterate from there
             //
             HeapEntityType hcType = TCGet(obj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type;
-            assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
+            Assert(hcType == HeapEntityType::Structure || hcType == HeapEntityType::CacheableDictionary || hcType == HeapEntityType::UncacheableDictionary);
             UserHeapPointer<void> prop = key.AsPointer();
             if (hcType == HeapEntityType::Structure)
             {
@@ -3078,7 +3109,7 @@ finished_iteration:
                 {
                     return false;
                 }
-                assert(slotOrd < structure->m_numSlots);
+                Assert(slotOrd < structure->m_numSlots);
                 TableObjectIterator iter;
                 iter.m_state = IteratorState::NamedProperty;
                 iter.m_namedPropertyOrd = slotOrd;
@@ -3112,7 +3143,7 @@ finished_iteration:
             ReleaseAssert(false && "unimplemented");
         }
 
-        assert(key.IsDouble());
+        Assert(key.IsDouble());
         double idx = key.AsDouble();
         if (IsNaN(idx))
         {
@@ -3191,9 +3222,9 @@ static_assert(sizeof(TableObjectIterator) == 8);
 
 inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructureHiddenClass(TableObject* obj, uint32_t slot, uint32_t inlineCapacity)
 {
-    assert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
-    assert(Structure::IsPolyMetatable(obj->m_hiddenClass.As<Structure>()));
-    assert(Structure::GetPolyMetatableSlot(obj->m_hiddenClass.As<Structure>()) == slot);
+    Assert(obj->m_hiddenClass.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+    Assert(Structure::IsPolyMetatable(obj->m_hiddenClass.As<Structure>()));
+    Assert(Structure::GetPolyMetatableSlot(obj->m_hiddenClass.As<Structure>()) == slot);
     TValue res;
     if (slot < inlineCapacity)
     {
@@ -3210,7 +3241,7 @@ inline UserHeapPointer<void> WARN_UNUSED GetPolyMetatableFromObjectWithStructure
     }
     else
     {
-        assert(res.IsPointer());
+        Assert(res.IsPointer());
         return res.AsPointer<void>();
     }
 }

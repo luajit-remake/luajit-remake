@@ -1,29 +1,27 @@
 ; ModuleID = 'extracted_ir'
 source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
-target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
-define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn5(ptr %0, ptr %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, i64 %9, double %10, double %11, double %12, double %13, double %14, double %15) local_unnamed_addr #0 {
-  %.val.val.i.i = load i64, ptr %1, align 8, !tbaa.struct !2
-  %17 = inttoptr i64 %.val.val.i.i to ptr
-  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr %0, ptr nonnull %1, ptr %17, ptr undef, i64 %4, ptr undef, i64 undef, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef)
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn5(i64 %0, ptr nocapture readnone %1, i64 %2, ptr %3, ptr nocapture readnone %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, ptr %9, i64 %10, i64 %11, ptr nocapture readnone %12, double %13, double %14, double %15, double %16, double %17, double %18) local_unnamed_addr #0 {
+  %.val.val.i.i = load i64, ptr %3, align 8, !tbaa !2
+  %20 = inttoptr i64 %.val.val.i.i to ptr
+  musttail call ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(i64 %0, ptr undef, i64 %2, ptr nonnull %3, ptr %20, ptr undef, i64 undef, i64 undef, i64 undef, ptr %9, i64 undef, i64 undef, ptr undef, double undef, double undef, double undef, double undef, double undef, double undef)
   ret void
 }
 
 ; Function Attrs: nounwind
-declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(ptr, ptr, ptr, ptr, i64, ptr, i64, i64, i64, i64, double, double, double, double, double, double) local_unnamed_addr #1
+declare dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_DeegenInternal_ThrowTValueErrorImpl(i64, ptr, i64, ptr, ptr, ptr, i64, i64, i64, ptr, i64, i64, ptr, double, double, double, double, double, double) local_unnamed_addr #0
 
-attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 
 !llvm.linker.options = !{}
 !llvm.module.flags = !{!0, !1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"uwtable", i32 2}
-!2 = !{i64 0, i64 8, !3}
-!3 = !{!4, !4, i64 0}
-!4 = !{!"long", !5, i64 0}
-!5 = !{!"omnipotent char", !6, i64 0}
-!6 = !{!"Simple C++ TBAA"}
+!2 = !{!3, !3, i64 0}
+!3 = !{!"long", !4, i64 0}
+!4 = !{!"omnipotent char", !5, i64 0}
+!5 = !{!"Simple C++ TBAA"}

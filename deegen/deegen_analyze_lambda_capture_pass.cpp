@@ -420,7 +420,7 @@ static void DeegenAddLambdaCaptureAnnotationImpl(llvm::Function* func)
     FunctionType* fty = FunctionType::get(llvm_type_of<void>(ctx) /*result*/, annotationFnArgTys, false /*isVarArgs*/);
     Function* annotationFn = Function::Create(fty, GlobalValue::LinkageTypes::ExternalLinkage, annotationFnName, module);
     ReleaseAssert(annotationFn->getName().str() == annotationFnName);
-    annotationFn->addFnAttr(Attribute::AttrKind::NoUnwind);
+    annotationFn->addFnAttr(Attribute::NoUnwind);
 
     CallInst::Create(annotationFn, annotationFnArgs, "", ci /*insertBefore*/);
 

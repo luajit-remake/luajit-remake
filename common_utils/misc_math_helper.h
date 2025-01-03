@@ -2,53 +2,24 @@
 
 #include "common.h"
 
-// Left/right shift on negative number in C is undefined behavior.
-// The two functions below avoids this UB by doing a sign-extended shift.
-// The compiler is smart enough to just generate an arithmetic shift instruction as one would normally expect.
+// Perform a sign-extended right-shift, even if T is an unsigned type
 //
-template<typename T, typename U>
-T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftRight(T value, U shift)
-{
-    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
-    if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
-    if constexpr(std::is_signed_v<T>)
-    {
-        return (static_cast<std::make_unsigned_t<T>>(value) & (static_cast<std::make_unsigned_t<T>>(1) << (sizeof(T) * 8 - 1)))
-                ? (~((~value) >> shift)) : (value >> shift);
-    }
-    else
-    {
-        return value >> shift;
-    }
-}
-
-template<typename T, typename U>
-T WARN_UNUSED ALWAYS_INLINE ArithmeticShiftLeft(T value, U shift)
-{
-    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
-    if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
-    if constexpr(std::is_signed_v<T>)
-    {
-        return static_cast<T>(static_cast<std::make_unsigned_t<T>>(value) << shift);
-    }
-    else
-    {
-        return value << shift;
-    }
-}
-
 template<typename T, typename U>
 T WARN_UNUSED ALWAYS_INLINE SignExtendedShiftRight(T value, U shift)
 {
     static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_integral_v<U> && !std::is_same_v<U, bool>, "must be integral types");
-    if constexpr(std::is_signed_v<U>) { assert(shift >= 0); }
+    if constexpr(std::is_signed_v<U>) { Assert(shift >= 0); }
     if constexpr(std::is_signed_v<T>)
     {
-        return ArithmeticShiftRight(value, shift);
+        // C++20 standardized that >> on signed integers is arithmetic right-shift (before C++20 it's undefined behavior).
+        // LLVM 19 has a regression that the "soft" arithmetic right-shift (that works without C++20) generates poor code in some cases.
+        // So just rely on the C++20 standard. We are already requiring C++20 in a ton of places anyway.
+        //
+        return value >> shift;
     }
     else
     {
-        return static_cast<T>(ArithmeticShiftRight(static_cast<std::make_signed_t<T>>(value), shift));
+        return static_cast<T>(static_cast<std::make_signed_t<T>>(value) >> shift);
     }
 }
 
@@ -109,7 +80,7 @@ template<typename Dst, typename Src>
 constexpr Dst WARN_UNUSED ALWAYS_INLINE SafeIntegerCast(Src src)
 {
     static_assert(std::is_integral_v<Dst> && std::is_integral_v<Src>, "only works for integer cast");
-    assert(IntegerCanBeRepresentedIn<Dst>(src));
+    Assert(IntegerCanBeRepresentedIn<Dst>(src));
     return static_cast<Dst>(src);
 }
 
@@ -120,9 +91,9 @@ constexpr T RoundUpToMultipleOf(T val)
     static_assert(mult < std::numeric_limits<T>::max());
     if constexpr(std::is_signed_v<T>)
     {
-        assert(val >= 0);
+        Assert(val >= 0);
     }
-    assert(val <= std::numeric_limits<T>::max() - static_cast<T>(mult));
+    Assert(val <= std::numeric_limits<T>::max() - static_cast<T>(mult));
     return (val + static_cast<T>(mult) - 1) / static_cast<T>(mult) * static_cast<T>(mult);
 }
 
@@ -250,7 +221,7 @@ constexpr Dst WARN_UNUSED BitwiseTruncateTo(Src src)
 // From http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 constexpr uint32_t RoundUpToPowerOfTwo(uint32_t v)
 {
-    assert(v <= (1U << 31));
+    Assert(v <= (1U << 31));
     v--;
     v |= v >> 1;
     v |= v >> 2;
@@ -277,6 +248,24 @@ bool WARN_UNUSED ALWAYS_INLINE IsNaN(T a)
     SUPRESS_FLOAT_EQUAL_WARNING(
         return a != a;
     )
+}
+
+template<typename T>
+uint32_t WARN_UNUSED ALWAYS_INLINE CountTrailingZeros(T value)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+    static_assert(std::is_unsigned_v<T>, "CountTrailingZeros does not make sense for signed types!");
+    TestAssert(value != 0);
+    if constexpr(sizeof(T) <= 4)
+    {
+        static_assert(sizeof(unsigned int) == 4);
+        return static_cast<uint32_t>(__builtin_ctz(value));
+    }
+    else
+    {
+        static_assert(sizeof(T) == 8);
+        return static_cast<uint32_t>(__builtin_ctzll(value));
+    }
 }
 
 namespace internal
@@ -345,23 +334,23 @@ struct BitFieldMember
         {
             if constexpr(std::is_signed_v<std::underlying_type_t<SelfType>>)
             {
-                assert(static_cast<int64_t>(v) >= 0);
+                Assert(static_cast<int64_t>(v) >= 0);
             }
             using T = std::make_unsigned_t<std::underlying_type_t<SelfType>>;
             T raw = static_cast<T>(v);
-            assert(raw < (1ULL << width));
+            Assert(raw < (1ULL << width));
             value = static_cast<CarrierType>(raw);
         }
         else
         {
             if constexpr(!std::is_same_v<SelfType, bool>)
             {
-                assert(v < (1ULL << width));
+                Assert(v < (1ULL << width));
             }
             value = static_cast<CarrierType>(v);
         }
         c = static_cast<CarrierType>((c & x_maskForSet) | (value << start));
-        assert(Get(c) == v);
+        Assert(Get(c) == v);
     }
 
     static constexpr SelfType ALWAYS_INLINE WARN_UNUSED Get(const CarrierType& c)
@@ -381,7 +370,7 @@ struct BitFieldMember
 //
 inline void ALWAYS_INLINE SafeMemcpy(void* dst, const void* src, size_t len)
 {
-    assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
+    Assert(reinterpret_cast<uintptr_t>(dst) + len <= reinterpret_cast<uintptr_t>(src) || reinterpret_cast<uintptr_t>(src) + len <= reinterpret_cast<uintptr_t>(dst));
     memcpy(dst, src, len);
 }
 
@@ -389,6 +378,6 @@ template<typename T>
 constexpr T WARN_UNUSED SingletonBitmask(size_t bitOrd)
 {
     static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_unsigned_v<T>);
-    assert(bitOrd < sizeof(T) * 8);
+    Assert(bitOrd < sizeof(T) * 8);
     return static_cast<T>(static_cast<T>(1) << bitOrd);
 }

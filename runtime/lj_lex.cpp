@@ -143,7 +143,7 @@ static ALWAYS_INLINE LexChar lex_savenext(LexState* ls)
 static void lex_newline(LexState* ls)
 {
     LexChar old = ls->c;
-    assert(lex_iseol(ls) && "bad usage");
+    Assert(lex_iseol(ls) && "bad usage");
     lex_next(ls); /* Skip "\n" or "\r". */
     if (lex_iseol(ls) && ls->c != old)
         lex_next(ls); /* Skip "\n\r" or "\r\n". */
@@ -161,7 +161,7 @@ static void lex_newline(LexState* ls)
 static void lex_number(LexState* ls, TValue* tv)
 {
     LexChar c, xp = 'e';
-    assert(lj_char_isdigit(ls->c) && "bad usage");
+    Assert(lj_char_isdigit(ls->c) && "bad usage");
     if ((c = ls->c) == '0' && (lex_savenext(ls) | 0x20) == 'x')
         xp = 'p';
     while (lj_char_isident(ls->c) || ls->c == '.' ||
@@ -171,7 +171,7 @@ static void lex_number(LexState* ls, TValue* tv)
         lex_savenext(ls);
     }
     lex_save(ls, '\0');
-    assert(ls->sb->Len() > 0);
+    Assert(ls->sb->Len() > 0);
     StrScanResult scanResult = TryConvertStringToDoubleWithLuaSemantics(ls->sb->Begin(), ls->sb->Len() - 1);
     if (scanResult.fmt == STRSCAN_ERROR)
     {
@@ -179,7 +179,7 @@ static void lex_number(LexState* ls, TValue* tv)
         ls->errorToken = TK_number;
         parser_throw(ls);
     }
-    assert(scanResult.fmt == STRSCAN_NUM);
+    Assert(scanResult.fmt == STRSCAN_NUM);
     *tv = TValue::Create<tDouble>(scanResult.d);
 }
 
@@ -188,7 +188,7 @@ static int lex_skipeq(LexState* ls)
 {
     int count = 0;
     LexChar s = ls->c;
-    assert((s == '[' || s == ']') && "bad usage");
+    Assert((s == '[' || s == ']') && "bad usage");
     while (lex_savenext(ls) == '=' && count < 0x20000000)
         count++;
     return (ls->c == s) ? count : (-count) - 1;
@@ -432,7 +432,7 @@ static LexToken lex_scan(LexState* ls, TValue* tv)
             } while (lj_char_isident(ls->c));
             TValue tvStr = lj_parse_keepstr(ls, ls->sb->Begin(), ls->sb->Len());
             *tv = tvStr;
-            assert(tvStr.Is<tString>());
+            Assert(tvStr.Is<tString>());
             HeapPtr<HeapString> s = tvStr.As<tString>();
             if (HeapString::IsReservedWord(s) > 0) /* Reserved word? */
             {
@@ -659,7 +659,7 @@ void lj_lex_next(LexState* ls)
 /* Look ahead for the next token. */
 LexToken lj_lex_lookahead(LexState* ls)
 {
-    assert(ls->lookahead == TK_eof && "double lookahead");
+    Assert(ls->lookahead == TK_eof && "double lookahead");
     ls->lookahead = lex_scan(ls, &ls->lookaheadval);
     return ls->lookahead;
 }
@@ -693,18 +693,18 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* coroCtx, lua_Rea
         std::unique_ptr<ScriptModule> module = std::make_unique<ScriptModule>();
         module->m_unlinkedCodeBlocks = std::move(ls.ucbList);
         module->m_defaultGlobalObject = coroCtx->m_globalObject;
-        assert(module->m_unlinkedCodeBlocks.size() > 0);
-        assert(module->m_unlinkedCodeBlocks.back() == chunkFn);
+        Assert(module->m_unlinkedCodeBlocks.size() > 0);
+        Assert(module->m_unlinkedCodeBlocks.back() == chunkFn);
         for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
         {
             AssertIff(ucb != chunkFn, ucb->m_parent != nullptr);
             AssertIff(ucb != chunkFn, ucb->m_uvFixUpCompleted);
-            assert(ucb->m_defaultCodeBlock == nullptr);
+            Assert(ucb->m_defaultCodeBlock == nullptr);
             ucb->m_defaultCodeBlock = CodeBlock::Create(vm, ucb, coroCtx->m_globalObject);
         }
         chunkFn->m_uvFixUpCompleted = true;
-        assert(chunkFn->m_numFixedArguments == 0);
-        assert(chunkFn->m_numUpvalues == 0);
+        Assert(chunkFn->m_numFixedArguments == 0);
+        Assert(chunkFn->m_numUpvalues == 0);
         UserHeapPointer<FunctionObject> entryPointFunc = FunctionObject::Create(vm, chunkFn->GetCodeBlock(coroCtx->m_globalObject));
         module->m_defaultEntryPoint = entryPointFunc;
         return {
@@ -844,7 +844,7 @@ static const char* Parser_LuaStringArrayReader(CoroutineRuntimeContext* /*ctx*/,
     TableObject::PrepareGetByIntegerIndex(state->m_tab, info /*out*/);
     TValue tv = TableObject::GetByIntegerIndex(state->m_tab, state->m_cur, info);
     state->m_cur++;
-    assert(tv.Is<tString>());
+    Assert(tv.Is<tString>());
     HeapString* s = TranslateToRawPointer(tv.As<tString>());
     *size = s->m_length;
     return reinterpret_cast<const char*>(s->m_string);
@@ -858,7 +858,7 @@ ParseResult WARN_UNUSED ParseLuaScript(CoroutineRuntimeContext* ctx, HeapPtr<Tab
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tab, info /*out*/);
         TValue res = TableObject::GetByIntegerIndex(tab, i, info);
-        assert(res.Is<tString>());
+        Assert(res.Is<tString>());
     }
 #endif
     LuaStringArrayReaderState state;

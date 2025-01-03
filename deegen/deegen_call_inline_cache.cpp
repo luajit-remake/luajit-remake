@@ -4,7 +4,7 @@
 #include "deegen_jit_slow_path_data.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_stencil_runtime_constant_insertion_pass.h"
-#include "deegen_baseline_jit_codegen_logic_creator.h"
+#include "deegen_jit_codegen_logic_creator.h"
 #include "deegen_magic_asm_helper.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/Linker/Linker.h"
@@ -49,7 +49,7 @@ static void EmitInterpreterCallIcCacheMissPopulateIcSlowPath(InterpreterBytecode
 
     Value* cachedIcTvAddr = ic.GetCachedTValue()->EmitGetAddress(ifi->GetModule(), ifi->GetBytecodeMetadataPtr(), insertBefore);
     ReleaseAssert(ic.GetCachedTValue()->GetSize() == 8);
-    Value* tv = ifi->CallDeegenCommonSnippet("BoxFunctionObjectToTValue", { functionObject }, insertBefore);
+    Value* tv = ifi->CallDeegenCommonSnippet("BoxFunctionObjectHeapPtrToTValue", { functionObject }, insertBefore);
     ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
     new StoreInst(tv, cachedIcTvAddr, false /*isVolatile*/, Align(ic.GetCachedTValue()->GetAlignment()), insertBefore);
 
@@ -135,8 +135,8 @@ static bool WARN_UNUSED CheckCanHoistCallIcCheck(llvm::Value* functionObject,
         return false;
     }
 
-    TypeSpeculationMask checkedMask = GetCheckedMaskOfTValueTypecheckFunction(callee);
-    if ((checkedMask & x_typeSpeculationMaskFor<tFunction>) != x_typeSpeculationMaskFor<tFunction>)
+    TypeMaskTy checkedMask = GetCheckedMaskOfTValueTypecheckFunction(callee);
+    if ((checkedMask & x_typeMaskFor<tFunction>) != x_typeMaskFor<tFunction>)
     {
         // I'm not sure if this is even possible, since our MakeCall API always accept a 'target' that is a tFunction
         //
@@ -207,7 +207,7 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
     ReleaseAssert(ic.GetCachedTValue()->GetSize() == 8);
     Value* cachedIcTv = new LoadInst(llvm_type_of<uint64_t>(ctx), cachedIcTvAddr, "", false /*isVolatile*/, Align(ic.GetCachedTValue()->GetAlignment()), term);
 
-    Value* icHit = new ICmpInst(term, CmpInst::Predicate::ICMP_EQ, cachedIcTv, tv);
+    Value* icHit = new ICmpInst(term /*insertBefore*/, CmpInst::Predicate::ICMP_EQ, cachedIcTv, tv);
     Function* expectIntrin = Intrinsic::getDeclaration(ifi->GetModule(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
     icHit = CallInst::Create(expectIntrin, { icHit, CreateLLVMConstantInt<bool>(ctx, true) }, "", term);
 
@@ -235,16 +235,9 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
     ReleaseAssert(icMissBB != nullptr);
     ReleaseAssert(icMissBB != pred);
     ReleaseAssert(term->isConditional());
-    if (term->getSuccessor(0) == bb)
-    {
-        term->setSuccessor(0, updateIc);
-        ReleaseAssert(term->getSuccessor(1) != bb);
-    }
-    else
-    {
-        ReleaseAssert(term->getSuccessor(1) == bb);
-        term->setSuccessor(1, updateIc);
-    }
+    ReleaseAssert(term->getSuccessor(0) == bb);
+    term->setSuccessor(0, updateIc);
+    ReleaseAssert(term->getSuccessor(1) != bb);
 
     // Set up the logic in IC miss path ('updateIc' basic block), which should run the slow path and then populate IC
     //
@@ -314,7 +307,7 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
         Function* callee = typechk->getCalledFunction();
         ReleaseAssert(callee != nullptr && (IsTValueTypeCheckAPIFunction(callee) || IsTValueTypeCheckStrengthReductionFunction(callee)));
         ReleaseAssert(typechk->arg_size() == 1 && typechk->getArgOperand(0) == tv);
-        ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeSpeculationMaskFor<tFunction>) == x_typeSpeculationMaskFor<tFunction>);
+        ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeMaskFor<tFunction>) == x_typeMaskFor<tFunction>);
 
         DominatorTree dt(*fn);
         bool isUsedInPredBlock = false;
@@ -334,8 +327,10 @@ static void EmitInterpreterCallIcWithHoistedCheck(InterpreterBytecodeImplCreator
         if (!isUsedInPredBlock)
         {
             Constant* tcIcHit = CreateLLVMConstantInt<bool>(ctx, true);
-            Instruction* tcIcMiss = typechk->clone();
-            icMissBB->getInstList().push_front(tcIcMiss);
+            Instruction* tcIcMissRaw = typechk->clone();
+            Instruction* tcIcMiss = CallInst::Create(expectIntrin, { tcIcMissRaw, CreateLLVMConstantInt<bool>(ctx, true) }, "");
+            tcIcMiss->insertBefore(icMissBB->begin());
+            tcIcMissRaw->insertBefore(icMissBB->begin());
             PHINode* tcJoin = PHINode::Create(llvm_type_of<bool>(ctx), 2 /*reserveInDeg*/, "", phiInsertionPt);
             tcJoin->addIncoming(tcIcHit, icHitBB);
             tcJoin->addIncoming(tcIcMiss, updateIc);
@@ -513,7 +508,7 @@ static void InsertBaselineJitCallIcMagicAsmForDirectCall(llvm::Module* module,
                                    true /*hasSideEffects*/);
     CallBrInst* inst = CallBrInst::Create(fty, ia, icHit /*fallthroughDest*/, { icMiss, icSlowPath } /*gotoDests*/, { tv, cpSym } /*args*/, "", insertBefore);
     inst->addFnAttr(Attribute::NoUnwind);
-    inst->addFnAttr(Attribute::ReadNone);
+    inst->setDoesNotAccessMemory();
 }
 
 // Emit ASM magic for the CallIC closure-call case (i.e., cache on a fixed CodeBlock)
@@ -568,9 +563,8 @@ static void InsertBaselineJitCallIcMagicAsmForClosureCall(llvm::Module* module,
                                    constraintText,
                                    true /*hasSideEffects*/);
     CallBrInst* inst = CallBrInst::Create(fty, ia, icHit /*fallthroughDest*/, { icMiss } /*gotoDests*/, { codeBlockSysHeapPtrVal, cpSym } /*args*/, "", insertBefore);
-    // not sure why LLVM doesn't add Attribute::ReadNone for this one, but let's just do what LLVM does...
-    //
     inst->addFnAttr(Attribute::NoUnwind);
+    inst->setDoesNotAccessMemory();
 }
 
 // Clone the basic block containing instruction 'origin', return the cloned instruction in the new BB (and the new BB is just the instruction's parent)
@@ -599,7 +593,7 @@ static llvm::Instruction* WARN_UNUSED CloneBasicBlockContainingInstruction(llvm:
         //
         ReleaseAssert(!isa<PHINode>(&inst));
         Instruction* newInst = inst.clone();
-        newBB->getInstList().push_back(newInst);
+        newInst->insertBefore(newBB->end());
         if (&inst == origin)
         {
             ReleaseAssert(result == nullptr);
@@ -744,7 +738,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         Value* slowPathDataOffset = ifi->GetSlowPathDataOffsetFromJitFastPath(icMissOrigin /*insertBefore*/);
         Value* slowPathAddrOfThisStencil = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_STENCIL_SLOW_PATH_ADDR);
         Value* dataSecAddrOfThisStencil = DeegenInsertOrGetCopyAndPatchPlaceholderSymbol(ifi->GetModule(), CP_PLACEHOLDER_STENCIL_DATA_SEC_ADDR);
-        Value* targetTV = ifi->CallDeegenCommonSnippet("BoxFunctionObjectToTValue", { functionObjectTarget }, icMissOrigin);
+        Value* targetTV = ifi->CallDeegenCommonSnippet("BoxFunctionObjectHeapPtrToTValue", { functionObjectTarget }, icMissOrigin);
         ReleaseAssert(llvm_value_has_type<uint64_t>(targetTV));
 
         CallInst* codeBlockAndEntryPoint = CallInst::Create(
@@ -877,12 +871,12 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
                 Function* originalCondFn = cast<CallInst>(originalCond)->getCalledFunction();
                 ReleaseAssert(originalCondFn != nullptr);
                 ReleaseAssert(IsTValueTypeCheckAPIFunction(originalCondFn) || IsTValueTypeCheckStrengthReductionFunction(originalCondFn));
-                TypeSpeculationMask checkedMask = GetCheckedMaskOfTValueTypecheckFunction(originalCondFn);
+                TypeMaskTy checkedMask = GetCheckedMaskOfTValueTypecheckFunction(originalCondFn);
                 // Having passed this assert, we know brInst is checking a typemask at least as strict as tHeapEntity
                 // (which should always be true since tHeapEntity is the only thing between tFunction and tTop, and we have
                 // checked earlier that the condition covers tFunction), so we are good
                 //
-                ReleaseAssert((checkedMask & x_typeSpeculationMaskFor<tHeapEntity>) == checkedMask);
+                ReleaseAssert((checkedMask & x_typeMaskFor<tHeapEntity>) == checkedMask);
 
                 // Add likely_true intrinsic for isHeapEntity to avoid breaking hot-cold splitting
                 //
@@ -906,7 +900,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
             {
                 ReleaseAssert(brInst->getParent() != nullptr);
                 brInst->removeFromParent();
-                ccMissBB->getInstList().push_back(brInst);
+                brInst->insertBefore(ccMissBB->end());
             }
 
             // Emit the IC miss block, which is also the original 'bb' block
@@ -924,7 +918,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
                 Function* callee = typechk->getCalledFunction();
                 ReleaseAssert(callee != nullptr && (IsTValueTypeCheckAPIFunction(callee) || IsTValueTypeCheckStrengthReductionFunction(callee)));
                 ReleaseAssert(typechk->arg_size() == 1 && typechk->getArgOperand(0) == tv);
-                ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeSpeculationMaskFor<tFunction>) == x_typeSpeculationMaskFor<tFunction>);
+                ReleaseAssert((GetCheckedMaskOfTValueTypecheckFunction(callee) & x_typeMaskFor<tFunction>) == x_typeMaskFor<tFunction>);
 
                 DominatorTree dt(*func);
                 bool isUsedInPredBlock = false;
@@ -970,7 +964,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
                     }
                     ReleaseAssert(typechk->getParent() != nullptr);
                     typechk->removeFromParent();
-                    ccMissBB->getInstList().push_front(typechk);
+                    typechk->insertBefore(ccMissBB->begin());
                 }
             }
 
@@ -1011,7 +1005,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
     //     ... do call ...
     //
     {
-        Value* tv = ifi->CallDeegenCommonSnippet("BoxFunctionObjectToTValue", { functionObject }, origin);
+        Value* tv = ifi->CallDeegenCommonSnippet("BoxFunctionObjectHeapPtrToTValue", { functionObject }, origin);
         ReleaseAssert(llvm_value_has_type<uint64_t>(tv));
 
         AssertInstructionIsFollowedByUnreachable(origin);
@@ -1026,24 +1020,25 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
         Value* calleeCbU32 = emitIcClosureCallCheckBlock(dcMissBB, tv, ccHitBB, icMissBB);
 
         Instruction* ccHitOrigin = origin->clone();
-        ccHitBB->getInstList().push_back(ccHitOrigin);
+        ccHitOrigin->insertBefore(ccHitBB->end());
         new UnreachableInst(ctx, ccHitBB);
 
         emitIcClosureCallHitBlock(ccHitOrigin, calleeCbU32);
 
         Instruction* dcHitOrigin = origin->clone();
-        dcHitBB->getInstList().push_back(dcHitOrigin);
+        dcHitOrigin->insertBefore(dcHitBB->end());
         new UnreachableInst(ctx, dcHitBB);
 
         emitIcDirectCallHitBlock(dcHitOrigin);
 
         Instruction* unreachableAfterOrigin = origin->getNextNode();
         ReleaseAssert(isa<UnreachableInst>(unreachableAfterOrigin));
+
+        ReleaseAssert(origin->getParent() != nullptr && unreachableAfterOrigin->getParent() != nullptr);
         origin->removeFromParent();
         unreachableAfterOrigin->removeFromParent();
-
-        icMissBB->getInstList().push_back(origin);
-        icMissBB->getInstList().push_back(unreachableAfterOrigin);
+        origin->insertBefore(icMissBB->end());
+        unreachableAfterOrigin->insertBefore(icMissBB->end());
 
         emitIcMissBlock(origin, functionObject);
 
@@ -1098,12 +1093,12 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
 //     jp dcIcMissEntry
 //     jmp __fake_dest
 //
-// After IC extraction, the SMC region needs to be fixed up by calling BaselineJitAsmTransformResult::FixupSMCRegion,
+// After IC extraction, the SMC region needs to be fixed up by calling JitAsmTransformResult::FixupSMCRegion,
 // which simply make it unconditionally jump to 'ccIcMissEntry'.
 //
-std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> WARN_UNUSED DeegenCallIcLogicCreator::DoBaselineJitAsmTransform(X64AsmFile* file)
+std::vector<DeegenCallIcLogicCreator::JitAsmTransformResult> WARN_UNUSED DeegenCallIcLogicCreator::DoJitAsmTransform(X64AsmFile* file)
 {
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> r;
+    std::vector<DeegenCallIcLogicCreator::JitAsmTransformResult> r;
 
     // Process one IC use, identified by a DirectCallIC asm magic (from this magic we can find everything we need)
     //
@@ -1350,7 +1345,11 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> WARN_UNUSED
             .m_labelForClosureCallIc = ccEntry->m_normalizedLabelName,
             .m_labelForCcIcMissLogic = ccIcMissSlowPathLabel,
             .m_labelForDcIcMissLogic = dcIcMissSlowPathLabel,
-            .m_uniqueOrd = icUniqueOrd
+            .m_uniqueOrd = icUniqueOrd,
+            .m_symbolNameForSMCLabelOffset = "",
+            .m_symbolNameForSMCRegionLength = "",
+            .m_symbolNameForCcIcMissLogicLabelOffset = "",
+            .m_symbolNameForDcIcMissLogicLabelOffset = ""
         });
     };
 
@@ -1394,7 +1393,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitAsmTransformResult> WARN_UNUSED
 // because it must be the longest (the SMC region for direct-call mode is simply one jump without any setup logic)
 // This is slightly tricky, but should be fine for now...
 //
-void DeegenCallIcLogicCreator::BaselineJitAsmTransformResult::FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file)
+void DeegenCallIcLogicCreator::JitAsmTransformResult::FixupSMCRegionAfterCFGAnalysis(X64AsmFile* file)
 {
     X64AsmBlock* block = nullptr;
     for (X64AsmBlock* b : file->m_blocks)
@@ -1430,7 +1429,7 @@ void DeegenCallIcLogicCreator::BaselineJitAsmTransformResult::FixupSMCRegionAfte
     block->m_terminalJmpTargetLabel = m_labelForCcIcMissLogic;
 }
 
-void DeegenCallIcLogicCreator::BaselineJitAsmTransformResult::EmitComputeLabelOffsetAndLengthSymbol(X64AsmFile* file)
+void DeegenCallIcLogicCreator::JitAsmTransformResult::EmitComputeLabelOffsetAndLengthSymbol(X64AsmFile* file)
 {
     // Compute the offset and length of SMC region
     //
@@ -1554,12 +1553,11 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
     {
         extraPlaceholderOrds.push_back(CP_PLACEHOLDER_CALL_IC_DIRECT_CALL_TVALUE);
     }
-    if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+    if (ifi->HasCondBrTarget())
     {
         extraPlaceholderOrds.push_back(CP_PLACEHOLDER_BYTECODE_CONDBR_DEST);
     }
-    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(false /*mayEliminateTailJump*/,
-                                                                     ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
                                                                      ifi->GetNumTotalGenericIcCaptures(),
                                                                      ifi->GetStencilRcDefinitions(),
                                                                      extraPlaceholderOrds);
@@ -1571,7 +1569,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
         dataSectionOffset = cgRes.m_icPathPreFixupCode.size();
         size_t alignment = cgRes.m_dataSecAlignment;
         ReleaseAssert(alignment > 0);
-        ReleaseAssert(alignment <= x_baselineJitMaxPossibleDataSectionAlignment);
+        ReleaseAssert(alignment <= x_jitMaxPossibleDataSectionAlignment);
         // Our codegen allocator allocates 16-byte-aligned memory, so the data section alignment must not exceed that
         //
         ReleaseAssert(alignment <= 16);
@@ -1648,6 +1646,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 101
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 103
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 104
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 105
 
     for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
     {
@@ -1705,7 +1704,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
         }
         case CP_PLACEHOLDER_BYTECODE_CONDBR_DEST:
         {
-            ReleaseAssert(ifi->GetBytecodeDef()->m_hasConditionalBranchTarget);
+            ReleaseAssert(ifi->HasCondBrTarget());
             return condBrDest;
         }
         default:
@@ -1765,7 +1764,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
         return args;
     };
 
-    EmitCopyLogicForBaselineJitCodeGen(module.get(), codeAndData, icCodeAddr, "deegen_ic_pre_fixup_code_and_data", entryBB);
+    EmitCopyLogicForJitCodeGen(module.get(), codeAndData, icCodeAddr, "deegen_ic_pre_fixup_code_and_data", entryBB, false /*mustBeExact*/);
 
     auto emitPatchFnCall = [&](Function* target, Value* dstAddr)
     {
@@ -1811,7 +1810,7 @@ static CreateCodegenCallIcLogicImplResult WARN_UNUSED CreateCodegenCallIcLogicIm
             {
                 if (rr.m_stencilHoleOrd == CP_PLACEHOLDER_CALL_IC_CALLEE_CODE_PTR)
                 {
-                    bool is64 = (rr.m_relocationType == ELF::R_X86_64_64);
+                    bool is64 = rr.Is64Bit();
                     codePtrPatchRecords.push_back(std::make_pair(baseOffset + rr.m_offset, is64));
                 }
             }
@@ -1875,7 +1874,7 @@ static CreateCodegenCallIcRepatchSmcRegionImplResult WARN_UNUSED CreateRepatchCa
         {
             if (smcRegionOffset <= rr.m_offset && rr.m_offset < smcRegionOffset + smcRegionSize)
             {
-                ReleaseAssert(rr.m_offset + (rr.m_relocationType == ELF::R_X86_64_64 ? 8 : 4) <= smcRegionOffset + smcRegionSize);
+                ReleaseAssert(rr.m_offset + (rr.Is64Bit() ? 8 : 4) <= smcRegionOffset + smcRegionSize);
                 rlist.push_back(rr);
             }
         }
@@ -1884,11 +1883,13 @@ static CreateCodegenCallIcRepatchSmcRegionImplResult WARN_UNUSED CreateRepatchCa
 
     // Generate patch logic to fix up the relocations in SMC region
     //
-    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(false /*mayEliminateTailJump*/,
-                                                                     ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
+    DeegenStencilCodegenResult cgRes = stencil.PrintCodegenFunctions(ifi->GetBytecodeDef()->m_list.size() /*numBytecodeOperands*/,
                                                                      ifi->GetNumTotalGenericIcCaptures(),
                                                                      ifi->GetStencilRcDefinitions());
 
+    // PrintCodegenFunctions may eliminate the tail jump to a fallthrough, which is in theory problematic for us if the jump is
+    // part of the SMC region. This is not supposed to happen, but if it ever happens, the below assertion will catch it anyway.
+    //
     ReleaseAssert(cgRes.m_fastPathPreFixupCode.size() >= smcRegionOffset + smcRegionSize);
     ReleaseAssert(cgRes.m_condBrFixupOffsetsInFastPath.empty());
 
@@ -1946,6 +1947,7 @@ static CreateCodegenCallIcRepatchSmcRegionImplResult WARN_UNUSED CreateRepatchCa
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 101
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 103
     cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 104
+    cgArgTys.push_back(llvm_type_of<uint64_t>(ctx));    // ordinal 105
 
     for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
     {
@@ -1987,12 +1989,12 @@ static CreateCodegenCallIcRepatchSmcRegionImplResult WARN_UNUSED CreateRepatchCa
 
         // The memcpy must not clobber anything after, so mustBeExact is true
         //
-        EmitCopyLogicForBaselineJitCodeGen(module.get(),
-                                           smcRegionPreFixupCode,
-                                           dstAddr,
-                                           "deegen_ic_pre_fixup_smc_region_for_closure_call",
-                                           entryBB,
-                                           true /*mustBeExact*/);
+        EmitCopyLogicForJitCodeGen(module.get(),
+                                   smcRegionPreFixupCode,
+                                   dstAddr,
+                                   "deegen_ic_pre_fixup_smc_region_for_closure_call",
+                                   entryBB,
+                                   true /*mustBeExact*/);
     }
 
     auto buildArgVector = [&](Function* target) WARN_UNUSED -> std::vector<Value*>
@@ -2095,7 +2097,7 @@ static void SetupCallIcSmcRegionInitialInstructions(DeegenStencil& mainLogicSten
     {
         if (smcRegionOffset <= rr.m_offset && rr.m_offset < smcRegionOffset + smcRegionSize)
         {
-            ReleaseAssert(rr.m_offset + (rr.m_relocationType == llvm::ELF::R_X86_64_64 ? 8 : 4) <= smcRegionOffset + smcRegionSize);
+            ReleaseAssert(rr.m_offset + (rr.Is64Bit() ? 8 : 4) <= smcRegionOffset + smcRegionSize);
             continue;
         }
 
@@ -2137,13 +2139,13 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     BaselineJitImplCreator* ifi,
     std::unordered_map<std::string, size_t> stencilToFastPathOffsetMap,
     DeegenStencil& mainLogicStencil /*inout*/,
-    BaselineJitAsmLoweringResult& icInfo,
+    JitAsmLoweringResult& icInfo,
     const DeegenGlobalBytecodeTraitAccessor& bcTraitAccessor)
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
 
-    BaselineJitSlowPathDataLayout* slowPathDataLayout = ifi->GetBytecodeDef()->GetBaselineJitSlowPathDataLayout();
+    BaselineJitSlowPathDataLayout* slowPathDataLayout = ifi->GetBaselineJitSlowPathDataLayout();
 
     ReleaseAssert(stencilToFastPathOffsetMap.count(ifi->GetResultFunctionName()));
     size_t stencilBaseOffsetInFastPath = stencilToFastPathOffsetMap[ifi->GetResultFunctionName()];
@@ -2289,7 +2291,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     // If m_numEntries >= x_maxJitCallInlineCacheEntries, don't create more ICs. Just get the result and return.
     //
-    Value* isIcCountReachedMaximum = new ICmpInst(*entryBB, ICmpInst::ICMP_UGE, numExistingICs, CreateLLVMConstantInt<uint8_t>(ctx, x_maxJitCallInlineCacheEntries));
+    Value* isIcCountReachedMaximum = new ICmpInst(entryBB, ICmpInst::ICMP_UGE, numExistingICs, CreateLLVMConstantInt<uint8_t>(ctx, x_maxJitCallInlineCacheEntries));
 
     BasicBlock* skipIcCreationBB = BasicBlock::Create(ctx, "", fn);
     BasicBlock* prepareCreateIcBB = BasicBlock::Create(ctx, "", fn);
@@ -2331,7 +2333,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     // Depending on if m_mode == DirectCall, we need to execute different logic
     //
-    Value* isIcSiteInDirectCallMode = new ICmpInst(*prepareCreateIcBB, ICmpInst::ICMP_EQ, currentIcMode, CreateLLVMConstantInt<uint8_t>(ctx, static_cast<uint8_t>(JitCallInlineCacheSite::Mode::DirectCall)));
+    Value* isIcSiteInDirectCallMode = new ICmpInst(prepareCreateIcBB, ICmpInst::ICMP_EQ, currentIcMode, CreateLLVMConstantInt<uint8_t>(ctx, static_cast<uint8_t>(JitCallInlineCacheSite::Mode::DirectCall)));
 
     BasicBlock* dcBB = BasicBlock::Create(ctx, "", fn);
     BasicBlock* ccBB = BasicBlock::Create(ctx, "", fn);
@@ -2350,7 +2352,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
     auto getCondBrDestU64 = [&](BasicBlock* bb) WARN_UNUSED -> Value*
     {
         Value* condBrDest = nullptr;
-        if (ifi->GetBytecodeDef()->m_hasConditionalBranchTarget)
+        if (ifi->HasCondBrTarget())
         {
             condBrDest = slowPathDataLayout->m_condBrJitAddr.EmitGetValueLogic(slowPathData, bb);
             ReleaseAssert(llvm_value_has_type<void*>(condBrDest));
@@ -2419,7 +2421,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         new StoreInst(dcJitAddr, jitAddrAlloca, dcBB);
 
         Value* transitedToCCModeU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), transitedToCCModeAlloca, "", dcBB);
-        Value* transitedToCCMode = new ICmpInst(*dcBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
+        Value* transitedToCCMode = new ICmpInst(dcBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
 
         BasicBlock* insertIcDcModeBB = BasicBlock::Create(ctx, "", fn);
 
@@ -2445,8 +2447,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         Value* calleeCbU32 = new PtrToIntInst(calleeCbHeapPtr, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
         Value* codePtrU64 = new PtrToIntInst(codePointer, llvm_type_of<uint64_t>(ctx), "", insertIcDcModeBB);
 
-        std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
-                                                                                                                         ifi->GetBytecodeDef(),
+        ReleaseAssert(ifi->GetBaselineJitSlowPathDataLayout()->IsLayoutFinalized());
+        std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi,
                                                                                                                          slowPathData,
                                                                                                                          slowPathDataOffset,
                                                                                                                          baselineCodeBlock32,
@@ -2464,8 +2466,8 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
         createReturnLogic(calleeCbHeapPtr, codePointer, insertIcDcModeBB);
     }
 
-    std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier::BaselineJIT,
-                                                                                                                     ifi->GetBytecodeDef(),
+    ReleaseAssert(ifi->GetBaselineJitSlowPathDataLayout()->IsLayoutFinalized());
+    std::vector<Value*> bytecodeOperandList = DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(ifi,
                                                                                                                      slowPathData,
                                                                                                                      slowPathDataOffset,
                                                                                                                      baselineCodeBlock32,
@@ -2480,7 +2482,7 @@ DeegenCallIcLogicCreator::BaselineJitCodegenResult WARN_UNUSED DeegenCallIcLogic
 
     {
         Value* transitedToCCModeU8 = new LoadInst(llvm_type_of<uint8_t>(ctx), transitedToCCModeAlloca, "", ccBB);
-        Value* transitedToCCMode = new ICmpInst(*ccBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
+        Value* transitedToCCMode = new ICmpInst(ccBB, ICmpInst::ICMP_NE, transitedToCCModeU8, CreateLLVMConstantInt<uint8_t>(ctx, 0));
 
         BasicBlock* repatchSmcBB = BasicBlock::Create(ctx, "", fn);
 

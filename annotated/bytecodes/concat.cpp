@@ -57,7 +57,7 @@ inline std::optional<HeapPtr<HeapString>> WARN_UNUSED TryGetStringOrConvertNumbe
 //
 inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* base, int32_t startOffset, TValue curValue)
 {
-    assert(startOffset >= 0);
+    Assert(startOffset >= 0);
 
     std::optional<HeapPtr<HeapString>> optStr = TryGetStringOrConvertNumberToString(curValue);
     if (!optStr)
@@ -99,7 +99,9 @@ inline ScanForMetamethodCallResult WARN_UNUSED ScanForMetamethodCall(TValue* bas
 
     return {
         .m_exhausted = true,
-        .m_lhsValue = curValue
+        .m_endOffset = Undef<int32_t>(),
+        .m_lhsValue = curValue,
+        .m_rhsValue = Undef<TValue>()
     };
 }
 
@@ -158,9 +160,9 @@ static void NO_RETURN ConcatOnMetamethodReturnContinuation(TValue* base, uint16_
     using namespace ConcatBytecodeHelper;
 
     TValue curValue = GetReturnValue(0);
-    assert(base[num - 1].Is<tInt32>());
+    Assert(base[num - 1].Is<tInt32>());
     int32_t nextSlotToConcat = base[num - 1].As<tInt32>();
-    assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(num) - 2);
+    Assert(nextSlotToConcat >= -1 && nextSlotToConcat < static_cast<int32_t>(num) - 2);
     __builtin_assume(nextSlotToConcat < static_cast<int32_t>(num) - 2);
     if (nextSlotToConcat < 0)
     {
@@ -208,7 +210,7 @@ static void NO_RETURN ConcatCallMetatableSlowPath(TValue* base, uint16_t num)
     // Do primitive concatenation until we found the first location to call metamethod
     //
     ScanForMetamethodCallResult fsr = ScanForMetamethodCall(base, static_cast<int32_t>(num) - 2, base[num - 1] /*initialValue*/);
-    assert(!fsr.m_exhausted);
+    Assert(!fsr.m_exhausted);
 
     // Store the next slot to concat on metamethod return on the last slot of the values to concat
     // This slot is clobberable (confirmed by checking LuaJIT source code).
@@ -262,9 +264,27 @@ DEEGEN_DEFINE_BYTECODE(Concat)
     Implementation(ConcatImpl);
     Variant(Op("num").HasValue(2));
     Variant();
+    DfgVariant(Op("num").HasValue(2));
+    DfgVariant();
+    // Output type deduction: if all inputs are string/double, output is string. Otherwise output can be anything.
+    //
+    TypeDeductionRule(
+        [](RangedInputTypeMaskGetter* base, uint16_t num) -> TypeMask
+        {
+            for (size_t i = 0; i < num; i++)
+            {
+                if (!base->Get(i).SubsetOf(x_typeMaskFor<tString> | x_typeMaskFor<tDouble>))
+                {
+                    return x_typeMaskFor<tTop>;
+                }
+            }
+            return x_typeMaskFor<tString>;
+        });
     DeclareReads(Range(Op("base"), Op("num")));
     DeclareWrites();
-    DeclareClobbers(Range(Op("base") + Op("num") - 1, 1));
+    // Everything is clobbered since we do the double-to-string conversion in-place
+    //
+    DeclareClobbers(Range(Op("base"), Op("num")));
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

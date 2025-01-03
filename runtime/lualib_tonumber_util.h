@@ -103,5 +103,5 @@ inline bool WARN_UNUSED ALWAYS_INLINE LuaLib_TVDoubleViewToNumberSlow(double& tv
             ThrowError("bad argument #" PP_STRINGIFY(oneIndexedArgOrd) " to '" PP_STRINGIFY(fnName) "' (string expected)"); \
         }                                                                                                                   \
     }                                                                                                                       \
-    assert(true)        /* end with a statement so a comma can be added */
+    Assert(true)        /* end with a statement so a comma can be added */
 

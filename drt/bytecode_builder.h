@@ -119,14 +119,14 @@ public:
     BytecodeOpcodeTy GetCanonicalizedOpcodeAtPosition(size_t bcPos)
     {
         BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
-        assert(opcode < x_numTotalVariants);
+        Assert(opcode < x_numTotalVariants);
         if constexpr(!isDecodingMode)
         {
             // If we are building the bytecode stream, we know BytecodeBuilder can only emit non-quickening bytecodes,
             // so the bytecode opcode must have been canonicalized. Assert this.
             //
-            assert(x_isPrimitiveBcArray[opcode]);
-            assert(x_canonicalizedBcArray[opcode] == opcode);
+            Assert(x_isPrimitiveBcArray[opcode]);
+            Assert(x_canonicalizedBcArray[opcode] == opcode);
             return opcode;
         }
         else
@@ -140,7 +140,7 @@ public:
 
     BytecodeOpcodeTy GetCanonicalizedOpcodeFromOpcode(BytecodeOpcodeTy opcode)
     {
-        assert(opcode < x_numTotalVariants);
+        Assert(opcode < x_numTotalVariants);
         return x_canonicalizedBcArray[opcode];
     }
 
@@ -152,7 +152,7 @@ public:
     bool WARN_UNUSED IsPrimitiveBytecode(size_t bcPos)
     {
         BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
-        assert(opcode < x_numTotalVariants);
+        Assert(opcode < x_numTotalVariants);
         return x_isPrimitiveBcArray[opcode];
     }
 
@@ -174,7 +174,7 @@ public:
     {
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t offset = x_bcOutputOperandOffsetArray[opcode];
-        assert(offset != 255);
+        Assert(offset != 255);
         // The output operand slot is always a BcSlot and is currently hardcoded to 2 bytes
         //
         return UnalignedLoad<uint16_t>(GetBytecodeStart() + bcPos + offset);
@@ -184,14 +184,14 @@ public:
     //
     void SetOutputOperand(size_t bcPos, size_t value)
     {
-        assert(!isDecodingMode);
-        assert(IsPrimitiveBytecode(bcPos));
+        Assert(!isDecodingMode);
+        Assert(IsPrimitiveBytecode(bcPos));
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t offset = x_bcOutputOperandOffsetArray[opcode];
-        assert(offset != 255);
+        Assert(offset != 255);
         // Currently the output operand slot is hardcoded to 2 bytes
         //
-        assert(value <= 32767);
+        Assert(value <= 32767);
         // Output operand is always a BcSlot, so we should just store the slot value
         //
         UnalignedStore<uint16_t>(GetBytecodeStart() + bcPos + offset, static_cast<uint16_t>(value));
@@ -201,11 +201,11 @@ public:
     //
     void SetBranchTargetOffset(size_t bcPos, int16_t destBcOffset)
     {
-        assert(!isDecodingMode);
-        assert(IsPrimitiveBytecode(bcPos));
+        Assert(!isDecodingMode);
+        Assert(IsPrimitiveBytecode(bcPos));
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t branchOperandOffsetInBc = x_bcBranchOperandOffsetArray[opcode];
-        assert(branchOperandOffsetInBc != 255);
+        Assert(branchOperandOffsetInBc != 255);
         UnalignedStore<int16_t>(GetBytecodeStart() + bcPos + branchOperandOffsetInBc, destBcOffset);
     }
 
@@ -214,7 +214,7 @@ public:
     //
     bool WARN_UNUSED SetBranchTarget(size_t bcPos, size_t destBcPos)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         int64_t diff = static_cast<int64_t>(destBcPos - bcPos);
         // TODO: we likely need to support larger offset size in the future, but for now just stick with int16_t
         //
@@ -250,7 +250,7 @@ public:
     {
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t branchOperandOffsetInBc = x_bcBranchOperandOffsetArray[opcode];
-        assert(branchOperandOffsetInBc != 255);
+        Assert(branchOperandOffsetInBc != 255);
 
         using ValueType = int16_t;
         ValueType offset = UnalignedLoad<ValueType>(GetBytecodeStart() + bcPos + branchOperandOffsetInBc);
@@ -261,7 +261,7 @@ public:
     {
         ssize_t offset = GetBranchTargetOffset(bcPos);
         ssize_t dest = static_cast<ssize_t>(bcPos) + offset;
-        assert(dest >= 0);
+        Assert(dest >= 0);
         return static_cast<size_t>(dest);
     }
 
@@ -271,7 +271,7 @@ public:
     template<BCKind bytecodeKind>
     void ALWAYS_INLINE ReplaceBytecode(size_t bcPos, const OperandsTypeForBytecodeKind<bytecodeKind>& operands)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         static_assert(x_isBcKindPotentiallyReplaceable[static_cast<size_t>(bytecodeKind)],
                       "To replace a bytecode by another, you must use SameLengthConstraint in bytecode definition to ensure that they have equal length");
 
@@ -279,7 +279,7 @@ public:
         size_t oldLen = GetLengthOfSpecifiedBytecode(bcPos);
         uint8_t* oldBytecodeStreamBegin = m_bufferBegin;
 #endif
-        assert(bcPos < GetCurLength());
+        Assert(bcPos < GetCurLength());
 
         // Hackily change the current bytecode pointer to 'bcPos', so the bytecode is created there
         //
@@ -294,11 +294,11 @@ public:
 
         // Since this is an equal-length replacement, it should never cause buffer growth
         //
-        assert(m_bufferBegin == oldBytecodeStreamBegin);
+        Assert(m_bufferBegin == oldBytecodeStreamBegin);
         // Assert that the generated bytecode indeed has the same length as the replaced bytecode
         //
-        assert(m_bufferCur == m_bufferBegin + bcPos + oldLen);
-        assert(m_bufferCur <= oldBufferCur);
+        Assert(m_bufferCur == m_bufferBegin + bcPos + oldLen);
+        Assert(m_bufferCur <= oldBufferCur);
 
         // Now, change back the current buffer pointer
         //
@@ -310,7 +310,7 @@ public:
     //
     bool WARN_UNUSED CheckWellFormedness()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         std::unordered_set<size_t> bytecodeBoundarySet;
         uint8_t* cur = m_bufferBegin;
         while (cur < m_bufferCur)
@@ -335,7 +335,7 @@ public:
         while (cur < m_bufferCur)
         {
             size_t bcPos = static_cast<size_t>(cur - m_bufferBegin);
-            assert(IsPrimitiveBytecode(bcPos));
+            Assert(IsPrimitiveBytecode(bcPos));
             if (BytecodeHasBranchOperand(bcPos))
             {
                 size_t branchTarget = GetBranchTarget(bcPos);
@@ -349,18 +349,18 @@ public:
             }
             cur += GetLengthOfSpecifiedBytecode(bcPos);
         }
-        assert(cur == m_bufferCur);
+        Assert(cur == m_bufferCur);
         return true;
     }
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequence()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         static_assert(sizeof(BytecodeOpcodeTy) <= x_numExtraPaddingAtBytecodeStreamEnd);
         std::pair<uint8_t*, size_t> res = GetBuiltBytecodeSequenceImpl();
         // Append the "stopper" bytecode opcode right after the end of the bytecode sequence
         //
-        assert(res.second >= x_numExtraPaddingAtBytecodeStreamEnd);
+        Assert(res.second >= x_numExtraPaddingAtBytecodeStreamEnd);
         uint8_t* loc = res.first + res.second - x_numExtraPaddingAtBytecodeStreamEnd;
         UnalignedStore<BytecodeOpcodeTy>(loc, SafeIntegerCast<BytecodeOpcodeTy>(x_numTotalVariants));
         return res;
@@ -373,7 +373,7 @@ public:
 
     BytecodeRWCInfo WARN_UNUSED GetDataFlowReadInfo(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         TestAssert(x_rwcReadInfoFns[opcode] != nullptr);
         return (this->*(x_rwcReadInfoFns[opcode]))(bcPos);
@@ -381,7 +381,7 @@ public:
 
     BytecodeRWCInfo WARN_UNUSED GetDataFlowWriteInfo(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         TestAssert(x_rwcWriteInfoFns[opcode] != nullptr);
         return (this->*(x_rwcWriteInfoFns[opcode]))(bcPos);
@@ -389,7 +389,7 @@ public:
 
     BytecodeRWCInfo WARN_UNUSED GetDataFlowClobberInfo(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         TestAssert(x_rwcClobberInfoFns[opcode] != nullptr);
         return (this->*(x_rwcClobberInfoFns[opcode]))(bcPos);
@@ -398,7 +398,7 @@ public:
     template<typename T>
     bool WARN_UNUSED IsBytecodeIntrinsic(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BytecodeOpcodeTy opcode = GetRawOpcodeAtPosition(bcPos);
         return (x_bcIntrinsicOrdinalArray[opcode] == ::detail::bytecode_intrinsic_ordinal_from_ty<T>);
     }
@@ -406,7 +406,7 @@ public:
     template<typename T>
     T WARN_UNUSED GetBytecodeIntrinsicInfo(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         static_assert(!std::is_same_v<T, void>);
         TestAssert(IsBytecodeIntrinsic<T>(bcPos));
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
@@ -464,7 +464,7 @@ public:
 
     size_t WARN_UNUSED GetDfgNodeSpecificDataLength(size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BCKind bcKind = GetBytecodeKind(bcPos);
         TestAssert(bcKind < BCKind::X_END_OF_ENUM);
         return x_bcKindDfgNsdLengthArray[static_cast<size_t>(bcKind)];
@@ -472,7 +472,7 @@ public:
 
     void PopulateDfgNodeSpecificData(void* nsdPtr, size_t bcPos)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         TestAssert(x_dfgNsdInfoWriterFnArray[opcode] != nullptr);
         return (this->*(x_dfgNsdInfoWriterFnArray[opcode]))(reinterpret_cast<uint8_t*>(nsdPtr), bcPos);
@@ -480,7 +480,7 @@ public:
 
     static void DumpDfgNodeSpecificData(BCKind bcKind, FILE* file, void* nsdPtr, bool& shouldPrefixCommaOnFirstItem)
     {
-        assert(isDecodingMode);
+        Assert(isDecodingMode);
         TestAssert(bcKind < BCKind::X_END_OF_ENUM);
         (x_bcKindDumpDfgNsdInfoFnArray[static_cast<size_t>(bcKind)])(file, reinterpret_cast<uint8_t*>(nsdPtr), shouldPrefixCommaOnFirstItem);
     }
@@ -489,10 +489,10 @@ private:
 
     BytecodeOpcodeTy GetRawOpcodeAtPosition(size_t bcPos)
     {
-        assert(bcPos < GetCurLength());
-        assert(bcPos + sizeof(BytecodeOpcodeTy) <= GetCurLength());
+        Assert(bcPos < GetCurLength());
+        Assert(bcPos + sizeof(BytecodeOpcodeTy) <= GetCurLength());
         BytecodeOpcodeTy opcode = UnalignedLoad<BytecodeOpcodeTy>(GetBytecodeStart() + bcPos);
-        assert(opcode < x_bcKindArray.size());
+        Assert(opcode < x_bcKindArray.size());
         return opcode;
     }
 
@@ -500,8 +500,8 @@ private:
     {
         BytecodeOpcodeTy opcode = GetCanonicalizedOpcodeAtPosition(bcPos);
         uint8_t res = x_bcLengthArray[opcode];
-        assert(res != 255 && res > 0);
-        assert(bcPos + res <= GetCurLength());
+        Assert(res != 255 && res > 0);
+        Assert(bcPos + res <= GetCurLength());
         return res;
     }
 
@@ -789,12 +789,115 @@ private:
     static constexpr std::array<DfgDumpNsdInfoFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindDumpDfgNsdInfoFnArray = []() {
         std::array<DfgDumpNsdInfoFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
 #define macro(e)   \
-        res[static_cast<size_t>(BCKind::e)] = &DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::DumpDfgNodeSpecificDataImpl;                                                      \
+        res[static_cast<size_t>(BCKind::e)] = &DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::DumpDfgNodeSpecificDataImpl;
 
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
         return res;
     }();
+
+private:
+    using DfgRangeOpRWInfoGetterFn = void(*)(uint8_t*, uint32_t*, uint32_t*, size_t&, size_t&, size_t&);
+
+    template<typename T>
+    static constexpr const DfgRangeOpRWInfoGetterFn* GetDfgRangeOpRWInfoGetterFnArrayForBytecode()
+    {
+        if constexpr(T::x_bytecodeHasRangedOperand)
+        {
+            return T::x_dfgRangeOpRWInfoGetterFns.data();
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
+    static constexpr std::array<const DfgRangeOpRWInfoGetterFn*, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgRangeOpRWInfoGetterArrays = []() {
+        std::array<const DfgRangeOpRWInfoGetterFn*, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e)   \
+        res[static_cast<size_t>(BCKind::e)] = GetDfgRangeOpRWInfoGetterFnArrayForBytecode<DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>>();
+
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+    template<typename T>
+    static constexpr size_t GetDfgRangeOpRWInfoGetterFnArraySizeForBytecode()
+    {
+        if constexpr(T::x_bytecodeHasRangedOperand)
+        {
+            return T::x_dfgRangeOpRWInfoGetterFns.size();
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    static constexpr std::array<size_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgRangeOpRWInfoGetterArraySizes = []() {
+        std::array<size_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e)   \
+        res[static_cast<size_t>(BCKind::e)] = GetDfgRangeOpRWInfoGetterFnArraySizeForBytecode<DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>>();
+
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
+public:
+
+    // Get the mapping of the DFG Node SSA inputs/outputs to the locations into the ranged operand
+    //
+    // nsd:        the NodeSpecificData of the DFG Node
+    //
+    // inputOrds:  The relative offset from the range start for all the reads of the range will be stored here.
+    //             This corresponds to the last X SSA inputs of the DFG node, in the same order
+    //
+    // outputOrds: Similar, but for outputs
+    //
+    // numInputs:  Caller should set this to be the size of the inputOrds buffer, for assertion check
+    //             After the call, this will be the actual # of items populated into inputOrds
+    //
+    // numOutputs: Similar, but for outputs
+    //
+    // rangeLen:   After the call, this will be the required length of the range operand when doing codegen
+    //
+    static void ALWAYS_INLINE GetDfgRangeOperandRWInfo(BCKind bcKind,
+                                                       uint8_t* nsd,
+                                                       uint32_t* inputOrds /*out*/,
+                                                       uint32_t* outputOrds /*out*/,
+                                                       size_t& numInputs /*inout*/,
+                                                       size_t& numOutputs /*inout*/,
+                                                       size_t& rangeLen /*out*/)
+    {
+        Assert(isDecodingMode);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        const DfgRangeOpRWInfoGetterFn* arr = x_dfgRangeOpRWInfoGetterArrays[static_cast<size_t>(bcKind)];
+        if (arr == nullptr)
+        {
+            TestAssert(x_dfgRangeOpRWInfoGetterArraySizes[static_cast<size_t>(bcKind)] == 0);
+            numInputs = 0;
+            numOutputs = 0;
+            rangeLen = 0;
+            return;
+        }
+
+        // The bytecode variant ordinal is always stored as an uint8_t at offset 0 of nsd
+        //
+        uint8_t variantOrd = nsd[0];
+        TestAssert(variantOrd < x_dfgRangeOpRWInfoGetterArraySizes[static_cast<size_t>(bcKind)]);
+
+        DfgRangeOpRWInfoGetterFn func = arr[variantOrd];
+        return func(nsd, inputOrds, outputOrds, numInputs, numOutputs, rangeLen);
+    }
+
+    static bool ALWAYS_INLINE BytecodeHasRangeOperand(BCKind bcKind)
+    {
+        Assert(isDecodingMode);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        return x_dfgRangeOpRWInfoGetterArrays[static_cast<size_t>(bcKind)] != nullptr;
+    }
 };
 
 class BytecodeBuilder final : public BytecodeAccessor<false /*isDecodingMode*/>
@@ -823,7 +926,7 @@ constexpr auto x_bytecode_metadata_struct_size_list = ComputeConstexprTraitArray
 constexpr auto x_bytecode_metadata_struct_log_2_alignment_list = ComputeConstexprTraitArrayForTuple<uint32_t /*TraitType*/, BytecodeMetadataStructTypeList>(
     []<typename T>() -> uint32_t {
         size_t alignment = T::GetAlignment();
-        assert(is_power_of_2(alignment));
+        Assert(is_power_of_2(alignment));
         uint32_t log2res = 0;
         while (alignment != 1)
         {

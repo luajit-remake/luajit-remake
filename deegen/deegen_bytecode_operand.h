@@ -114,9 +114,10 @@ public:
         return llvm::Type::getIntNTy(ctx, static_cast<uint32_t>(ValueFullByteLength() * 8));
     }
 
+    bool HasOperandOrdinal() const { return m_operandOrdinal != static_cast<size_t>(-1); }
     size_t OperandOrdinal() const
     {
-        ReleaseAssert(m_operandOrdinal != static_cast<size_t>(-1));
+        ReleaseAssert(HasOperandOrdinal());
         return m_operandOrdinal;
     }
     void SetOperandOrdinal(size_t ordinal) { m_operandOrdinal = ordinal; }
@@ -179,14 +180,15 @@ public:
     // Generic logic that decodes a bytecode operand from a storage location
     //
     llvm::Value* WARN_UNUSED GetOperandValueFromStorage(llvm::Value* storagePtr, size_t offsetInStorage, size_t storageSize, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetOperandValueFromStorage(llvm::Value* storagePtr, size_t offsetInStorage, size_t storageSize, llvm::BasicBlock* insertAtEnd);
 
-    virtual json WARN_UNUSED SaveToJSON() = 0;
+    virtual json_t WARN_UNUSED SaveToJSON() = 0;
 
-    static std::unique_ptr<BcOperand> WARN_UNUSED LoadFromJSON(json& j);
+    static std::unique_ptr<BcOperand> WARN_UNUSED LoadFromJSON(json_t& j);
 
 protected:
-    json WARN_UNUSED SaveBaseToJSON();
-    BcOperand(json& j);
+    json_t WARN_UNUSED SaveBaseToJSON();
+    BcOperand(json_t& j);
 
 private:
     std::string m_name;
@@ -207,13 +209,20 @@ class BcOpSlot final : public BcOperand
 public:
     BcOpSlot(const std::string& name)
         : BcOperand(name)
+        , m_hasSpeculation(false)
+        , m_specMask(0)
     { }
 
-    BcOpSlot(json& j);
+    BcOpSlot(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
-        ss << "Arg '" << OperandName() << "': Slot" << std::endl;
+        ss << "Arg '" << OperandName() << "': Slot";
+        if (HasDfgSpeculation())
+        {
+            ss << " [DFG speculation: " << DumpHumanReadableTypeSpeculation(GetDfgSpecMask()) << "]";
+        }
+        ss << std::endl;
     }
 
     virtual BcOperandKind GetKind() override { return BcOperandKind::Slot; }
@@ -242,12 +251,35 @@ public:
 
     virtual int64_t WARN_UNUSED ValueUpperBound() override
     {
-        return 1048576;
+        return x_localOrdinalUpperBound;
     }
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
-    virtual json WARN_UNUSED SaveToJSON() override final;
+    virtual json_t WARN_UNUSED SaveToJSON() override final;
+
+    void SetDfgSpeculation(uint64_t specMask)
+    {
+        ReleaseAssert(!m_hasSpeculation);
+        ReleaseAssert(specMask <= x_typeMaskFor<tTop>);
+        m_hasSpeculation = true;
+        m_specMask = SafeIntegerCast<TypeMaskTy>(specMask);
+    }
+
+    bool WARN_UNUSED HasDfgSpeculation() { return m_hasSpeculation; }
+
+    TypeMaskTy WARN_UNUSED GetDfgSpecMask()
+    {
+        ReleaseAssert(HasDfgSpeculation());
+        ReleaseAssert(m_specMask <= x_typeMaskFor<tTop>);
+        return m_specMask;
+    }
+
+    static constexpr int64_t x_localOrdinalUpperBound = 1048576;
+
+private:
+    bool m_hasSpeculation;
+    TypeMaskTy m_specMask;
 };
 
 // A bytecode operand that refers to a constant in the constant table
@@ -255,12 +287,12 @@ public:
 class BcOpConstant final : public BcOperand
 {
 public:
-    BcOpConstant(const std::string& name, TypeSpeculationMask mask)
+    BcOpConstant(const std::string& name, TypeMaskTy mask)
         : BcOperand(name)
         , m_typeMask(mask)
     { }
 
-    BcOpConstant(json& j);
+    BcOpConstant(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -275,7 +307,7 @@ public:
         // Note that even though some other types have only one possible value as well (e.g., DoubleNaN), we only do this optimization for 'nil'
         // as it is the important case (... == nil is pretty common) and the 'nil' constant is readily avaiable (thanks to the tag register).
         //
-        return m_typeMask == x_typeSpeculationMaskFor<tNil>;
+        return m_typeMask == x_typeMaskFor<tNil>;
     }
 
     virtual size_t WARN_UNUSED ValueFullByteLength() override
@@ -299,7 +331,7 @@ public:
 
     virtual int64_t WARN_UNUSED ValueLowerBound() override
     {
-        return -1048576;
+        return x_constantTableOrdLowerBound;
     }
 
     virtual int64_t WARN_UNUSED ValueUpperBound() override
@@ -309,11 +341,13 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
-    virtual json WARN_UNUSED SaveToJSON() override final;
+    virtual json_t WARN_UNUSED SaveToJSON() override final;
+
+    static constexpr int64_t x_constantTableOrdLowerBound = -1048576;
 
     // The statically-known type mask of this constant
     //
-    TypeSpeculationMask m_typeMask;
+    TypeMaskTy m_typeMask;
 };
 
 // A bytecode operand that is a literal integer
@@ -327,7 +361,7 @@ public:
         , m_numBytes(numBytes)
     { }
 
-    BcOpLiteral(json& j);
+    BcOpLiteral(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -413,7 +447,7 @@ public:
         }
     }
 
-    virtual json WARN_UNUSED SaveToJSON() override;
+    virtual json_t WARN_UNUSED SaveToJSON() override;
 
     // The sign and width of this literal
     //
@@ -443,7 +477,7 @@ public:
         }
     }
 
-    BcOpSpecializedLiteral(json& j);
+    BcOpSpecializedLiteral(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -485,7 +519,7 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
-    virtual json WARN_UNUSED SaveToJSON() override final;
+    virtual json_t WARN_UNUSED SaveToJSON() override final;
 
     uint64_t m_concreteValue;
 };
@@ -504,7 +538,7 @@ public:
         , m_operandRangeLimit(nullptr)
     { }
 
-    BcOpBytecodeRangeBase(json& j);
+    BcOpBytecodeRangeBase(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -565,7 +599,7 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
-    virtual json WARN_UNUSED SaveToJSON() override final;
+    virtual json_t WARN_UNUSED SaveToJSON() override final;
 
     bool m_isReadOnly;
     bool m_hasRangeLimit;
@@ -584,7 +618,7 @@ public:
         , m_size(size)
     { }
 
-    BcOpInlinedMetadata(json& j);
+    BcOpInlinedMetadata(json_t& j);
 
     virtual void dump(std::stringstream& ss) override
     {
@@ -625,7 +659,7 @@ public:
 
     virtual llvm::Value* WARN_UNUSED EmitUsageValueFromBytecodeValue(DeegenBytecodeImplCreatorBase* ifi, llvm::BasicBlock* targetBB /*out*/, llvm::Value* bytecodeValue) override;
 
-    virtual json WARN_UNUSED SaveToJSON() override final;
+    virtual json_t WARN_UNUSED SaveToJSON() override final;
 
     size_t m_size;
 };
@@ -658,11 +692,47 @@ enum class BytecodeQuickeningKind
 struct BytecodeOperandQuickeningDescriptor
 {
     size_t m_operandOrd;
-    TypeSpeculationMask m_speculatedMask;
+    TypeMaskTy m_speculatedMask;
 };
 
 struct BaselineJitSlowPathDataLayout;
 struct DfgJitSlowPathDataLayout;
+
+struct OperandRegPreferenceInfo
+{
+    OperandRegPreferenceInfo()
+        : m_isInitialized(false)
+        , m_isInitializedByUser(false)
+        , m_isGprAllowed(false)
+        , m_isFprAllowed(false)
+        , m_isGprPreferred(false)
+    { }
+
+    json_t WARN_UNUSED SaveToJSON();
+    void LoadFromJSON(json_t& j);
+
+    static OperandRegPreferenceInfo WARN_UNUSED ParseFromLLVM(llvm::Module* module, llvm::Constant* cst);
+
+    // Return the default reg preference based on the known/speculated type mask
+    // This means FPR if mask is a subset of tDouble, GPR if mask is disjoint with tDouble,
+    // GPR & FPR otherwise (and prefer GPR, as with other default rules)
+    //
+    static OperandRegPreferenceInfo WARN_UNUSED GetDefaultRegPreferenceFromTypeMask(TypeMaskTy mask);
+
+    bool m_isInitialized;
+    bool m_isInitializedByUser;
+    bool m_isGprAllowed;
+    bool m_isFprAllowed;
+    bool m_isGprPreferred;   // only makes sense if both GPR and FPR allowed
+};
+
+class BytecodeVariantDefinition;
+
+struct BytecodeVariantCollection
+{
+    std::vector<std::unique_ptr<BytecodeVariantDefinition>> m_variants;
+    std::vector<std::unique_ptr<BytecodeVariantDefinition>> m_dfgVariants;
+};
 
 class BytecodeVariantDefinition
 {
@@ -673,6 +743,7 @@ public:
         , m_hasDecidedOperandWidth(false)
         , m_bytecodeStructLengthTentativelyFinalized(false)
         , m_bytecodeStructLengthFinalized(false)
+        , m_isDfgVariant(false)
         , m_hasOutputValue(false)
         , m_hasConditionalBranchTarget(false)
         , m_metadataStructInfoAssigned(false)
@@ -688,12 +759,12 @@ public:
         , m_bytecodeMayMakeTailCallDetermined(false)
         , m_bytecodeMayMakeTailCall(false)
         , m_isInterpreterToBaselineJitOsrEntryPoint(false)
+        , m_disableRegAllocEnabledAssertEvenIfRegHintGiven(false)
         , m_bytecodeStructLength(static_cast<size_t>(-1))
         , m_baselineJitSlowPathData(nullptr)
-        , m_dfgJitSlowPathData(nullptr)
     { }
 
-    BytecodeVariantDefinition(json& j);
+    BytecodeVariantDefinition(json_t& j);
 
     void SetMaxOperandWidthBytes(size_t maxWidthBytesInput)
     {
@@ -734,7 +805,7 @@ public:
         m_bytecodeStructLength = currentOffset;
     }
 
-    static std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
+    static std::vector<BytecodeVariantCollection> WARN_UNUSED ParseAllFromModule(llvm::Module* module);
     static void RemoveUsedAttributeOfBytecodeDefinitionGlobalSymbol(llvm::Module* module);
     static void AssertBytecodeDefinitionGlobalSymbolHasBeenRemoved(llvm::Module* module);
 
@@ -872,22 +943,13 @@ public:
         return m_baselineJitSlowPathData;
     }
 
-    bool WARN_UNUSED IsDfgJitSlowPathDataLayoutDetermined()
-    {
-        return m_dfgJitSlowPathData != nullptr;
-    }
-
-    DfgJitSlowPathDataLayout* WARN_UNUSED GetDfgJitSlowPathDataLayout()
-    {
-        ReleaseAssert(IsDfgJitSlowPathDataLayoutDetermined());
-        return m_dfgJitSlowPathData;
-    }
-
     size_t WARN_UNUSED GetBaselineJitSlowPathDataLength();
 
     void ComputeBaselineJitSlowPathDataLayout();
 
-    size_t WARN_UNUSED GetNumCallICsInJitTier()
+    // Note that DFG JIT does not use call IC since it is the highest tier now
+    //
+    size_t WARN_UNUSED GetNumCallICsInBaselineJitTier()
     {
         ReleaseAssert(m_numJitCallICs != static_cast<size_t>(-1));
         return m_numJitCallICs;
@@ -917,7 +979,42 @@ public:
         return m_bytecodeMayMakeTailCall;
     }
 
-    json WARN_UNUSED SaveToJSON();
+    struct DfgNsdLayout
+    {
+        size_t m_nsdLength;
+        std::map<size_t /*operandOrd*/, size_t /*offsetInNsd*/> m_operandOffsets;
+    };
+
+    // DEVNOTE:
+    // The layout described below is assumed in other places by the DFG codegen.
+    // If you change the layout, corresponding changes to the codegen must be done!
+    //
+    // 1. Bytecode variant ordinal comes first (uint8_t)
+    // 2. Each Literal or SpecializedLiteral, in the same order they show up in the bytecode, with the same type, no alignment
+    //
+    DfgNsdLayout WARN_UNUSED ComputeDfgNsdLayout()
+    {
+        size_t dfgNsdLength = sizeof(uint8_t);
+        std::map<size_t, size_t> operandOffsetMap;
+        for (size_t i = 0; i < m_list.size(); i++)
+        {
+            BcOperand* operand = m_list[i].get();
+            if (operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral)
+            {
+                ReleaseAssert(!operandOffsetMap.count(i));
+                operandOffsetMap[i] = dfgNsdLength;
+
+                BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
+                dfgNsdLength += lit->m_numBytes;
+            }
+        }
+        return {
+            .m_nsdLength = dfgNsdLength,
+            .m_operandOffsets = operandOffsetMap
+        };
+    }
+
+    json_t WARN_UNUSED SaveToJSON();
 
     // For now we have a fixed 2-byte opcode header for simplicity
     // We can probably improve compactness by making the most common opcodes use 1-byte opcode in the future
@@ -940,6 +1037,7 @@ public:
     bool m_bytecodeStructLengthTentativelyFinalized;
     bool m_bytecodeStructLengthFinalized;
 
+    bool m_isDfgVariant;
     bool m_hasOutputValue;
     bool m_hasConditionalBranchTarget;
     std::unique_ptr<BcOpSlot> m_outputOperand;
@@ -978,6 +1076,13 @@ public:
     std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
 
     std::string m_rcwInfoFuncs;
+    std::vector<std::pair<std::string, std::string>> m_rawReadRangeExprs;
+    std::vector<std::pair<std::string, std::string>> m_rawWriteRangeExprs;
+    std::vector<std::pair<std::string, std::string>> m_rawClobberRangeExprs;
+
+    std::vector<OperandRegPreferenceInfo> m_operandRegPrefInfo;
+    OperandRegPreferenceInfo m_outputRegPrefInfo;
+
     size_t m_bcIntrinsicOrd;      // -1 if none
     std::string m_bcIntrinsicName;
     std::string m_bcIntrinsicInfoGetterFunc;
@@ -989,6 +1094,8 @@ public:
     bool m_bytecodeMayMakeTailCall;
 
     bool m_isInterpreterToBaselineJitOsrEntryPoint;
+
+    bool m_disableRegAllocEnabledAssertEvenIfRegHintGiven;
 
 private:
     void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)
@@ -1002,7 +1109,6 @@ private:
     BytecodeMetadataStructBase::StructInfo m_metadataStructInfo;
 
     BaselineJitSlowPathDataLayout* m_baselineJitSlowPathData;
-    DfgJitSlowPathDataLayout* m_dfgJitSlowPathData;
 
     // If the bytecode has a Call IC, this holds the metadata (InterpreterCallIcMetadata::IcExists() tell whether the IC exists or not)
     //
@@ -1070,7 +1176,7 @@ struct BytecodeOpcodeRawValueMap
         return bytecodeName.find("_fused_ic_") != std::string::npos;
     }
 
-    static BytecodeOpcodeRawValueMap WARN_UNUSED ParseFromJSON(json j);
+    static BytecodeOpcodeRawValueMap WARN_UNUSED ParseFromJSON(json_t j);
     static BytecodeOpcodeRawValueMap WARN_UNUSED ParseFromCommandLineArgs();
 
 private:

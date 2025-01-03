@@ -1,14 +1,11 @@
-#include "force_release_build.h"
-
 #include "define_deegen_common_snippet.h"
 #include "runtime_utils.h"
 
-static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint64_t* dst, uint64_t* stackBase, CoroutineRuntimeContext* coroCtx)
+static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint64_t* dst, CoroutineRuntimeContext* coroCtx)
 {
-    int32_t srcOffset = coroCtx->m_variadicRetSlotBegin;
     uint32_t num = coroCtx->m_numVariadicRets;
 
-    uint64_t* src = stackBase + srcOffset;
+    uint64_t* src = reinterpret_cast<uint64_t*>(coroCtx->m_variadicRetStart);
 
     // What we need is just a memmove. We hand-implement it because:
     // 1. Calling 'memmove' will result in a ton of code, which is bad for our case.
@@ -23,12 +20,7 @@ static void DeegenSnippet_CopyVariadicResultsToArgumentsForwardMayOvercopy(uint6
     #pragma clang loop vectorize(disable)
     do
     {
-        uint64_t tmp1 = src[0];
-        uint64_t tmp2 = src[1];
-        dst[0] = tmp1;
-        dst[1] = tmp2;
-        src += 2;
-        dst += 2;
+        __builtin_memcpy_inline(dst + i, src + i, sizeof(TValue) * 2);
         i += 2;
     }
     while (i < num);    // TODO: investigate if we should add a unlikely here

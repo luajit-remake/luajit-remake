@@ -207,7 +207,7 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
                 goto do_metamethod_call;
             }
 
-            assert(!lhs.Is<tUserdata>() && "unimplemented");
+            Assert(!lhs.Is<tUserdata>() && "unimplemented");
 
             metamethod = GetMetamethodForValue(lhs, GetMetamethodKind<opKind>());
             if (metamethod.IsNil())
@@ -217,10 +217,10 @@ void NO_RETURN ComparisonOperationImpl(TValue lhs, TValue rhs)
             goto do_metamethod_call;
         }
 
-        assert(!lhs.Is<tInt32>() && "unimplemented");
+        Assert(!lhs.Is<tInt32>() && "unimplemented");
 
         {
-            assert(lhs.Is<tMIV>());
+            Assert(lhs.Is<tMIV>());
             if (!rhs.Is<tMIV>())
             {
                 goto fail;
@@ -309,6 +309,29 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ComparisonOperation, bool shouldBranch, Comparat
         Op("lhs").HasType<tDoubleNotNaN>(),
         Op("rhs").HasType<tDoubleNotNaN>()
     );
+    // DFG speculations:
+    // 1. Speculate for <tDouble, tDouble>
+    // 2. No speculation, but still move non-double case to AOT slow path
+    //
+    DfgVariant(
+        Op("lhs").HasType<tDouble>(),
+        Op("rhs").HasType<tDouble>()
+    );
+    DfgVariant().EnableHotColdSplitting(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
+    );
+    RegAllocHint(
+        Op("lhs").RegHint(RegHint::FPR),
+        Op("rhs").RegHint(RegHint::FPR)
+    );
+    if constexpr(!shouldBranch)
+    {
+        RegAllocHint(
+            Op("output").RegHint(RegHint::GPR)
+        );
+        TypeDeductionRule([](TypeMask /*lhs*/, TypeMask /*rhs*/) -> TypeMask { return x_typeMaskFor<tBool>; });
+    }
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfLT, ComparisonOperation, true /*shouldBranch*/, ComparatorKind::LessThan);

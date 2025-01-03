@@ -60,8 +60,8 @@ void NO_RETURN EqualityOperationImpl(TValue lhs, TValue rhs)
         goto end;
     }
 
-    assert(!lhs.Is<tInt32>() && "unimplemented");
-    assert(!rhs.Is<tInt32>() && "unimplemented");
+    Assert(!lhs.Is<tInt32>() && "unimplemented");
+    Assert(!rhs.Is<tInt32>() && "unimplemented");
 
     if (likely(lhs.Is<tTable>() && rhs.Is<tTable>()))
     {
@@ -157,6 +157,40 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(EqualityOperation, bool compareForNotEqual, bool
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsConstant<tBool>()
     );
+    // DFG speculations:
+    // If we can speculate that rhs is double, or is not double and not table, we don't need to speculate anything on lhs,
+    // since the comparison logic doesn't care about lhs's type in these cases
+    //
+    // TODO: think about how we can express that comparing stuffs of different types is trivially false
+    //
+    DfgVariant(
+        Op("lhs").RegHint(RegHint::FPR),
+        Op("rhs").HasType<tDouble>()
+    );
+    DfgVariant(
+        Op("lhs").RegHint(RegHint::GPR),
+        Op("rhs").HasType((x_typeMaskFor<tMIV> | x_typeMaskFor<tHeapEntity>) ^ x_typeMaskFor<tTable>)
+    );
+    // Comparing two tables may result in calling metamethod
+    //
+    DfgVariant(
+        Op("lhs").HasType<tTable>(),
+        Op("rhs").HasType<tTable>()
+    );
+    // The general variant (without speculation) should move non-double case to AOT
+    //
+    DfgVariant(
+        Op("lhs").RegHint(RegHint::FPR),
+        Op("rhs").RegHint(RegHint::FPR)
+    ).EnableHotColdSplitting(
+        Op("lhs").HasType<tDoubleNotNaN>(),
+        Op("rhs").HasType<tDoubleNotNaN>()
+    );
+    if constexpr(!shouldBranch)
+    {
+        RegAllocHint(Op("output").RegHint(RegHint::GPR));
+        TypeDeductionRule([](TypeMask /*lhs*/, TypeMask /*rhs*/) -> TypeMask { return x_typeMaskFor<tBool>; });
+    }
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfEq, EqualityOperation, false /*compareForNotEqual*/, true /*shouldBranch*/);

@@ -6,6 +6,18 @@
 
 namespace dast {
 
+std::pair<std::unique_ptr<llvm::Module>, llvm::Function*> WARN_UNUSED GetDeegenCommonSnippetModule(llvm::LLVMContext& ctx, const std::string& snippetName)
+{
+    using namespace llvm;
+
+    std::unique_ptr<Module> module = GetDeegenCommonSnippetLLVMIR(ctx, snippetName, 0 /*expectedKind = snippet*/);
+    std::string fnName = std::string(x_deegen_common_snippet_function_name_prefix) + snippetName;
+    Function* func = module->getFunction(fnName);
+    ReleaseAssert(func != nullptr);
+    ReleaseAssert(!func->empty());
+    return std::make_pair(std::move(module), func);
+}
+
 llvm::Function* WARN_UNUSED LinkInDeegenCommonSnippet(llvm::Module* module /*inout*/, const std::string& snippetName)
 {
     using namespace llvm;
@@ -23,7 +35,7 @@ llvm::Function* WARN_UNUSED LinkInDeegenCommonSnippet(llvm::Module* module /*ino
 
     // Now we need to link in the function
     //
-    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetLLVMIR(ctx, snippetName, 0 /*expectedKind = snippet*/);
+    std::unique_ptr<Module> snippetModule = GetDeegenCommonSnippetModule(ctx, snippetName).first;
 
     {
         Linker linker(*module);
@@ -39,11 +51,11 @@ llvm::Function* WARN_UNUSED LinkInDeegenCommonSnippet(llvm::Module* module /*ino
     ReleaseAssert(func->getLinkage() == GlobalValue::LinkageTypes::ExternalLinkage);
     func->setLinkage(GlobalValue::LinkageTypes::InternalLinkage);
 
-    if (func->hasFnAttribute(Attribute::AttrKind::NoInline))
+    if (func->hasFnAttribute(Attribute::NoInline))
     {
-        func->removeFnAttr(Attribute::AttrKind::NoInline);
+        func->removeFnAttr(Attribute::NoInline);
     }
-    func->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    func->addFnAttr(Attribute::AlwaysInline);
 
     return func;
 }

@@ -1,6 +1,6 @@
 #include "deegen_baseline_jit_impl_creator.h"
 #include "deegen_ast_inline_cache.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "deegen_ast_slow_path.h"
 #include "deegen_jit_slow_path_data.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
@@ -37,11 +37,11 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     // Inline 'm_impl' into 'm_wrapper'
     //
-    if (m_impl->hasFnAttribute(Attribute::AttrKind::NoInline))
+    if (m_impl->hasFnAttribute(Attribute::NoInline))
     {
-        m_impl->removeFnAttr(Attribute::AttrKind::NoInline);
+        m_impl->removeFnAttr(Attribute::NoInline);
     }
-    m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    m_impl->addFnAttr(Attribute::AlwaysInline);
     m_impl->setLinkage(GlobalValue::InternalLinkage);
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
@@ -50,48 +50,40 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     m_valuePreserver.RefreshAfterTransform();
 
-    std::vector<AstInlineCache::BaselineJitLLVMLoweringResult> icLLRes;
+    std::vector<AstInlineCache::JitLLVMLoweringResult> icLLRes;
 
     if (IsMainComponent())
     {
         std::vector<AstInlineCache> allIcUses = AstInlineCache::GetAllUseInFunction(m_wrapper);
-        size_t globalIcTraitOrdBase = gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName());
+        size_t globalIcTraitOrdBase = gbta.GetBaselineJitGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName());
         for (size_t i = 0; i < allIcUses.size(); i++)
         {
-            icLLRes.push_back(allIcUses[i].DoLoweringForBaselineJit(this, i, globalIcTraitOrdBase));
+            icLLRes.push_back(allIcUses[i].DoLoweringForJit(this, i, globalIcTraitOrdBase));
             globalIcTraitOrdBase += allIcUses[i].m_totalEffectKinds;
         }
-        ReleaseAssert(globalIcTraitOrdBase == gbta.GetGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName()) + gbta.GetNumTotalGenericIcEffectKinds(m_bytecodeDef->GetBytecodeIdName()));
+        ReleaseAssert(globalIcTraitOrdBase == gbta.GetBaselineJitGenericIcEffectTraitBaseOrdinal(m_bytecodeDef->GetBytecodeIdName()) + gbta.GetNumTotalGenericIcEffectKinds(m_bytecodeDef->GetBytecodeIdName()));
     }
 
     // Now we can do the lowerings
     //
     AstBytecodeReturn::DoLoweringForBaselineJIT(this, m_wrapper);
     AstMakeCall::LowerForBaselineJIT(this, m_wrapper);
-    AstReturnValueAccessor::LowerForInterpreterOrBaselineJIT(this, m_wrapper);
+    AstReturnValueAccessor::LowerForInterpreterOrBaselineOrDfg(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForBaselineJIT(this, m_wrapper);
-    AstSlowPath::LowerAllForInterpreterOrBaselineJIT(this, m_wrapper);
+    AstSlowPath::LowerAllForInterpreterOrBaselineOrDfg(this, m_wrapper);
 
     // Lower the remaining function APIs from the generic IC
     //
     if (!IsJitSlowPath())
     {
         LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
-        AstInlineCache::LowerIcPtrGetterFunctionForBaselineJit(this, m_wrapper);
+        AstInlineCache::LowerIcPtrGetterFunctionForJit(this, m_wrapper);
     }
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
     //
-    m_wrapper->removeFnAttr(Attribute::AttrKind::NoReturn);
-    if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
-    {
-        std::string slowPathFnName = BytecodeIrInfo::GetQuickeningSlowPathFuncName(m_bytecodeDef);
-        Function* slowPathFn = m_module->getFunction(slowPathFnName);
-        ReleaseAssert(slowPathFn != nullptr);
-        ReleaseAssert(slowPathFn->hasFnAttribute(Attribute::AttrKind::NoReturn));
-        slowPathFn->removeFnAttr(Attribute::AttrKind::NoReturn);
-    }
+    m_wrapper->removeFnAttr(Attribute::NoReturn);
 
     // Remove the value preserver annotations so optimizer can work fully
     //
@@ -173,6 +165,7 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
     //
     m_wrapper = m_module->getFunction(m_resultFuncName);
     ReleaseAssert(m_wrapper != nullptr);
+    m_execFnContext->ResetFunction(m_wrapper);
 
     if (IsJitSlowPath())
     {
@@ -183,27 +176,16 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     // Run the stencil lowering pass in preparation for stencil generation
     //
-    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(m_wrapper, GetRcPlaceholderNameForFallthrough());
+    DeegenStencilLoweringPass slPass = DeegenStencilLoweringPass::RunIrRewritePhase(m_wrapper, IsLastJitStencilInBytecode(), GetRcPlaceholderNameForFallthrough());
 
     // Compile the function to ASM (.s) file
-    // TODO: ideally we should think about properly setting function and loop alignments
-    // Currently we simply ignore alignments, which is fine for now since currently our none of our JIT fast path contains loops.
-    // But this will break down once any loop is introduced. To fix this, we need to be aware of the aligned BBs and manually generate NOPs.
     //
-    std::string asmFile = CompileLLVMModuleToAssemblyFileForStencilGeneration(
-        m_module.get(),
-        llvm::Reloc::Static,
-        llvm::CodeModel::Small,
-        [](TargetOptions& opt) {
-            // This is the option that is equivalent to the clang -fdata-sections flag
-            // Put each data symbol into a separate data section so our stencil creation pass can produce more efficient result
-            //
-            opt.DataSections = true;
-        });
+    std::string asmFile = CompileToAssemblyFileForStencilGeneration();
 
     // Run the ASM phase of the stencil lowering pass
     //
-    slPass.RunAsmRewritePhase(asmFile);
+    slPass.ParseAsmFile(asmFile);
+    slPass.RunAsmRewritePhase();
     asmFile = slPass.m_primaryPostTransformAsmFile;
 
     m_stencilPreTransformAsmFile = std::move(slPass.m_rawInputFileForAudit);
@@ -216,15 +198,25 @@ void BaselineJitImplCreator::DoLowering(BytecodeIrInfo* bii, const DeegenGlobalB
 
     // Parse object file into copy-and-patch stencil
     //
-    m_stencil = DeegenStencil::ParseMainLogic(ctx, m_stencilObjectFile);
+    m_stencil = DeegenStencil::ParseMainLogic(ctx, IsLastJitStencilInBytecode(), m_stencilObjectFile);
 
-    m_genericIcLoweringResult = AstInlineCache::DoLoweringAfterAsmTransform(bii,
-                                                                            this,
-                                                                            std::move(icBodyModule),
-                                                                            icLLRes,
-                                                                            slPass.m_genericIcLoweringResults,
-                                                                            m_stencil /*mainStencil*/,
-                                                                            gbta);
+    m_genericIcLoweringResult = AstInlineCache::DoLoweringAfterAsmTransform(
+        bii,
+        this,
+        std::move(icBodyModule),
+        icLLRes,
+        slPass.m_genericIcLoweringResults,
+        m_stencil /*mainStencil*/,
+        gbta.GetBaselineJitGenericIcEffectTraitBaseOrdinal(GetBytecodeDef()->GetBytecodeIdName()),
+        gbta.GetNumTotalGenericIcEffectKinds(GetBytecodeDef()->GetBytecodeIdName()));
+
+    if (slPass.m_shouldAssertNoGenericIcWithInlineSlab)
+    {
+        for (auto& item : m_genericIcLoweringResult.m_inlineSlabInfo)
+        {
+            ReleaseAssert(!item.m_hasInlineSlab);
+        }
+    }
 
     m_callIcInfo = slPass.m_callIcLoweringResults;
 

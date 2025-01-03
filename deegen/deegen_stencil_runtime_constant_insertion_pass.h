@@ -33,6 +33,13 @@ protected:
 public:
     virtual ~CPRuntimeConstantNodeBase() { }
 
+    // For simplicity, we do not have proper ref-counting for this class, and simply never delete this class
+    //
+    void NO_RETURN operator delete(void* /*ptr*/)
+    {
+        ReleaseAssert(false && "do not delete this class");
+    }
+
     virtual bool IsRawRuntimeConstant() { return false; }
 
     void SetFullRange()

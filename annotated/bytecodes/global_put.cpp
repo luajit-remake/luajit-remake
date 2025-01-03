@@ -14,11 +14,11 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
     // If 'metamethod' is a function, we should invoke the metamethod.
     // Otherwise, we should repeat operation on 'metamethod' (i.e., recurse on metamethod[index])
     //
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
     while (true)
     {
-        assert(!metamethod.Is<tNil>());
+        Assert(!metamethod.Is<tNil>());
         if (likely(metamethod.Is<tHeapEntity>()))
         {
             HeapEntityType mmType = metamethod.GetHeapEntityType();
@@ -63,7 +63,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue tvIndex, TValue /*bc_value
 
 static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
 {
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
     HeapPtr<TableObject> base = GetFEnvGlobalObject();
 
@@ -75,8 +75,8 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
         TableObject::PreparePutByIdForGlobalObject(base, UserHeapPointer<HeapString> { index }, c_info /*out*/);
         // We know that the global object must be a CacheableDictionary, so most fields in c_info should have determined values
         //
-        assert(c_info.m_isInlineCacheable && c_info.m_propertyExists && !c_info.m_shouldGrowButterfly);
-        assert(c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_info.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+        Assert(c_info.m_isInlineCacheable && c_info.m_propertyExists && !c_info.m_shouldGrowButterfly);
+        Assert(c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_info.m_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
         if (likely(!c_info.m_mayHaveMetatable))
         {
             if (c_info.m_icKind == PutByIdICInfo::ICKind::InlinedStorage)
@@ -144,7 +144,7 @@ static void NO_RETURN GlobalPutImpl(TValue tvIndex, TValue valueToPut)
         Return();
     }
 
-    assert(!metamethod.Is<tNil>());
+    Assert(!metamethod.Is<tNil>());
     EnterSlowPath<HandleMetamethodSlowPath>(TValue::Create<tTable>(base), valueToPut, metamethod);
 }
 
@@ -158,6 +158,10 @@ DEEGEN_DEFINE_BYTECODE(GlobalPut)
     Implementation(GlobalPutImpl);
     Variant(
         Op("index").IsConstant<tString>()
+    );
+    DfgVariant();
+    RegAllocHint(
+        Op("index").RegHint(RegHint::GPR)
     );
 }
 

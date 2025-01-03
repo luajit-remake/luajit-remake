@@ -11,12 +11,7 @@ static void ALWAYS_INLINE MoveArgumentsForCoroutine(TValue* dst, const TValue* s
 #pragma clang loop vectorize(disable)
     while (i < num)
     {
-        TValue tmp1 = src[0];
-        TValue tmp2 = src[1];
-        dst[0] = tmp1;
-        dst[1] = tmp2;
-        src += 2;
-        dst += 2;
+        __builtin_memcpy_inline(dst + i, src + i, sizeof(TValue) * 2);
         i += 2;
     }
 }
@@ -29,15 +24,15 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_finish)
     TValue* retStart = GetReturnValuesBegin();
     size_t numRets = GetNumReturnValues();
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
+    Assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
     CoroutineRuntimeContext* targetCoro = currentCoro->m_parent;
-    assert(targetCoro != nullptr);
-    assert(!targetCoro->m_coroutineStatus.IsDead() && !targetCoro->m_coroutineStatus.IsResumable());
+    Assert(targetCoro != nullptr);
+    Assert(!targetCoro->m_coroutineStatus.IsDead() && !targetCoro->m_coroutineStatus.IsResumable());
 
     // Update coroutine status: the current coroutine becomes dead
     //
     currentCoro->m_coroutineStatus.SetDead(true);
-    assert(currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
+    Assert(currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
 
     // Set up the arguments returned to the parent coroutine
     //
@@ -61,7 +56,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_finish)
     }
     else
     {
-        assert(dstHdr->m_numVariadicArguments == 1);
+        Assert(dstHdr->m_numVariadicArguments == 1);
         // For coroutine.wrap, we should simply store all the return values
         //
         // TODO: we need to check for stack overflow here once we implement resizable stack
@@ -83,8 +78,8 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(coro_init)
     // and all the arguments must show up at GetStackBase() + x_numSlotsForStackFrameHeader due to how we design the scheme.
     // So we can simply execute a InPlaceCall here.
     //
-    assert(start == GetStackBase() + x_numSlotsForStackFrameHeader);
-    assert(GetStackBase()[0].Is<tFunction>());
+    Assert(start == GetStackBase() + x_numSlotsForStackFrameHeader);
+    Assert(GetStackBase()[0].Is<tFunction>());
     MakeInPlaceCall(start, numArgs, DEEGEN_LIB_FUNC_RETURN_CONTINUATION(coro_finish));
 }
 
@@ -169,13 +164,13 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_resume)
     // Now we know the first arg is indeed a valid coroutine object for 'resume'
     //
     {
-        assert(arg.Is<tThread>());
+        Assert(arg.Is<tThread>());
         VM* vm = VM::GetActiveVMForCurrentThread();
         CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(vm, arg.As<tThread>());
 
         // Update coroutine status: the target coroutine becomes no longer resumable and has the current coroutine as parent
         //
-        assert(!targetCoro->m_coroutineStatus.IsDead() && targetCoro->m_coroutineStatus.IsResumable());
+        Assert(!targetCoro->m_coroutineStatus.IsDead() && targetCoro->m_coroutineStatus.IsResumable());
         targetCoro->m_coroutineStatus.SetResumable(false);
         CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
         targetCoro->m_parent = currentCoro;
@@ -204,7 +199,7 @@ not_coroutine_object_or_not_resumable:
     {
         VM* vm = VM::GetActiveVMForCurrentThread();
         CoroutineStatus status = TCGet(arg.As<tThread>()->m_coroutineStatus);
-        assert(!status.IsResumable());
+        Assert(!status.IsResumable());
         if (status.IsDead())
         {
             Return(TValue::Create<tBool>(false), TValue::Create<tString>(vm->CreateStringObjectFromRawCString("cannot resume dead coroutine")));
@@ -260,25 +255,25 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
 
     HeapPtr<CoroutineRuntimeContext> coro = arg.As<tThread>();
     CoroutineStatus status = TCGet(coro->m_coroutineStatus);
-    assert(status.IsCoroutineObject());
+    Assert(status.IsCoroutineObject());
 
     VM* vm = VM::GetActiveVMForCurrentThread();
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     if (TranslateToHeapPtr(currentCoro) == coro)
     {
-        assert(!status.IsDead() && !status.IsResumable());
+        Assert(!status.IsDead() && !status.IsResumable());
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("running")));
     }
 
     if (status.IsResumable())
     {
-        assert(!status.IsDead());
+        Assert(!status.IsDead());
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("suspended")));
     }
 
     if (status.IsDead())
     {
-        assert(!status.IsResumable());
+        Assert(!status.IsResumable());
         Return(TValue::Create<tString>(vm->CreateStringObjectFromRawCString("dead")));
     }
 
@@ -290,9 +285,9 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_status)
 DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 {
     HeapPtr<FunctionObject> func = GetStackFrameHeader()->m_func;
-    assert(func->m_numUpvalues == 1);
+    Assert(func->m_numUpvalues == 1);
     TValue uv = TCGet(func->m_upvalues[0]);
-    assert(uv.Is<tThread>());
+    Assert(uv.Is<tThread>());
     CoroutineRuntimeContext* targetCoro = TranslateToRawPointer(uv.As<tThread>());
 
     // We are basically duplicating the logic in coroutine.resume here, because we do not want to make an
@@ -313,7 +308,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_wrap_call)
 
     // Update coroutine status: the target coroutine becomes no longer resumable and has the current coroutine as parent
     //
-    assert(!targetCoro->m_coroutineStatus.IsDead() && targetCoro->m_coroutineStatus.IsResumable());
+    Assert(!targetCoro->m_coroutineStatus.IsDead() && targetCoro->m_coroutineStatus.IsResumable());
     targetCoro->m_coroutineStatus.SetResumable(false);
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
     targetCoro->m_parent = currentCoro;
@@ -376,7 +371,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_yield)
     size_t numArgs = GetNumArgs();
 
     CoroutineRuntimeContext* currentCoro = GetCurrentCoroutine();
-    assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
+    Assert(!currentCoro->m_coroutineStatus.IsDead() && !currentCoro->m_coroutineStatus.IsResumable());
     CoroutineRuntimeContext* targetCoro = currentCoro->m_parent;
     if (unlikely(targetCoro == nullptr))
     {
@@ -386,7 +381,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_yield)
         ThrowError("Cannot yield the root coroutine");
     }
 
-    assert(!targetCoro->m_coroutineStatus.IsDead() && !targetCoro->m_coroutineStatus.IsResumable());
+    Assert(!targetCoro->m_coroutineStatus.IsDead() && !targetCoro->m_coroutineStatus.IsResumable());
 
     // Update the coroutine status: the current coroutine becomes resumable
     //
@@ -419,7 +414,7 @@ DEEGEN_DEFINE_LIB_FUNC(coroutine_yield)
     }
     else
     {
-        assert(dstHdr->m_numVariadicArguments == 1);
+        Assert(dstHdr->m_numVariadicArguments == 1);
         // For coroutine.wrap, we should simply store all the return values
         //
         // TODO: we need to check for stack overflow here once we implement resizable stack

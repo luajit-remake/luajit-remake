@@ -5,12 +5,12 @@
 
 static void NO_RETURN TableVariadicPutBySeqImpl(TValue base, TValue tvIndex)
 {
-    assert(tvIndex.Is<tInt32>());
+    Assert(tvIndex.Is<tInt32>());
     int32_t indexStart = tvIndex.As<tInt32>();
 
     // 'base' is guaranteed to be a table object, as this opcode only shows up in a table initializer expression.
     //
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     HeapPtr<TableObject> tableObj = base.As<tTable>();
 
     // Since this opcode only shows up in a table initializer expression, 'base' must have no metatable.
@@ -42,7 +42,12 @@ DEEGEN_DEFINE_BYTECODE(TableVariadicPutBySeq)
     Variant(
         Op("index").IsConstant<tInt32>()
     );
+    DfgVariant();
     DeclareReads(VariadicResults());
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR),
+        Op("index").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

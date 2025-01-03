@@ -4,17 +4,17 @@
 namespace dast {
 
 DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::Build(BytecodeOpcodeRawValueMap& bytecodeOrderMap,
-                                                                                       std::vector<json>& allJsonInfo)
+                                                                                       std::vector<json_t>& allJsonInfo)
 {
     std::unordered_map<std::string, Trait> allTraits;
-    for (json& oneJsonInfo : allJsonInfo)
+    for (json_t& oneJsonInfo : allJsonInfo)
     {
         ReleaseAssert(oneJsonInfo.count("all-bytecode-info"));
-        json& bytecodeInfoListJson = oneJsonInfo["all-bytecode-info"];
+        json_t& bytecodeInfoListJson = oneJsonInfo["all-bytecode-info"];
         ReleaseAssert(bytecodeInfoListJson.is_array());
         for (size_t bytecodeDefOrd = 0; bytecodeDefOrd < bytecodeInfoListJson.size(); bytecodeDefOrd++)
         {
-            json& curBytecodeInfoJson = bytecodeInfoListJson[bytecodeDefOrd];
+            json_t& curBytecodeInfoJson = bytecodeInfoListJson[bytecodeDefOrd];
 
             ReleaseAssert(curBytecodeInfoJson.count("bytecode_variant_definition"));
             std::unique_ptr<BytecodeVariantDefinition> bytecodeDef = std::make_unique<BytecodeVariantDefinition>(curBytecodeInfoJson["bytecode_variant_definition"]);
@@ -26,7 +26,7 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
             allTraits[bytecodeId] = {
                 .m_opcodeOrdinal = bytecodeOrderMap.GetOpcode(bytecodeId),
                 .m_numInterpreterFusedIcVariants = bytecodeOrderMap.GetNumInterpreterFusedIcVariants(bytecodeId),
-                .m_numJitCallIC = bytecodeDef->GetNumCallICsInJitTier(),
+                .m_numJitCallIC = bytecodeDef->GetNumCallICsInBaselineJitTier(),
                 .m_jitCallIcTraitBaseOrdinal = static_cast<uint64_t>(-1),                       // compute later
                 .m_numGenericIcTotalEffectKinds = bytecodeDef->GetTotalGenericIcEffectKinds(),
                 .m_genericIcEffectTraitBaseOrdinal = static_cast<uint64_t>(-1)                  // compute later
@@ -77,7 +77,7 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
     // For sanity, make sure everything is the same after a save/load
     //
     {
-        json savedJson = r.SaveToJson();
+        json_t savedJson = r.SaveToJson();
         DeegenGlobalBytecodeTraitAccessor r2 = LoadFromJson(savedJson);
         ReleaseAssert(r.m_bytecodeOrder == r2.m_bytecodeOrder);
         ReleaseAssert(r2.m_traitSet.size() == r.m_traitSet.size());
@@ -96,16 +96,16 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
     return r;
 }
 
-json WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::SaveToJson()
+json_t WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::SaveToJson()
 {
-    std::vector<json> list;
+    std::vector<json_t> list;
     ReleaseAssert(m_bytecodeOrder.size() == m_traitSet.size());
     for (std::string& bytecodeId : m_bytecodeOrder)
     {
         ReleaseAssert(m_traitSet.count(bytecodeId));
         Trait trait = m_traitSet[bytecodeId];
 
-        json j;
+        json_t j;
         j["bytecode_id"] = bytecodeId;
         j["opcode_ord"] = trait.m_opcodeOrdinal;
         j["num_fused_ic_variants"] = trait.m_numInterpreterFusedIcVariants;
@@ -119,7 +119,7 @@ json WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::SaveToJson()
     return list;
 }
 
-DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::LoadFromJson(json& j)
+DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor::LoadFromJson(json_t& j)
 {
     std::vector<std::string> bytecodeOrder;
     std::unordered_map<std::string, Trait> allTraits;
@@ -127,7 +127,7 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
     ReleaseAssert(j.is_array());
     for (size_t ord = 0; ord < j.size(); ord++)
     {
-        json& info = j[ord];
+        json_t& info = j[ord];
         std::string bytecodeId;
         Trait trait;
         JSONCheckedGet(info, "bytecode_id", bytecodeId);

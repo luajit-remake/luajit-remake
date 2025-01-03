@@ -3,6 +3,8 @@
 #include "common.h"
 #include "misc_llvm_helper.h"
 #include "deegen_engine_tier.h"
+#include "deegen_jit_register_patch_analyzer.h"
+
 #include "llvm/BinaryFormat/ELF.h"
 
 namespace dast {
@@ -78,6 +80,8 @@ struct StencilSharedConstantDataObject
     //
     std::string WARN_UNUSED PrintDefinition();
 
+    static constexpr const char* x_varNamePrefix = "deegen_jit_stencil_shared_constant_data_object_";
+
     // A unique label assigned to this object for printing C++ code
     //
     size_t m_uniqueLabel;
@@ -137,6 +141,11 @@ struct RelocationRecord
         , m_sectionRef()
     { }
 
+    bool Is64Bit() const
+    {
+        return m_relocationType == llvm::ELF::R_X86_64_64;
+    }
+
     // One of the following: R_X86_64_PLT32, R_X86_64_PC32, R_X86_64_64, R_X86_64_32S, R_X86_64_32
     //
     uint64_t m_relocationType;
@@ -175,6 +184,7 @@ struct StencilPrivateDataObject
 
 class CPRuntimeConstantNodeBase;
 class BytecodeVariantDefinition;
+class JitImplCreatorBase;
 
 struct DeegenStencilCodegenResult
 {
@@ -196,6 +206,10 @@ struct DeegenStencilCodegenResult
     std::vector<CondBrLatePatchRecord> m_condBrFixupOffsetsInSlowPath;
     std::vector<CondBrLatePatchRecord> m_condBrFixupOffsetsInDataSec;
 
+    EncodedStencilRegPatchStream m_fastPathRegPatches;
+    EncodedStencilRegPatchStream m_slowPathRegPatches;
+    EncodedStencilRegPatchStream m_icPathRegPatches;
+
     std::vector<bool> m_fastPathRelocMarker;
     std::vector<bool> m_slowPathRelocMarker;
     std::vector<bool> m_icPathRelocMarker;
@@ -208,7 +222,21 @@ struct DeegenStencilCodegenResult
     static constexpr const char* x_icPathCodegenFuncName = "deegen_do_codegen_icpath";
     static constexpr const char* x_dataSecCodegenFuncName = "deegen_do_codegen_datasec";
 
-    // Return a LLVM module that contains actually linkable codegen logic
+    bool WARN_UNUSED NeedRegPatchPhase()
+    {
+        if (m_isForIcLogicExtraction)
+        {
+            return !m_icPathRegPatches.IsEmpty();
+        }
+        else
+        {
+            return !m_fastPathRegPatches.IsEmpty() || !m_slowPathRegPatches.IsEmpty();
+        }
+    }
+
+    // Return a LLVM module that contains actually linkable codegen logic (the patch functions for fast/slow/ic path)
+    // Note that the generated logic does not do reg patching: caller is responsible for doing it afterwards!
+    //
     // 'originModule' should be the original module where the stencil object file is compiled from
     //
     std::unique_ptr<llvm::Module> WARN_UNUSED GenerateCodegenLogicLLVMModule(llvm::Module* originModule, const std::string& cppStorePath = "");
@@ -216,8 +244,7 @@ struct DeegenStencilCodegenResult
     // Create LLVM logic that decodes the SlowPathData and return the bytecode operand vector expected by the codegen function
     // The vector may contain nullptr, in which case caller should assert that the argument is indeed unused by the codegen function, and pass undef instead
     //
-    static std::vector<llvm::Value*> WARN_UNUSED BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier engineTier,
-                                                                                            BytecodeVariantDefinition* bytecodeDef,
+    static std::vector<llvm::Value*> WARN_UNUSED BuildBytecodeOperandVectorFromSlowPathData(JitImplCreatorBase* ifi,
                                                                                             llvm::Value* slowPathData,
                                                                                             llvm::Value* slowPathDataOffset,
                                                                                             llvm::Value* codeBlock32,
@@ -237,23 +264,45 @@ struct DeegenStencil
     std::vector<StencilSharedConstantDataObject*> m_sharedDataObjs;
     std::vector<uint8_t> m_fastPathCode;
     std::vector<RelocationRecord> m_fastPathRelos;
+    std::vector<StencilRegRenamePatchItem> m_fastPathRegPatches;
     std::vector<uint8_t> m_slowPathCode;
     std::vector<RelocationRecord> m_slowPathRelos;
+    std::vector<StencilRegRenamePatchItem> m_slowPathRegPatches;
     std::vector<uint8_t> m_icPathCode;
     std::vector<RelocationRecord> m_icPathRelos;
+    std::vector<StencilRegRenamePatchItem> m_icPathRegPatches;
+
     StencilPrivateDataObject m_privateDataObject;
     using SectionToPdoOffsetMapTy = std::unordered_map<std::string /*secName*/, uint64_t /*offset*/>;
     SectionToPdoOffsetMapTy m_sectionToPdoOffsetMap;
     std::unordered_map<std::string, uint64_t> m_labelDistanceComputations;
     llvm::Triple m_triple;
     bool m_isForIcLogicExtraction;
+    // This is always false for IC stencils
+    //
+    bool m_isLastStencilInBytecode;
+    bool m_hasRegPatchInfo;
+    // If reg alloc is enabled, a bitmask denoting the set of FPU regs that showed up in the stencil
+    //
+    uint64_t m_usedFpuRegs;
+    // nullptr if reg alloc is not enabled
+    //
+    StencilRegisterFileContext* m_regCtxUsedForRegParsing;
+    // The list of runtime function names called by the stencil, only populated if ParseRegisterPatches is called
+    //
+    std::set<std::string> m_rtCallFnNamesForRegAllocEnabledStencil;
 
     // Prints a C++ file that defines 3 functions 'deegen_do_codegen_[fastpath/slowpath/datasec]' with the following parameters
     //     uint8_t* destAddr,
     //     uint64_t fastPathAddr,
     //     uint64_t slowPathAddr,
+    //     uint64_t icPathAddr,
+    //     uint64_t icDataAddr,
     //     uint64_t dataSecAddr,
+    //     special placeholder ords 100 ~ 199
     //     N * int64_t bytecodeValXX
+    //     M * int64_t icStateValXXX
+    //     reserved placeholder ords (placeholder ords >=10000)
     //
     // Note that the functions only contain the patch logic, not the copy logic. This is because we may need to
     // merge multiple stencils into one, and it turns out that LLVM optimizer is not smart enough to merge multiple
@@ -263,21 +312,48 @@ struct DeegenStencil
     // All of those ordinals must be >= 10000 to avoid interfering with normal placeholders.
     //
     DeegenStencilCodegenResult WARN_UNUSED PrintCodegenFunctions(
-        bool mayAttemptToEliminateJmpToFallthrough,
         size_t numBytecodeOperands,
         size_t numGenericIcTotalCaptures,
         const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
         const std::vector<size_t>& extraPlaceholderOrds = {});
 
-    static DeegenStencil WARN_UNUSED ParseMainLogic(llvm::LLVMContext& ctx, const std::string& objFile)
+    // This value must be kept in sync with the implementation of PrintCodegenFunctions
+    //
+    static constexpr uint32_t x_cgFnArgOrdStartForSpecialPlaceholder = 6;
+
+    static constexpr uint32_t x_cgFnNumSpecialPlaceholders = 5;
+    static constexpr std::array<size_t, x_cgFnNumSpecialPlaceholders> x_cgFnSpecialPlaceholdersList = {
+        100, 101, 103, 104, 105
+    };
+
+    static uint32_t WARN_UNUSED GetArgOrdForSpecialPlaceholderInCgFn(size_t ord)
     {
-        return ParseImpl(ctx, objFile, false /*isExtractIcLogic*/, {} /*mainLogicPdoLayout*/);
+        ReleaseAssert(x_cgFnSpecialPlaceholdersList.size() == x_cgFnNumSpecialPlaceholders);
+        for (uint32_t i = 0; i < x_cgFnNumSpecialPlaceholders; i++)
+        {
+            if (x_cgFnSpecialPlaceholdersList[i] == ord)
+            {
+                return x_cgFnArgOrdStartForSpecialPlaceholder + i;
+            }
+        }
+        ReleaseAssert(false);
+    }
+
+    static DeegenStencil WARN_UNUSED ParseMainLogic(llvm::LLVMContext& ctx, bool isLastStencilInBytecode, const std::string& objFile)
+    {
+        return ParseImpl(ctx, objFile, false /*isExtractIcLogic*/, isLastStencilInBytecode, {} /*mainLogicPdoLayout*/);
     }
 
     static DeegenStencil WARN_UNUSED ParseIcLogic(llvm::LLVMContext& ctx, const std::string& objFile, const SectionToPdoOffsetMapTy& mainLogicPdoOffsetMap)
     {
-        return ParseImpl(ctx, objFile, true /*isExtractIcLogic*/, mainLogicPdoOffsetMap);
+        return ParseImpl(ctx, objFile, true /*isExtractIcLogic*/, false /*isLastStencilInBytecode*/, mainLogicPdoOffsetMap);
     }
+
+    // For main logic, updates fast/slow path code, and generate reg patches
+    // For IC logic, updates IC path code and generate reg patches
+    // Also populates m_usedFpuRegs
+    //
+    void ParseRegisterPatches(StencilRegisterFileContext* regCtx);
 
     uint64_t WARN_UNUSED RetrieveLabelDistanceComputationResult(const std::string& varName) const
     {
@@ -289,6 +365,7 @@ private:
     static DeegenStencil WARN_UNUSED ParseImpl(llvm::LLVMContext& ctx,
                                                const std::string& objFile,
                                                bool isExtractIcLogic,
+                                               bool isLastStencilInBytecode,
                                                SectionToPdoOffsetMapTy mainLogicPdoLayout);
 };
 
@@ -300,6 +377,21 @@ std::string WARN_UNUSED DumpStencilDisassemblyForAuditPurpose(
     bool isDataSection,
     const std::vector<uint8_t>& preFixupCode,
     const std::vector<bool>& isPartOfReloc,
+    const EncodedStencilRegPatchStream& regPatches,
+    StencilRegisterFileContext* regCtx,
     const std::string& linePrefix);
+
+// Same as above, but the simpler API for code that does not use reg alloc
+//
+inline std::string WARN_UNUSED DumpStencilDisassemblyForAuditPurpose(
+    llvm::Triple triple,
+    bool isDataSection,
+    const std::vector<uint8_t>& preFixupCode,
+    const std::vector<bool>& isPartOfReloc,
+    const std::string& linePrefix)
+{
+    return DumpStencilDisassemblyForAuditPurpose(
+        triple, isDataSection, preFixupCode, isPartOfReloc, {} /*regPatches*/, nullptr /*regCtx*/, linePrefix);
+}
 
 }   // namespace dast

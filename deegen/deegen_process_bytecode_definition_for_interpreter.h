@@ -16,7 +16,8 @@ struct ProcessBytecodeDefinitionForInterpreterResult
     std::vector<std::vector<std::string>> m_allExternCDeclarations;
     std::vector<std::pair<std::string /*auditFileName*/, std::string /*content*/>> m_auditFiles;
     std::string m_generatedHeaderFile;
-    json m_bytecodeInfoJson;
+    json_t m_bytecodeInfoJson;
+    json_t m_dfgVariantInfoJson;
 };
 
 ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module);

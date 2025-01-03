@@ -77,11 +77,47 @@ static void RunAsmHotColdSplittingPass(X64AsmFile* file /*inout*/,
 retry:
             while (line < curBlock->m_lines.size())
             {
+                bool canDetermineHotOrCold = false;
+                bool isColdBlock = false;
+
                 if (curBlock->m_lines[line].m_originCertain != nullptr)
                 {
+                    canDetermineHotOrCold = true;
                     llvm::BasicBlock* originBB = curBlock->m_lines[line].m_originCertain->getParent();
                     ReleaseAssert(originBB != nullptr);
-                    if (llvmColdBBSet.count(originBB))
+                    isColdBlock = llvmColdBBSet.count(originBB);
+                }
+
+                if (line + 1 == curBlock->m_lines.size())
+                {
+                    X64AsmLine& asmLine = curBlock->m_lines[line];
+                    if (asmLine.IsDirectUnconditionalJumpInst() && asmLine.HasDeegenTailCallAnnotation())
+                    {
+                        std::string tailCallDest = asmLine.GetWord(1);
+
+                        // This is a tail call, try to figure out if this is a slow path tail call
+                        // This is ugly, but for now..
+                        //
+                        if (tailCallDest.starts_with("__deegen_bytecode_") ||
+                            tailCallDest.starts_with("__deegen_baseline_jit_") ||
+                            tailCallDest.starts_with("__deegen_dfg_jit_"))
+                        {
+                            if (tailCallDest.find("_slow_path_") != std::string::npos ||
+                                tailCallDest.find("_quickening_slowpath") != std::string::npos)
+                            {
+                                // If LLVM also has something to say, it must also be claiming that this is cold
+                                //
+                                ReleaseAssertImp(canDetermineHotOrCold, isColdBlock);
+                                canDetermineHotOrCold = true;
+                                isColdBlock = true;
+                            }
+                        }
+                    }
+                }
+
+                if (canDetermineHotOrCold)
+                {
+                    if (isColdBlock)
                     {
                         if (seenHotBB)
                         {
@@ -237,7 +273,7 @@ retry:
 //
 static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* file /*inout*/,
                                                                     uint32_t locIdent,
-                                                                    const std::string& fnNameForDebug,
+                                                                    [[maybe_unused]] const std::string& fnNameForDebug,
                                                                     const std::string& fallthroughPlaceholderName,
                                                                     std::unordered_set<std::string> blocksMustNotSplit)
 {
@@ -246,14 +282,39 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
         return;
     }
 
+    if (file->m_blocks.size() == 0)
+    {
+        return;
+    }
+
+    // If the last line is already a "JMP fallthrough", nothing to do
+    //
+    {
+        X64AsmBlock* block = file->m_blocks.back();
+        ReleaseAssert(block->m_lines.size() > 0);
+        if (block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
+        {
+            return;
+        }
+    }
+
     X64AsmBlock* targetBlock = nullptr;
     size_t targetBlockOrd = static_cast<size_t>(-1);
     for (size_t i = 0; i < file->m_blocks.size(); i++)
     {
         X64AsmBlock* block = file->m_blocks[i];
+        bool containsLocIdent = false;
         for (X64AsmLine& line : block->m_lines)
         {
             if (line.m_rawLocIdent == locIdent)
+            {
+                containsLocIdent = true;
+                break;
+            }
+        }
+        if (containsLocIdent)
+        {
+            if (block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
             {
                 targetBlock = block;
                 targetBlockOrd = i;
@@ -281,23 +342,105 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
         }
     }
 
+    // If we still can't find a candidate, try to look for a 'JCC fallthrough; JMP XXX' pattern.
+    // If so, we can rewrite it to 'JNCC XXX; JMP fallthrough' and proceed with the transformation
+    //
+    // We record the place we did this rewrite, so if the transformation fails,
+    // we can undo the rewrite so that we only modify the assembly if we are able to achieve something useful
+    //
+    size_t jccRewriteBlockOrd = static_cast<size_t>(-1);
     if (targetBlock == nullptr)
     {
-        // If we still can't find a candidate, all of the candidates should have been moved to slow path.
-        // This is kinda weird but theoretically possible. In this case, just skip this optimization.
-        //
-        bool foundInSlowPath = false;
-        for (size_t i = 0; i < file->m_slowpath.size(); i++)
+        auto tryJccRewrite = [&](size_t blockOrd) WARN_UNUSED -> bool
         {
-            X64AsmBlock* block = file->m_slowpath[i];
-            ReleaseAssert(block->m_lines.size() > 0);
-            if (block->m_lines.back().IsDirectUnconditionalJumpInst() && block->m_lines.back().GetWord(1) == fallthroughPlaceholderName)
+            ReleaseAssert(blockOrd < file->m_blocks.size());
+            X64AsmBlock* block = file->m_blocks[blockOrd];
+            if (block->m_lines.size() < 2)
             {
-                foundInSlowPath = true;
-                break;
+                return false;
+            }
+            X64AsmLine& terminator = block->m_lines.back();
+            X64AsmLine& lineBeforeTerm = block->m_lines[block->m_lines.size() - 2];
+            if (terminator.IsDirectUnconditionalJumpInst() &&
+                lineBeforeTerm.IsConditionalJumpInst() &&
+                lineBeforeTerm.GetWord(1) == fallthroughPlaceholderName)
+            {
+                ReleaseAssert(terminator.NumWords() == 2 && lineBeforeTerm.NumWords() == 2);
+                // This rewrite is only correct if JMP follows immediately by JCC.
+                // But the JMP instruction may have a pile of prefix texts (that are not normal assembly instructions).
+                // I think this is normally harmless since these are usually harmless directives. I can only think of an edge case
+                // where it contains ".byte" instructions (which we treat as opaque prefix bytes).
+                // For sanity, check this case and do not proceed if the word ".byte" is found. Hopefully this is good enough..
+                //
+                if (terminator.m_prefixingText.find(".byte ") != std::string::npos)
+                {
+                    return false;
+                }
+
+                lineBeforeTerm.FlipConditionalJumpCondition();
+                std::swap(lineBeforeTerm.GetWord(1), terminator.GetWord(1));
+
+                block->m_endsWithJmpToLocalLabel = false;
+
+                ReleaseAssert(jccRewriteBlockOrd == static_cast<size_t>(-1));
+                ReleaseAssert(targetBlock == nullptr && targetBlockOrd == static_cast<size_t>(-1));
+                jccRewriteBlockOrd = blockOrd;
+                targetBlock = block;
+                targetBlockOrd = blockOrd;
+
+                file->Validate();
+
+                return true;
+            }
+            return false;
+        };
+
+        // Try to use the block that corresponds to the line hint if possible
+        //
+        for (size_t i = 0; i < file->m_blocks.size(); i++)
+        {
+            X64AsmBlock* block = file->m_blocks[i];
+            bool containsLocIdent = false;
+            for (X64AsmLine& line : block->m_lines)
+            {
+                if (line.m_rawLocIdent == locIdent)
+                {
+                    containsLocIdent = true;
+                    break;
+                }
+            }
+            if (containsLocIdent)
+            {
+                if (tryJccRewrite(i))
+                {
+                    break;
+                }
             }
         }
-        ReleaseAssert(foundInSlowPath);
+
+        // If the above fails, try any block
+        //
+        if (targetBlock == nullptr)
+        {
+            for (size_t i = 0; i < file->m_blocks.size(); i++)
+            {
+                if (tryJccRewrite(i))
+                {
+                    break;
+                }
+            }
+        }
+
+        ReleaseAssertIff(targetBlock != nullptr, jccRewriteBlockOrd != static_cast<size_t>(-1));
+    }
+
+    if (targetBlock == nullptr)
+    {
+        // If we still can't find a candidate, just skip this optimization.
+        //
+        //fprintf(stderr, "[NOTE] Failed to rewrite JIT stencil to eliminate jmp to fallthrough "
+        //                "because we cannot find a 'JMP fallthrough' or a qualifying 'JCC fallthrough' instruction "
+        //                "to do the rewrite (function name = %s).\n", fnNameForDebug.c_str());
         return;
     }
 
@@ -446,15 +589,45 @@ static void AttemptToTransformDispatchToNextBytecodeIntoFallthrough(X64AsmFile* 
 
         if (curBlockOrd == 0)
         {
-            fprintf(stderr, "[NOTE] Failed to rewrite JIT stencil to eliminate jmp to fallthrough (function name = %s).\n", fnNameForDebug.c_str());
-            return;
+            //fprintf(stderr, "[NOTE] Failed to rewrite JIT stencil to eliminate jmp to fallthrough (function name = %s).\n", fnNameForDebug.c_str());
+            break;
         }
 
         curBlockOrd--;
     }
+
+    // Having reached here, the transform has failed
+    // If we did the JCC rewrite, undo it so we don't change the assembly in any way
+    //
+    if (jccRewriteBlockOrd != static_cast<size_t>(-1))
+    {
+        ReleaseAssert(jccRewriteBlockOrd < file->m_blocks.size());
+        X64AsmBlock* block = file->m_blocks[jccRewriteBlockOrd];
+        ReleaseAssert(block->m_lines.size() >= 2);
+
+        X64AsmLine& terminator = block->m_lines.back();
+        X64AsmLine& lineBeforeTerm = block->m_lines[block->m_lines.size() - 2];
+        ReleaseAssert(terminator.NumWords() == 2 && lineBeforeTerm.NumWords() == 2);
+        ReleaseAssert(terminator.IsDirectUnconditionalJumpInst() && terminator.GetWord(1) == fallthroughPlaceholderName);
+        ReleaseAssert(lineBeforeTerm.IsConditionalJumpInst());
+
+        lineBeforeTerm.FlipConditionalJumpCondition();
+        std::swap(lineBeforeTerm.GetWord(1), terminator.GetWord(1));
+
+        if (file->m_labelNormalizer.QueryLabelExists(terminator.GetWord(1)))
+        {
+            block->m_endsWithJmpToLocalLabel = true;
+            block->m_terminalJmpTargetLabel = file->m_labelNormalizer.GetNormalizedLabel(terminator.GetWord(1));
+        }
+        else
+        {
+            block->m_endsWithJmpToLocalLabel = false;
+        }
+    }
 }
 
-DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePhase(llvm::Function* f, const std::string& fallthroughPlaceholderName)
+DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePhase(
+    llvm::Function* f, bool isLastStencilInBytecode, const std::string& fallthroughPlaceholderName)
 {
     using namespace llvm;
     DeegenStencilLoweringPass r;
@@ -465,7 +638,7 @@ DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePha
     LoopInfo li(dom);
     BranchProbabilityInfo bpi(*f, li);
     BlockFrequencyInfo bfi(*f, bpi, li);
-    uint64_t entryFreq = bfi.getEntryFreq();
+    uint64_t entryFreq = bfi.getEntryFreq().getFrequency();
     ReleaseAssert(entryFreq != 0);
 
     auto getBBFreq = [&](BasicBlock* bb) WARN_UNUSED -> double
@@ -492,6 +665,8 @@ DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePha
 
     r.m_diInfo = InjectedMagicDiLocationInfo::RunOnFunction(f);
 
+    r.m_isLastStencilInBytecode = isLastStencilInBytecode;
+    r.m_shouldAssertNoGenericIcWithInlineSlab = false;
     r.m_locIdentForJmpToFallthroughCandidate = 0;
     r.m_nextBytecodeFallthroughPlaceholderName = fallthroughPlaceholderName;
 
@@ -544,8 +719,10 @@ DeegenStencilLoweringPass WARN_UNUSED DeegenStencilLoweringPass::RunIrRewritePha
     return r;
 }
 
-void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
+void DeegenStencilLoweringPass::ParseAsmFile(const std::string& asmFile)
 {
+    ReleaseAssert(m_rawInputFileForAudit.get() == nullptr && m_workFile.get() == nullptr);
+
     std::unique_ptr<X64AsmFile> fileHolder = X64AsmFile::ParseFile(asmFile, m_diInfo);
     X64AsmFile* file = fileHolder.get();
     m_rawInputFileForAudit = file->Clone();
@@ -555,17 +732,27 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     //
     DeegenAsmCfg::AnalyzeIndirectBranch(file, m_diInfo.GetFunc(), false /*addDebugComment*/);
 
+    file->Validate();
+
+    m_workFile = std::move(fileHolder);
+}
+
+void DeegenStencilLoweringPass::RunAsmRewritePhase()
+{
+    X64AsmFile* file = m_workFile.get();
+    ReleaseAssert(file != nullptr);
+
     // Lower the Call IC asm magic
     //
-    using CallIcAsmTransformResult = DeegenCallIcLogicCreator::BaselineJitAsmTransformResult;
-    std::vector<CallIcAsmTransformResult> callICs = DeegenCallIcLogicCreator::DoBaselineJitAsmTransform(file);
+    using CallIcAsmTransformResult = DeegenCallIcLogicCreator::JitAsmTransformResult;
+    std::vector<CallIcAsmTransformResult> callICs = DeegenCallIcLogicCreator::DoJitAsmTransform(file);
 
     file->Validate();
 
     // Lower the Generic IC asm magic
     //
-    using GenericIcAsmTransformResult = AstInlineCache::BaselineJitAsmTransformResult;
-    std::vector<GenericIcAsmTransformResult> genericICs = AstInlineCache::DoAsmTransformForBaselineJit(file);
+    using GenericIcAsmTransformResult = AstInlineCache::JitAsmTransformResult;
+    std::vector<GenericIcAsmTransformResult> genericICs = AstInlineCache::DoAsmTransformForJit(file);
 
     // Collect all the IC entry labels (Call IC and Generic IC)
     // Note that the order here must agree with the order we extract IC snippets later in this function!
@@ -666,10 +853,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         file->Validate();
     }
 
-    // Attempt to transform the dispatch to next bytecode to a fallthrough. Note that:
+    // If this is the last stencil in the bytecode, it is worth to attempt to transform the dispatch to next bytecode to a fallthrough. Note that:
     // 1. After this step the CFG is invalidated.
     // 2. This transform may need to split a block into two. We must not do this to any of the SMC regions of the ICs.
     //
+    if (m_isLastStencilInBytecode && m_nextBytecodeFallthroughPlaceholderName != "")
     {
         std::unordered_set<std::string> blocksMustNotSplit;
         for (CallIcAsmTransformResult& item : callICs)
@@ -686,9 +874,104 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
                                                                 m_diInfo.GetFunc()->getName().str(),
                                                                 m_nextBytecodeFallthroughPlaceholderName,
                                                                 blocksMustNotSplit);
-        cfg.m_cfg.clear();
         file->Validate();
+
+        ReleaseAssert(file->m_blocks.size() > 0);
+
+        // Try to change all the "jmp fallthroughPlaceholder" to a direct jump to the end of the instruction stream
+        //
+        // Note that we cannot do this optimization if the bytecode has generic IC and the SMC region is at the tail position,
+        // as in that case the generic IC may have inline slab, thus the length of the SMC region right now is not final and may be changed later.
+        // This would change the length of the stencil and invalidate our jumps that hardcode the (wrong) length of the stencil!
+        //
+        bool mayHaveGenericIcWithInlineSlab = false;
+        for (GenericIcAsmTransformResult& item : genericICs)
+        {
+            ReleaseAssert(file->m_labelNormalizer.QueryLabelExists(item.m_labelForSMCRegion));
+            X64AsmBlock* smcBlock = file->FindBlockInFastPath(file->m_labelNormalizer.GetNormalizedLabel(item.m_labelForSMCRegion));
+            ReleaseAssert(smcBlock != nullptr);
+
+            X64AsmBlock* tailBlock = file->m_blocks.back();
+            if (smcBlock == tailBlock)
+            {
+                mayHaveGenericIcWithInlineSlab = true;
+            }
+            else
+            {
+                // Ugly: even if smcBlock is not tail block, we still must check if there's only a "jmp fallthrough" instruction after smcBlock,
+                // as it may be eliminated... Furthermore, only checking if there's one block exist after smcBlock is not correct as there may
+                // be multiple blocks but each contains only a fallthrough to the next block...
+                //
+                size_t smcBlockOrd = static_cast<size_t>(-1);
+                for (size_t blockOrd = 0; blockOrd < file->m_blocks.size(); blockOrd++)
+                {
+                    if (file->m_blocks[blockOrd] == smcBlock)
+                    {
+                        ReleaseAssert(smcBlockOrd == static_cast<size_t>(-1));
+                        smcBlockOrd = blockOrd;
+                    }
+                }
+                ReleaseAssert(smcBlockOrd != static_cast<size_t>(-1));
+                ReleaseAssert(smcBlockOrd + 1 < file->m_blocks.size());
+
+                size_t numEffectiveInsts = 0;
+                for (size_t blockOrd = smcBlockOrd + 1; blockOrd < file->m_blocks.size(); blockOrd++)
+                {
+                    numEffectiveInsts += file->m_blocks[blockOrd]->m_lines.size();
+                    if (file->IsTerminatorInstructionFallthrough(blockOrd)) { numEffectiveInsts--; }
+                }
+                ReleaseAssert(numEffectiveInsts > 0);
+                if (numEffectiveInsts == 1)
+                {
+                    ReleaseAssert(tailBlock->m_lines.size() == 1);
+                    if (tailBlock->m_lines.back().IsDirectUnconditionalJumpInst() &&
+                        tailBlock->m_lines.back().GetWord(1) == m_nextBytecodeFallthroughPlaceholderName)
+                    {
+                        mayHaveGenericIcWithInlineSlab = true;
+                    }
+                }
+            }
+        }
+
+        if (!mayHaveGenericIcWithInlineSlab)
+        {
+            // Caller logic will assert that the generic IC codegen agrees with us on this
+            //
+            m_shouldAssertNoGenericIcWithInlineSlab = true;
+
+            // Note that we have to keep the tail fallthrough jump if it exists (even if it will be removed
+            // by the later steps) to avoid edge cases such as empty blocks (or empty functions at all)..
+            //
+            // In fact, to simplify things (e.g., to avoid having jump to the end of the function, which our current X64AsmBlock model doesn't like),
+            // we will always add a "jmp fallthroughPlaceholder" if the fast path not already ends with one,
+            // then rewrite all the other "jmp fallthroughPlaceholder" to jump to that instruction instead.
+            // After later passes eliminate the tail jump, all the jumps will correctly point to the end of the fast path, as desired.
+            //
+            X64AsmBlock* newTailBlock = X64AsmBlock::Create(file, m_nextBytecodeFallthroughPlaceholderName);
+            ReleaseAssert(!newTailBlock->m_endsWithJmpToLocalLabel);
+            file->m_blocks.push_back(newTailBlock);
+            file->Validate();
+
+            // Rewrite all existing "jmp fallthroughPlaceholder" instructions to jump to the new tail block instead
+            //
+            for (X64AsmBlock* block : file->m_blocks)
+            {
+                if (block == newTailBlock) { continue; }
+
+                if (block->m_lines.back().IsDirectUnconditionalJumpInst() &&
+                    block->m_lines.back().GetWord(1) == m_nextBytecodeFallthroughPlaceholderName)
+                {
+                    ReleaseAssert(!block->m_endsWithJmpToLocalLabel);
+                    block->m_lines.back().GetWord(1) = newTailBlock->m_normalizedLabelName;
+                    block->m_endsWithJmpToLocalLabel = true;
+                    block->m_terminalJmpTargetLabel = newTailBlock->m_normalizedLabelName;
+                }
+            }
+            file->Validate();
+        }
     }
+
+    cfg.m_cfg.clear();
 
     // The call IC and generic IC's SMC block ends with a jump. The jump must not be eliminated to a fallthrough even if it happens to
     // jump to the immediate following block, because the jump is only a placeholder.
@@ -764,6 +1047,98 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
     }
 
     file->Validate();
+    file->AssertAllMagicRemoved();
+
+    // Compute the code metrics
+    // It should be better to move this pile of nonsense to the place that actually needs to compute it, but for now..
+    //
+    {
+        m_numInstructionsInFastPath = file->GetNumAssemblyInstructionsInFastPath();
+        m_numInstructionsInSlowPath = file->GetNumAssemblyInstructionsInSlowPath();
+
+        // Check whether an instruction is a stack operation
+        //
+        auto isInstructionStackOperation = [&](X64AsmLine& line) -> bool
+        {
+            if (!line.IsInstruction())
+            {
+                return false;
+            }
+            // A push/pop is a stack operation
+            //
+            std::string& instOp = line.GetWord(0);
+            if (instOp.starts_with("pop") && (instOp.length() <= 4 || instOp == "popfq"))
+            {
+                return true;
+            }
+            if (instOp.starts_with("push") && (instOp.length() <= 5 || instOp == "pushfq"))
+            {
+                return true;
+            }
+            // It turns out that LLVM will gracefully emit "X-byte Spill" / "X-byte Reload" comment
+            // for stack spills and reloads, for now let's just use this as an indication for other stack operations
+            //
+            if (line.m_trailingComments.find("-byte Spill") != std::string::npos ||
+                line.m_trailingComments.find("-byte Reload") != std::string::npos)
+            {
+                return true;
+            }
+            return false;
+        };
+
+        size_t numStackOps = 0;
+        size_t numStackPopBeforeTailCall = 0;
+
+        auto workForComponent = [&](std::vector<X64AsmBlock*>& blocks)
+        {
+            for (X64AsmBlock* block : blocks)
+            {
+                for (X64AsmLine& line : block->m_lines)
+                {
+                    if (isInstructionStackOperation(line))
+                    {
+                        numStackOps++;
+                    }
+                }
+
+                if (block->m_lines.size() >= 2)
+                {
+                    // Check if the last inst is a tail call
+                    //
+                    X64AsmLine& line1 = block->m_lines[block->m_lines.size() - 1];
+                    if ((line1.IsIndirectJumpInst() || line1.IsDirectUnconditionalJumpInst()) &&
+                        line1.HasDeegenTailCallAnnotation())
+                    {
+                        // Check if the second last inst is a pop
+                        //
+                        X64AsmLine& line2 = block->m_lines[block->m_lines.size() - 2];
+                        if (line2.GetWord(0) == "popq")
+                        {
+                            numStackPopBeforeTailCall++;
+                        }
+                    }
+                }
+            }
+        };
+
+        workForComponent(file->m_blocks);
+        m_numStackOperationsInFastPath = numStackOps;
+        m_numStackPopBeforeTailCallInFastPath = numStackPopBeforeTailCall;
+
+        numStackOps = 0;
+        numStackPopBeforeTailCall = 0;
+        workForComponent(file->m_slowpath);
+        m_numStackOperationsInSlowPath = numStackOps;
+        m_numStackPopBeforeTailCallInSlowPath = numStackPopBeforeTailCall;
+
+        numStackOps = 0;
+        numStackPopBeforeTailCall = 0;
+        workForComponent(file->m_icPath);
+        m_numTotalStackOperationsInIc = numStackOps;
+        m_numTotalStackPopBeforeTailCallInIc = numStackPopBeforeTailCall;
+    }
+
+    m_primaryPostTransformAsmFile = file->ToStringAndRemoveDebugInfo();
 
     auto getIcAsmFile = [&](std::vector<X64AsmBlock*> icLogic) WARN_UNUSED -> std::string
     {
@@ -778,14 +1153,10 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         return icFile->ToStringAndRemoveDebugInfo();
     };
 
-    file->Validate();
-    file->AssertAllMagicRemoved();
-    m_primaryPostTransformAsmFile = file->ToStringAndRemoveDebugInfo();
-
     // Important to extract IC after all transformation on primary ASM file has been executed,
     // as the IC ASM and the primary ASM's main logic must be EXACTLY in sync!
     //
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> callIcInfos;
+    std::vector<DeegenCallIcLogicCreator::JitAsmLoweringResult> callIcInfos;
 
     // The order of extracting IC snippets must agree with the order we collected the IC labels!
     //
@@ -806,6 +1177,8 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         callIcInfos.push_back({
             .m_directCallLogicAsm = dcAsm,
             .m_closureCallLogicAsm = ccAsm,
+            .m_directCallLogicAsmLineCount = dcLogic.GetNumAsmLines(),
+            .m_closureCallLogicAsmLineCount = ccLogic.GetNumAsmLines(),
             .m_symbolNameForSMCLabelOffset = item.m_symbolNameForSMCLabelOffset,
             .m_symbolNameForSMCRegionLength = item.m_symbolNameForSMCRegionLength,
             .m_symbolNameForCcIcMissLogicLabelOffset = item.m_symbolNameForCcIcMissLogicLabelOffset,
@@ -814,11 +1187,11 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
         });
     }
 
-    std::vector<AstInlineCache::BaselineJitAsmLoweringResult> genericIcInfos;
+    std::vector<AstInlineCache::JitAsmLoweringResult> genericIcInfos;
 
     for (GenericIcAsmTransformResult& item : genericICs)
     {
-        AstInlineCache::BaselineJitAsmLoweringResult info;
+        AstInlineCache::JitAsmLoweringResult info;
         for (const std::string& label : item.m_labelForEffects)
         {
             ReleaseAssert(offsetInIcEntryLabelList < icEntryLabelList.size());
@@ -827,6 +1200,7 @@ void DeegenStencilLoweringPass::RunAsmRewritePhase(const std::string& asmFile)
 
             ReleaseAssert(icLogic.m_blocks.size() > 0 && icLogic.m_blocks[0]->m_normalizedLabelName == label);
             info.m_icLogicAsm.push_back(getIcAsmFile(icLogic.m_blocks));
+            info.m_icLogicAsmLineCount.push_back(icLogic.GetNumAsmLines());
         }
 
         info.m_symbolNameForSMCLabelOffset = item.m_symbolNameForSMCLabelOffset;

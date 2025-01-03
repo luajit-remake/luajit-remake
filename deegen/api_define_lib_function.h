@@ -56,7 +56,7 @@ protected:
 
     TValue GetArg(size_t i)
     {
-        assert(i < GetNumArgs());
+        Assert(i < GetNumArgs());
         return m_stackBase[i];
     }
 

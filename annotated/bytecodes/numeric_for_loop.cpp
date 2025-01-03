@@ -25,7 +25,7 @@ static void NO_RETURN ForLoopInitSlowPath(TValue* base)
             {
                 ThrowError("'for' loop range must be a number");
             }
-            assert(r.fmt == STRSCAN_NUM);
+            Assert(r.fmt == STRSCAN_NUM);
             vals[i] = r.d;
             base[i] = TValue::Create<tDouble>(r.d);
         }
@@ -94,7 +94,7 @@ static void NO_RETURN ForLoopInitImpl(TValue* base)
         // Having reached here, we know 'step' is a not-NaN double value, and 'step > 0' is false.
         // So 'step <= 0' is true
         //
-        assert(step.As<tDouble>() <= 0);
+        Assert(step.As<tDouble>() <= 0);
 
         // See comment in the mirror branch
         //
@@ -128,8 +128,15 @@ DEEGEN_DEFINE_BYTECODE(ForLoopInit)
     Result(ConditionalBranch);
     Implementation(ForLoopInitImpl);
     Variant();
+    DfgVariant();
     DeclareReads(Range(Op("base"), 3));
-    DeclareWrites(Range(Op("base"), 4));
+    DeclareWrites(
+        Range(Op("base"), 4).TypeDeductionRule(
+            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
+            {
+                return x_typeMaskFor<tDouble>;
+            })
+    );
 }
 
 static void NO_RETURN ForLoopStepImpl(TValue* base)
@@ -147,7 +154,7 @@ static void NO_RETURN ForLoopStepImpl(TValue* base)
     //     '(vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1])'
     // can be optimized out.
     //
-    assert(!IsNaN(vals[2]));
+    Assert(!IsNaN(vals[2]));
 
     // Unfortunately we have to manually tail-duplicate the 'if', otherwise Clang would generate weird cmove code
     // (that indeed has one less branch, but should perform inferior in this specific case since the 'vals[2] > 0'
@@ -192,8 +199,20 @@ DEEGEN_DEFINE_BYTECODE(ForLoopStep)
     Implementation(ForLoopStepImpl);
     CheckForInterpreterTierUp(true);
     Variant();
+    DfgVariant();
     DeclareReads(Range(Op("base"), 3));
-    DeclareWrites(Range(Op("base"), 1), Range(Op("base") + 3, 1));
+    DeclareWrites(
+        Range(Op("base"), 1).TypeDeductionRule(
+            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
+            {
+                return x_typeMaskFor<tDouble>;
+            }),
+        Range(Op("base") + 3, 1).TypeDeductionRule(
+            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
+            {
+                return x_typeMaskFor<tDouble>;
+            })
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

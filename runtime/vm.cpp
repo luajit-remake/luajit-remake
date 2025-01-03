@@ -20,7 +20,7 @@ VM* WARN_UNUSED VM::Create()
     {
         uintptr_t ptr = reinterpret_cast<uintptr_t>(ptrVoid);
         uintptr_t alignedPtr = RoundUpToMultipleOf<x_vmLayoutAlignment>(ptr);
-        assert(alignedPtr >= ptr && alignedPtr % x_vmLayoutAlignment == 0 && alignedPtr - ptr < x_vmLayoutAlignment);
+        Assert(alignedPtr >= ptr && alignedPtr % x_vmLayoutAlignment == 0 && alignedPtr - ptr < x_vmLayoutAlignment);
 
         uintptr_t vmRangeStart = alignedPtr + x_vmLayoutAlignmentOffset;
 
@@ -35,7 +35,7 @@ VM* WARN_UNUSED VM::Create()
         {
             uintptr_t vmRangeEnd = vmRangeStart + x_vmLayoutLength;
             uintptr_t originalMapEnd = ptr + x_mmapLength;
-            assert(vmRangeEnd <= originalMapEnd);
+            Assert(vmRangeEnd <= originalMapEnd);
             if (originalMapEnd > vmRangeEnd)
             {
                 int r = munmap(reinterpret_cast<void*>(vmRangeEnd), originalMapEnd - vmRangeEnd);
@@ -46,7 +46,7 @@ VM* WARN_UNUSED VM::Create()
         ptrVoid = reinterpret_cast<void*>(vmRangeStart);
     }
 
-    assert(reinterpret_cast<uintptr_t>(ptrVoid) % x_vmLayoutAlignment == x_vmLayoutAlignmentOffset);
+    Assert(reinterpret_cast<uintptr_t>(ptrVoid) % x_vmLayoutAlignment == x_vmLayoutAlignmentOffset);
 
     bool success = false;
     void* unmapPtrOnFailure = ptrVoid;
@@ -63,7 +63,7 @@ VM* WARN_UNUSED VM::Create()
     // Map memory and initialize the VM struct
     //
     void* vmVoid = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptrVoid) + x_vmBaseOffset);
-    assert(reinterpret_cast<uintptr_t>(vmVoid) % x_vmLayoutAlignment == 0);
+    Assert(reinterpret_cast<uintptr_t>(vmVoid) % x_vmLayoutAlignment == 0);
     constexpr size_t sizeToMap = RoundUpToMultipleOf<x_pageSize>(sizeof(VM));
     {
         void* r = mmap(vmVoid, sizeToMap, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
@@ -72,7 +72,7 @@ VM* WARN_UNUSED VM::Create()
     }
 
     VM* vm = new (vmVoid) VM();
-    assert(vm == vmVoid);
+    Assert(vm == vmVoid);
     Auto(
         if (!success)
         {
@@ -147,7 +147,7 @@ bool WARN_UNUSED VM::InitializeVMBase()
 
 void __attribute__((__preserve_most__)) VM::BumpUserHeap()
 {
-    assert(m_userHeapCurPtr < m_userHeapPtrLimit);
+    Assert(m_userHeapCurPtr < m_userHeapPtrLimit);
     VM_FAIL_IF(m_userHeapCurPtr < -static_cast<intptr_t>(x_vmBaseOffset),
                "Resource limit exceeded: user heap overflowed %dGB memory limit.", static_cast<int>(x_vmUserHeapSize >> 30));
 
@@ -155,24 +155,24 @@ void __attribute__((__preserve_most__)) VM::BumpUserHeap()
     // TODO: consider allocating smaller sizes on the first few allocations
     //
     intptr_t newHeapLimit = m_userHeapCurPtr & (~static_cast<intptr_t>(x_allocationSize - 1));
-    assert(newHeapLimit <= m_userHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit < m_userHeapPtrLimit);
+    Assert(newHeapLimit <= m_userHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit < m_userHeapPtrLimit);
     size_t lengthToAllocate = static_cast<size_t>(m_userHeapPtrLimit - newHeapLimit);
-    assert(lengthToAllocate % x_pageSize == 0);
+    Assert(lengthToAllocate % x_pageSize == 0);
 
     uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(newHeapLimit);
     void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
     VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
                           "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-    assert(r == reinterpret_cast<void*>(allocAddr));
+    Assert(r == reinterpret_cast<void*>(allocAddr));
 
     m_userHeapPtrLimit = newHeapLimit;
-    assert(m_userHeapPtrLimit <= m_userHeapCurPtr);
-    assert(m_userHeapPtrLimit >= -static_cast<intptr_t>(x_vmBaseOffset));
+    Assert(m_userHeapPtrLimit <= m_userHeapCurPtr);
+    Assert(m_userHeapPtrLimit >= -static_cast<intptr_t>(x_vmBaseOffset));
 }
 
 void VM::BumpSystemHeap()
 {
-    assert(m_systemHeapCurPtr > m_systemHeapPtrLimit);
+    Assert(m_systemHeapCurPtr > m_systemHeapPtrLimit);
     constexpr uint32_t x_allocationSize = 65536;
 
     VM_FAIL_IF(m_systemHeapCurPtr > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) - x_allocationSize,
@@ -181,19 +181,19 @@ void VM::BumpSystemHeap()
     // TODO: consider allocating smaller sizes on the first few allocations
     //
     uint32_t newHeapLimit = RoundUpToMultipleOf<x_allocationSize>(m_systemHeapCurPtr);
-    assert(newHeapLimit >= m_systemHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit > m_systemHeapPtrLimit);
+    Assert(newHeapLimit >= m_systemHeapCurPtr && newHeapLimit % static_cast<int64_t>(x_pageSize) == 0 && newHeapLimit > m_systemHeapPtrLimit);
 
     size_t lengthToAllocate = static_cast<size_t>(newHeapLimit - m_systemHeapPtrLimit);
-    assert(lengthToAllocate % x_pageSize == 0);
+    Assert(lengthToAllocate % x_pageSize == 0);
 
     uintptr_t allocAddr = VMBaseAddress() + static_cast<uint64_t>(m_systemHeapPtrLimit);
     void* r = mmap(reinterpret_cast<void*>(allocAddr), lengthToAllocate, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
     VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
                           "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
-    assert(r == reinterpret_cast<void*>(allocAddr));
+    Assert(r == reinterpret_cast<void*>(allocAddr));
 
     m_systemHeapPtrLimit = newHeapLimit;
-    assert(m_systemHeapPtrLimit >= m_systemHeapCurPtr);
+    Assert(m_systemHeapPtrLimit >= m_systemHeapCurPtr);
 }
 
 int32_t WARN_UNUSED VM::SpdsAllocatePageSlowPath()
@@ -230,7 +230,7 @@ int32_t WARN_UNUSED VM::SpdsAllocatePageSlowPathImpl()
     // We allocate 4K, 8K, 16K, 32K first (the highest 4K is not used to prevent all kinds of overflowing issue)
     // After that we allocate 64K each time
     //
-    assert(m_spdsPageAllocLimit % static_cast<int32_t>(x_pageSize) == 0 && m_spdsPageAllocLimit % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
+    Assert(m_spdsPageAllocLimit % static_cast<int32_t>(x_pageSize) == 0 && m_spdsPageAllocLimit % static_cast<int32_t>(x_spdsAllocationPageSize) == 0);
     size_t lengthToAllocate = x_allocationSize;
     if (unlikely(m_spdsPageAllocLimit > -x_allocationSize))
     {
@@ -240,12 +240,12 @@ int32_t WARN_UNUSED VM::SpdsAllocatePageSlowPathImpl()
         }
         else
         {
-            assert(m_spdsPageAllocLimit < 0);
+            Assert(m_spdsPageAllocLimit < 0);
             lengthToAllocate = static_cast<size_t>(-m_spdsPageAllocLimit);
-            assert(lengthToAllocate <= x_allocationSize);
+            Assert(lengthToAllocate <= x_allocationSize);
         }
     }
-    assert(lengthToAllocate > 0 && lengthToAllocate % x_pageSize == 0 && lengthToAllocate % x_spdsAllocationPageSize == 0);
+    Assert(lengthToAllocate > 0 && lengthToAllocate % x_pageSize == 0 && lengthToAllocate % x_spdsAllocationPageSize == 0);
 
     VM_FAIL_IF(SubWithOverflowCheck(m_spdsPageAllocLimit, static_cast<int32_t>(lengthToAllocate), &m_spdsPageAllocLimit),
                "Resource limit exceeded: SPDS region overflowed 2GB memory limit.");
@@ -258,12 +258,12 @@ int32_t WARN_UNUSED VM::SpdsAllocatePageSlowPathImpl()
     // Allocate memory
     //
     uintptr_t allocAddr = VMBaseAddress() + SignExtendTo<uint64_t>(m_spdsPageAllocLimit);
-    assert(allocAddr % x_pageSize == 0 && allocAddr % x_spdsAllocationPageSize == 0);
+    Assert(allocAddr % x_pageSize == 0 && allocAddr % x_spdsAllocationPageSize == 0);
     void* r = mmap(reinterpret_cast<void*>(allocAddr), static_cast<size_t>(lengthToAllocate), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE | MAP_FIXED, -1, 0);
     VM_FAIL_WITH_ERRNO_IF(r == MAP_FAILED,
                           "Out of Memory: Allocation of length %llu failed", static_cast<unsigned long long>(lengthToAllocate));
 
-    assert(r == reinterpret_cast<void*>(allocAddr));
+    Assert(r == reinterpret_cast<void*>(allocAddr));
 
     // The first page is returned to caller
     //
@@ -285,7 +285,7 @@ int32_t WARN_UNUSED VM::SpdsAllocatePageSlowPathImpl()
         }
 
         int32_t lastPage = cur;
-        assert(lastPage == m_spdsPageAllocLimit + static_cast<int32_t>(lengthToAllocate));
+        Assert(lastPage == m_spdsPageAllocLimit + static_cast<int32_t>(lengthToAllocate));
 
         SpdsPutAllocatedPagesToFreeList(firstPage, lastPage);
     }
@@ -297,8 +297,8 @@ bool WARN_UNUSED VM::InitializeVMGlobalData()
     for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
     {
         m_stringNameForMetatableKind[i] = CreateStringObjectFromRawString(x_luaMetatableStringName[i], static_cast<uint32_t>(std::char_traits<char>::length(x_luaMetatableStringName[i])));
-        assert(m_stringNameForMetatableKind[i].As()->m_hashHigh == x_luaMetamethodHashes[i]);
-        assert(GetMetamethodOrdinalFromStringName(m_stringNameForMetatableKind[i].As()) == static_cast<int>(i));
+        Assert(m_stringNameForMetatableKind[i].As()->m_hashHigh == x_luaMetamethodHashes[i]);
+        Assert(GetMetamethodOrdinalFromStringName(m_stringNameForMetatableKind[i].As()) == static_cast<int>(i));
     }
 
     for (size_t i = 0; i < x_numInlineCapacitySteppings; i++)
@@ -468,8 +468,8 @@ HeapString* WARN_UNUSED ALWAYS_INLINE MaterializeMultiPieceString(VM* vm, Iterat
 
     // Assert that the provided length and hash value matches reality
     //
-    assert(curDst - ptr->m_string == static_cast<intptr_t>(slah.m_length));
-    assert(HashString(ptr->m_string, ptr->m_length) == slah.m_hashValue);
+    Assert(curDst - ptr->m_string == static_cast<intptr_t>(slah.m_length));
+    Assert(HashString(ptr->m_string, ptr->m_length) == slah.m_hashValue);
     return ptr;
 }
 
@@ -492,7 +492,7 @@ void VM::ExpandStringConserHashTableIfNeeded()
         return;
     }
 
-    assert(m_hashTable != nullptr && is_power_of_2(m_hashTableSizeMask + 1));
+    Assert(m_hashTable != nullptr && is_power_of_2(m_hashTableSizeMask + 1));
     VM_FAIL_IF(m_hashTableSizeMask >= (1U << 29),
                "Global string hash table has grown beyond 2^30 slots");
     uint32_t newSize = (m_hashTableSizeMask + 1) * 2;
@@ -579,8 +579,8 @@ next_slot:
 
     // The string is not found, insert it into the hash table
     //
-    assert(slotForInsertion != static_cast<uint32_t>(-1));
-    assert(StringHtCellValueIsNonExistentOrDeleted(m_hashTable[slotForInsertion]));
+    Assert(slotForInsertion != static_cast<uint32_t>(-1));
+    Assert(StringHtCellValueIsNonExistentOrDeleted(m_hashTable[slotForInsertion]));
 
     m_elementCount++;
     HeapString* element = MaterializeMultiPieceString(this, iterator, lenAndHash);
@@ -596,8 +596,8 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
 #ifndef NDEBUG
     for (size_t i = 0; i < len; i++)
     {
-        assert(start[i].IsPointer());
-        assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
+        Assert(start[i].IsPointer());
+        Assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
     }
 #endif
     struct Iterator
@@ -609,7 +609,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
 
         std::pair<const uint8_t*, uint32_t> GetAndAdvance()
         {
-            assert(m_cur < m_end);
+            Assert(m_cur < m_end);
             HeapString* e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
             m_cur++;
             return std::make_pair(static_cast<const uint8_t*>(e->m_string), e->m_length);
@@ -638,7 +638,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
 
         std::pair<const uint8_t*, uint32_t> GetAndAdvance()
         {
-            assert(m_cur < m_end);
+            Assert(m_cur < m_end);
             const uint8_t* ptr = reinterpret_cast<const uint8_t*>(m_cur->first);
             uint32_t len = static_cast<uint32_t>(m_cur->second);
             m_cur++;
@@ -658,11 +658,11 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
 UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(UserHeapPointer<HeapString> str1, TValue* start, size_t len)
 {
 #ifndef NDEBUG
-    assert(str1.As()->m_type == HeapEntityType::String);
+    Assert(str1.As()->m_type == HeapEntityType::String);
     for (size_t i = 0; i < len; i++)
     {
-        assert(start[i].IsPointer());
-        assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
+        Assert(start[i].IsPointer());
+        Assert(start[i].AsPointer().As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::String);
     }
 #endif
 
@@ -691,7 +691,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenation(
             }
             else
             {
-                assert(m_cur < m_end);
+                Assert(m_cur < m_end);
                 e = m_translator.TranslateToRawPtr(m_cur->AsPointer().As<HeapString>());
                 m_cur++;
             }
@@ -725,7 +725,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromRawString(cons
 
         std::pair<const void*, uint32_t> GetAndAdvance()
         {
-            assert(m_isFirst);
+            Assert(m_isFirst);
             m_isFirst = false;
             return std::make_pair(m_str, m_len);
         }
@@ -796,11 +796,11 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenationO
         coalescedStringLen = inputStringLen;
     }
 
-    assert(coalescedStringLen > 0 && coalescedStringLen % inputStringLen == 0);
+    Assert(coalescedStringLen > 0 && coalescedStringLen % inputStringLen == 0);
 #ifndef NDEBUG
     for (size_t i = 0; i < coalescedStringLen; i++)
     {
-        assert(coalescedStringPtr[i] == static_cast<uint8_t>(inputStringPtr[i % inputStringLen]));
+        Assert(coalescedStringPtr[i] == static_cast<uint8_t>(inputStringPtr[i % inputStringLen]));
     }
 #endif
 
@@ -819,7 +819,7 @@ UserHeapPointer<HeapString> WARN_UNUSED VM::CreateStringObjectFromConcatenationO
 
         std::pair<const void*, uint32_t> GetAndAdvance()
         {
-            assert(m_totalLen > 0);
+            Assert(m_totalLen > 0);
             uint32_t consume = std::min(m_len, m_totalLen);
             m_totalLen -= consume;
             return std::make_pair(m_ptr, consume);

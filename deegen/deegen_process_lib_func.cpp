@@ -1,5 +1,5 @@
 #include "deegen_process_lib_func.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "api_define_lib_function.h"
 #include "deegen_ast_throw_error.h"
 #include "runtime_utils.h"
@@ -154,7 +154,11 @@ void UserLibReturnAPI::DoLowering(DeegenLibFuncInstance* ifi)
 
     Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackBase", { stackbase }, m_origin);
 
-    InterpreterFunctionInterface::CreateDispatchToReturnContinuation(retAddr, ifi->GetCoroutineCtx(), stackbase, m_retRangeBegin, m_retRangeNum, m_origin);
+    ifi->GetFuncContext()->PrepareDispatch<ReturnContinuationInterface>()
+        .Set<RPV_StackBase>(stackbase)
+        .Set<RPV_RetValsPtr>(m_retRangeBegin)
+        .Set<RPV_NumRetVals>(m_retRangeNum)
+        .Dispatch(retAddr, m_origin);
 
     AssertInstructionIsFollowedByUnreachable(m_origin);
     Instruction* unreachableInst = m_origin->getNextNode();
@@ -194,28 +198,29 @@ void DeegenLibLowerThrowErrorAPIs(DeegenLibFuncInstance* ifi, llvm::Function* fu
         std::string demangledName = DemangleCXXSymbol(callInst->getCalledFunction()->getName().str());
         Value* errorObject = callInst->getArgOperand(1);
 
+        Value* errorObjectAsPtr = nullptr;
         Function* target;
         if (demangledName.starts_with("DeegenLibFuncCommonAPIs::ThrowError(TValue"))
         {
             ReleaseAssert(llvm_value_has_type<uint64_t>(errorObject));
             target = GetThrowTValueErrorDispatchTargetFunction(ifi->GetModule());
+            errorObjectAsPtr = new IntToPtrInst(errorObject, llvm_type_of<void*>(ctx), "", callInst /*insertBefore*/);
         }
         else
         {
             ReleaseAssert(demangledName.starts_with("DeegenLibFuncCommonAPIs::ThrowError(char const*"));
             ReleaseAssert(llvm_value_has_type<void*>(errorObject));
             target = GetThrowCStringErrorDispatchTargetFunction(ifi->GetModule());
-            errorObject = new PtrToIntInst(errorObject, llvm_type_of<uint64_t>(ctx), "", callInst /*insertBefore*/);
+            errorObjectAsPtr = errorObject;
         }
+        ReleaseAssert(errorObjectAsPtr != nullptr && llvm_value_has_type<void*>(errorObjectAsPtr));
 
-        InterpreterFunctionInterface::CreateDispatchToCallee(
-            target,
-            ifi->GetCoroutineCtx(),
-            ifi->GetStackBase(),
-            UndefValue::get(llvm_type_of<HeapPtr<void>>(ctx)),
-            errorObject /*numArgs repurposed as errorObj*/,
-            UndefValue::get(llvm_type_of<uint64_t>(ctx)),
-            callInst /*insertBefore*/);
+        ifi->GetFuncContext()->PrepareDispatch<FunctionEntryInterface>()
+            .Set<RPV_StackBase>(ifi->GetStackBase())
+            .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(UndefValue::get(llvm_type_of<void*>(ctx)))
+            .Set<RPV_NumArgsAsPtr>(errorObjectAsPtr)    // numArgs repurposed as errorObj
+            .Set<RPV_IsMustTailCall>(UndefValue::get(llvm_type_of<uint64_t>(ctx)))
+            .Dispatch(target, callInst /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(callInst);
         Instruction* unreachableInst = callInst->getNextNode();
@@ -259,13 +264,13 @@ void DeegenLibLowerCoroutineSwitchAPIs(DeegenLibFuncInstance* ifi, llvm::Functio
         ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
 
         Value* retAddr = CreateCallToDeegenCommonSnippet(ifi->GetModule(), "GetRetAddrFromStackBase", { dstStackBase }, callInst);
-        InterpreterFunctionInterface::CreateDispatchToReturnContinuation(
-            retAddr,
-            dstCoro,
-            dstStackBase,
-            dstStackBase /*retStart*/,
-            numArgs /*numRets*/,
-            callInst /*insertBefore*/);
+        ReturnContinuationInterface& dispatchCtx = ifi->GetFuncContext()->PrepareDispatch<ReturnContinuationInterface>();
+        dispatchCtx.RPV_CoroContext::ClearValue();
+        dispatchCtx.Set<RPV_CoroContext>(dstCoro)
+            .Set<RPV_StackBase>(dstStackBase)
+            .Set<RPV_RetValsPtr>(dstStackBase) /*retStart*/
+            .Set<RPV_NumRetVals>(numArgs)
+            .Dispatch(retAddr, callInst /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(callInst);
         Instruction* unreachableInst = callInst->getNextNode();
@@ -329,14 +334,18 @@ void DeegenLibLowerInPlaceCallAPIs(DeegenLibFuncInstance* ifi, llvm::Function* f
         Value* codePointer = ExtractValueInst::Create(codeBlockAndEntryPoint, { 1 /*idx*/ }, "", callInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(codePointer));
 
-        InterpreterFunctionInterface::CreateDispatchToCallee(
-            codePointer,
-            ifi->GetCoroutineCtx(),
-            argsBegin,
-            calleeCbHeapPtr,
-            numArgs,
-            CreateLLVMConstantInt<uint64_t>(ctx, 0) /*isTailCall*/,
-            callInst /*insertBefore*/);
+        ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(calleeCbHeapPtr));
+        Value* calleeCbHeapPtrAsPtr = new AddrSpaceCastInst(calleeCbHeapPtr, llvm_type_of<void*>(ctx), "", callInst);
+
+        ReleaseAssert(llvm_value_has_type<uint64_t>(numArgs));
+        Value* numArgsAsPtr = new IntToPtrInst(numArgs, llvm_type_of<void*>(ctx), "", callInst /*insertBefore*/);
+
+        ifi->GetFuncContext()->PrepareDispatch<FunctionEntryInterface>()
+            .Set<RPV_StackBase>(argsBegin)
+            .Set<RPV_NumArgsAsPtr>(numArgsAsPtr)
+            .Set<RPV_InterpCodeBlockHeapPtrAsPtr>(calleeCbHeapPtrAsPtr)
+            .Set<RPV_IsMustTailCall>(CreateLLVMConstantInt<uint64_t>(ctx, 0))
+            .Dispatch(codePointer, callInst /*insertBefore*/);
 
         AssertInstructionIsFollowedByUnreachable(callInst);
         Instruction* unreachableInst = callInst->getNextNode();
@@ -356,10 +365,10 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
     ReleaseAssert(m_target->getLinkage() == GlobalValue::ExternalLinkage);
     ReleaseAssert(!m_impl->empty());
     ReleaseAssert(m_impl->getLinkage() == GlobalValue::InternalLinkage);
-    ReleaseAssert(m_impl->hasFnAttribute(Attribute::AttrKind::NoReturn));
+    ReleaseAssert(m_impl->hasFnAttribute(Attribute::NoReturn));
 
-    ReleaseAssert(!m_impl->hasFnAttribute(Attribute::AttrKind::NoInline));
-    m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    ReleaseAssert(!m_impl->hasFnAttribute(Attribute::NoInline));
+    m_impl->addFnAttr(Attribute::AlwaysInline);
 
     {
         std::string funName = m_target->getName().str();
@@ -368,12 +377,19 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
         //
         m_target->setName(funName + "_tmp");
 
-        Function* wrapper = InterpreterFunctionInterface::CreateFunction(m_module, funName);
+        if (m_isReturnContinuation)
+        {
+            m_funcCtx = ExecutorFunctionContext::Create(DeegenEngineTier::Interpreter, false /*isJitCode*/, true /*isRetCont*/);
+        }
+        else
+        {
+            m_funcCtx = ExecutorFunctionContext::CreateForFunctionEntry(DeegenEngineTier::Interpreter);
+        }
+
+        Function* wrapper = m_funcCtx->CreateFunction(m_module, funName);
         ReleaseAssert(wrapper->getName() == funName);
 
-        CopyFunctionAttributes(wrapper, m_impl);
-        wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
-        wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
+        wrapper->addFnAttr(Attribute::NoReturn);
 
         {
             // Just sanity check that the fake function is never being called
@@ -396,22 +412,23 @@ DeegenLibFuncInstance::DeegenLibFuncInstance(llvm::Function* impl, llvm::Functio
     }
 
     BasicBlock* bb = BasicBlock::Create(ctx, "", m_target);
-    m_valuePreserver.Preserve(x_coroutineCtx, m_target->getArg(0));
+    m_valuePreserver.Preserve(x_coroutineCtx, m_funcCtx->GetValueAtEntry<RPV_CoroContext>());
 
     if (m_isReturnContinuation)
     {
-        Value* stackBase = CreateCallToDeegenCommonSnippet(m_module, "GetCallerStackBaseFromStackBase", { m_target->getArg(1) }, bb);
+        Value* stackBase = CreateCallToDeegenCommonSnippet(
+            m_module, "GetCallerStackBaseFromStackBase", { m_funcCtx->GetValueAtEntry<RPV_StackBase>() }, bb);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
-        m_valuePreserver.Preserve(x_retStart, m_target->getArg(5));
-        m_valuePreserver.Preserve(x_numRet, m_target->getArg(6));
+        m_valuePreserver.Preserve(x_retStart, m_funcCtx->GetValueAtEntry<RPV_RetValsPtr>());
+        m_valuePreserver.Preserve(x_numRet, m_funcCtx->GetValueAtEntry<RPV_NumRetVals>());
 
         ReleaseAssert(m_impl->arg_size() == 4);
         CallInst::Create(m_impl, { GetCoroutineCtx(), GetStackBase(), GetRetStart(), GetNumRet() }, "", bb);
     }
     else
     {
-        m_valuePreserver.Preserve(x_stackBase, m_target->getArg(1));
-        PtrToIntInst* numArgs = new PtrToIntInst(m_target->getArg(2), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
+        m_valuePreserver.Preserve(x_stackBase, m_funcCtx->GetValueAtEntry<RPV_StackBase>());
+        PtrToIntInst* numArgs = new PtrToIntInst(m_funcCtx->GetValueAtEntry<RPV_NumArgsAsPtr>(), llvm_type_of<uint64_t>(ctx), "" /*name*/, bb);
         m_valuePreserver.Preserve(x_numArgs, numArgs);
 
         ReleaseAssert(m_impl->arg_size() == 3);
@@ -434,7 +451,7 @@ void DeegenLibFuncInstance::DoLowering()
     DeegenLibLowerCoroutineSwitchAPIs(this, m_target);
     DeegenLibLowerInPlaceCallAPIs(this, m_target);
 
-    m_target->removeFnAttr(Attribute::AttrKind::NoReturn);
+    m_target->removeFnAttr(Attribute::NoReturn);
     m_valuePreserver.Cleanup();
 }
 
@@ -535,7 +552,7 @@ void DeegenLibFuncProcessor::DoLowering(llvm::Module* module)
         ReleaseAssert(!func->empty());
         ReleaseAssert(func->getLinkage() == GlobalValue::ExternalLinkage);
         ReleaseAssert(func->getCallingConv() == CallingConv::GHC);
-        ReleaseAssert(func->getFunctionType() == InterpreterFunctionInterface::GetType(module->getContext()));
+        ReleaseAssert(func->getFunctionType() == RegisterPinningScheme::GetFunctionType(module->getContext()));
     }
 
     DesugarAndSimplifyLLVMModule(module, DesugaringLevel::Top);

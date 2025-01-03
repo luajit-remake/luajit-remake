@@ -43,18 +43,29 @@ update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 120
 #update-alternatives --install /usr/bin/ld ld /usr/local/bin/mold 100
 update-alternatives --install /usr/bin/ld ld /usr/bin/x86_64-linux-gnu-ld 90
 
-# Checkout LLVM 15.0.3
+# Checkout LLVM 19.1.6
 #
 LLVM_SRC_DIR=/llvm-src
 mkdir $LLVM_SRC_DIR
 cd $LLVM_SRC_DIR
-git clone -b llvmorg-15.0.3 --depth 1 https://github.com/llvm/llvm-project.git
+git clone -b llvmorg-19.1.6 --depth 1 https://github.com/llvm/llvm-project.git
 
-# Apply our patch
-#
 cd $LLVM_SRC_DIR/llvm-project
 mv /llvm.patch llvm.patch
+mv /llvm_revert_a1b78fb.patch llvm_revert_a1b78fb.patch
+mv /llvm_slow_3ops_lea_option.patch llvm_slow_3ops_lea_option.patch
+
+# Apply our LLVM patches
+# The option to annotate indirect branch targets in assembly, and hacks for calling conventions
+#
 git apply llvm.patch
+# LLVM commit a1b78fb needs to reverted because it introduces bugs that 
+# causes __builtin_expect to not work correctly: https://github.com/llvm/llvm-project/issues/121105
+#
+git apply llvm_revert_a1b78fb.patch
+# Add an option to disable TuningSlow3OpsLEA
+#
+git apply llvm_slow_3ops_lea_option.patch
 
 # Build and install Clang+LLVM
 # Since we are already building Clang+LLVM by ourselves, take this chance to enable RTTI. 
@@ -70,8 +81,8 @@ cd $LLVM_SRC_DIR/llvm-project/build
 CC=clang-12 CXX=clang++-12 cmake -GNinja -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_RTTI=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS=clang ../llvm
 # Leave two CPUs idle so the system won't be irresponsible during the build
 #
-REQUIRES_RTTI=1 ninja -j$((`nproc`-2))
-REQUIRES_RTTI=1 ninja install
+CC=clang-12 CXX=clang++-12 REQUIRES_RTTI=1 ninja -j$((`nproc`-2))
+CC=clang-12 CXX=clang++-12 REQUIRES_RTTI=1 ninja install
 
 # Having built Clang+LLVM, we can now uninstall the system Clang compiler
 #

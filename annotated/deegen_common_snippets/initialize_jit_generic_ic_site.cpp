@@ -1,7 +1,5 @@
-#include "force_release_build.h"
-
 #include "define_deegen_common_snippet.h"
-#include "drt/baseline_jit_codegen_helper.h"
+#include "drt/jit_inline_cache_utils.h"
 
 static void DeegenSnippet_InitializeJitGenericIcSite(JitGenericInlineCacheSite* site)
 {

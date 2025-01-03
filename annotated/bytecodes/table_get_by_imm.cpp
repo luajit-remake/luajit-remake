@@ -17,7 +17,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_i
 //
 static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
 {
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     TableObject::GetMetatableResult gmr = TableObject::GetMetatable(base.As<tTable>());
     if (gmr.m_result.m_value != 0)
     {
@@ -38,7 +38,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_in
 //
 static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index)
 {
-    assert(!base.Is<tTable>());
+    Assert(!base.Is<tTable>());
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::Index);
     if (metamethod.Is<tNil>())
     {
@@ -51,7 +51,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue /*bc_base*/, int16_t /
 //
 static void NO_RETURN HandleMetatableSlowPath(TValue /*bc_base*/, int16_t /*bc_index*/, TValue base, int16_t index, TValue metamethod)
 {
-    assert(!metamethod.Is<tNil>());
+    Assert(!metamethod.Is<tNil>());
 
     // If 'metamethod' is a function, we should invoke the metamethod
     //
@@ -118,7 +118,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
                         TValue res = *(heapEntity->m_butterfly->UnsafeGetInVectorIndexAddr(index));
                         // We know that 'res' must not be nil thanks to the guarantee of continuous array, so no need to check metatable
                         //
-                        assert(!res.Is<tNil>());
+                        Assert(!res.Is<tNil>());
                         return std::make_pair(res, ResKind::NoMetatable);
                     }
                     else
@@ -153,7 +153,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    Assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {
@@ -175,7 +175,7 @@ static void NO_RETURN TableGetByImmImpl(TValue base, int16_t index)
             {
                 return ic->Effect([heapEntity, index, c_resKind]() {
                     IcSpecializeValueFullCoverage(c_resKind, ResKind::MayHaveMetatable, ResKind::NoMetatable);
-                    assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
+                    Assert(TCGet(heapEntity->m_arrayType).HasSparseMap());
                     auto [res, success] = TableObject::TryAccessIndexInVectorStorage(heapEntity, index);
                     if (success)
                     {
@@ -222,6 +222,12 @@ DEEGEN_DEFINE_BYTECODE(TableGetByImm)
     Result(BytecodeValue);
     Implementation(TableGetByImmImpl);
     Variant();
+    DfgVariant(Op("base").HasType<tTable>());
+    DfgVariant();
+    TypeDeductionRule(ValueProfile);
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

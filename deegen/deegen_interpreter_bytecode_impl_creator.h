@@ -24,7 +24,6 @@ public:
     static std::unique_ptr<InterpreterBytecodeImplCreator> WARN_UNUSED LowerOneComponent(BytecodeIrComponent& bic);
     static std::unique_ptr<llvm::Module> WARN_UNUSED DoLoweringForAll(BytecodeIrInfo& bi);
 
-    virtual llvm::Module* GetModule() const override { return m_module.get(); }
     llvm::Value* GetCondBrDest() const { return m_valuePreserver.Get(x_condBrDest); }
     llvm::Value* GetBytecodeMetadataPtr() const { return m_valuePreserver.Get(x_metadataPtr); }
     llvm::Value* GetInterpreterCodeBlock() const { return m_valuePreserver.Get(x_interpreterCodeBlock); }
@@ -38,7 +37,6 @@ private:
     void CreateWrapperFunction();
     void LowerGetBytecodeMetadataPtrAPI();
 
-    std::unique_ptr<llvm::Module> m_module;
     llvm::Function* m_impl;
     llvm::Function* m_wrapper;
 

@@ -1,34 +1,32 @@
-diff --git a/llvm/include/llvm/CodeGen/TargetInstrInfo.h b/llvm/include/llvm/CodeGen/TargetInstrInfo.h
-index 72f69f4c6..3d109a6d9 100644
---- a/llvm/include/llvm/CodeGen/TargetInstrInfo.h
-+++ b/llvm/include/llvm/CodeGen/TargetInstrInfo.h
-@@ -1208,6 +1208,8 @@ public:
-   /// even if it has glue.
-   virtual bool canCopyGluedNodeDuringSchedule(SDNode *N) const { return false; }
+diff --git a/llvm/include/llvm/CodeGen/MachineFunction.h b/llvm/include/llvm/CodeGen/MachineFunction.h
+index 6e7292abe..825b3c962 100644
+--- a/llvm/include/llvm/CodeGen/MachineFunction.h
++++ b/llvm/include/llvm/CodeGen/MachineFunction.h
+@@ -484,6 +484,8 @@ public:
+   struct CallSiteInfo {
+     /// Vector of call argument and its forwarding register.
+     SmallVector<ArgRegPair, 1> ArgRegPairs;
++    SmallVector<ArgRegPair, 1> RetRegPairs;
++    bool HasRetRegPairsInfo = false;
+   };
  
-+  virtual int getJumpTableIndex(const MachineInstr &MI) const { return -1; }
-+
- protected:
-   /// Target-dependent implementation for foldMemoryOperand.
-   /// Target-independent code in foldMemoryOperand will
+ private:
 diff --git a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
-index 32a10ad41..32a049ef8 100644
+index 2297b27ff..8e82129ca 100644
 --- a/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
 +++ b/llvm/lib/CodeGen/AsmPrinter/AsmPrinter.cpp
-@@ -125,6 +125,12 @@
+@@ -134,6 +134,10 @@ using namespace llvm;
  
- using namespace llvm;
- 
-+
-+static cl::opt<bool>
-+    AddIndirectBranchDestAnnotationForDeegen("add-indirect-branch-dest-annotation-for-deegen", cl::init(false), cl::Hidden,
-+                                            cl::desc("Add destination annotations to indirect branches for Deegen"));
-+
-+
  #define DEBUG_TYPE "asm-printer"
  
- const char DWARFGroupName[] = "dwarf";
-@@ -1490,6 +1496,35 @@ void AsmPrinter::emitFunctionBody() {
++static cl::opt<bool>
++    AddIndirectBranchDestAnnotationForDeegen("add-indirect-branch-dest-annotation-for-deegen", cl::init(false), cl::Hidden,
++                                             cl::desc("Add destination annotations to indirect branches for Deegen"));
++
+ // This is a replication of fields of object::PGOAnalysisMap::Features. It
+ // should match the order of the fields so that
+ // `object::PGOAnalysisMap::Features::decode(PgoAnalysisMapFeatures.getBits())`
+@@ -1743,6 +1747,76 @@ void AsmPrinter::emitFunctionBody() {
        if (isVerbose())
          emitComments(MI, OutStreamer->getCommentOS());
  
@@ -58,6 +56,47 @@ index 32a10ad41..32a049ef8 100644
 +                  annotationText += "}";
 +                  OutStreamer->AddComment(annotationText);
 +              }
++              if (MI.isCall()) 
++              {
++                  const auto& callSiteInfoMap = MF->getCallSitesInfo();
++                  auto it = callSiteInfoMap.find(&MI);
++                  if (it != callSiteInfoMap.end())
++                  {
++                      std::string annotationText = "__deegen_asm_annotation_call{";
++                      const TargetRegisterInfo* TRI = MF->getSubtarget().getRegisterInfo();
++                      {
++                          annotationText += "arg_regs[";
++                          for (const MachineFunction::ArgRegPair& argReg : it->second.ArgRegPairs) 
++                          {
++                              Register reg = argReg.Reg;
++                              if (!reg.isPhysical())
++                              {
++                                  fprintf(stderr, "Deegen AsmPrinter hack: Call reg is not physical!\n");
++                                  abort();
++                              }
++                              annotationText += std::string(TRI->getName(reg.asMCReg())) + ",";
++                          }
++                          annotationText += "]";
++                      }
++                      if (it->second.HasRetRegPairsInfo)
++                      {
++                          annotationText += "ret_regs[";
++                          for (const MachineFunction::ArgRegPair& argReg : it->second.RetRegPairs) 
++                          {
++                              Register reg = argReg.Reg;
++                              if (!reg.isPhysical())
++                              {
++                                  fprintf(stderr, "Deegen AsmPrinter hack: Call ret reg is not physical!\n");
++                                  abort();
++                              }
++                              annotationText += std::string(TRI->getName(reg.asMCReg())) + ",";
++                          }
++                          annotationText += "]";
++                      }
++                      annotationText += "}";
++                      OutStreamer->AddComment(annotationText);
++                  }
++              }
 +          }
 +      }
 +
@@ -65,123 +104,56 @@ index 32a10ad41..32a049ef8 100644
        case TargetOpcode::CFI_INSTRUCTION:
          emitCFIInstruction(MI);
 diff --git a/llvm/lib/Target/X86/X86CallingConv.td b/llvm/lib/Target/X86/X86CallingConv.td
-index 4dd8a6cdd..5a2c1fa5d 100644
+index 9ec68bfb8..ca822bedb 100644
 --- a/llvm/lib/Target/X86/X86CallingConv.td
 +++ b/llvm/lib/Target/X86/X86CallingConv.td
-@@ -705,9 +705,9 @@ def CC_X86_64_GHC : CallingConv<[
-   // Promote i8/i16/i32 arguments to i64.
-   CCIfType<[i8, i16, i32], CCPromoteToType<i64>>,
+@@ -715,7 +715,7 @@ def CC_X86_64_GHC : CallingConv<[
  
--  // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, SpLim
-+  // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, SpLim, RCX, RDX, R10, R11
+   // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, SpLim
    CCIfType<[i64],
 -            CCAssignToReg<[R13, RBP, R12, RBX, R14, RSI, RDI, R8, R9, R15]>>,
-+            CCAssignToReg<[R13, RBP, R12, RBX, R14, RSI, RDI, R8, R9, R15, RCX, RDX, R10, R11]>>,
++            CCAssignToReg<[R13, RBP, R12, RBX, R14, RSI, RDI, R8, R9, R15, R10, R11, RDX]>>,
  
    // Pass in STG registers: F1, F2, F3, F4, D1, D2
    CCIfType<[f32, f64, v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
-@@ -1154,14 +1154,14 @@ def CSR_64_CXX_TLS_Darwin_PE : CalleeSavedRegs<(add RBP)>;
- // CSRs that are handled explicitly via copies.
- def CSR_64_CXX_TLS_Darwin_ViaCopy : CalleeSavedRegs<(sub CSR_64_TLS_Darwin, RBP)>;
+@@ -1174,10 +1174,10 @@ def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RAX, RCX, RDX, RSI, RDI,
+ def CSR_Win64_RT_MostRegs : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
+                                                  (sequence "XMM%u", 6, 15))>;
  
--// All GPRs - except r11
--def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RAX, RCX, RDX, RSI, RDI,
-+// All GPRs - except r11, rax and rdx
-+def CSR_64_RT_MostRegs : CalleeSavedRegs<(add CSR_64, RCX, RSI, RDI,
-                                               R8, R9, R10)>;
- 
- // All registers - except r11
+-// All registers - except r11 and return registers.
 -def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
-+def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs, RAX, RDX,
++// All registers - except return registers.
++def CSR_64_RT_AllRegs     : CalleeSavedRegs<(add CSR_64_RT_MostRegs, R11,
                                                   (sequence "XMM%u", 0, 15))>;
 -def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs,
-+def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs, RAX, RDX,
++def CSR_64_RT_AllRegs_AVX : CalleeSavedRegs<(add CSR_64_RT_MostRegs, R11,
                                                   (sequence "YMM%u", 0, 15))>;
  
  def CSR_64_MostRegs : CalleeSavedRegs<(add RBX, RCX, RDX, RSI, RDI, R8, R9, R10,
-diff --git a/llvm/lib/Target/X86/X86InstrInfo.cpp b/llvm/lib/Target/X86/X86InstrInfo.cpp
-index 74ef831e1..613faece6 100644
---- a/llvm/lib/Target/X86/X86InstrInfo.cpp
-+++ b/llvm/lib/Target/X86/X86InstrInfo.cpp
-@@ -3252,6 +3252,68 @@ bool X86InstrInfo::analyzeBranchPredicate(MachineBasicBlock &MBB,
-   return true;
- }
+diff --git a/llvm/lib/Target/X86/X86ISelLoweringCall.cpp b/llvm/lib/Target/X86/X86ISelLoweringCall.cpp
+index f659c168b..f0eeb1d14 100644
+--- a/llvm/lib/Target/X86/X86ISelLoweringCall.cpp
++++ b/llvm/lib/Target/X86/X86ISelLoweringCall.cpp
+@@ -2543,6 +2543,22 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
  
-+static int getJumpTableIndexFromAddr(const MachineInstr &MI) {
-+    const MCInstrDesc &Desc = MI.getDesc();
-+    int MemRefBegin = X86II::getMemoryOperandNo(Desc.TSFlags);
-+    assert(MemRefBegin >= 0 && "instr should have memory operand");
-+    MemRefBegin += X86II::getOperandBias(Desc);
-+
-+    const MachineOperand &MO = MI.getOperand(MemRefBegin + X86::AddrDisp);
-+    if (!MO.isJTI())
-+        return -1;
-+
-+    return MO.getIndex();
-+}
-+
-+static int getJumpTableIndexFromReg(const MachineRegisterInfo &MRI,
-+                                    Register Reg) {
-+    if (!Reg.isVirtual())
-+        return -1;
-+    MachineInstr *MI = MRI.getUniqueVRegDef(Reg);
-+    if (MI == nullptr)
-+        return -1;
-+    unsigned Opcode = MI->getOpcode();
-+    if (Opcode != X86::LEA64r && Opcode != X86::LEA32r)
-+        return -1;
-+    return getJumpTableIndexFromAddr(*MI);
-+}
-+
-+int X86InstrInfo::getJumpTableIndex(const MachineInstr &MI) const {
-+    unsigned Opcode = MI.getOpcode();
-+    // Switch-jump pattern for non-PIC code looks like:
-+    //   JMP64m $noreg, 8, %X, %jump-table.X, $noreg
-+    if (Opcode == X86::JMP64m || Opcode == X86::JMP32m) {
-+        return getJumpTableIndexFromAddr(MI);
+   InGlue = Chain.getValue(1);
+   DAG.addNoMergeSiteInfo(Chain.getNode(), CLI.NoMerge);
++  
++  if (DAG.getTarget().Options.EmitCallSiteInfo)
++  {
++    CSInfo.HasRetRegPairsInfo = true;
++    SmallVector<CCValAssign, 16> RVLocs;
++    CCState CCInfoRet(CallConv, isVarArg, MF, RVLocs, *DAG.getContext());
++    CCInfoRet.AnalyzeCallResult(Ins, RetCC_X86);
++    for (unsigned I = 0, E = RVLocs.size(); I != E; ++I) 
++    {
++      CCValAssign &VA = RVLocs[I];
++      if (VA.isRegLoc()) 
++      {
++        CSInfo.RetRegPairs.emplace_back(VA.getLocReg(), I);
++      }
 +    }
-+    // The pattern for PIC code looks like:
-+    //   %0 = LEA64r $rip, 1, $noreg, %jump-table.X
-+    //   %1 = MOVSX64rm32 %0, 4, XX, 0, $noreg
-+    //   %2 = ADD64rr %1, %0
-+    //   JMP64r %2
-+    if (Opcode == X86::JMP64r || Opcode == X86::JMP32r) {
-+        Register Reg = MI.getOperand(0).getReg();
-+        if (!Reg.isVirtual())
-+            return -1;
-+
-+        const MachineFunction &MF = *MI.getParent()->getParent();
-+        const MachineRegisterInfo &MRI = MF.getRegInfo();
-+        MachineInstr *Add = MRI.getUniqueVRegDef(Reg);
-+        if (Add == nullptr)
-+            return -1;
-+
-+        if (Add->getOpcode() != X86::ADD64rr && Add->getOpcode() != X86::ADD32rr)
-+            return -1;
-+
-+        int JTI1 = getJumpTableIndexFromReg(MRI, Add->getOperand(1).getReg());
-+        if (JTI1 >= 0)
-+            return JTI1;
-+        int JTI2 = getJumpTableIndexFromReg(MRI, Add->getOperand(2).getReg());
-+        if (JTI2 >= 0)
-+            return JTI2;
-+    }
-+    return -1;
-+}
-+
- unsigned X86InstrInfo::removeBranch(MachineBasicBlock &MBB,
-                                     int *BytesRemoved) const {
-   assert(!BytesRemoved && "code size not handled");
-diff --git a/llvm/lib/Target/X86/X86InstrInfo.h b/llvm/lib/Target/X86/X86InstrInfo.h
-index 81729e361..abc387bcd 100644
---- a/llvm/lib/Target/X86/X86InstrInfo.h
-+++ b/llvm/lib/Target/X86/X86InstrInfo.h
-@@ -327,6 +327,8 @@ public:
-                      SmallVectorImpl<MachineOperand> &Cond,
-                      bool AllowModify) const override;
++  }
+   DAG.addCallSiteInfo(Chain.getNode(), std::move(CSInfo));
  
-+  int getJumpTableIndex(const MachineInstr &MI) const override;
-+
-   Optional<ExtAddrMode>
-   getAddrModeFromMemoryOp(const MachineInstr &MemI,
-                           const TargetRegisterInfo *TRI) const override;
+   // Save heapallocsite metadata.

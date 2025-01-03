@@ -1,4 +1,4 @@
-#include "force_release_build.h"
+#include "disable_assertions.h"
 
 #include "api_define_bytecode.h"
 #include "deegen_api.h"

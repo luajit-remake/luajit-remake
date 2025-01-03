@@ -48,7 +48,8 @@ GenerateFnEntryLogicArrayResult WARN_UNUSED GenerateBaselineJitFnEntryLogicArray
         r.m_infoList.push_back({
             .m_fastPathCodeLen = static_cast<uint16_t>(res.m_fastPathLen),
             .m_slowPathCodeLen = static_cast<uint16_t>(res.m_slowPathLen),
-            .m_dataSecCodeLen = static_cast<uint16_t>(res.m_dataSecLen)
+            .m_dataSecCodeLen = static_cast<uint16_t>(res.m_dataSecLen),
+            .m_emitterFn = nullptr
         });
         r.m_fnNameList.push_back(res.m_patchFnName);
 

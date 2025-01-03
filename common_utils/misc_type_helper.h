@@ -157,12 +157,24 @@ constexpr uint64_t offsetof_member_impl()
     using C = class_type_of_member_object_pointer_t<T>;
     using V = value_type_of_member_object_pointer_t<T>;
 
-    constexpr C* c = FOLD_CONSTEXPR(reinterpret_cast<C*>(0x4000));
-    constexpr V* v = FOLD_CONSTEXPR(&(c->*member_object_ptr));
+    if constexpr(!std::is_array_v<V>)
+    {
+        constexpr C* c = FOLD_CONSTEXPR(reinterpret_cast<C*>(0x4000));
+        constexpr V* v = FOLD_CONSTEXPR(&(c->*member_object_ptr));
 
-    constexpr uint64_t cu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(c));
-    constexpr uint64_t vu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(v));
-    return vu - cu;
+        constexpr uint64_t cu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(c));
+        constexpr uint64_t vu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(v));
+        return vu - cu;
+    }
+    else
+    {
+        constexpr C* c = FOLD_CONSTEXPR(reinterpret_cast<C*>(0x4000));
+        constexpr std::remove_extent_t<V>* v = FOLD_CONSTEXPR(c->*member_object_ptr);
+
+        constexpr uint64_t cu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(c));
+        constexpr uint64_t vu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(v));
+        return vu - cu;
+    }
 }
 
 }   // namespace internal
@@ -172,6 +184,9 @@ constexpr uint64_t offsetof_member_v = internal::offsetof_member_impl<member_obj
 
 template<auto member_object_ptr>
 using typeof_member_t = value_type_of_member_object_pointer_t<decltype(member_object_ptr)>;
+
+template<auto member_object_ptr>
+using classof_member_t = class_type_of_member_object_pointer_t<decltype(member_object_ptr)>;
 
 // The C++ placement-new is not type-safe: the pointer to 'new' is taken as a void*, so it will silently corrupt memory if
 // the pointer type does not match the object type (e.g. if you accidentally pass in a T** instead of T*). Fix this problem.

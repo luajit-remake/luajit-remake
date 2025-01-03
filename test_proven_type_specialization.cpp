@@ -54,7 +54,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_1)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -77,7 +77,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_2)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -100,7 +100,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_3)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tDoubleNotNaN>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tDoubleNotNaN>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -123,8 +123,8 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_4)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0, 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -147,8 +147,8 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_5)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0, 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tMIV>));
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tMIV>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -171,8 +171,8 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_6)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0, 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::make_unique<TValueTypecheckOptimizationPass::NotConstraint>(std::move(constraint)));
 
         pass.Run();
@@ -199,8 +199,8 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_7)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0, 1 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tMIV>));
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tMIV>));
         pass.SetConstraint(std::make_unique<TValueTypecheckOptimizationPass::NotConstraint>(std::move(constraint)));
 
         pass.Run();
@@ -227,13 +227,13 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_8)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0, 1 });
         auto c1 = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        c1->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
-        c1->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tDouble>));
+        c1->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
+        c1->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tDouble>));
         auto not1 = std::make_unique<TValueTypecheckOptimizationPass::NotConstraint>(std::move(c1));
 
         auto c2 = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        c2->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tMIV>));
-        c2->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeSpeculationMaskFor<tMIV>));
+        c2->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tMIV>));
+        c2->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(1, x_typeMaskFor<tMIV>));
         auto not2 = std::make_unique<TValueTypecheckOptimizationPass::NotConstraint>(std::move(c2));
 
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
@@ -266,7 +266,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_9)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tBool>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tBool>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -289,7 +289,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_10)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tNil>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tNil>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -312,7 +312,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_11)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tMIV>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -335,7 +335,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_12)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -358,7 +358,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_13)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tBool>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tBool>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -381,7 +381,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_14)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tNil>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tNil>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -404,7 +404,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_15)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tMIV>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tMIV>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -427,7 +427,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_16)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDouble>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDouble>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -450,7 +450,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_17)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tHeapEntity>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tHeapEntity>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -474,7 +474,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_18)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tTable>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tTable>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -498,7 +498,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_19)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tFunction>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tFunction>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -521,7 +521,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_20)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDoubleNotNaN>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDoubleNotNaN>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();
@@ -544,7 +544,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_21)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tDoubleNotNaN>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tDoubleNotNaN>));
         pass.SetConstraint(std::make_unique<TValueTypecheckOptimizationPass::NotConstraint>(std::move(constraint)));
 
         pass.Run();
@@ -567,7 +567,7 @@ TEST(DeegenOptimizer, ProvenTypeSpecialization_22)
         pass.SetTargetFunction(target);
         pass.SetOperandList({ 0 });
         auto constraint = std::make_unique<TValueTypecheckOptimizationPass::AndConstraint>();
-        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeSpeculationMaskFor<tThread>));
+        constraint->AddClause(std::make_unique<TValueTypecheckOptimizationPass::LeafConstraint>(0, x_typeMaskFor<tThread>));
         pass.SetConstraint(std::move(constraint));
 
         pass.Run();

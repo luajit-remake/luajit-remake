@@ -19,9 +19,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
     }
 
     HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
-    GetByIdICInfo icInfo;
-    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len), icInfo /*out*/);
-    TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Len).As<void>(), icInfo);
+    TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Len);
 
     if (metamethod.Is<tNil>())
     {
@@ -50,7 +48,7 @@ static void NO_RETURN LengthOperatorNotTableOrStringSlowPath(TValue input)
 
 static void NO_RETURN LengthOperatorTableLengthSlowPath(TValue input)
 {
-    assert(input.Is<tTable>());
+    Assert(input.Is<tTable>());
     uint32_t length = TableObject::GetTableLengthWithLuaSemanticsSlowPath(input.As<tTable>());
     Return(TValue::Create<tDouble>(length));
 }
@@ -90,8 +88,30 @@ DEEGEN_DEFINE_BYTECODE(LengthOf)
     );
     Result(BytecodeValue);
     Implementation(LengthOperatorImpl);
-    // TODO: we need quickening since we want to dynamically specialize for tString and tTable
     Variant();
+    DfgVariant(Op("input").HasType<tString>());
+    DfgVariant(Op("input").HasType<tTable>());
+    DfgVariant();
+    // Output type deduction: if input is string, output is always double. Otherwise cannot reason about.
+    // But it's also kind of important to be able to speculate double, so we will value profile as well.
+    //
+    TypeDeductionRule(
+        [](TypeMask input) -> TypeMask
+        {
+            if (input.SubsetOf<tString>())
+            {
+                return x_typeMaskFor<tDouble>;
+            }
+            else
+            {
+                return x_typeMaskFor<tTop>;
+            }
+        });
+    TypeDeductionRule(ValueProfile);
+    RegAllocHint(
+        Op("input").RegHint(RegHint::GPR),
+        Op("output").RegHint(RegHint::FPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

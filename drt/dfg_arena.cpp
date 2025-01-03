@@ -7,8 +7,8 @@ void InitializeDfgAllocationArenaIfNeeded()
     //
     if (g_arena == nullptr)
     {
-        assert(g_arena == nullptr);
+        Assert(g_arena == nullptr);
         g_arena = Arena::Create();
-        assert(g_arena != nullptr);
+        Assert(g_arena != nullptr);
     }
 }

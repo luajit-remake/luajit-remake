@@ -17,6 +17,12 @@ DEEGEN_DEFINE_BYTECODE(LogicalNot)
     Result(BytecodeValue);
     Implementation(LogicalNotImpl);
     Variant();
+    DfgVariant();
+    TypeDeductionRule([](TypeMask /*input*/) -> TypeMask { return x_typeMaskFor<tBool>; });
+    RegAllocHint(
+        Op("value").RegHint(RegHint::GPR),
+        Op("output").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

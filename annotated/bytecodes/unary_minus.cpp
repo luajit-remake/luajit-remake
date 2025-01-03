@@ -34,9 +34,7 @@ static void NO_RETURN UnaryMinusImpl(TValue input)
     }
 
     HeapPtr<TableObject> metatable = metatableMaybeNull.As<TableObject>();
-    GetByIdICInfo icInfo;
-    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm), icInfo /*out*/);
-    TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(LuaMetamethodKind::Unm).As<void>(), icInfo);
+    TValue metamethod = GetMetamethodFromMetatable(metatable, LuaMetamethodKind::Unm);
 
     if (likely(metamethod.Is<tFunction>()))
     {
@@ -66,7 +64,31 @@ DEEGEN_DEFINE_BYTECODE(UnaryMinus)
     );
     Result(BytecodeValue);
     Implementation(UnaryMinusImpl);
-    Variant().EnableHotColdSplitting(Op("input").HasType<tDouble>());
+    Variant().EnableHotColdSplitting(
+        Op("input").HasType<tDouble>()
+    );
+    DfgVariant(
+        Op("input").HasType<tDouble>()
+    );
+    DfgVariant().EnableHotColdSplitting(
+        Op("input").HasType<tDouble>()
+    );
+    TypeDeductionRule(
+        [](TypeMask input) -> TypeMask
+        {
+            if (input.SubsetOf<tDouble>())
+            {
+                return x_typeMaskFor<tDouble>;
+            }
+            else
+            {
+                return x_typeMaskFor<tTop>;
+            }
+        });
+    RegAllocHint(
+        Op("input").RegHint(RegHint::FPR),
+        Op("output").RegHint(RegHint::FPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

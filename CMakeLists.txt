@@ -114,9 +114,13 @@ include_directories(SYSTEM "${PROJECT_SOURCE_DIR}/gtest/include")
 #
 add_subdirectory(gtest)
 
+# Increase Clang's artificial computation limit on constexpr since we have some complex constexprs
+#
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fconstexpr-depth=32767 ")
+
 # Append extra cxx warning flags
 #
-SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Wno-gnu-anonymous-struct -Werror ")
+SET(EXTRA_WARNING_FLAGS "-Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++20-compat -Wno-unused-macros -Wno-global-constructors -Wno-exit-time-destructors -Wno-weak-vtables -Wno-padded -Wno-alloca -Wno-missing-prototypes -Wno-zero-length-array -Wno-undefined-func-template -Wno-reserved-identifier -Wno-disabled-macro-expansion -Wno-gnu-zero-variadic-macro-arguments -Wno-packed -Wno-overlength-strings -Wno-switch-enum -Wno-gnu-anonymous-struct -Wno-switch-default -Wno-unsafe-buffer-usage -Werror ")
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${EXTRA_WARNING_FLAGS} ")
 
 # llvm-specific flags
@@ -169,6 +173,8 @@ add_library(git_commit_hash_info
 
 add_subdirectory(common_utils)
 
+add_subdirectory(zydis)
+
 add_subdirectory(deegen)
 
 add_subdirectory(annotated)
@@ -218,6 +224,10 @@ set(UNIT_TEST_SRC
   test_dfg_frontend.cpp
   test_temp_arena_allocator.cpp
   test_llvm_effectful_function_checker.cpp
+  test_dfg_jit_stencils.cpp
+  test_zydis_register_parser.cpp
+  test_dfg_reg_alloc_state.cpp
+  test_dfg_reg_move_inst_generator.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES
@@ -231,6 +241,7 @@ set(UNIT_TEST_LINK_LIBRARIES
   deegen_user_builtin_lib
   deegen_unit_test_ir
   deegen_common_snippet_ir
+  zydis
   git_commit_hash_info
 )
 

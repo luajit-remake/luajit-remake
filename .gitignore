@@ -1,4 +1,5 @@
 __llvm__
+__generated__
 build/
 ljr.cflags
 ljr.config

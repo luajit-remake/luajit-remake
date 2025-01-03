@@ -180,6 +180,11 @@ void FPS_GenerateInterpreterFunctionEntryLogic()
     TransactionalOutputFile asmFile(cl_assemblyOutputFilename);
     asmFile.write(asmFileContents);
 
+    std::string auditFilePath = FPS_GetAuditFilePath("interpreter_func_entry.s");
+    TransactionalOutputFile auditFile(auditFilePath);
+    auditFile.write(asmFileContents);
+
+    auditFile.Commit();
     hdrFile.Commit();
     cppFile.Commit();
     asmFile.Commit();

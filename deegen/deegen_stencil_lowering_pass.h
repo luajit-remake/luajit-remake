@@ -25,20 +25,32 @@ namespace dast {
 //
 class DeegenStencilLoweringPass
 {
+    DeegenStencilLoweringPass() = default;
+
 public:
     // Run the LLVM IR phase (IR -> IR transformation)
-    // 'fallthroughPlaceholderName' is optionally the placeholder name that represents the fallthrough function
-    // for the next bytecode. If provided, we will attempt to optimize the code so that the code can fallthrough
-    // (instead of jump) to the next bytecode. Pass "" if such rewrite is not desired.
     //
-    static DeegenStencilLoweringPass WARN_UNUSED RunIrRewritePhase(llvm::Function* f, const std::string& fallthroughPlaceholderName);
+    // If 'isLastStencilInBytecode' is true, 'fallthroughPlaceholderName' may be provided to tell us the placeholder name that
+    // represents the fallthrough function for the next bytecode.
+    // In this case, we will attempt to optimize the code so that the code can fallthrough (instead of jump) to the next bytecode,
+    // and optimize the other branches to the fallthrough bytecode to use short (imm8) branch if possible.
+    // If 'isLastStencilInBytecode' is false, 'fallthroughPlaceholderName' is not useful.
+    //
+    static DeegenStencilLoweringPass WARN_UNUSED RunIrRewritePhase(
+        llvm::Function* f, bool isLastStencilInBytecode, const std::string& fallthroughPlaceholderName);
 
-    // Run the ASM phase (ASM -> ASM transformation), returns the transformed ASM file
+    // Parse ASM file into m_workFile
     //
-    void RunAsmRewritePhase(const std::string& asmFile);
+    void ParseAsmFile(const std::string& asmFile);
+
+    // Run the ASM phase (ASM -> ASM transformation) on m_workFile, this populates the relavent fields in this struct
+    //
+    void RunAsmRewritePhase();
 
     InjectedMagicDiLocationInfo m_diInfo;
     std::vector<llvm::BasicBlock*> m_coldBlocks;
+    bool m_isLastStencilInBytecode;
+    bool m_shouldAssertNoGenericIcWithInlineSlab;
     uint32_t m_locIdentForJmpToFallthroughCandidate;
     std::string m_nextBytecodeFallthroughPlaceholderName;
 
@@ -46,9 +58,22 @@ public:
     //
     std::unique_ptr<X64AsmFile> m_rawInputFileForAudit;
 
+    std::unique_ptr<X64AsmFile> m_workFile;
+
     std::string m_primaryPostTransformAsmFile;
-    std::vector<DeegenCallIcLogicCreator::BaselineJitAsmLoweringResult> m_callIcLoweringResults;
-    std::vector<AstInlineCache::BaselineJitAsmLoweringResult> m_genericIcLoweringResults;
+    std::vector<DeegenCallIcLogicCreator::JitAsmLoweringResult> m_callIcLoweringResults;
+    std::vector<AstInlineCache::JitAsmLoweringResult> m_genericIcLoweringResults;
+
+    // Assorted metrics used by caller
+    //
+    size_t m_numInstructionsInFastPath;
+    size_t m_numInstructionsInSlowPath;
+    size_t m_numStackOperationsInFastPath;
+    size_t m_numStackOperationsInSlowPath;
+    size_t m_numTotalStackOperationsInIc;
+    size_t m_numStackPopBeforeTailCallInFastPath;
+    size_t m_numStackPopBeforeTailCallInSlowPath;
+    size_t m_numTotalStackPopBeforeTailCallInIc;
 };
 
 }   // namespace dast

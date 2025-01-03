@@ -11,6 +11,8 @@
 #include "deegen_ast_slow_path.h"
 #include "deegen_postprocess_module_linker.h"
 #include "llvm_identical_function_merger.h"
+#include "api_define_bytecode.h"
+#include "base64_util.h"
 
 #include "llvm/Transforms/Utils/FunctionComparator.h"
 #include "llvm/Linker/Linker.h"
@@ -299,9 +301,9 @@ void GenerateVariantSelectorImpl(FILE* fp,
             {
                 ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
                 BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
-                TypeSpeculationMask mask = op->m_typeMask;
-                ReleaseAssert(mask <= x_typeSpeculationMaskFor<tTop>);
-                if (mask != x_typeSpeculationMaskFor<tTop>)
+                TypeMaskTy mask = op->m_typeMask;
+                ReleaseAssert(mask <= x_typeMaskFor<tTop>);
+                if (mask != x_typeMaskFor<tTop>)
                 {
                     isNoSpecializationEdgeCase = false;
                 }
@@ -343,12 +345,12 @@ void GenerateVariantSelectorImpl(FILE* fp,
         {
             // Find one 'maximal' (i.e. no other mask is a superset of it) type mask in the set
             //
-            TypeSpeculationMask maximalMask = 0;
+            TypeMaskTy maximalMask = 0;
             for (BytecodeVariantDefinition* def : S)
             {
                 ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
                 BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
-                TypeSpeculationMask mask = op->m_typeMask;
+                TypeMaskTy mask = op->m_typeMask;
                 ReleaseAssert(mask > 0);
                 if ((mask & maximalMask) == maximalMask)
                 {
@@ -362,7 +364,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
             {
                 for (auto& maskAndName : x_list_of_type_speculation_mask_and_name)
                 {
-                    TypeSpeculationMask mask = maskAndName.first;
+                    TypeMaskTy mask = maskAndName.first;
                     if (mask == maximalMask)
                     {
                         maskName = maskAndName.second;
@@ -394,7 +396,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 {
                     ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
                     BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
-                    TypeSpeculationMask mask = op->m_typeMask;
+                    TypeMaskTy mask = op->m_typeMask;
                     if ((mask & maximalMask) == mask && mask < maximalMask)
                     {
                         selected.push_back(def);
@@ -425,7 +427,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 {
                     ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
                     BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
-                    TypeSpeculationMask mask = op->m_typeMask;
+                    TypeMaskTy mask = op->m_typeMask;
                     if (mask == maximalMask)
                     {
                         selected.push_back(def);
@@ -622,29 +624,61 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     DeegenAnalyzeLambdaCapturePass::RemoveAnnotations(module.get());
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
-    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+    std::vector<BytecodeVariantCollection> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
     std::vector<std::unique_ptr<Module>> allBytecodeFunctions;
     std::vector<std::string> allReturnContinuationNames;
 
-    std::unordered_map<BytecodeVariantDefinition*, std::unique_ptr<BytecodeIrInfo>> bvdImplMap;
-    for (auto& bytecodeDef : defs)
+    struct BVInfo
     {
-        for (auto& bytecodeVariantDef : bytecodeDef)
+        std::unique_ptr<BytecodeIrInfo> m_bii;
+        std::unique_ptr<Module> m_interpModule;
+    };
+
+    std::unordered_map<BytecodeVariantDefinition*, BVInfo> bvdImplMap;
+
+    {
+        auto createBytecodeIrInfo = [&](BytecodeVariantDefinition* bvd)
         {
             // For now we just stay simple and unconditionally let all operands have 2 bytes, which is already stronger than LuaJIT's assumption
             // Let's think about saving memory by providing 1-byte variants, or further removing limitations by allowing 4-byte operands later
             //
-            bytecodeVariantDef->SetMaxOperandWidthBytes(2);
-            Function* implFunc = module->getFunction(bytecodeVariantDef->m_implFunctionName);
+            bvd->SetMaxOperandWidthBytes(2);
+            Function* implFunc = module->getFunction(bvd->m_implFunctionName);
             ReleaseAssert(implFunc != nullptr);
 
-            ReleaseAssert(!bvdImplMap.count(bytecodeVariantDef.get()));
-            bvdImplMap[bytecodeVariantDef.get()] = std::make_unique<BytecodeIrInfo>(BytecodeIrInfo::Create(bytecodeVariantDef.get(), implFunc));
+            std::unique_ptr<BytecodeIrInfo> bii = std::make_unique<BytecodeIrInfo>(BytecodeIrInfo::Create(bvd, implFunc));
+            ReleaseAssert(!bvdImplMap.count(bvd));
+            bvdImplMap[bvd] = {
+                .m_bii = std::move(bii),
+                .m_interpModule = nullptr
+            };
+        };
+
+        for (auto& bytecodeDef : defs)
+        {
+            for (auto& bvd : bytecodeDef.m_variants)
+            {
+                createBytecodeIrInfo(bvd.get());
+            }
+            // We do not need the interpreter implementation of the DFG variants,
+            // but we still need to know which components are needed by the variant,
+            // which is figured out during the interpreter lowering process.
+            // This is ugly, but it's the easiest solution to do for now.
+            //
+            for (auto& bvd : bytecodeDef.m_dfgVariants)
+            {
+                createBytecodeIrInfo(bvd.get());
+            }
+        }
+
+        for (auto& it : bvdImplMap)
+        {
+            it.second.m_interpModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*it.second.m_bii.get());
         }
     }
 
-    for (auto& bytecodeDef : defs)
+    for (BytecodeVariantCollection& bytecodeDef : defs)
     {
         std::string generatedClassName;
 
@@ -653,8 +687,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         std::vector<std::string>& cdeclNameForVariants = finalRes.m_allExternCDeclarations.back();
 
         {
-            ReleaseAssert(bytecodeDef.size() > 0);
-            std::unique_ptr<BytecodeVariantDefinition>& def = bytecodeDef[0];
+            ReleaseAssert(bytecodeDef.m_variants.size() > 0);
+            std::unique_ptr<BytecodeVariantDefinition>& def = bytecodeDef.m_variants[0];
             generatedClassName = GetGeneratedBuilderClassNameFromBytecodeName(def->m_bytecodeName);
             finalRes.m_generatedClassNames.push_back(generatedClassName);
             fprintf(fp, "template<typename CRTP>\nclass %s {\n", generatedClassName.c_str());
@@ -682,7 +716,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             {
                 std::vector<DeegenBytecodeOperandType> selectedTypes;
                 std::vector<BytecodeVariantDefinition*> S;
-                for (auto& it : bytecodeDef)
+                for (auto& it : bytecodeDef.m_variants)
                 {
                     S.push_back(it.get());
                 }
@@ -690,7 +724,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 ReleaseAssert(selectedTypes.size() == 0);
             }
 
-            fprintf(fp, "        assert(false && \"Bad operand type/value combination! Did you forget to put it in Variant() list?\");\n");
+            fprintf(fp, "        Assert(false && \"Bad operand type/value combination! Did you forget to put it in Variant() list?\");\n");
             fprintf(fp, "        __builtin_unreachable();\n");
             fprintf(fp, "    }\n\n");
 
@@ -724,15 +758,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
         std::unordered_map<size_t /*variantOrd*/, size_t /*opcodeVariantOrdinal*/> opcodeVariantOrdinalMap;
 
+        bool needRangedOperandInfoGetter = false;
+
         size_t bytecodeDfgNsdLength = static_cast<size_t>(-1);
         size_t currentBytecodeVariantOrdinal = 0;
-        for (auto& bytecodeVariantDef : bytecodeDef)
+        for (auto& bytecodeVariantDef : bytecodeDef.m_variants)
         {
             BcTraitInfo traitInfo;
 
             ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
-            BytecodeIrInfo* bii = bvdImplMap[bytecodeVariantDef.get()].get();
-            std::unique_ptr<Module> resultModule = InterpreterBytecodeImplCreator::DoLoweringForAll(*bii);
+            BytecodeIrInfo* bii = bvdImplMap[bytecodeVariantDef.get()].m_bii.get();
+            std::unique_ptr<Module>& resultModule = bvdImplMap[bytecodeVariantDef.get()].m_interpModule;
             std::vector<std::string> affliatedFunctionNameList = bii->m_affliatedBytecodeFnNames;
 
             traitInfo.m_isBarrier = !bytecodeVariantDef->BytecodeMayFallthroughToNextBytecode();
@@ -853,13 +889,13 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 if (operand->GetKind() == BcOperandKind::Constant)
                 {
                     BcOpConstant* bcOpCst = assert_cast<BcOpConstant*>(operand.get());
-                    if (bcOpCst->m_typeMask != x_typeSpeculationMaskFor<tTop>)
+                    if (bcOpCst->m_typeMask != x_typeMaskFor<tTop>)
                     {
                         std::string maskName = "";
                         {
                             for (auto& maskAndName : x_list_of_type_speculation_mask_and_name)
                             {
-                                TypeSpeculationMask mask = maskAndName.first;
+                                TypeMaskTy mask = maskAndName.first;
                                 if (mask == bcOpCst->m_typeMask)
                                 {
                                     maskName = maskAndName.second;
@@ -867,7 +903,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             }
                         }
                         ReleaseAssert(maskName != "");
-                        fprintf(fp, "        assert(param%d.Is<%s>());\n", static_cast<int>(i), maskName.c_str());
+                        fprintf(fp, "        Assert(param%d.Is<%s>());\n", static_cast<int>(i), maskName.c_str());
                     }
                 }
 
@@ -876,7 +912,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     BcOpSpecializedLiteral* spLit = assert_cast<BcOpSpecializedLiteral*>(operand.get());
                     uint64_t spVal64 = spLit->m_concreteValue;
                     std::string spVal = GetSpecializedValueAsString(spLit->GetLiteralType(), spVal64);
-                    fprintf(fp, "        assert(param%d == %s);\n", static_cast<int>(i), spVal.c_str());
+                    fprintf(fp, "        Assert(param%d == %s);\n", static_cast<int>(i), spVal.c_str());
                     ReleaseAssert(operand->IsElidedFromBytecodeStruct());
                 }
 
@@ -989,7 +1025,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 size_t offset = bytecodeVariantDef->m_condBrTarget->GetOffsetInBytecodeStruct();
                 // Initialize the unconditional jump to jump to itself, just so that we have no uninitialized value
                 //
-                assert(bytecodeVariantDef->m_condBrTarget->GetSizeInBytecodeStruct() == 2);
+                Assert(bytecodeVariantDef->m_condBrTarget->GetSizeInBytecodeStruct() == 2);
                 fprintf(fp, "        UnalignedStore<int16_t>(base + %u, 0);\n", SafeIntegerCast<unsigned int>(offset));
                 traitInfo.m_branchOperandOffset = offset;
             }
@@ -1006,7 +1042,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
             fprintf(fp, "        [[maybe_unused]] uint8_t* base = crtp->GetBytecodeStart() + bcPos;\n");
-            fprintf(fp, "        assert(crtp->GetCanonicalizedOpcodeFromOpcode(UnalignedLoad<uint16_t>(base)) == CRTP::template GetBytecodeOpcodeBase<%s>() + %d);\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
+            fprintf(fp, "        Assert(crtp->GetCanonicalizedOpcodeFromOpcode(UnalignedLoad<uint16_t>(base)) == CRTP::template GetBytecodeOpcodeBase<%s>() + %d);\n", generatedClassName.c_str(), SafeIntegerCast<int>(currentBytecodeVariantOrdinal));
 
             for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
             {
@@ -1028,7 +1064,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     {
                         ReleaseAssert(operand->GetKind() == BcOperandKind::Constant);
                         BcOpConstant* cst = assert_cast<BcOpConstant*>(operand.get());
-                        ReleaseAssert(cst->m_typeMask == x_typeSpeculationMaskFor<tNil>);
+                        ReleaseAssert(cst->m_typeMask == x_typeMaskFor<tNil>);
                         fprintf(fp, "        TValue param%d = TValue::Create<tNil>();\n",static_cast<int>(i));
                     }
                     continue;
@@ -1104,36 +1140,288 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
             // Generate the DFG node-specific-data emitters, which should simply carry all the literals in this bytecode
             //
-            size_t dfgNsdLength = 0;
+            BytecodeVariantDefinition::DfgNsdLayout nsdLayout = bytecodeVariantDef->ComputeDfgNsdLayout();
+
+            std::vector<bool> nsdFilledChecker;
+            nsdFilledChecker.resize(nsdLayout.m_nsdLength, false /*value*/);
+
+            auto markNsdBytesFilled = [&](size_t offset, size_t length)
+            {
+                for (size_t k = 0; k < length; k++)
+                {
+                    ReleaseAssert(offset + k <= nsdFilledChecker.size());
+                    ReleaseAssert(!nsdFilledChecker[offset + k]);
+                    nsdFilledChecker[offset + k] = true;
+                }
+            };
+
+            auto checkNsdComplete = [&]()
+            {
+                ReleaseAssert(nsdFilledChecker.size() == nsdLayout.m_nsdLength);
+                for (size_t i = 0; i < nsdFilledChecker.size(); i++)
+                {
+                    ReleaseAssert(nsdFilledChecker[i]);
+                }
+            };
+
             fprintf(fp, "    void PopulateDfgNodeSpecificDataImpl%u([[maybe_unused]] uint8_t* nsdPtr, size_t bcPos)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
             fprintf(fp, "    {\n");
             fprintf(fp, "        [[maybe_unused]] Operands ops = DeegenDecodeImpl%u(bcPos);\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
-            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            ReleaseAssert(bytecodeVariantDef->m_variantOrd <= 255);
+
+            // DEVNOTE:
+            //     The following layout is assumed by the DFG codegen. If you change the layout corresponding changes to the codegen must be done!
+            //
+            // Bytecode variant ordinal must come first
+            //
+            fprintf(fp, "        UnalignedStore<uint8_t>(nsdPtr + %d, %d);\n", 0 /*offsetInNsd*/, static_cast<int>(bytecodeVariantDef->m_variantOrd));
+            markNsdBytesFilled(0 /*offset*/, 1 /*length*/);
+
+            std::unordered_map<std::string /*operandName*/, std::pair<BcOperand*, size_t /*offsetInNsd*/>> operandToNsdOffsetMap;
+
+            for (auto& it : nsdLayout.m_operandOffsets)
             {
-                BcOperand* operand = bytecodeVariantDef->m_list[i].get();
-                if (operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral)
-                {
-                    BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
-                    size_t numBytes = lit->m_numBytes;
-                    bool isSigned = lit->m_isSigned;
-                    fprintf(fp, "        UnalignedStore<%sint%d_t>(nsdPtr + %d, ops.%s.m_value);\n",
-                            (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
-                            static_cast<int>(dfgNsdLength),
-                            lit->OperandName().c_str());
-                    dfgNsdLength += numBytes;
-                }
+                size_t operandOrd = it.first;
+                size_t nsdOffset = it.second;
+
+                ReleaseAssert(operandOrd < bytecodeVariantDef->m_list.size());
+                BcOperand* operand = bytecodeVariantDef->m_list[operandOrd].get();
+
+                ReleaseAssert(!operandToNsdOffsetMap.count(operand->OperandName()));
+                operandToNsdOffsetMap[operand->OperandName()] = std::make_pair(operand, nsdOffset);
+
+                ReleaseAssert(operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral);
+                BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
+                size_t numBytes = lit->m_numBytes;
+                bool isSigned = lit->m_isSigned;
+                fprintf(fp, "        UnalignedStore<%sint%d_t>(nsdPtr + %d, ops.%s.m_value);\n",
+                        (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
+                        static_cast<int>(nsdOffset),
+                        lit->OperandName().c_str());
+
+                markNsdBytesFilled(nsdOffset, numBytes);
             }
+
+            checkNsdComplete();
+            ReleaseAssert(operandToNsdOffsetMap.size() == nsdLayout.m_operandOffsets.size());
+
             fprintf(fp, "    }\n\n");
 
             if (bytecodeDfgNsdLength == static_cast<size_t>(-1))
             {
-                bytecodeDfgNsdLength = dfgNsdLength;
+                bytecodeDfgNsdLength = nsdLayout.m_nsdLength;
             }
             else
             {
                 // All the variants' node-specific-data must have the same length, as they all just consist of the literal fields in the bytecode
                 //
-                ReleaseAssert(bytecodeDfgNsdLength == dfgNsdLength);
+                ReleaseAssert(bytecodeDfgNsdLength == nsdLayout.m_nsdLength);
+            }
+
+            // Generate getter functions for the mapping of the ranged operand to input/output using the NodeSpecificData
+            // Note that this must agree exactly with the result of the RWC functions, even though the RWC
+            // functions are not printed here: this is very fragile and should be refactored, but for now..
+            //
+            // Function prototype:
+            // void(*)(uint8_t* nsd,
+            //         uint32_t* inputOrds /*out*/,
+            //         uint32_t* outputOrds /*out*/,
+            //         size_t& numInputs /*inout*/,
+            //         size_t& numOutputs /*inout*/,
+            //         size_t& rangeLen /*out*/)
+            //
+            // inputOrds: stores the relative offset from the range start for all the reads of the range
+            // outputOrds: similar but for outputs
+            // numInputs: caller should set this to be the size of the inputOrds buffer, for assertion check
+            //            the function will set this to the actual # of items populated into inputOrds
+            // numOutputs: similar but for outputs
+            // rangeLen: stores the required length for this range.
+            //
+            {
+                bool hasBytecodeRangeOperand = false;
+                BcOpBytecodeRangeBase* rangeOperand = nullptr;
+                for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                {
+                    BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                    if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                    {
+                        // To make DFG logic easier, lockdown cases where the bytecode has >1 range operand
+                        //
+                        ReleaseAssert(!hasBytecodeRangeOperand && "for now only one bytecode Range operand is supported");
+                        hasBytecodeRangeOperand = true;
+                        rangeOperand = assert_cast<BcOpBytecodeRangeBase*>(operand);
+
+                        needRangedOperandInfoGetter = true;
+                    }
+                }
+
+                if (hasBytecodeRangeOperand)
+                {
+                    fprintf(fp, "\n    static void GetRangeOperandRWInfoImpl%u([[maybe_unused]] RestrictPtr<uint8_t> nsdPtr, "
+                                "[[maybe_unused]] RestrictPtr<uint32_t> inputOrds, "
+                                "[[maybe_unused]] RestrictPtr<uint32_t> outputOrds, "
+                                "size_t& numInputs /*inout*/, "
+                                "size_t& numOutputs /*inout*/, "
+                                "size_t& rangeLen /*out*/)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+                    fprintf(fp, "    {\n");
+                    fprintf(fp, "        size_t curMaxRangeLength = 0;\n");
+
+                    using RangeDesc = DeegenFrontendBytecodeDefinitionDescriptor::Range;
+                    using OperandExpr = DeegenFrontendBytecodeDefinitionDescriptor::OperandExpr;
+                    using OperandExprNode = DeegenFrontendBytecodeDefinitionDescriptor::OperandExprNode;
+
+                    auto parseRangeDesc = [&](std::pair<std::string, std::string>& data) -> RangeDesc
+                    {
+                        auto decodeOperandExpr = [&](std::string& s) -> OperandExpr
+                        {
+                            std::string str = base64_decode(s);
+                            ReleaseAssert(str.length() == sizeof(OperandExpr));
+                            OperandExpr e;
+                            memcpy(&e, str.data(), sizeof(OperandExpr));
+                            return e;
+                        };
+                        RangeDesc rd;
+                        rd.m_start = decodeOperandExpr(data.first);
+                        rd.m_len = decodeOperandExpr(data.second);
+                        return rd;
+                    };
+
+                    enum class RCWKind
+                    {
+                        Read,
+                        Write,
+                        Clobber
+                    };
+
+                    std::function<std::string(OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp)> printExprImpl;
+                    printExprImpl = [&](OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp) -> std::string
+                    {
+                        switch (node.m_kind)
+                        {
+                        case OperandExprNode::Number:
+                        {
+                            return "(" + std::to_string(node.m_number) + ")";
+                        }
+                        case OperandExprNode::Operand:
+                        {
+                            std::string opName = node.m_operandName;
+                            if (opName == rangeOperand->OperandName())
+                            {
+                                rangedOperandShowedUp = true;
+                                return "(0)";
+                            }
+                            if (!operandToNsdOffsetMap.count(opName))
+                            {
+                                fprintf(stderr, "Invalid use of operand in DeclareRead/Write/Clobber expression: only RangeOperand and literal operands are allowed!\n");
+                                abort();
+                            }
+                            BcOperand* op = operandToNsdOffsetMap[opName].first;
+                            size_t offsetInNsd = operandToNsdOffsetMap[opName].second;
+
+                            ReleaseAssert(op->GetKind() == BcOperandKind::Literal || op->GetKind() == BcOperandKind::SpecializedLiteral);
+                            BcOpLiteral* lit = assert_cast<BcOpLiteral*>(op);
+                            ReleaseAssert(lit != nullptr);
+                            size_t numBytes = lit->m_numBytes;
+                            bool isSigned = lit->m_isSigned;
+                            std::string loadExpr = std::string("UnalignedLoad<") + (isSigned ? "" : "u") + "int" + std::to_string(numBytes * 8)
+                                + "_t>(nsdPtr + " + std::to_string(offsetInNsd) + ")";
+                            std::string i32Expr = std::string("SafeIntegerCast<int32_t>(SafeIntegerCast<") + (isSigned ? "" : "u") + "int32_t>(" + loadExpr + "))";
+                            return "(" + i32Expr + ")";
+                        }
+                        case OperandExprNode::Infinity:
+                        {
+                            ReleaseAssert(false);
+                        }
+                        case OperandExprNode::Add:
+                        {
+                            ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
+                            return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "+"
+                                + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
+                        }
+                        case OperandExprNode::Sub:
+                        {
+                            ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
+                            return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "-"
+                                + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
+                        }
+                        case OperandExprNode::BadKind:
+                        {
+                            ReleaseAssert(false);
+                        }
+                        }   /*switch*/
+                    };
+
+                    auto printExpr = [&](OperandExpr& expr, bool& rangedOperandShowedUp) -> std::string
+                    {
+                        ReleaseAssert(expr.m_numNodes > 0);
+                        return printExprImpl(expr.m_nodes, expr.m_numNodes, expr.m_nodes[0], rangedOperandShowedUp);
+                    };
+
+                    auto handleRangeList = [&](std::vector<std::pair<std::string, std::string>>& rangeList, RCWKind rcwKind)
+                    {
+                        std::string dstArrName, dstCntName;
+                        if (rcwKind == RCWKind::Read)
+                        {
+                            dstArrName = "inputOrds";
+                            dstCntName = "numInputs";
+                        }
+                        else if (rcwKind == RCWKind::Write)
+                        {
+                            dstArrName = "outputOrds";
+                            dstCntName = "numOutputs";
+                        }
+
+                        fprintf(fp, "        {\n");
+                        if (rcwKind != RCWKind::Clobber)
+                        {
+                            fprintf(fp, "            size_t numItems = 0;\n");
+                        }
+                        for (auto& item : rangeList)
+                        {
+                            RangeDesc rdesc = parseRangeDesc(item);
+                            ReleaseAssert(!rdesc.m_start.IsInfinity());
+                            if (rdesc.m_len.IsInfinity())
+                            {
+                                if (rcwKind != RCWKind::Clobber)
+                                {
+                                    fprintf(stderr, "Infinity() should never be used explicitly in DeclareRead/Write/Clobber expressions!\n");
+                                    abort();
+                                }
+                                continue;
+                            }
+                            bool rangedOperandShowedUp = false;
+                            std::string startExpr = printExpr(rdesc.m_start, rangedOperandShowedUp /*out*/);
+                            ReleaseAssert(rangedOperandShowedUp);
+                            rangedOperandShowedUp = false;
+                            std::string lenExpr = printExpr(rdesc.m_len, rangedOperandShowedUp /*out*/);
+                            ReleaseAssert(!rangedOperandShowedUp);
+
+                            fprintf(fp, "            {\n");
+                            fprintf(fp, "                uint32_t start = SafeIntegerCast<uint32_t>(%s);\n", startExpr.c_str());
+                            fprintf(fp, "                uint32_t len = SafeIntegerCast<uint32_t>(%s);\n", lenExpr.c_str());
+                            fprintf(fp, "                curMaxRangeLength = std::max(curMaxRangeLength, static_cast<size_t>(start) + len);\n");
+                            if (rcwKind != RCWKind::Clobber)
+                            {
+                                fprintf(fp, "                TestAssert(numItems + len <= %s);\n", dstCntName.c_str());
+                                fprintf(fp, "                for (uint32_t i = 0; i < len; i++) { %s[numItems] = start + i; numItems++; }\n", dstArrName.c_str());
+                            }
+                            fprintf(fp, "            }\n");
+                        }
+                        if (rcwKind != RCWKind::Clobber)
+                        {
+                            fprintf(fp, "            TestAssert(numItems <= %s);\n", dstCntName.c_str());
+                            fprintf(fp, "            %s = numItems;\n", dstCntName.c_str());
+                        }
+                        fprintf(fp, "        }\n");
+                    };
+
+                    handleRangeList(bytecodeVariantDef->m_rawReadRangeExprs, RCWKind::Read);
+                    handleRangeList(bytecodeVariantDef->m_rawWriteRangeExprs, RCWKind::Write);
+                    handleRangeList(bytecodeVariantDef->m_rawClobberRangeExprs, RCWKind::Clobber);
+
+                    fprintf(fp, "        rangeLen = curMaxRangeLength;\n");
+                    fprintf(fp, "    }\n\n");
+                }
             }
 
             ReleaseAssert(!opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
@@ -1150,34 +1438,34 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         ReleaseAssert(cdeclNameForVariants.size() == totalCreatedBytecodeFunctionsInThisBytecode);
 
         fprintf(fp, "public:\n");
-        fprintf(fp, "    Operands WARN_UNUSED Decode%s(size_t bcPos)\n", bytecodeDef[0]->m_bytecodeName.c_str());
+        fprintf(fp, "    Operands WARN_UNUSED Decode%s(size_t bcPos)\n", bytecodeDef.m_variants[0]->m_bytecodeName.c_str());
         fprintf(fp, "    {\n");
         fprintf(fp, "        CRTP* crtp = static_cast<CRTP*>(this);\n");
         fprintf(fp, "        uint8_t* base = crtp->GetBytecodeStart() + bcPos;\n");
         fprintf(fp, "        size_t opcode = UnalignedLoad<uint16_t>(base);\n");
-        fprintf(fp, "        assert(opcode >= CRTP::template GetBytecodeOpcodeBase<%s>());\n", generatedClassName.c_str());
+        fprintf(fp, "        Assert(opcode >= CRTP::template GetBytecodeOpcodeBase<%s>());\n", generatedClassName.c_str());
         fprintf(fp, "        opcode -= CRTP::template GetBytecodeOpcodeBase<%s>();\n", generatedClassName.c_str());
-        fprintf(fp, "        assert(opcode < %d);\n", static_cast<int>(currentBytecodeVariantOrdinal));
-        fprintf(fp, "        assert(x_isVariantEmittable[opcode]);\n");
+        fprintf(fp, "        Assert(opcode < %d);\n", static_cast<int>(currentBytecodeVariantOrdinal));
+        fprintf(fp, "        Assert(x_isVariantEmittable[opcode]);\n");
         fprintf(fp, "        switch (opcode)\n");
         fprintf(fp, "        {\n");
 
-        for (auto& bytecodeVariantDef : bytecodeDef)
+        for (auto& bytecodeVariantDef : bytecodeDef.m_variants)
         {
             ReleaseAssert(opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
             fprintf(fp, "        case %d:\n", static_cast<int>(opcodeVariantOrdinalMap[bytecodeVariantDef->m_variantOrd]));
             fprintf(fp, "            return DeegenDecodeImpl%d(bcPos);\n", static_cast<int>(bytecodeVariantDef->m_variantOrd));
         }
         fprintf(fp, "        default:\n");
-        fprintf(fp, "        assert(false && \"unexpected opcode\");\n");
+        fprintf(fp, "        Assert(false && \"unexpected opcode\");\n");
         fprintf(fp, "        __builtin_unreachable();\n");
         fprintf(fp, "        } /*switch opcode*/\n");
         fprintf(fp, "    }\n\n");
 
         fprintf(fp, "    template<size_t variantOrd>\n");
-        fprintf(fp, "    Operands WARN_UNUSED ALWAYS_INLINE Decode%s_Variant(size_t bcPos)\n", bytecodeDef[0]->m_bytecodeName.c_str());
+        fprintf(fp, "    Operands WARN_UNUSED ALWAYS_INLINE Decode%s_Variant(size_t bcPos)\n", bytecodeDef.m_variants[0]->m_bytecodeName.c_str());
         fprintf(fp, "    {\n        ");
-        for (auto& bytecodeVariantDef : bytecodeDef)
+        for (auto& bytecodeVariantDef : bytecodeDef.m_variants)
         {
             ReleaseAssert(opcodeVariantOrdinalMap.count(bytecodeVariantDef->m_variantOrd));
             fprintf(fp, "if constexpr(variantOrd == %d) {\n", static_cast<int>(bytecodeVariantDef->m_variantOrd));
@@ -1275,7 +1563,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         // but providing this information statically allows us to catch more errors statically.
         //
         fprintf(fp, "    static constexpr bool x_isPotentiallyReplaceable = %s;\n",
-                (bytecodeDef[0]->m_sameLengthConstraintList.size() > 0) ? "true" : "false");
+                (bytecodeDef.m_variants[0]->m_sameLengthConstraintList.size() > 0) ? "true" : "false");
 
         // Emit the arrays of RWC information getters
         //
@@ -1308,11 +1596,11 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         printRWCGetterArray("Write");
         printRWCGetterArray("Clobber");
 
-        if (bytecodeDef[0]->m_bcIntrinsicOrd != static_cast<size_t>(-1))
+        if (bytecodeDef.m_variants[0]->m_bcIntrinsicOrd != static_cast<size_t>(-1))
         {
-            ReleaseAssert(bytecodeDef[0]->m_bcIntrinsicOrd < 255);
-            fprintf(fp, "    static constexpr uint8_t x_bytecodeIntrinsicOrdinal = %d;\n", static_cast<int>(bytecodeDef[0]->m_bcIntrinsicOrd));
-            fprintf(fp, "    using BytecodeIntrinsicDefTy = BytecodeIntrinsicInfo::%s;\n", bytecodeDef[0]->m_bcIntrinsicName.c_str());
+            ReleaseAssert(bytecodeDef.m_variants[0]->m_bcIntrinsicOrd < 255);
+            fprintf(fp, "    static constexpr uint8_t x_bytecodeIntrinsicOrdinal = %d;\n", static_cast<int>(bytecodeDef.m_variants[0]->m_bcIntrinsicOrd));
+            fprintf(fp, "    using BytecodeIntrinsicDefTy = BytecodeIntrinsicInfo::%s;\n", bytecodeDef.m_variants[0]->m_bcIntrinsicName.c_str());
             fprintf(fp, "    using BytecodeIntrinsicInfoGetterFn = BytecodeIntrinsicDefTy(%s<CRTP>::*)(size_t);\n",
                     generatedClassName.c_str());
             fprintf(fp, "    static constexpr std::array<BytecodeIntrinsicInfoGetterFn, %d> x_bytecodeIntrinsicInfoGetters = { ",
@@ -1360,16 +1648,40 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         }
         fprintf(fp, " };\n");
 
+        fprintf(fp, "    using DfgRangeOpRWInfoGetterFn = void(*)(uint8_t*, uint32_t*, uint32_t*, size_t&, size_t&, size_t&);\n");
+
+        if (needRangedOperandInfoGetter)
+        {
+            fprintf(fp, "    static constexpr bool x_bytecodeHasRangedOperand = true;\n");
+            fprintf(fp, "    static constexpr std::array<DfgRangeOpRWInfoGetterFn, %d> x_dfgRangeOpRWInfoGetterFns = { ", static_cast<int>(bytecodeDef.m_variants.size()));
+            for (size_t i = 0; i < bytecodeDef.m_variants.size(); i++)
+            {
+                if (i > 0) { fprintf(fp, ", "); }
+                fprintf(fp, "&%s<CRTP>::GetRangeOperandRWInfoImpl%d", generatedClassName.c_str(), static_cast<int>(i));
+            }
+            fprintf(fp, " };\n\n");
+        }
+        else
+        {
+            fprintf(fp, "    static constexpr bool x_bytecodeHasRangedOperand = false;\n");
+            fprintf(fp, "    static constexpr std::array<DfgRangeOpRWInfoGetterFn, 0> x_dfgRangeOpRWInfoGetterFns = {};\n");
+        }
+
         // Emit the DFG node-specific-data dump function
         //
         {
             size_t curNsdOffset = 0;
-            bool isFirstItem = true;
             fprintf(fp, "\n    static void DumpDfgNodeSpecificDataImpl([[maybe_unused]] FILE* file, [[maybe_unused]] uint8_t* nsdPtr, [[maybe_unused]] bool& shouldPrefixCommaOnFirstItem)\n");
             fprintf(fp, "    {\n");
-            for (size_t i = 0; i < bytecodeDef[0]->m_list.size(); i++)
+            fprintf(fp, "        {\n");
+            fprintf(fp, "            uint8_t value = UnalignedLoad<uint8_t>(nsdPtr + %u);\n", static_cast<unsigned int>(curNsdOffset));
+            fprintf(fp, "            if (shouldPrefixCommaOnFirstItem) { fprintf(file, \", \"); }\n");
+            fprintf(fp, "            fprintf(file, \"variantOrd=%%d\", static_cast<int>(value));\n");
+            fprintf(fp, "        }\n");
+            curNsdOffset += sizeof(uint8_t);
+            for (size_t i = 0; i < bytecodeDef.m_variants[0]->m_list.size(); i++)
             {
-                BcOperand* operand = bytecodeDef[0]->m_list[i].get();
+                BcOperand* operand = bytecodeDef.m_variants[0]->m_list[i].get();
                 if (operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral)
                 {
                     BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
@@ -1381,18 +1693,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             (isSigned ? "" : "u"), static_cast<int>(numBytes * 8),
                             static_cast<unsigned int>(curNsdOffset));
                     curNsdOffset += numBytes;
-                    if (isFirstItem)
-                    {
-                        fprintf(fp, "            if (shouldPrefixCommaOnFirstItem) { fprintf(file, \", \"); }\n");
-                    }
-                    fprintf(fp, "            fprintf(file, \"%s%s=%%%s\", static_cast<%s>(value));\n",
-                            (isFirstItem ? "" : ", "),
+                    fprintf(fp, "            fprintf(file, \", %s=%%%s\", static_cast<%s>(value));\n",
                             lit->OperandName().c_str(),
                             (isSigned ? "lld" : "llu"),
                             (isSigned ? "long long" : "unsigned long long"));
                     fprintf(fp, "            shouldPrefixCommaOnFirstItem = true;\n");
                     fprintf(fp, "        }\n");
-                    isFirstItem = false;
                 }
             }
             fprintf(fp, "    }\n\n");
@@ -1428,19 +1734,46 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     // also removes unused slowpaths and return continuations from the bytecode definition,
     // and renames the slow paths to unique names
     //
+    // Save interpreter/baseline JIT variants
+    //
     {
-        std::vector<nlohmann::json> allJsonList;
+        std::vector<json_t> allJsonList;
         for (auto& bytecodeDef : defs)
         {
-            for (auto& bytecodeVariantDef : bytecodeDef)
+            for (auto& bytecodeVariantDef : bytecodeDef.m_variants)
             {
                 ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
-                std::unique_ptr<BytecodeIrInfo>& info = bvdImplMap[bytecodeVariantDef.get()];
+                std::unique_ptr<BytecodeIrInfo>& info = bvdImplMap[bytecodeVariantDef.get()].m_bii;
                 allJsonList.push_back(info->SaveToJSON());
             }
         }
-        ReleaseAssert(allJsonList.size() == bvdImplMap.size());
         finalRes.m_bytecodeInfoJson = std::move(allJsonList);
+    }
+
+    // Save DFG variants
+    //
+    {
+        size_t totalDfgVariants = 0;
+        std::vector<json_t> allJsonList;
+        for (auto& bytecodeDef : defs)
+        {
+            std::vector<json_t> bcVariantList;
+            for (auto& bytecodeVariantDef : bytecodeDef.m_dfgVariants)
+            {
+                ReleaseAssert(bvdImplMap.count(bytecodeVariantDef.get()));
+                std::unique_ptr<BytecodeIrInfo>& info = bvdImplMap[bytecodeVariantDef.get()].m_bii;
+                bcVariantList.push_back(info->SaveToJSON());
+            }
+            totalDfgVariants += bcVariantList.size();
+
+            json_t bcInfo = json_t::object();
+            bcInfo["bytecode_name"] = bytecodeDef.m_variants[0]->m_bytecodeName;
+            bcInfo["dfg_variants"] = std::move(bcVariantList);
+            allJsonList.push_back(std::move(bcInfo));
+        }
+        finalRes.m_dfgVariantInfoJson = std::move(allJsonList);
+
+        ReleaseAssert(totalDfgVariants + finalRes.m_bytecodeInfoJson.size() == bvdImplMap.size());
     }
 
     return finalRes;

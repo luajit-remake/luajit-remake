@@ -19,11 +19,11 @@ std::unique_ptr<llvm::Module> WARN_UNUSED GetTestCase(llvm::LLVMContext& ctx, si
 
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnly);
 
-    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+    std::vector<BytecodeVariantCollection> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
 
     ReleaseAssert(defs.size() >= testcaseNum);
-    ReleaseAssert(defs[testcaseNum - 1].size() > 0);
-    auto& target = defs[testcaseNum - 1][0];
+    ReleaseAssert(defs[testcaseNum - 1].m_variants.size() > 0);
+    auto& target = defs[testcaseNum - 1].m_variants[0];
     target->SetMaxOperandWidthBytes(4);
 
     Function* implFunc = module->getFunction(target->m_implFunctionName);

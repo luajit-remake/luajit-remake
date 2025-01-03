@@ -24,7 +24,7 @@ static void PrintLJRUsage()
 
 static void LaunchScript(int argc, char** argv)
 {
-    assert(argc >= 2);
+    Assert(argc >= 2);
     VM* vm = VM::Create();
 
     // According to Lua Standard:

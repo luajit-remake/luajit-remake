@@ -16,7 +16,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, int16_t index, TValu
     //
     while (true)
     {
-        assert(!metamethod.Is<tNil>());
+        Assert(!metamethod.Is<tNil>());
         if (likely(metamethod.Is<tHeapEntity>()))
         {
             HeapEntityType mmType = metamethod.GetHeapEntityType();
@@ -93,7 +93,7 @@ no_metamethod:
 
 static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, int16_t /*index*/, TValue /*valueToPut*/)
 {
-    assert(!base.Is<tTable>());
+    Assert(!base.Is<tTable>());
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
     if (metamethod.Is<tNil>())
     {
@@ -104,7 +104,7 @@ static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, int16_t /*index*
 
 static void NO_RETURN HandleNoMetamethodSlowPathPut(TValue base, int16_t index, TValue valueToPut)
 {
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     HeapPtr<TableObject> tableObj = base.As<tTable>();
     VM* vm = VM::GetActiveVMForCurrentThread();
     TableObject* raw = TranslateToRawPointer(vm, tableObj);
@@ -150,7 +150,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
                     // DEVNOTE: when we support int32 type, we need to specialize for ValueCheckKind::Int32 as well. Same in the other places.
                     //
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                    Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
@@ -166,7 +166,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::InBound:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::NoCheck);
+                    Assert(c_valueCK == ValueCheckKind::DoubleOrNil || c_valueCK == ValueCheckKind::NoCheck);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::DoubleOrNil, ValueCheckKind::NoCheck);
                         if (likely(TableObject::CheckValueMeetsPreconditionForPutByIntegerIndexFastPath(valueToPut, c_valueCK)))
@@ -182,7 +182,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::NoArrayPart:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                    Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                     SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                     ArrayType c_newArrayType = c_info.m_newArrayType;
@@ -195,7 +195,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                             // PreparePutByIntegerIndex only create IC with IndexCheckKind::NoArrayPart if the index is x_arrayBaseOrd.
                             // And since this is PutByImm, the index is a constant, thus will never change in future runs of this IC.
                             //
-                            assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
+                            Assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
                             std::ignore = index;
                             if (likely(tableObj->m_butterfly != nullptr))
                             {
@@ -233,7 +233,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::Continuous:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                    Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     return ic->Effect([tableObj, index, valueToPut, c_valueCK]() {
                         IcSpecializeValueFullCoverage(c_valueCK, ValueCheckKind::Double, ValueCheckKind::NotNil);
                         // Check for metamethod call
@@ -296,7 +296,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                 case IndexCheckKind::NoArrayPart:
                 {
                     ValueCheckKind c_valueCK = c_info.m_valueCheckKind;
-                    assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
+                    Assert(c_valueCK == ValueCheckKind::Double || c_valueCK == ValueCheckKind::NotNil);
                     SystemHeapPointer<void> c_expectedHiddenClass = c_info.m_hiddenClass;
                     SystemHeapPointer<void> c_newHiddenClass = c_info.m_newHiddenClass;
                     ArrayType c_newArrayType = c_info.m_newArrayType;
@@ -320,7 +320,7 @@ static void NO_RETURN TablePutByImmImpl(TValue base, int16_t index, TValue value
                             // PreparePutByIntegerIndex only create IC with IndexCheckKind::NoArrayPart if the index is x_arrayBaseOrd.
                             // And since this is PutByImm, the index is a constant, thus will never change in future runs of this IC.
                             //
-                            assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
+                            Assert(index == ArrayGrowthPolicy::x_arrayBaseOrd);
                             std::ignore = index;
                             if (likely(tableObj->m_butterfly != nullptr))
                             {
@@ -404,6 +404,11 @@ DEEGEN_DEFINE_BYTECODE(TablePutByImm)
     Result(NoOutput);
     Implementation(TablePutByImmImpl);
     Variant();
+    DfgVariant(Op("base").HasType<tTable>());
+    DfgVariant();
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

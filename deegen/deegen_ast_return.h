@@ -7,8 +7,10 @@
 
 namespace dast {
 
+class DeegenBytecodeImplCreatorBase;
 class InterpreterBytecodeImplCreator;
 class BaselineJitImplCreator;
+class DfgJitImplCreator;
 
 class AstBytecodeReturn
 {
@@ -41,6 +43,17 @@ public:
         }
     }
 
+    void DoLoweringForDfgJIT(DfgJitImplCreator* ifi, llvm::Function* func);
+
+    static void LowerAllForDfgJIT(DfgJitImplCreator* ifi, llvm::Function* func)
+    {
+        std::vector<AstBytecodeReturn> res = GetAllUseInFunction(func);
+        for (AstBytecodeReturn& item : res)
+        {
+            item.DoLoweringForDfgJIT(ifi, func);
+        }
+    }
+
     // Return true if the given function contains a call to the 'Return()' API, so it may transfer control to the next bytecode
     //
     static bool WARN_UNUSED CheckMayFallthroughToNextBytecode(llvm::Function* func)
@@ -55,6 +68,11 @@ public:
         }
         return false;
     }
+
+    // Emit the logic that stores the output of the bytecode to stack, if an output exists
+    // Note that this function does not work if the output is reg-allocated in DFG
+    //
+    void EmitStoreOutputToStackLogic(DeegenBytecodeImplCreatorBase* ifi, llvm::Instruction* insertBefore);
 
     llvm::CallInst* m_origin;
     // Whether this is a ReturnAndBranch API call

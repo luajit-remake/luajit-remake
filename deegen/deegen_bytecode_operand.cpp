@@ -7,6 +7,7 @@
 #include "api_define_bytecode.h"
 #include "runtime_utils.h"
 #include "deegen_jit_slow_path_data.h"
+#include "base64_util.h"
 
 namespace dast {
 
@@ -52,6 +53,15 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromStorage(llvm::Value* stor
     return result;
 }
 
+llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromStorage(llvm::Value* storagePtr, size_t offsetInStorage, size_t storageSize, llvm::BasicBlock* insertAtEnd)
+{
+    using namespace llvm;
+    UnreachableInst* dummy = new UnreachableInst(storagePtr->getContext(), insertAtEnd);
+    Value* res = GetOperandValueFromStorage(storagePtr, offsetInStorage, storageSize, dummy);
+    dummy->eraseFromParent();
+    return res;
+}
+
 llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(llvm::Value* bytecodePtr, llvm::BasicBlock* targetBB)
 {
     using namespace llvm;
@@ -68,9 +78,9 @@ llvm::Value* WARN_UNUSED BcOperand::GetOperandValueFromBytecodeStruct(Interprete
     return GetOperandValueFromBytecodeStruct(ifi->GetCurBytecode(), targetBB);
 }
 
-json WARN_UNUSED BcOperand::SaveBaseToJSON()
+json_t WARN_UNUSED BcOperand::SaveBaseToJSON()
 {
-    json j;
+    json_t j;
     j["kind"] = StringifyBcOperandKind(GetKind());
     j["name"] = m_name;
     j["operand_ordinal"] = m_operandOrdinal;
@@ -79,7 +89,7 @@ json WARN_UNUSED BcOperand::SaveBaseToJSON()
     return j;
 }
 
-BcOperand::BcOperand(json& j)
+BcOperand::BcOperand(json_t& j)
 {
     JSONCheckedGet(j, "name", m_name /*out*/);
     JSONCheckedGet(j, "operand_ordinal", m_operandOrdinal /*out*/);
@@ -87,7 +97,7 @@ BcOperand::BcOperand(json& j)
     JSONCheckedGet(j, "size_in_bcstruct", m_sizeInBytecodeStruct /*out*/);
 }
 
-std::unique_ptr<BcOperand> WARN_UNUSED BcOperand::LoadFromJSON(json& j)
+std::unique_ptr<BcOperand> WARN_UNUSED BcOperand::LoadFromJSON(json_t& j)
 {
     BcOperandKind opKind = GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind"));
     switch (opKind)
@@ -99,15 +109,22 @@ std::unique_ptr<BcOperand> WARN_UNUSED BcOperand::LoadFromJSON(json& j)
     ReleaseAssert(false);
 }
 
-BcOpSlot::BcOpSlot(json& j)
+BcOpSlot::BcOpSlot(json_t& j)
     : BcOperand(j)
+    , m_hasSpeculation(false)
+    , m_specMask(0)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Slot);
+    JSONCheckedGet(j, "has_dfg_speculation", m_hasSpeculation /*out*/);
+    JSONCheckedGet(j, "dfg_speculation_mask", m_specMask /*out*/);
 }
 
-json WARN_UNUSED BcOpSlot::SaveToJSON()
+json_t WARN_UNUSED BcOpSlot::SaveToJSON()
 {
-    json j = SaveBaseToJSON();
+    json_t j = SaveBaseToJSON();
+    j["has_dfg_speculation"] = m_hasSpeculation;
+    j["dfg_speculation_mask"] = m_specMask;
+    ReleaseAssertImp(m_hasSpeculation, m_specMask <= x_typeMaskFor<tTop>);
     return j;
 }
 
@@ -124,16 +141,16 @@ llvm::Value* WARN_UNUSED BcOpSlot::EmitUsageValueFromBytecodeValue(DeegenBytecod
     return bv;
 }
 
-BcOpConstant::BcOpConstant(json& j)
+BcOpConstant::BcOpConstant(json_t& j)
     : BcOperand(j)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Constant);
     JSONCheckedGet(j, "typeMask", m_typeMask /*out*/);
 }
 
-json WARN_UNUSED BcOpConstant::SaveToJSON()
+json_t WARN_UNUSED BcOpConstant::SaveToJSON()
 {
-    json j = SaveBaseToJSON();
+    json_t j = SaveBaseToJSON();
     j["typeMask"] = m_typeMask;
     return j;
 }
@@ -142,7 +159,7 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(DeegenByt
 {
     using namespace llvm;
     LLVMContext& ctx = ifi->GetModule()->getContext();
-    if (m_typeMask == x_typeSpeculationMaskFor<tNil>)
+    if (m_typeMask == x_typeMaskFor<tNil>)
     {
         ReleaseAssert(bytecodeValue == nullptr);
         Value* res = CreateLLVMConstantInt(ctx, TValue::Nil().m_value);
@@ -175,7 +192,7 @@ llvm::Value* WARN_UNUSED BcOpConstant::EmitUsageValueFromBytecodeValue(DeegenByt
     }
 }
 
-BcOpLiteral::BcOpLiteral(json& j)
+BcOpLiteral::BcOpLiteral(json_t& j)
     : BcOperand(j)
 {
     // This class is not final and is inherited by SpecializedLiteral, so both class could be calling us
@@ -186,9 +203,9 @@ BcOpLiteral::BcOpLiteral(json& j)
     JSONCheckedGet(j, "lit_num_bytes", m_numBytes /*out*/);
 }
 
-json WARN_UNUSED BcOpLiteral::SaveToJSON()
+json_t WARN_UNUSED BcOpLiteral::SaveToJSON()
 {
-    json j = SaveBaseToJSON();
+    json_t j = SaveBaseToJSON();
     j["lit_is_signed"] = m_isSigned;
     j["lit_num_bytes"] = m_numBytes;
     return j;
@@ -202,16 +219,16 @@ llvm::Value* WARN_UNUSED BcOpLiteral::EmitUsageValueFromBytecodeValue(DeegenByte
     return bytecodeValue;
 }
 
-BcOpSpecializedLiteral::BcOpSpecializedLiteral(json& j)
+BcOpSpecializedLiteral::BcOpSpecializedLiteral(json_t& j)
     : BcOpLiteral(j)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::SpecializedLiteral);
     JSONCheckedGet(j, "lit_concrete_value", m_concreteValue /*out*/);
 }
 
-json WARN_UNUSED BcOpSpecializedLiteral::SaveToJSON()
+json_t WARN_UNUSED BcOpSpecializedLiteral::SaveToJSON()
 {
-    json j = BcOpLiteral::SaveToJSON();
+    json_t j = BcOpLiteral::SaveToJSON();
     j["lit_concrete_value"] = m_concreteValue;
     return j;
 }
@@ -226,7 +243,7 @@ llvm::Value* WARN_UNUSED BcOpSpecializedLiteral::EmitUsageValueFromBytecodeValue
     return res;
 }
 
-BcOpBytecodeRangeBase::BcOpBytecodeRangeBase(json& j)
+BcOpBytecodeRangeBase::BcOpBytecodeRangeBase(json_t& j)
     : BcOperand(j)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::BytecodeRangeBase);
@@ -246,9 +263,9 @@ BcOpBytecodeRangeBase::BcOpBytecodeRangeBase(json& j)
     }
 }
 
-json WARN_UNUSED BcOpBytecodeRangeBase::SaveToJSON()
+json_t WARN_UNUSED BcOpBytecodeRangeBase::SaveToJSON()
 {
-    json j = SaveBaseToJSON();
+    json_t j = SaveBaseToJSON();
     j["range_is_readonly"] = m_isReadOnly;
     j["range_has_limit"] = m_hasRangeLimit;
     if (m_hasRangeLimit)
@@ -276,16 +293,16 @@ llvm::Value* WARN_UNUSED BcOpBytecodeRangeBase::EmitUsageValueFromBytecodeValue(
     return res;
 }
 
-BcOpInlinedMetadata::BcOpInlinedMetadata(json& j)
+BcOpInlinedMetadata::BcOpInlinedMetadata(json_t& j)
     : BcOperand(j)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::InlinedMetadata);
     JSONCheckedGet(j, "inline_md_size", m_size /*out*/);
 }
 
-json WARN_UNUSED BcOpInlinedMetadata::SaveToJSON()
+json_t WARN_UNUSED BcOpInlinedMetadata::SaveToJSON()
 {
-    json j = SaveBaseToJSON();
+    json_t j = SaveBaseToJSON();
     j["inline_md_size"] = m_size;
     return j;
 }
@@ -299,6 +316,106 @@ llvm::Value* WARN_UNUSED BcOpInlinedMetadata::EmitUsageValueFromBytecodeValue(De
     Value* res = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), ifi->GetCurBytecode(), { CreateLLVMConstantInt<uint64_t>(ctx, GetOffsetInBytecodeStruct()) }, "", targetBB);
     ReleaseAssert(res->getType() == GetUsageType(ctx));
     return res;
+}
+
+json_t WARN_UNUSED OperandRegPreferenceInfo::SaveToJSON()
+{
+    json_t j = json_t::object();
+    j["is_initialized"] = m_isInitialized;
+    j["is_initialized_by_user"] = m_isInitializedByUser;
+    j["is_gpr_allowed"] = m_isGprAllowed;
+    j["is_fpr_allowed"] = m_isFprAllowed;
+    j["is_gpr_preferred"] = m_isGprPreferred;
+    return j;
+}
+
+void OperandRegPreferenceInfo::LoadFromJSON(json_t& j)
+{
+    ReleaseAssert(j.is_object());
+    m_isInitialized = JSONCheckedGet<bool>(j, "is_initialized");
+    m_isInitializedByUser = JSONCheckedGet<bool>(j, "is_initialized_by_user");
+    m_isGprAllowed = JSONCheckedGet<bool>(j, "is_gpr_allowed");
+    m_isFprAllowed = JSONCheckedGet<bool>(j, "is_fpr_allowed");
+    m_isGprPreferred = JSONCheckedGet<bool>(j, "is_gpr_preferred");
+}
+
+OperandRegPreferenceInfo WARN_UNUSED OperandRegPreferenceInfo::ParseFromLLVM(llvm::Module* module, llvm::Constant* cst)
+{
+    using namespace llvm;
+    using OperandRegPriorityInfo = DeegenFrontendBytecodeDefinitionDescriptor::OperandRegPriorityInfo;
+    using RegHintEnum = DeegenFrontendBytecodeDefinitionDescriptor::RegHint;
+
+    OperandRegPreferenceInfo r;
+
+    LLVMConstantStructReader reader(module, cst);
+    auto numTerms = reader.GetValue<&DeegenFrontendBytecodeDefinitionDescriptor::OperandRegPriorityInfo::m_numTerms>();
+    static_assert(std::is_same_v<decltype(numTerms), uint8_t>);
+    if (numTerms == static_cast<uint8_t>(-1))
+    {
+        return r;
+    }
+
+    ReleaseAssert(numTerms <= OperandRegPriorityInfo::x_maxTerms);
+    LLVMConstantArrayReader arrReader(module, reader.Get<&OperandRegPriorityInfo::m_priorityList>());
+    ReleaseAssert(arrReader.GetNumElements<RegHintEnum>() == OperandRegPriorityInfo::x_maxTerms);
+
+    RegHintEnum data[OperandRegPriorityInfo::x_maxTerms];
+    for (size_t i = 0; i < numTerms; i++)
+    {
+        RegHintEnum val = static_cast<RegHintEnum>(arrReader.GetValue<std::underlying_type_t<RegHintEnum>>(i));
+        data[i] = val;
+    }
+
+    r.m_isInitialized = true;
+    r.m_isInitializedByUser = true;
+
+    for (size_t i = 0; i < numTerms; i++)
+    {
+        if (data[i] == RegHintEnum::GPR)
+        {
+            r.m_isGprAllowed = true;
+        }
+        else
+        {
+            ReleaseAssert(data[i] == RegHintEnum::FPR);
+            r.m_isFprAllowed = true;
+        }
+    }
+
+    ReleaseAssert(numTerms > 0 && "empty reg candidate is not allowed!");
+    if (data[0] == RegHintEnum::GPR)
+    {
+        r.m_isGprPreferred = true;
+    }
+    return r;
+}
+
+OperandRegPreferenceInfo WARN_UNUSED OperandRegPreferenceInfo::GetDefaultRegPreferenceFromTypeMask(TypeMaskTy mask)
+{
+    OperandRegPreferenceInfo r;
+    r.m_isInitialized = true;
+    if ((mask & x_typeMaskFor<tDouble>) == mask)
+    {
+        // Subset of tDouble, FPR only
+        //
+        r.m_isFprAllowed = true;
+        return r;
+    }
+
+    if ((mask & x_typeMaskFor<tDouble>) == 0)
+    {
+        // Disjoint with tDouble, GPR only
+        //
+        r.m_isGprAllowed = true;
+        return r;
+    }
+
+    // GPR & FPR
+    //
+    r.m_isGprAllowed = true;
+    r.m_isFprAllowed = true;
+    r.m_isGprPreferred = true;
+    return r;
 }
 
 llvm::Value* WARN_UNUSED BytecodeVariantDefinition::DecodeBytecodeOpcode(llvm::Value* bytecode, llvm::Instruction* insertBefore)
@@ -320,7 +437,7 @@ llvm::Value* WARN_UNUSED BytecodeVariantDefinition::DecodeBytecodeOpcode(llvm::V
     return res;
 }
 
-std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED BytecodeVariantDefinition::ParseAllFromModule(llvm::Module* module)
+std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::ParseAllFromModule(llvm::Module* module)
 {
     using namespace llvm;
     using Desc = DeegenFrontendBytecodeDefinitionDescriptor;
@@ -446,11 +563,24 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         return bytecodeSameLengthConstraintGroup[p];
     };
 
-    auto readSpecializedOperand = [&](Constant* cst) -> SpecializedOperand {
+    struct ParsedSpecializedOperand
+    {
+        DeegenSpecializationKind m_kind;
+        uint64_t m_value;
+        OperandRegPreferenceInfo m_regInfo;
+    };
+
+    auto readSpecializedOperand = [&](Constant* cst) -> ParsedSpecializedOperand {
         LLVMConstantStructReader spOperandReader(module, cst);
         auto kind = spOperandReader.GetValue<&SpecializedOperand::m_kind>();
         auto value = spOperandReader.GetValue<&SpecializedOperand::m_value>();
-        return SpecializedOperand { kind, value };
+        OperandRegPreferenceInfo info = OperandRegPreferenceInfo::ParseFromLLVM(module, spOperandReader.Get<&SpecializedOperand::m_regHint>());
+
+        return ParsedSpecializedOperand {
+            .m_kind = kind,
+            .m_value = value,
+            .m_regInfo = info
+        };
     };
 
     // Returns the C++ code that constructs the BytecodeRWCInfo as a string
@@ -460,6 +590,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         bool isApiCalled;
         std::vector<std::string> preheaderLines;
         std::vector<std::string> ctorItems;
+        std::vector<std::pair<std::string, std::string>> allRawRangeItems;
     };
 
     auto readRCWExprList = [&](Constant* cst) -> ReadRCWExprResult {
@@ -468,7 +599,6 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         using OperandExpr = Desc::OperandExpr;
         using OperandExprNode = Desc::OperandExprNode;
 
-        std::vector<std::unique_ptr<std::string>> nameHolders;
         auto readOperandExpr = [&](Constant* expr) -> OperandExpr
         {
             OperandExpr ex;
@@ -486,22 +616,41 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 ex.m_nodes[i].m_right = rds.GetValue<&OperandExprNode::m_right>();
                 if (ex.m_nodes[i].m_kind == OperandExprNode::Kind::Operand)
                 {
-                    std::string operandName = GetValueFromLLVMConstantCString(rds.Get<&OperandExprNode::m_operandName>());
-                    nameHolders.push_back(std::make_unique<std::string>(operandName));
-                    ex.m_nodes[i].m_operandName = nameHolders.back().get()->c_str();
+                    LLVMConstantArrayReader strReader(module, rds.Get<&OperandExprNode::m_operandName>());
+                    ReleaseAssert(strReader.GetNumElements<char>() == OperandExprNode::x_maxOperandNameLength);
+                    bool hasZero = false;
+                    for (size_t idx = 0; idx < OperandExprNode::x_maxOperandNameLength; idx++)
+                    {
+                        char ch = GetValueOfLLVMConstantInt<char>(strReader.Get<char>(idx));
+                        hasZero |= (ch == '\0');
+                        ex.m_nodes[i].m_operandName[idx] = ch;
+                    }
+                    ReleaseAssert(hasZero);
                 }
                 ex.m_nodes[i].m_number = rds.GetValue<&OperandExprNode::m_number>();
             }
             return ex;
         };
 
+        // Takes advantage of the fact that the OperandExpr contains no pointers inside
+        //
+        auto stringifyOperandExprBase64 = [&](const OperandExpr& expr) -> std::string
+        {
+            const unsigned char* data = reinterpret_cast<const unsigned char*>(&expr);
+            return base64_encode(data, sizeof(OperandExpr));
+        };
+
         LLVMConstantStructReader reader(module, cst);
         if (!reader.GetValue<&RCWDesc::m_apiCalled>())
         {
-            return ReadRCWExprResult { .isApiCalled = false };
+            ReadRCWExprResult res;
+            res.isApiCalled = false;
+            return res;
         }
 
         std::vector<std::string> ctorItems, preheaderItems;
+        std::vector<std::pair<std::string, std::string>> allRawRangeItems;
+
         if (reader.GetValue<&RCWDesc::m_accessesVariadicArgs>())
         {
             ctorItems.push_back("BytecodeRWCDesc::CreateVarArgs()");
@@ -521,6 +670,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             LLVMConstantStructReader rangeDescReader(module, exprArrayReader.Get<RangeDesc>(i));
             OperandExpr start = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_start>());
             OperandExpr len = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_len>());
+            allRawRangeItems.push_back(std::make_pair(stringifyOperandExprBase64(start), stringifyOperandExprBase64(len)));
             ReleaseAssert(!start.IsInfinity());
             preheaderItems.push_back("int64_t range_start_" + std::to_string(i) + " = " + start.PrintCppExpression("ops") + ";");
             preheaderItems.push_back("TestAssert(range_start_" + std::to_string(i) + " >= 0);");
@@ -535,21 +685,23 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         return ReadRCWExprResult {
             .isApiCalled = true,
             .preheaderLines = preheaderItems,
-            .ctorItems = ctorItems
+            .ctorItems = ctorItems,
+            .allRawRangeItems = allRawRangeItems
         };
     };
 
-    std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> result;
+    std::vector<BytecodeVariantCollection> result;
     for (size_t curBytecodeOrd = 0; curBytecodeOrd < numBytecodesInThisTU; curBytecodeOrd++)
     {
         result.push_back({});
-        std::vector<std::unique_ptr<BytecodeVariantDefinition>>& listForCurrentBytecode = result.back();
+        BytecodeVariantCollection& curBytecodeInfo = result.back();
 
         LLVMConstantStructReader curDefReader(module, defListReader.Get<Desc>(curBytecodeOrd));
         ReleaseAssert(curDefReader.GetValue<&Desc::m_operandTypeListInitialized>() == true);
         ReleaseAssert(curDefReader.GetValue<&Desc::m_implementationInitialized>() == true);
         ReleaseAssert(curDefReader.GetValue<&Desc::m_resultKindInitialized>() == true);
         size_t numVariants = curDefReader.GetValue<&Desc::m_numVariants>();
+        size_t numDfgVariants = curDefReader.GetValue<&Desc::m_numDfgVariants>();
         size_t numOperands = curDefReader.GetValue<&Desc::m_numOperands>();
         LLVMConstantArrayReader operandListReader(module, curDefReader.Get<&Desc::m_operandTypes>());
         ReleaseAssert(operandListReader.GetNumElements<Desc::Operand>() == Desc::x_maxOperands);
@@ -586,12 +738,28 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             }
         }
 
+        std::vector<OperandRegPreferenceInfo> bcLevelOperandRegPrefInfo;
+        {
+            LLVMConstantStructReader tmpReader(module, curDefReader.Get<&Desc::m_bcRegPriorityInfo>());
+            LLVMConstantArrayReader regPrefInfoList(module, tmpReader.Dewrap());
+            ReleaseAssert(regPrefInfoList.GetNumElements<Desc::OperandRegPriorityInfo>() == Desc::x_maxOperands);
+            for (size_t i = 0; i < numOperands; i++)
+            {
+                Constant* regPrefInfo = regPrefInfoList.Get<Desc::OperandRegPriorityInfo>(i);
+                bcLevelOperandRegPrefInfo.push_back(OperandRegPreferenceInfo::ParseFromLLVM(module, regPrefInfo));
+            }
+        }
+
+        OperandRegPreferenceInfo bcLevelOutputRegPrefInfo = OperandRegPreferenceInfo::ParseFromLLVM(
+            module, curDefReader.Get<&Desc::m_outputRegPriorityInfo>());
+
+        bool shouldDisableRegAllocEnabledAssertEvenIfRegHintGiven = curDefReader.GetValue<&Desc::m_disableRegAllocMustBeEnabledAssert>();
+
         ReadRCWExprResult bcwiseRCWReadInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareReadsInfo>());
         ReadRCWExprResult bcwiseRCWWriteInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareWritesInfo>());
         ReadRCWExprResult bcwiseRCWClobberInfo = readRCWExprList(curDefReader.Get<&Desc::m_bcDeclareClobbersInfo>());
 
-        LLVMConstantArrayReader variantListReader(module, curDefReader.Get<&Desc::m_variants>());
-        for (size_t variantOrd = 0; variantOrd < numVariants; variantOrd++)
+        auto readVariant = [&](bool isDfgVariant, size_t variantOrd, LLVMConstantStructReader& variantReader) -> std::unique_ptr<BytecodeVariantDefinition>
         {
             std::unique_ptr<BytecodeVariantDefinition> def = std::make_unique<BytecodeVariantDefinition>();
             def->m_bytecodeOrdInTU = curBytecodeOrd;
@@ -599,6 +767,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_bytecodeName = bytecodeNamesInThisTU[curBytecodeOrd];
             def->m_opNames = operandNames;
             def->m_originalOperandTypes = operandTypes;
+            def->m_isDfgVariant = isDfgVariant;
             def->m_hasDecidedOperandWidth = false;
             def->m_bytecodeStructLengthTentativelyFinalized = false;
             def->m_bytecodeStructLengthFinalized = false;
@@ -614,6 +783,7 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
             def->m_bytecodeMayFallthroughToNextBytecodeDetermined = false;
             def->m_bytecodeMayMakeTailCallDetermined = false;
             def->m_isInterpreterToBaselineJitOsrEntryPoint = isInterpreterToBaselineJitOsrEntryPoint;
+            def->m_disableRegAllocEnabledAssertEvenIfRegHintGiven = shouldDisableRegAllocEnabledAssertEvenIfRegHintGiven;
             if (hasTValueOutput)
             {
                 def->m_outputOperand = std::make_unique<BcOpSlot>("output");
@@ -623,7 +793,6 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 def->m_condBrTarget = std::make_unique<BcOpLiteral>("condBrTarget", true /*isSigned*/, 4 /*numBytes*/);
             }
 
-            LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
             bool enableHCS = variantReader.GetValue<&Desc::SpecializedVariant::m_enableHCS>();
             size_t numQuickenings = variantReader.GetValue<&Desc::SpecializedVariant::m_numQuickenings>();
             if (enableHCS)
@@ -637,45 +806,119 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 ReleaseAssert(numQuickenings == 0);
             }
 
+            def->m_operandRegPrefInfo = bcLevelOperandRegPrefInfo;
+            def->m_outputRegPrefInfo = bcLevelOutputRegPrefInfo;
+
+            {
+                OperandRegPreferenceInfo regPrefInfo = OperandRegPreferenceInfo::ParseFromLLVM(
+                    module, variantReader.Get<&Desc::SpecializedVariant::m_baseOutputRegPriority>());
+
+                if (regPrefInfo.m_isInitialized)
+                {
+                    def->m_outputRegPrefInfo = regPrefInfo;
+                }
+            }
+
+            ReleaseAssertImp(def->m_outputRegPrefInfo.m_isInitialized, def->m_hasOutputValue);
+
             LLVMConstantArrayReader baseReader(module, variantReader.Get<&Desc::SpecializedVariant::m_base>());
             for (size_t opOrd = 0; opOrd < numOperands; opOrd++)
             {
-                SpecializedOperand spOp = readSpecializedOperand(baseReader.Get<SpecializedOperand>(opOrd));
+                // Type specialization/speculation information overrides bytecode-level reg hint
+                // Helper function that updates reg hint based on the type info
+                //
+                auto updateRegPrefBasedOnTypeMask = [&](uint64_t typeMask)
+                {
+                    ReleaseAssert(typeMask <= x_typeMaskFor<tTop>);
+                    ReleaseAssert(opOrd < def->m_operandRegPrefInfo.size());
+                    if (typeMask != x_typeMaskFor<tTop>)
+                    {
+                        def->m_operandRegPrefInfo[opOrd] = OperandRegPreferenceInfo::GetDefaultRegPreferenceFromTypeMask(SafeIntegerCast<TypeMaskTy>(typeMask));
+                    }
+                };
+
+                ParsedSpecializedOperand spOp = readSpecializedOperand(baseReader.Get<SpecializedOperand>(opOrd));
                 DeegenBytecodeOperandType opType = operandTypes[opOrd];
                 std::string operandName = operandNames[opOrd];
                 if (opType == DeegenBytecodeOperandType::BytecodeSlotOrConstant)
                 {
-                    if (spOp.m_kind == DeegenSpecializationKind::BytecodeSlot)
+                    // For DFG variant, BytecodeSlotOrConstant is always a bytecode slot, since the input is either reg-alloc'ed or spilled
+                    //
+                    if (spOp.m_kind == DeegenSpecializationKind::BytecodeSlot || isDfgVariant)
                     {
-                        def->m_list.push_back(std::make_unique<BcOpSlot>(operandName));
+                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                        // If this is a DFG variant, we also need to know the speculations
+                        //
+                        if (isDfgVariant)
+                        {
+                            ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
+                            if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
+                            {
+                                op->SetDfgSpeculation(spOp.m_value);
+                                updateRegPrefBasedOnTypeMask(spOp.m_value);
+                            }
+                        }
+                        def->m_list.push_back(std::move(op));
                     }
                     else
                     {
                         ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::BytecodeConstantWithType && "unexpected specialization");
-                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, SafeIntegerCast<TypeSpeculationMask>(spOp.m_value)));
+                        TypeMaskTy typeMask = SafeIntegerCast<TypeMaskTy>(spOp.m_value);
+                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, typeMask));
+                        updateRegPrefBasedOnTypeMask(typeMask);
                     }
                 }
                 else if (opType == DeegenBytecodeOperandType::BytecodeSlot)
                 {
-                    ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::NotSpecialized && "unexpected specialization");
-                    def->m_list.push_back(std::make_unique<BcOpSlot>(operandName));
-                }
-                else if (opType == DeegenBytecodeOperandType::Constant)
-                {
-                    TypeSpeculationMask specMask;
-                    if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
+                    std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                    if (isDfgVariant)
                     {
-                        specMask = x_typeSpeculationMaskFor<tTop>;
-                    }
-                    else if (spOp.m_kind == DeegenSpecializationKind::BytecodeConstantWithType)
-                    {
-                        specMask = SafeIntegerCast<TypeSpeculationMask>(spOp.m_value);
+                        ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
+                        if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
+                        {
+                            op->SetDfgSpeculation(spOp.m_value);
+                            updateRegPrefBasedOnTypeMask(spOp.m_value);
+                        }
                     }
                     else
                     {
-                        ReleaseAssert(false && "unexpected specialization");
+                        ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::NotSpecialized && "unexpected specialization");
                     }
-                    def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, specMask));
+                    def->m_list.push_back(std::move(op));
+                }
+                else if (opType == DeegenBytecodeOperandType::Constant)
+                {
+                    // DFG variant does not have the concept of constant, constant is implemented as bytecode slot
+                    //
+                    if (isDfgVariant)
+                    {
+                        ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
+                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                        if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
+                        {
+                            op->SetDfgSpeculation(spOp.m_value);
+                            updateRegPrefBasedOnTypeMask(spOp.m_value);
+                        }
+                        def->m_list.push_back(std::move(op));
+                    }
+                    else
+                    {
+                        TypeMaskTy specMask;
+                        if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
+                        {
+                            specMask = x_typeMaskFor<tTop>;
+                        }
+                        else if (spOp.m_kind == DeegenSpecializationKind::BytecodeConstantWithType)
+                        {
+                            specMask = SafeIntegerCast<TypeMaskTy>(spOp.m_value);
+                        }
+                        else
+                        {
+                            ReleaseAssert(false && "unexpected specialization");
+                        }
+                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, specMask));
+                        updateRegPrefBasedOnTypeMask(specMask);
+                    }
                 }
                 else if (opType == DeegenBytecodeOperandType::BytecodeRangeRO || opType == DeegenBytecodeOperandType::BytecodeRangeRW)
                 {
@@ -741,8 +984,24 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                         def->m_list.push_back(std::make_unique<BcOpSpecializedLiteral>(operandName, isSigned, numBytes, spOp.m_value));
                     }
                 }
+                // RegHint directly specified at the variant level can override all earlier decisions
+                //
+                if (spOp.m_regInfo.m_isInitialized)
+                {
+                    ReleaseAssert(opOrd < def->m_operandRegPrefInfo.size());
+                    def->m_operandRegPrefInfo[opOrd] = spOp.m_regInfo;
+                }
             }
             ReleaseAssert(def->m_list.size() == def->m_opNames.size());
+            ReleaseAssert(def->m_list.size() == def->m_operandRegPrefInfo.size());
+
+            for (size_t i = 0; i < def->m_list.size(); i++)
+            {
+                if (def->m_operandRegPrefInfo[i].m_isInitialized)
+                {
+                    ReleaseAssert(def->m_list[i]->GetKind() == BcOperandKind::Slot || def->m_list[i]->GetKind() == BcOperandKind::Constant);
+                }
+            }
 
             for (size_t i = 0; i < def->m_list.size(); i++)
             {
@@ -756,22 +1015,19 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 LLVMConstantArrayReader quickeningReader(module, quickeningReaderTmp.Get<&Desc::SpecializedVariant::Quickening::value>());
                 for (size_t opOrd = 0; opOrd < numOperands; opOrd++)
                 {
-                    SpecializedOperand spOp = readSpecializedOperand(quickeningReader.Get<SpecializedOperand>(opOrd));
+                    ParsedSpecializedOperand spOp = readSpecializedOperand(quickeningReader.Get<SpecializedOperand>(opOrd));
+                    ReleaseAssert(!spOp.m_regInfo.m_isInitialized && "Specifying a RegHint in EnableHotColdSplitting has no effect!");
                     if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
                     {
                         continue;
                     }
                     ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer);
                     ReleaseAssert(def->m_list[opOrd]->GetKind() == BcOperandKind::Slot || def->m_list[opOrd]->GetKind() == BcOperandKind::Constant);
-                    TypeSpeculationMask specMask = SafeIntegerCast<TypeSpeculationMask>(spOp.m_value);
+                    TypeMaskTy specMask = SafeIntegerCast<TypeMaskTy>(spOp.m_value);
                     def->m_quickening.push_back({ .m_operandOrd = opOrd, .m_speculatedMask = specMask });
                 }
                 ReleaseAssert(def->m_quickening.size() > 0);
             }
-
-            ReadRCWExprResult variantRCWReadInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareReadsInfo>());
-            ReadRCWExprResult variantRCWWriteInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareWritesInfo>());
-            ReadRCWExprResult variantRCWClobberInfo = readRCWExprList(variantReader.Get<&Desc::SpecializedVariant::m_variantDeclareClobbersInfo>());
 
             enum class GenerateRCWKind
             {
@@ -840,15 +1096,9 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 return res;
             };
 
-            auto generateRCWGetterFunc = [&](ReadRCWExprResult& bcwiseInfo, ReadRCWExprResult& variantInfo, GenerateRCWKind rcwKind) -> std::string
+            auto generateRCWGetterFunc = [&](ReadRCWExprResult& bcwiseInfo, GenerateRCWKind rcwKind) -> std::string
             {
-                if (bcwiseInfo.isApiCalled && variantInfo.isApiCalled)
-                {
-                    fprintf(stderr, "You should declare %s at either variant level or bytecode level, not both!\n",
-                            (rcwKind == GenerateRCWKind::Read ? "read" : (rcwKind == GenerateRCWKind::Write ? "write" : "clobber")));
-                    abort();
-                }
-                if (!bcwiseInfo.isApiCalled && !variantInfo.isApiCalled)
+                if (!bcwiseInfo.isApiCalled)
                 {
                     for (size_t i = 0; i < def->m_list.size(); i++)
                     {
@@ -868,20 +1118,30 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                     }
                 }
 
-                if (bcwiseInfo.isApiCalled)
-                {
-                    return generateRCWGetterFuncImpl(bcwiseInfo, rcwKind);
-                }
-                else
-                {
-                    return generateRCWGetterFuncImpl(variantInfo, rcwKind);
-                }
+                return generateRCWGetterFuncImpl(bcwiseInfo, rcwKind);
             };
 
             def->m_rcwInfoFuncs =
-                generateRCWGetterFunc(bcwiseRCWReadInfo, variantRCWReadInfo, GenerateRCWKind::Read)
-                + generateRCWGetterFunc(bcwiseRCWWriteInfo, variantRCWWriteInfo, GenerateRCWKind::Write)
-                + generateRCWGetterFunc(bcwiseRCWClobberInfo, variantRCWClobberInfo, GenerateRCWKind::Clobber);
+                generateRCWGetterFunc(bcwiseRCWReadInfo, GenerateRCWKind::Read)
+                + generateRCWGetterFunc(bcwiseRCWWriteInfo, GenerateRCWKind::Write)
+                + generateRCWGetterFunc(bcwiseRCWClobberInfo, GenerateRCWKind::Clobber);
+
+            auto getRCWRawRangeExprs = [&](ReadRCWExprResult& bcwiseInfo) -> std::vector<std::pair<std::string, std::string>>
+            {
+                if (bcwiseInfo.isApiCalled)
+                {
+                    return bcwiseInfo.allRawRangeItems;
+                }
+                else
+                {
+                    ReleaseAssert(bcwiseInfo.allRawRangeItems.empty());
+                    return {};
+                }
+            };
+
+            def->m_rawReadRangeExprs = getRCWRawRangeExprs(bcwiseRCWReadInfo);
+            def->m_rawWriteRangeExprs = getRCWRawRangeExprs(bcwiseRCWWriteInfo);
+            def->m_rawClobberRangeExprs = getRCWRawRangeExprs(bcwiseRCWClobberInfo);
 
             def->m_bcIntrinsicOrd = intrinsicOrd;
 
@@ -968,8 +1228,32 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
                 def->m_bcIntrinsicInfoGetterFunc = generateIntrinsicInfoGetter();
             }
 
+            return def;
+        };
 
-            listForCurrentBytecode.push_back(std::move(def));
+        {
+            ReleaseAssert(numVariants > 0);
+            LLVMConstantArrayReader variantListReader(module, curDefReader.Get<&Desc::m_variants>());
+            for (size_t variantOrd = 0; variantOrd < numVariants; variantOrd++)
+            {
+                LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
+                curBytecodeInfo.m_variants.push_back(readVariant(
+                    false /*isDfgVariant*/,
+                    variantOrd,
+                    variantReader));
+            }
+        }
+
+        {
+            LLVMConstantArrayReader variantListReader(module, curDefReader.Get<&Desc::m_dfgVariants>());
+            for (size_t variantOrd = 0; variantOrd < numDfgVariants; variantOrd++)
+            {
+                LLVMConstantStructReader variantReader(module, variantListReader.Get<Desc::SpecializedVariant>(variantOrd));
+                curBytecodeInfo.m_dfgVariants.push_back(readVariant(
+                    true /*isDfgVariant*/,
+                    variantOrd,
+                    variantReader));
+            }
         }
     }
 
@@ -983,12 +1267,12 @@ std::vector<std::vector<std::unique_ptr<BytecodeVariantDefinition>>> WARN_UNUSED
         for (size_t ord : sameLengthConstraintGroup)
         {
             ReleaseAssert(ord < numBytecodesInThisTU);
-            for (std::unique_ptr<BytecodeVariantDefinition>& it : result[ord])
+            for (std::unique_ptr<BytecodeVariantDefinition>& it : result[ord].m_variants)
             {
                 list.push_back(it.get());
             }
         }
-        for (std::unique_ptr<BytecodeVariantDefinition>& it : result[curBytecodeOrd])
+        for (std::unique_ptr<BytecodeVariantDefinition>& it : result[curBytecodeOrd].m_variants)
         {
             it->m_sameLengthConstraintList = list;
         }
@@ -1020,7 +1304,7 @@ void BytecodeVariantDefinition::AssertBytecodeDefinitionGlobalSymbolHasBeenRemov
     ReleaseAssert(module->getNamedValue(BytecodeVariantDefinition::x_sameLengthConstraintListSymbolName) == nullptr);
 }
 
-BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
+BytecodeVariantDefinition::BytecodeVariantDefinition(json_t& j)
     : BytecodeVariantDefinition()
 {
     JSONCheckedGet(j, "bytecode_ord_in_tu", m_bytecodeOrdInTU);
@@ -1035,8 +1319,8 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     }
     {
         ReleaseAssert(j.count("operand_list") && j["operand_list"].is_array());
-        std::vector<json> operand_list = j["operand_list"];
-        for (json& op_json : operand_list)
+        std::vector<json_t> operand_list = j["operand_list"];
+        for (json_t& op_json : operand_list)
         {
             std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
             m_list.push_back(std::move(op));
@@ -1046,11 +1330,13 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     m_bytecodeStructLengthTentativelyFinalized = true;
     m_bytecodeStructLengthFinalized = true;
 
+    JSONCheckedGet(j, "is_dfg_variant", m_isDfgVariant);
+
     JSONCheckedGet(j, "has_output_value", m_hasOutputValue);
     if (m_hasOutputValue)
     {
         ReleaseAssert(j.count("output_operand"));
-        json op_json = j["output_operand"];
+        json_t op_json = j["output_operand"];
         std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
         ReleaseAssert(op->GetKind() == BcOperandKind::Slot);
         m_outputOperand.reset(assert_cast<BcOpSlot*>(op.release()));
@@ -1060,7 +1346,7 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     if (m_hasConditionalBranchTarget)
     {
         ReleaseAssert(j.count("cond_br_target_operand"));
-        json op_json = j["cond_br_target_operand"];
+        json_t op_json = j["cond_br_target_operand"];
         std::unique_ptr<BcOperand> op = BcOperand::LoadFromJSON(op_json);
         ReleaseAssert(op->GetKind() == BcOperandKind::Literal);
         m_condBrTarget.reset(assert_cast<BcOpLiteral*>(op.release()));
@@ -1077,7 +1363,47 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
     JSONCheckedGet(j, "num_total_generic_ic_effect_kinds", m_totalGenericIcEffectKinds);
 
     JSONCheckedGet(j, "is_interpreter_to_baseline_jit_osr_entry_point", m_isInterpreterToBaselineJitOsrEntryPoint);
+    JSONCheckedGet(j, "disable_reg_alloc_enabled_assert_even_if_reg_hint_given", m_disableRegAllocEnabledAssertEvenIfRegHintGiven);
     JSONCheckedGet(j, "rcw_info_funcs", m_rcwInfoFuncs);
+
+    auto getRcwRangeInfo = [&](json_t& data) -> std::vector<std::pair<std::string, std::string>>
+    {
+        ReleaseAssert(data.is_array());
+        std::vector<std::pair<std::string, std::string>> resList;
+        for (json_t& item : data)
+        {
+            std::string s1, s2;
+            JSONCheckedGet(item, "start", s1);
+            JSONCheckedGet(item, "length", s2);
+            resList.push_back(std::make_pair(s1, s2));
+        }
+        return resList;
+    };
+
+    ReleaseAssert(j.count("rcw_range_operand_reads"));
+    m_rawReadRangeExprs = getRcwRangeInfo(j["rcw_range_operand_reads"]);
+
+    ReleaseAssert(j.count("rcw_range_operand_writes"));
+    m_rawWriteRangeExprs = getRcwRangeInfo(j["rcw_range_operand_writes"]);
+
+    ReleaseAssert(j.count("rcw_range_operand_clobbers"));
+    m_rawClobberRangeExprs = getRcwRangeInfo(j["rcw_range_operand_clobbers"]);
+
+    {
+        ReleaseAssert(j.count("operand_reg_pref_info_list"));
+        json_t& arr = j["operand_reg_pref_info_list"];
+        ReleaseAssert(arr.is_array());
+        for (size_t idx = 0; idx < arr.size(); idx++)
+        {
+            OperandRegPreferenceInfo info;
+            info.LoadFromJSON(arr[idx]);
+            m_operandRegPrefInfo.push_back(std::move(info));
+        }
+        ReleaseAssert(m_operandRegPrefInfo.size() == m_list.size());
+    }
+
+    ReleaseAssert(j.count("output_reg_pref_info"));
+    m_outputRegPrefInfo.LoadFromJSON(j["output_reg_pref_info"]);
 
     JSONCheckedGet(j, "bc_intrinsic_ord", m_bcIntrinsicOrd);
     JSONCheckedGet(j, "bc_intrinsic_info_getter", m_bcIntrinsicInfoGetterFunc);
@@ -1099,17 +1425,23 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json& j)
             ReleaseAssert(item.size() == 2);
             BytecodeOperandQuickeningDescriptor desc;
             desc.m_operandOrd = item[0];
-            desc.m_speculatedMask = SafeIntegerCast<TypeSpeculationMask>(item[1]);
+            desc.m_speculatedMask = SafeIntegerCast<TypeMaskTy>(item[1]);
             m_quickening.push_back(desc);
         }
     }
 
     JSONCheckedGet(j, "bytecode_struct_length", m_bytecodeStructLength);
+
+    JSONCheckedGet(j, "bytecode_may_fallthrough_to_next_bytecode", m_bytecodeMayFallthroughToNextBytecode);
+    m_bytecodeMayFallthroughToNextBytecodeDetermined = true;
+
+    JSONCheckedGet(j, "bytecode_may_make_tail_call", m_bytecodeMayMakeTailCall);
+    m_bytecodeMayMakeTailCallDetermined = true;
 }
 
-json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
+json_t WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
 {
-    json j;
+    json_t j;
     j["bytecode_ord_in_tu"] = m_bytecodeOrdInTU;
     j["bytecode_variant_ord"] = m_variantOrd;
     j["bytecode_name"] = m_bytecodeName;
@@ -1121,7 +1453,7 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
         j["original_operand_type_list"] = originalOperandTypes;
     }
     {
-        std::vector<json> operand_list;
+        std::vector<json_t> operand_list;
         for (std::unique_ptr<BcOperand>& op : m_list)
         {
             operand_list.push_back(op->SaveToJSON());
@@ -1132,6 +1464,8 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
     ReleaseAssert(m_hasDecidedOperandWidth);
     ReleaseAssert(m_bytecodeStructLengthTentativelyFinalized);
     ReleaseAssert(m_bytecodeStructLengthFinalized);
+
+    j["is_dfg_variant"] = m_isDfgVariant;
 
     j["has_output_value"] = m_hasOutputValue;
     if (m_hasOutputValue)
@@ -1150,12 +1484,41 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
 
     j["is_interpreter_call_ic_explicitly_disabled"] = m_isInterpreterCallIcExplicitlyDisabled;
     j["is_interpreter_call_ic_ever_used"] = m_isInterpreterCallIcEverUsed;
-    j["num_jit_call_ic"] = GetNumCallICsInJitTier();
+    j["num_jit_call_ic"] = GetNumCallICsInBaselineJitTier();
     j["num_jit_generic_ic"] = GetNumGenericICsInJitTier();
     j["num_total_generic_ic_effect_kinds"] = GetTotalGenericIcEffectKinds();
 
     j["is_interpreter_to_baseline_jit_osr_entry_point"] = m_isInterpreterToBaselineJitOsrEntryPoint;
+    j["disable_reg_alloc_enabled_assert_even_if_reg_hint_given"] = m_disableRegAllocEnabledAssertEvenIfRegHintGiven;
     j["rcw_info_funcs"] = m_rcwInfoFuncs;
+
+    auto saveRcwRangeInfo = [&](const std::vector<std::pair<std::string, std::string>>& data) -> json_t
+    {
+        json_t r = json_t::array();
+        for (auto& it : data)
+        {
+            json_t item = json_t::object();
+            item["start"] = it.first;
+            item["length"] = it.second;
+            r.push_back(std::move(item));
+        }
+        return r;
+    };
+
+    j["rcw_range_operand_reads"] = saveRcwRangeInfo(m_rawReadRangeExprs);
+    j["rcw_range_operand_writes"] = saveRcwRangeInfo(m_rawWriteRangeExprs);
+    j["rcw_range_operand_clobbers"] = saveRcwRangeInfo(m_rawClobberRangeExprs);
+
+    {
+        json_t arr = json_t::array();
+        for (auto& item : m_operandRegPrefInfo)
+        {
+            arr.push_back(item.SaveToJSON());
+        }
+        j["operand_reg_pref_info_list"] = std::move(arr);
+    }
+
+    j["output_reg_pref_info"] = m_outputRegPrefInfo.SaveToJSON();
 
     j["bc_intrinsic_ord"] = m_bcIntrinsicOrd;
     j["bc_intrinsic_info_getter"] = m_bcIntrinsicInfoGetterFunc;
@@ -1179,14 +1542,15 @@ json WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
 
     j["bytecode_struct_length"] = m_bytecodeStructLength;
 
+    j["bytecode_may_fallthrough_to_next_bytecode"] = BytecodeMayFallthroughToNextBytecode();
+    j["bytecode_may_make_tail_call"] = BytecodeMayMakeTailCall();
     return j;
 }
 
 size_t WARN_UNUSED BytecodeVariantDefinition::GetBaselineJitSlowPathDataLength()
 {
     ReleaseAssert(IsBaselineJitSlowPathDataLayoutDetermined());
-    ReleaseAssert(m_baselineJitSlowPathData->m_totalLength != static_cast<size_t>(-1));
-    return m_baselineJitSlowPathData->m_totalLength;
+    return m_baselineJitSlowPathData->GetTotalLength();
 }
 
 void BytecodeVariantDefinition::ComputeBaselineJitSlowPathDataLayout()
@@ -1198,7 +1562,7 @@ void BytecodeVariantDefinition::ComputeBaselineJitSlowPathDataLayout()
     m_baselineJitSlowPathData->ComputeLayout(this);
 }
 
-BytecodeOpcodeRawValueMap WARN_UNUSED BytecodeOpcodeRawValueMap::ParseFromJSON(json j)
+BytecodeOpcodeRawValueMap WARN_UNUSED BytecodeOpcodeRawValueMap::ParseFromJSON(json_t j)
 {
     ReleaseAssert(j.is_array());
     size_t n = j.size();

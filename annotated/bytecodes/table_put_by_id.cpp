@@ -11,7 +11,7 @@ static void NO_RETURN TablePutByIdMetamethodCallContinuation(TValue /*base*/, TV
 
 static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TValue valueToPut, TValue metamethod)
 {
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
 
     // If 'metamethod' is a function, we should invoke the metamethod.
@@ -19,7 +19,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
     //
     while (true)
     {
-        assert(!metamethod.Is<tNil>());
+        Assert(!metamethod.Is<tNil>());
         if (likely(metamethod.Is<tHeapEntity>()))
         {
             HeapEntityType mmType = metamethod.GetHeapEntityType();
@@ -64,7 +64,7 @@ static void NO_RETURN HandleMetamethodSlowPath(TValue base, TValue tvIndex, TVal
 
 static void NO_RETURN HandleNotTableObjectSlowPath(TValue base, TValue /*tvIndex*/, TValue /*valueToPut*/)
 {
-    assert(!base.Is<tTable>());
+    Assert(!base.Is<tTable>());
     TValue metamethod = GetMetamethodForValue(base, LuaMetamethodKind::NewIndex);
     if (metamethod.Is<tNil>())
     {
@@ -91,7 +91,7 @@ static void ALWAYS_INLINE StoreValueIntoTableObject(HeapPtr<TableObject> obj, Pu
     }
     else
     {
-        assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
+        Assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
         TCSet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)), valueToPut);
     }
 }
@@ -104,7 +104,7 @@ static TValue ALWAYS_INLINE GetOldValueFromTableObject(HeapPtr<TableObject> obj,
     }
     else
     {
-        assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
+        Assert(kind == PutByIdICInfo::ICKind::OutlinedStorage);
         return TCGet(*(obj->m_butterfly->GetNamedPropertyAddr(slot)));
     }
 }
@@ -113,7 +113,7 @@ static TValue ALWAYS_INLINE GetOldValueFromTableObject(HeapPtr<TableObject> obj,
 
 static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue valueToPut)
 {
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
 
     if (likely(base.Is<tHeapEntity>()))
@@ -139,8 +139,8 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
             {
                 // Currently since we don't have UncacheableDictionary, the only case for this is TransitionedToDictionaryMode
                 //
-                assert(c_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
-                assert(!c_info.m_propertyExists);
+                Assert(c_icKind == PutByIdICInfo::ICKind::TransitionedToDictionaryMode);
+                Assert(!c_info.m_propertyExists);
                 if (unlikely(TableObject::PutByIdNeedToCheckMetatable(tableObj, c_info)))
                 {
                     TValue mm = GetNewIndexMetamethodFromTableObject(tableObj);
@@ -153,12 +153,12 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 return std::make_pair(TValue(), ResKind::NoMetamethod);
             }
 
-            assert(c_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
+            Assert(c_icKind == PutByIdICInfo::ICKind::InlinedStorage || c_icKind == PutByIdICInfo::ICKind::OutlinedStorage);
             if (likely(!c_info.m_mayHaveMetatable))
             {
                 if (c_info.m_propertyExists)
                 {
-                    assert(!c_info.m_shouldGrowButterfly);
+                    Assert(!c_info.m_shouldGrowButterfly);
                     return ic->Effect([tableObj, valueToPut, c_icKind, c_slot] {
                         IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                         IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
@@ -169,14 +169,14 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                 else
                 {
                     SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
-                    assert(c_newStructure.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                    Assert(c_newStructure.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
                     if (unlikely(c_info.m_shouldGrowButterfly))
                     {
                         return ic->Effect([tableObj, valueToPut, c_icKind, c_slot, c_newStructure] {
                             IcSpecializeValueFullCoverage(c_icKind, PutByIdICInfo::ICKind::InlinedStorage, PutByIdICInfo::ICKind::OutlinedStorage);
                             IcSpecifyCaptureValueRange(c_slot, Butterfly::x_namedPropOrdinalRangeMin, 255);
                             IcSpecifyCaptureAs2GBPointerNotNull(c_newStructure);
-                            assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                            Assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
                             uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
                             TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
                             TCSet(tableObj->m_hiddenClass, c_newStructure);
@@ -200,7 +200,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
             else if (!c_info.m_propertyExists)
             {
                 SystemHeapPointer<void> c_newStructure = c_info.m_newStructure.As();
-                assert(c_newStructure.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                Assert(c_newStructure.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
 
                 // The property is known to not exist, so we must always check the metatable
                 //
@@ -224,7 +224,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
                             return std::make_pair(mm, ResKind::HandleMetamethod);
                         }
 
-                        assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
+                        Assert(TCGet(tableObj->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure);
                         uint32_t oldButterflyNamedStorageCapacity = TCGet(tableObj->m_hiddenClass).As<Structure>()->m_butterflyNamedStorageCapacity;
                         TableObject::GrowButterflyNamedStorage_RT(tableObj, oldButterflyNamedStorageCapacity, c_newStructure.As<Structure>()->m_butterflyNamedStorageCapacity);
 
@@ -253,7 +253,7 @@ static void NO_RETURN TablePutByIdImpl(TValue base, TValue tvIndex, TValue value
             }
             else
             {
-                assert(!c_info.m_shouldGrowButterfly);
+                Assert(!c_info.m_shouldGrowButterfly);
 
                 // The property exists, so we must check if its old value is nil and then check metatable
                 //
@@ -308,6 +308,12 @@ DEEGEN_DEFINE_BYTECODE(TablePutById)
     Implementation(TablePutByIdImpl);
     Variant(
         Op("index").IsConstant<tString>()
+    );
+    DfgVariant(Op("base").HasType<tTable>());
+    DfgVariant();
+    RegAllocHint(
+        Op("base").RegHint(RegHint::GPR),
+        Op("index").RegHint(RegHint::GPR)
     );
 }
 

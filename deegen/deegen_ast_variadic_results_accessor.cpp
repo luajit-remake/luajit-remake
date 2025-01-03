@@ -18,7 +18,7 @@ struct LowerVariadicResultsAccessorApiPass final : public DeegenAbstractSimpleAp
         {
             ReleaseAssert(origin->arg_size() == 0);
             ReleaseAssert(llvm_value_has_type<void*>(origin));
-            CallInst* replacement = ifi->CallDeegenCommonSnippet("GetVariadicResultsStart", { ifi->GetStackBase(), ifi->GetCoroutineCtx() }, origin /*insertBefore*/);
+            CallInst* replacement = ifi->CallDeegenCommonSnippet("GetVariadicResultsStart", { ifi->GetCoroutineCtx() }, origin /*insertBefore*/);
             ReleaseAssert(origin->getType() == replacement->getType());
             origin->replaceAllUsesWith(replacement);
             origin->eraseFromParent();

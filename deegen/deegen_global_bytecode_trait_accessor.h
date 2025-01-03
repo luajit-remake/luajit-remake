@@ -32,10 +32,10 @@ class DeegenGlobalBytecodeTraitAccessor
 {
 public:
     static DeegenGlobalBytecodeTraitAccessor WARN_UNUSED Build(BytecodeOpcodeRawValueMap& bytecodeOrderMap,
-                                                               std::vector<json>& allJsonInfo);
+                                                               std::vector<json_t>& allJsonInfo);
 
-    json WARN_UNUSED SaveToJson();
-    static DeegenGlobalBytecodeTraitAccessor WARN_UNUSED LoadFromJson(json& j);
+    json_t WARN_UNUSED SaveToJson();
+    static DeegenGlobalBytecodeTraitAccessor WARN_UNUSED LoadFromJson(json_t& j);
     static DeegenGlobalBytecodeTraitAccessor WARN_UNUSED ParseFromCommandLineArgs();
 
     // Note that all of the functions below only works for primary bytecodes (not fused-ic variants)
@@ -77,7 +77,7 @@ public:
         return trait.m_numGenericIcTotalEffectKinds;
     }
 
-    uint64_t GetGenericIcEffectTraitBaseOrdinal(const std::string& bytecodeName) const
+    uint64_t GetBaselineJitGenericIcEffectTraitBaseOrdinal(const std::string& bytecodeName) const
     {
         Trait trait = GetTraitFromBytecodeName(bytecodeName);
         return trait.m_genericIcEffectTraitBaseOrdinal;

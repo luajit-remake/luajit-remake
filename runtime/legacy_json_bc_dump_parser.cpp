@@ -138,7 +138,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
 {
     using namespace DeegenBytecodeBuilder;
 
-    json module = json::parse(content);
+    json_t module = json_t::parse(content);
     TestAssert(module.is_object());
     TestAssert(module.count("ChunkName") && module["ChunkName"].is_string());
     std::unique_ptr<ScriptModule> smHolder = std::make_unique<ScriptModule>();
@@ -258,7 +258,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     //
                     std::map<int32_t, TValue> positiveIndexKVs;
 
-                    auto convertTableValue = [&](json& tabEntryValue) -> TValue
+                    auto convertTableValue = [&](json_t& tabEntryValue) -> TValue
                     {
                         std::string vty = JSONCheckedGet<std::string>(tabEntryValue, "Type");
                         TestAssert(vty == "Boolean" || vty == "String" || vty == "Int32" || vty == "Double");
@@ -413,7 +413,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                         else if (kty == "Double")
                         {
                             double key = JSONCheckedGet<double>(tabEntryKey, "Value");
-                            assert(!IsNaN(key));
+                            Assert(!IsNaN(key));
                             TValue val = convertTableValue(tabEntryValue);
                             TableObject::RawPutByValDoubleIndex(obj, key, val);
                             numericIndexInserted++;
@@ -475,7 +475,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
         auto& bytecodeList = j["Bytecode"];
         auto it = bytecodeList.begin();
 
-        auto getIntValue = [](const json& e) -> int32_t
+        auto getIntValue = [](const json_t& e) -> int32_t
         {
             TestAssert(e.is_number_integer() || e.is_number_unsigned());
             int32_t res;
@@ -592,9 +592,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeAdd(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == numCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == numCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -608,9 +608,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSub(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == numCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == numCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -624,9 +624,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMul(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == numCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == numCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -640,9 +640,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeDiv(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == numCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == numCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -656,9 +656,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMod(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == numCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == numCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -672,9 +672,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeAdd(bcPosForCurBytecode);
-                assert(operands.lhs == numCst(opdata[2]));
-                assert(operands.rhs == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == numCst(opdata[2]));
+                Assert(operands.rhs == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -688,9 +688,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSub(bcPosForCurBytecode);
-                assert(operands.lhs == numCst(opdata[2]));
-                assert(operands.rhs == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == numCst(opdata[2]));
+                Assert(operands.rhs == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -704,9 +704,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMul(bcPosForCurBytecode);
-                assert(operands.lhs == numCst(opdata[2]));
-                assert(operands.rhs == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == numCst(opdata[2]));
+                Assert(operands.rhs == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -720,9 +720,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeDiv(bcPosForCurBytecode);
-                assert(operands.lhs == numCst(opdata[2]));
-                assert(operands.rhs == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == numCst(opdata[2]));
+                Assert(operands.rhs == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -736,9 +736,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMod(bcPosForCurBytecode);
-                assert(operands.lhs == numCst(opdata[2]));
-                assert(operands.rhs == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == numCst(opdata[2]));
+                Assert(operands.rhs == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -752,9 +752,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeAdd(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -768,9 +768,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSub(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -784,9 +784,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMul(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -800,9 +800,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeDiv(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -816,9 +816,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMod(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -832,9 +832,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodePow(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[1]));
-                assert(operands.rhs == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.lhs == local(opdata[1]));
+                Assert(operands.rhs == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -850,9 +850,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeConcat(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.num == num);
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.num == num);
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -865,8 +865,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSetConstInt16(bcPosForCurBytecode);
-                assert(operands.value == static_cast<int16_t>(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.value == static_cast<int16_t>(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -881,8 +881,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfLT(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -897,8 +897,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNLT(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -913,8 +913,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfLE(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -929,8 +929,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNLE(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -945,8 +945,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -961,8 +961,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == local(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == local(opdata[1]));
 #endif
                 break;
             }
@@ -977,8 +977,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == objCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == objCst(opdata[1]));
 #endif
                 break;
             }
@@ -993,8 +993,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == objCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == objCst(opdata[1]));
 #endif
                 break;
             }
@@ -1009,8 +1009,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == numCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == numCst(opdata[1]));
 #endif
                 break;
             }
@@ -1025,8 +1025,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == numCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == numCst(opdata[1]));
 #endif
                 break;
             }
@@ -1041,8 +1041,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == priCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == priCst(opdata[1]));
 #endif
                 break;
             }
@@ -1057,8 +1057,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfNotEq(bcPosForCurBytecode);
-                assert(operands.lhs == local(opdata[0]));
-                assert(operands.rhs == priCst(opdata[1]));
+                Assert(operands.lhs == local(opdata[0]));
+                Assert(operands.rhs == priCst(opdata[1]));
 #endif
                 break;
             }
@@ -1074,9 +1074,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSelectAndBranchIfTruthy(bcPosForCurBytecode);
-                assert(operands.testValue == local(opdata[1]));
-                assert(operands.defaultValue == local(opdata[0]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.testValue == local(opdata[1]));
+                Assert(operands.defaultValue == local(opdata[0]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1092,9 +1092,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeSelectAndBranchIfFalsy(bcPosForCurBytecode);
-                assert(operands.testValue == local(opdata[1]));
-                assert(operands.defaultValue == local(opdata[0]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.testValue == local(opdata[1]));
+                Assert(operands.defaultValue == local(opdata[0]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1108,7 +1108,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfTruthy(bcPosForCurBytecode);
-                assert(operands.testValue == local(opdata[0]));
+                Assert(operands.testValue == local(opdata[0]));
 #endif
                 break;
             }
@@ -1122,7 +1122,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeBranchIfFalsy(bcPosForCurBytecode);
-                assert(operands.testValue == local(opdata[0]));
+                Assert(operands.testValue == local(opdata[0]));
 #endif
                 break;
             }
@@ -1135,8 +1135,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeGlobalGet(bcPosForCurBytecode);
-                assert(operands.index == objCst(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.index == objCst(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1150,8 +1150,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeGlobalPut(bcPosForCurBytecode);
-                assert(operands.index == objCst(opdata[1]));
-                assert(operands.value == local(opdata[0]));
+                Assert(operands.index == objCst(opdata[1]));
+                Assert(operands.value == local(opdata[0]));
 #endif
                 break;
             }
@@ -1167,8 +1167,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeRetM(bcPosForCurBytecode);
-                assert(operands.retStart == local(opdata[0]));
-                assert(operands.numRet == numReturnValues);
+                Assert(operands.retStart == local(opdata[0]));
+                Assert(operands.numRet == numReturnValues);
 #endif
                 break;
             }
@@ -1185,8 +1185,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeRet(bcPosForCurBytecode);
-                assert(operands.retStart == local(opdata[0]));
-                assert(operands.numRet == numReturnValues);
+                Assert(operands.retStart == local(opdata[0]));
+                Assert(operands.numRet == numReturnValues);
 #endif
                 break;
             }
@@ -1204,8 +1204,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeRet(bcPosForCurBytecode);
-                assert(operands.retStart == local(opdata[0]));
-                assert(operands.numRet == 1);
+                Assert(operands.retStart == local(opdata[0]));
+                Assert(operands.numRet == 1);
 #endif
                 break;
             }
@@ -1226,14 +1226,14 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeCallMR(bcPosForCurBytecode);
-                    assert(operands.base == local(opdata[0]));
-                    assert(operands.numArgs == numFixedParams);
-                    assert(operands.numRets == 0);
+                    Assert(operands.base == local(opdata[0]));
+                    Assert(operands.numArgs == numFixedParams);
+                    Assert(operands.numRets == 0);
 #endif
                 }
                 else
                 {
-                    assert(opdata[1] > 0);
+                    Assert(opdata[1] > 0);
                     uint16_t numResults = static_cast<uint16_t>(opdata[1] - 1);
                     bw.CreateCallM({
                         .base = local(opdata[0]),
@@ -1242,9 +1242,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeCallM(bcPosForCurBytecode);
-                    assert(operands.base == local(opdata[0]));
-                    assert(operands.numArgs == numFixedParams);
-                    assert(operands.numRets == numResults);
+                    Assert(operands.base == local(opdata[0]));
+                    Assert(operands.numArgs == numFixedParams);
+                    Assert(operands.numRets == numResults);
 #endif
                 }
                 break;
@@ -1266,14 +1266,14 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeCallR(bcPosForCurBytecode);
-                    assert(operands.base == local(opdata[0]));
-                    assert(operands.numArgs == numFixedParams);
-                    assert(operands.numRets == 0);
+                    Assert(operands.base == local(opdata[0]));
+                    Assert(operands.numArgs == numFixedParams);
+                    Assert(operands.numRets == 0);
 #endif
                 }
                 else
                 {
-                    assert(opdata[1] > 0);
+                    Assert(opdata[1] > 0);
                     uint16_t numResults = static_cast<uint16_t>(opdata[1] - 1);
                     bw.CreateCall({
                         .base = local(opdata[0]),
@@ -1282,9 +1282,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeCall(bcPosForCurBytecode);
-                    assert(operands.base == local(opdata[0]));
-                    assert(operands.numArgs == numFixedParams);
-                    assert(operands.numRets == numResults);
+                    Assert(operands.base == local(opdata[0]));
+                    Assert(operands.numArgs == numFixedParams);
+                    Assert(operands.numRets == numResults);
 #endif
                 }
                 break;
@@ -1301,8 +1301,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeCallMT(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
-                assert(operands.numArgs == numFixedParams);
+                Assert(operands.base == local(opdata[0]));
+                Assert(operands.numArgs == numFixedParams);
 #endif
                 break;
             }
@@ -1316,8 +1316,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeCallT(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
-                assert(operands.numArgs == numFixedParams);
+                Assert(operands.base == local(opdata[0]));
+                Assert(operands.numArgs == numFixedParams);
 #endif
                 break;
             }
@@ -1330,8 +1330,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMov(bcPosForCurBytecode);
-                assert(operands.input == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1344,8 +1344,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeLogicalNot(bcPosForCurBytecode);
-                assert(operands.value == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.value == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1358,8 +1358,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUnaryMinus(bcPosForCurBytecode);
-                assert(operands.input == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1372,8 +1372,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeLengthOf(bcPosForCurBytecode);
-                assert(operands.input == local(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == local(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1386,8 +1386,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMov(bcPosForCurBytecode);
-                assert(operands.input == objCst(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == objCst(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1400,8 +1400,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMov(bcPosForCurBytecode);
-                assert(operands.input == numCst(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == numCst(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1414,8 +1414,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeMov(bcPosForCurBytecode);
-                assert(operands.input == priCst(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.input == priCst(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1428,8 +1428,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeNewClosure(bcPosForCurBytecode);
-                assert(operands.unlinkedCb == objCst(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.unlinkedCb == objCst(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1474,9 +1474,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
 
 #ifndef NDEBUG
                 auto operands = bw.DecodeTableNew(bcPosForCurBytecode);
-                assert(operands.inlineStorageSizeStepping == stepping);
-                assert(operands.arrayPartSizeHint == static_cast<uint16_t>(arrayPartHint));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.inlineStorageSizeStepping == stepping);
+                Assert(operands.arrayPartSizeHint == static_cast<uint16_t>(arrayPartHint));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1508,10 +1508,10 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                                 });
 #ifndef NDEBUG
                                 auto operands = bw.DecodeTableDup(bcPosForCurBytecode);
-                                assert(operands.src == tv);
-                                assert(operands.inlineCapacityStepping == stepping);
-                                assert(operands.hasButterfly == 0);
-                                assert(operands.output == local(opdata[0]));
+                                Assert(operands.src == tv);
+                                Assert(operands.inlineCapacityStepping == stepping);
+                                Assert(operands.hasButterfly == 0);
+                                Assert(operands.output == local(opdata[0]));
 #endif
                             }
                         }
@@ -1528,10 +1528,10 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                                 });
 #ifndef NDEBUG
                                 auto operands = bw.DecodeTableDup(bcPosForCurBytecode);
-                                assert(operands.src == tv);
-                                assert(operands.inlineCapacityStepping == stepping);
-                                assert(operands.hasButterfly == 1);
-                                assert(operands.output == local(opdata[0]));
+                                Assert(operands.src == tv);
+                                Assert(operands.inlineCapacityStepping == stepping);
+                                Assert(operands.hasButterfly == 1);
+                                Assert(operands.output == local(opdata[0]));
 #endif
                             }
                         }
@@ -1545,8 +1545,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeTableDupGeneral(bcPosForCurBytecode);
-                    assert(operands.src == tv);
-                    assert(operands.output == local(opdata[0]));
+                    Assert(operands.src == tv);
+                    Assert(operands.output == local(opdata[0]));
 #endif
                 }
                 break;
@@ -1561,9 +1561,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTableGetByVal(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == local(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == local(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1577,9 +1577,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTableGetById(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == objCst(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == objCst(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1593,9 +1593,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTablePutByVal(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == local(opdata[2]));
-                assert(operands.value == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == local(opdata[2]));
+                Assert(operands.value == local(opdata[0]));
 #endif
                 break;
             }
@@ -1609,9 +1609,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTablePutById(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == objCst(opdata[2]));
-                assert(operands.value == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == objCst(opdata[2]));
+                Assert(operands.value == local(opdata[0]));
 #endif
                 break;
             }
@@ -1625,9 +1625,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTableGetByImm(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1641,9 +1641,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTablePutByImm(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[1]));
-                assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
-                assert(operands.value == local(opdata[0]));
+                Assert(operands.base == local(opdata[1]));
+                Assert(operands.index == SafeIntegerCast<int16_t>(opdata[2]));
+                Assert(operands.value == local(opdata[0]));
 #endif
                 break;
             }
@@ -1665,8 +1665,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeTableVariadicPutBySeq(bcPosForCurBytecode);
-                assert(operands.base == local(localSlot));
-                assert(operands.index == Cst<tInt32>(idx));
+                Assert(operands.base == local(localSlot));
+                Assert(operands.index == Cst<tInt32>(idx));
 #endif
                 break;
             }
@@ -1679,8 +1679,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvalueGetMutable(bcPosForCurBytecode);
-                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[1]));
-                assert(operands.output == local(opdata[0]));
+                Assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[1]));
+                Assert(operands.output == local(opdata[0]));
 #endif
                 break;
             }
@@ -1693,8 +1693,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
-                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
-                assert(operands.value == local(opdata[1]));
+                Assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                Assert(operands.value == local(opdata[1]));
 #endif
                 break;
             }
@@ -1707,8 +1707,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
-                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
-                assert(operands.value == objCst(opdata[1]));
+                Assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                Assert(operands.value == objCst(opdata[1]));
 #endif
                 break;
             }
@@ -1721,8 +1721,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
-                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
-                assert(operands.value == numCst(opdata[1]));
+                Assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                Assert(operands.value == numCst(opdata[1]));
 #endif
                 break;
             }
@@ -1735,8 +1735,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvaluePut(bcPosForCurBytecode);
-                assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
-                assert(operands.value == priCst(opdata[1]));
+                Assert(operands.ord == SafeIntegerCast<uint16_t>(opdata[0]));
+                Assert(operands.value == priCst(opdata[1]));
 #endif
                 break;
             }
@@ -1750,7 +1750,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeUpvalueClose(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
+                Assert(operands.base == local(opdata[0]));
 #endif
                 break;
             }
@@ -1770,7 +1770,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeForLoopInit(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
+                Assert(operands.base == local(opdata[0]));
 #endif
                 break;
             }
@@ -1789,7 +1789,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeForLoopStep(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
+                Assert(operands.base == local(opdata[0]));
 #endif
                 break;
             }
@@ -1829,8 +1829,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                     });
 #ifndef NDEBUG
                     auto operands = bw.DecodeGetVarArgsPrefix(bcPosForCurBytecode);
-                    assert(operands.base == local(opdata[0]));
-                    assert(operands.numToPut == SafeIntegerCast<uint16_t>(fieldB - 1));
+                    Assert(operands.base == local(opdata[0]));
+                    Assert(operands.numToPut == SafeIntegerCast<uint16_t>(fieldB - 1));
 #endif
                 }
                 break;
@@ -1846,8 +1846,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeRangeFillNils(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0]));
-                assert(operands.numToPut == SafeIntegerCast<uint16_t>(numSlotsToFill));
+                Assert(operands.base == local(opdata[0]));
+                Assert(operands.numToPut == SafeIntegerCast<uint16_t>(numSlotsToFill));
 #endif
                 break;
             }
@@ -1870,8 +1870,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeKVLoopIter(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0] - 3));
-                assert(operands.numRets == numRets);
+                Assert(operands.base == local(opdata[0] - 3));
+                Assert(operands.numRets == numRets);
 #endif
                 break;
             }
@@ -1893,8 +1893,8 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeForLoopIter(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0] - 3));
-                assert(operands.numRets == numRets);
+                Assert(operands.base == local(opdata[0] - 3));
+                Assert(operands.numRets == numRets);
 #endif
                 break;
             }
@@ -1913,7 +1913,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
                 });
 #ifndef NDEBUG
                 auto operands = bw.DecodeValidateIsNextAndBranch(bcPosForCurBytecode);
-                assert(operands.base == local(opdata[0] - 3));
+                Assert(operands.base == local(opdata[0] - 3));
 #endif
                 break;
             }
@@ -1951,9 +1951,9 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
         {
             size_t ljBytecodeOrd = jumpPatch.first;
             size_t bcPos = jumpPatch.second;
-            assert(ljBytecodeOrd < bytecodeLocation.size());
+            Assert(ljBytecodeOrd < bytecodeLocation.size());
             size_t bytecodeOffset = bytecodeLocation[ljBytecodeOrd];
-            assert(bytecodeOffset < bw.GetCurLength());
+            Assert(bytecodeOffset < bw.GetCurLength());
             if (unlikely(!bw.SetBranchTarget(bcPos, bytecodeOffset)))
             {
                 // TODO: gracefully handle
@@ -1962,7 +1962,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
             }
         }
 
-        assert(bw.CheckWellFormedness());
+        Assert(bw.CheckWellFormedness());
 
         std::pair<uint8_t*, size_t> bytecodeData = bw.GetBuiltBytecodeSequence();
         std::pair<uint64_t*, size_t> constantTableData = bw.GetBuiltConstantTable();
@@ -1974,7 +1974,7 @@ std::unique_ptr<ScriptModule> WARN_UNUSED ScriptModule::LegacyParseScriptFromJSO
         ucb->m_bytecodeLengthIncludingTailPadding = static_cast<uint32_t>(bytecodeData.second);
         ucb->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
         const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
-        assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
+        Assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
         memcpy(ucb->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
 
         // CodeBlock::Create must be called after populated everything (including the metadata counts) in ucb

@@ -5,6 +5,7 @@
 #include "deegen_process_bytecode_definition_for_interpreter.h"
 #include "deegen_ast_return.h"
 #include "base64_util.h"
+#include "json_parse_dump.h"
 
 #include "json_utils.h"
 
@@ -38,12 +39,12 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     fprintf(hdrOutFile.fp(), "\n} /*namespace DeegenBytecodeBuilder*/\n");
 
     TransactionalOutputFile jsonOutFile(cl_jsonOutputFilename);
-    using json = ::nlohmann::json;
-    json j;
+    json_t j;
     j["header-name"] = FPS_GetFileNameFromAbsolutePath(cl_headerOutputFilename);
     j["class-names"] = result.m_generatedClassNames;
     j["cdecl-names"] = result.m_allExternCDeclarations;
     j["all-bytecode-info"] = std::move(result.m_bytecodeInfoJson);
+    j["all-dfg-variant-info"] = std::move(result.m_dfgVariantInfoJson);
     j["return-cont-name-list"] = result.m_returnContinuationNameList;
     j["reference_module"] = base64_encode(DumpLLVMModuleAsString(result.m_referenceModule.get()));
     std::vector<std::string> bytecodeModuleList;
@@ -53,7 +54,7 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
     }
     j["bytecode_module_list"] = std::move(bytecodeModuleList);
 
-    jsonOutFile.write(j.dump(4 /*indent*/));
+    jsonOutFile.write(SerializeJsonWithIndent(j, 4 /*indent*/));
 
     for (auto& it : result.m_auditFiles)
     {
@@ -71,18 +72,17 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
 void FPS_GenerateBytecodeBuilderAPIHeader()
 {
     std::vector<std::string> jsonFileNameList = ParseCommaSeparatedFileList(cl_inputListFilenames);
-    std::vector<json> jlist;
+    std::vector<json_t> jlist;
     for (std::string& filename : jsonFileNameList)
     {
-        std::string s = ReadFileContentAsString(filename);
-        jlist.push_back(json::parse(s));
+        jlist.push_back(ParseJsonFromFileName(filename));
     }
 
     TransactionalOutputFile hdrOutFile(cl_headerOutputFilename);
     FPS_EmitHeaderFileCommonHeader(hdrOutFile.fp());
 
     fprintf(hdrOutFile.fp(), "#include \"drt/bytecode_builder_utils.h\"\n\n");
-    for (json& j : jlist)
+    for (json_t& j : jlist)
     {
         std::string includeName = JSONCheckedGet<std::string>(j, "header-name");
         fprintf(hdrOutFile.fp(), "#include \"%s\"\n", includeName.c_str());
@@ -91,7 +91,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     fprintf(hdrOutFile.fp(), "\n");
 
     std::vector<std::string> allClassNames;
-    for (json& j : jlist)
+    for (json_t& j : jlist)
     {
         ReleaseAssert(j.count("class-names") && j["class-names"].is_array());
         ReleaseAssert(j.count("cdecl-names") && j["cdecl-names"].is_array());
@@ -145,7 +145,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     fprintf(cppOutFile.fp(), "#include \"drt/bytecode_builder.h\"\n\n");
 
     size_t totalSize = 0;
-    for (json& j : jlist)
+    for (json_t& j : jlist)
     {
         for (auto& arr : j["cdecl-names"])
         {
@@ -171,7 +171,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     fprintf(cppOutFile.fp(), "            r[i] = nullptr;\n");
     fprintf(cppOutFile.fp(), "        }\n");
 
-    for (json& j : jlist)
+    for (json_t& j : jlist)
     {
         ReleaseAssert(j.count("class-names") && j["class-names"].is_array());
         ReleaseAssert(j.count("cdecl-names") && j["cdecl-names"].is_array());
@@ -260,7 +260,7 @@ void FPS_GenerateBytecodeBuilderAPIHeader()
     fprintf(cppOutFile2.fp(), "            r[i] = nullptr;\n");
     fprintf(cppOutFile2.fp(), "        }\n");
 
-    for (json& j : jlist)
+    for (json_t& j : jlist)
     {
         ReleaseAssert(j.count("class-names") && j["class-names"].is_array());
         ReleaseAssert(j.count("cdecl-names") && j["cdecl-names"].is_array());

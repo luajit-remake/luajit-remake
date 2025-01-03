@@ -14,7 +14,7 @@ public:
 
     bool CanUseFastPathGetForContinuousArray(int64_t idx)
     {
-        assert(IsContinuous());
+        Assert(IsContinuous());
         // We want to compute 'ArrayGrowthPolicy::x_arrayBaseOrd <= idx && idx < m_arrayLengthIfContinuous + x_arrayBaseOrd'
         // but we do not want to emit two branches.
         //
@@ -56,7 +56,7 @@ public:
 
     HeapPtr<ArraySparseMap> GetSparseMap()
     {
-        assert(HasSparseMap());
+        Assert(HasSparseMap());
         return GeneralHeapPointer<ArraySparseMap> { m_arrayLengthIfContinuous }.As();
     }
 
@@ -95,13 +95,13 @@ public:
 
     TValue* UnsafeGetInVectorIndexAddr(int64_t index)
     {
-        assert(GetHeader()->IndexFitsInVectorCapacity(index));
+        Assert(GetHeader()->IndexFitsInVectorCapacity(index));
         return reinterpret_cast<TValue*>(this) + index;
     }
 
     static int32_t WARN_UNUSED GetOutlineStorageIndex(uint32_t slot, uint32_t inlineCapacity)
     {
-        assert(slot >= inlineCapacity);
+        Assert(slot >= inlineCapacity);
         return static_cast<int32_t>(inlineCapacity) - static_cast<int32_t>(slot) - 1 - (1 - ArrayGrowthPolicy::x_arrayBaseOrd);
     }
 
@@ -112,7 +112,7 @@ public:
 
     TValue* GetNamedPropertyAddr(int32_t ord)
     {
-        assert(ord < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
+        Assert(ord < ArrayGrowthPolicy::x_arrayBaseOrd - 1);
         return &(reinterpret_cast<TValue*>(this)[ord]);
     }
 

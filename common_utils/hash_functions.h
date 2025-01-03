@@ -58,7 +58,7 @@ StringLengthAndHash WARN_UNUSED HashMultiPieceString(Iterator iterator)
     [[maybe_unused]] XXH_errorcode err;
 
     err = XXH3_64bits_reset(&state);
-    assert(err == XXH_OK);
+    Assert(err == XXH_OK);
 
     size_t totalLength = 0;
     while (iterator.HasMore())
@@ -68,7 +68,7 @@ StringLengthAndHash WARN_UNUSED HashMultiPieceString(Iterator iterator)
         std::tie(str, len) = iterator.GetAndAdvance();
         totalLength += len;
         err = XXH3_64bits_update(&state, str, len);
-        assert(err == XXH_OK);
+        Assert(err == XXH_OK);
     }
 
     uint64_t hash = XXH3_64bits_digest(&state);

@@ -53,6 +53,7 @@ public:
         return {
             .m_fastPathLen = m_baselineJitFastPathLen,
             .m_slowPathLen = m_baselineJitSlowPathLen,
+            .m_dataSecLen = m_baselineJitDataSecLen,
             .m_module = std::move(m_module),
             .m_patchFnName = GetFunctionName(),
             .m_asmSourceForAudit = m_baselineJitSourceAsmForAudit

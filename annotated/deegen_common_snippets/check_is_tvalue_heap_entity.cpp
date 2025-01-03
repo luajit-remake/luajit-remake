@@ -1,4 +1,4 @@
-#include "force_release_build.h"
+#include "disable_assertions.h"
 
 #include "define_deegen_common_snippet.h"
 #include "tvalue.h"

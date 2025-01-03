@@ -34,7 +34,7 @@ static void NO_RETURN CheckMetatableSlowPath(TValue /*bc_tvIndex*/, HeapPtr<Tabl
 //
 static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValue metamethod)
 {
-    assert(base.Is<tTable>());
+    Assert(base.Is<tTable>());
     while (true)
     {
         // If 'metamethod' is a function, we should invoke the metamethod, throwing out an error if fail
@@ -49,7 +49,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
             }
             else if (mmType == HeapEntityType::Table)
             {
-                assert(tvIndex.Is<tString>());
+                Assert(tvIndex.Is<tString>());
                 HeapPtr<HeapString> index = tvIndex.As<tString>();
                 HeapPtr<TableObject> tableObj = metamethod.As<tTable>();
                 GetByIdICInfo icInfo;
@@ -79,7 +79,7 @@ static void NO_RETURN HandleMetatableSlowPath(TValue tvIndex, TValue base, TValu
 
 static void NO_RETURN GlobalGetImpl(TValue tvIndex)
 {
-    assert(tvIndex.Is<tString>());
+    Assert(tvIndex.Is<tString>());
     HeapPtr<HeapString> index = tvIndex.As<tString>();
     HeapPtr<TableObject> base = GetFEnvGlobalObject();
 
@@ -112,7 +112,7 @@ static void NO_RETURN GlobalGetImpl(TValue tvIndex)
         }
         else
         {
-            assert(c_info.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
+            Assert(c_info.m_icKind == GetByIdICInfo::ICKind::MustBeNilButUncacheable);
             return std::make_pair(TValue::Nil(), c_mayHaveMt);
         }
     });
@@ -134,6 +134,11 @@ DEEGEN_DEFINE_BYTECODE(GlobalGet)
     Implementation(GlobalGetImpl);
     Variant(
         Op("index").IsConstant<tString>()
+    );
+    DfgVariant();
+    TypeDeductionRule(ValueProfile);
+    RegAllocHint(
+        Op("index").RegHint(RegHint::GPR)
     );
 }
 

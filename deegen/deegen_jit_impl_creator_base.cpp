@@ -1,6 +1,6 @@
 #include "deegen_jit_impl_creator_base.h"
 #include "deegen_ast_inline_cache.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "deegen_ast_slow_path.h"
 #include "deegen_jit_slow_path_data.h"
 #include "deegen_stencil_reserved_placeholder_ords.h"
@@ -13,30 +13,13 @@
 #include "deegen_ast_simple_lowering_utils.h"
 #include "deegen_ast_return_value_accessor.h"
 #include "deegen_stencil_lowering_pass.h"
+#include "deegen_dfg_jit_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
 #include "invoke_clang_helper.h"
 #include "llvm_override_option.h"
 #include "llvm/Linker/Linker.h"
 
 namespace dast {
-
-static std::string WARN_UNUSED GetRawRuntimeConstantPlaceholderName(size_t ordinal)
-{
-    return std::string("__deegen_constant_placeholder_bytecode_operand_") + std::to_string(ordinal);
-}
-
-llvm::CallInst* WARN_UNUSED DeegenPlaceholderUtils::CreateConstantPlaceholderForOperand(llvm::Module* module, size_t ordinal, llvm::Type* operandTy, llvm::Instruction* insertBefore)
-{
-    using namespace llvm;
-    std::string placeholderName = GetRawRuntimeConstantPlaceholderName(ordinal);
-    ReleaseAssert(module->getNamedValue(placeholderName) == nullptr);
-    FunctionType* fty = FunctionType::get(operandTy, {}, false /*isVarArg*/);
-    Function* func = Function::Create(fty, GlobalValue::ExternalLinkage, placeholderName, module);
-    ReleaseAssert(func->getName() == placeholderName);
-    func->addFnAttr(Attribute::AttrKind::NoUnwind);
-    func->addFnAttr(Attribute::AttrKind::ReadNone);
-    func->addFnAttr(Attribute::AttrKind::WillReturn);
-    return CallInst::Create(func, { }, "", insertBefore);
-}
 
 llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
@@ -58,19 +41,14 @@ llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateConstantPlaceholderForOper
 llvm::CallInst* WARN_UNUSED JitImplCreatorBase::CreateOrGetConstantPlaceholderForOperand(size_t ordinal, llvm::Type* operandTy, int64_t lb, int64_t ub, llvm::Instruction* insertBefore)
 {
     using namespace llvm;
-    std::string placeholderName = GetRawRuntimeConstantPlaceholderName(ordinal);
-    if (GetModule()->getNamedValue(placeholderName) == nullptr)
+    if (!DeegenPlaceholderUtils::IsConstantPlaceholderAlreadyDefined(GetModule(), ordinal))
     {
         return CreateConstantPlaceholderForOperand(ordinal, operandTy, lb, ub, insertBefore);
     }
 
-    Function* func = GetModule()->getFunction(placeholderName);
-    ReleaseAssert(func != nullptr);
-    ReleaseAssert(func->getReturnType() == operandTy);
-    ReleaseAssert(func->arg_size() == 0);
-
+    CallInst* ci = DeegenPlaceholderUtils::GetConstantPlaceholderForOperand(GetModule(), ordinal, operandTy, insertBefore);
     m_stencilRcInserter.WidenRange(ordinal, lb, ub);
-    return CallInst::Create(func, { }, "", insertBefore);
+    return ci;
 }
 
 std::pair<llvm::CallInst*, size_t /*ord*/> WARN_UNUSED JitImplCreatorBase::CreateGenericIcStateCapturePlaceholder(llvm::Type* ty, int64_t lb, int64_t ub, llvm::BasicBlock* insertAtEnd)
@@ -120,7 +98,7 @@ llvm::Value* WARN_UNUSED JitImplCreatorBase::GetSlowPathDataOffsetFromJitFastPat
     return res;
 }
 
-JitImplCreatorBase::JitImplCreatorBase(BytecodeIrComponent& bic)
+JitImplCreatorBase::JitImplCreatorBase(BytecodeIrInfo* bii, BytecodeIrComponent& bic)
     : DeegenBytecodeImplCreatorBase(bic.m_bytecodeDef, bic.m_processKind)
 {
     using namespace llvm;
@@ -131,43 +109,18 @@ JitImplCreatorBase::JitImplCreatorBase(BytecodeIrComponent& bic)
     m_wrapper = nullptr;
     m_resultFuncName = bic.m_identFuncName;
     m_generated = false;
+    ReleaseAssert(bii != nullptr);
+    m_biiInfo = bii;
+    m_bicInfo = &bic;
     m_isSlowPathReturnContinuation = false;
     m_numGenericIcCaptures = 0;
 }
 
-JitImplCreatorBase::JitImplCreatorBase(JitImplCreatorBase::SlowPathReturnContinuationTag, BytecodeIrComponent& bic)
-    : JitImplCreatorBase(bic)
+JitImplCreatorBase::JitImplCreatorBase(JitImplCreatorBase::SlowPathReturnContinuationTag, BytecodeIrInfo* bii, BytecodeIrComponent& bic)
+    : JitImplCreatorBase(bii, bic)
 {
     ReleaseAssert(m_processKind == BytecodeIrComponentKind::ReturnContinuation);
     m_isSlowPathReturnContinuation = true;
-}
-
-size_t WARN_UNUSED DeegenPlaceholderUtils::FindFallthroughPlaceholderOrd(const std::vector<CPRuntimeConstantNodeBase*>& rcDef)
-{
-    bool found = false;
-    size_t ord = static_cast<size_t>(-1);
-    for (size_t i = 0; i < rcDef.size(); i++)
-    {
-        CPRuntimeConstantNodeBase* def = rcDef[i];
-        if (def->IsRawRuntimeConstant() && dynamic_cast<CPRawRuntimeConstant*>(def)->m_label == 101 /*fallthroughTarget*/)
-        {
-            ReleaseAssert(!found);
-            found = true;
-            ord = i;
-        }
-    }
-    if (!found) { return static_cast<size_t>(-1); }
-    return ord;
-}
-
-std::string WARN_UNUSED DeegenPlaceholderUtils::FindFallthroughPlaceholderSymbolName(const std::vector<CPRuntimeConstantNodeBase*>& rcDef)
-{
-    size_t ord = FindFallthroughPlaceholderOrd(rcDef);
-    if (ord == static_cast<size_t>(-1))
-    {
-        return "";
-    }
-    return std::string("__deegen_cp_placeholder_") + std::to_string(ord);
 }
 
 std::string WARN_UNUSED JitImplCreatorBase::GetRcPlaceholderNameForFallthrough()
@@ -181,16 +134,7 @@ void JitImplCreatorBase::CreateWrapperFunction()
     using namespace llvm;
     LLVMContext& ctx = m_module->getContext();
 
-    JitSlowPathDataLayoutBase* jitSlowPathDataLayout;
-    if (IsBaselineJIT())
-    {
-        jitSlowPathDataLayout = m_bytecodeDef->GetBaselineJitSlowPathDataLayout();
-    }
-    else
-    {
-        ReleaseAssert(IsDfgJIT());
-        jitSlowPathDataLayout = m_bytecodeDef->GetDfgJitSlowPathDataLayout();
-    }
+    JitSlowPathDataLayoutBase* jitSlowPathDataLayout = GetJitSlowPathDataLayoutBase();
 
     ReleaseAssert(m_wrapper == nullptr);
 
@@ -199,58 +143,65 @@ void JitImplCreatorBase::CreateWrapperFunction()
     //
     ReleaseAssert(m_impl->hasExternalLinkage());
     m_impl->setLinkage(GlobalValue::InternalLinkage);
-    m_wrapper = InterpreterFunctionInterface::CreateFunction(m_module.get(), m_resultFuncName);
-    ReleaseAssert(m_wrapper->arg_size() == 16);
 
-    m_wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
-    m_wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
-    m_wrapper->addFnAttr(Attribute::AttrKind::NoInline);
-    CopyFunctionAttributes(m_wrapper /*dst*/, m_impl /*src*/);
+    bool isReturnContinuation = (m_processKind == BytecodeIrComponentKind::ReturnContinuation);
+    SetExecFnContext(ExecutorFunctionContext::Create(GetTier(), !IsJitSlowPath() /*isJitCode*/, isReturnContinuation));
+
+    m_wrapper = GetExecFnContext()->CreateFunction(m_module.get(), m_resultFuncName);
+
+    // The function is temporarily no_return before the control transfer APIs are lowered to tail call
+    //
+    m_wrapper->addFnAttr(Attribute::NoReturn);
+    m_wrapper->addFnAttr(Attribute::NoInline);
 
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
-    if (m_processKind != BytecodeIrComponentKind::ReturnContinuation)
+    if (!isReturnContinuation)
     {
         // Note that we also set parameter names here.
         // These are not required, but just to make dumps more readable
         //
-        Value* coroCtx = m_wrapper->getArg(0);
+        Value* coroCtx = GetExecFnContext()->GetValueAtEntry<RPV_CoroContext>();
         coroCtx->setName(x_coroutineCtx);
         m_valuePreserver.Preserve(x_coroutineCtx, coroCtx);
 
-        Value* stackBase = m_wrapper->getArg(1);
+        Value* stackBase = GetExecFnContext()->GetValueAtEntry<RPV_StackBase>();
         stackBase->setName(x_stackBase);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
-        Value* baselineCodeBlock = m_wrapper->getArg(3);
-        baselineCodeBlock->setName(GetJitCodeBlockLLVMVarName());
-        m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), baselineCodeBlock);
+        // Depending on the tier, this is the BaselineCodeBlock or the DfgCodeBlock
+        //
+        Value* jitCodeBlock = GetExecFnContext()->GetValueAtEntry<RPV_CodeBlock>();
+        jitCodeBlock->setName(GetJitCodeBlockLLVMVarName());
+        m_valuePreserver.Preserve(GetJitCodeBlockLLVMVarName(), jitCodeBlock);
 
         // The SlowPathData pointer is only useful (and valid) for slow path
         //
         if (IsJitSlowPath())
         {
-            Value* jitSlowPathData = m_wrapper->getArg(2);
+            Value* jitSlowPathData = GetExecFnContext()->GetValueAtEntry<RPV_JitSlowPathData>();
             jitSlowPathData->setName(x_jitSlowPathData);
             m_valuePreserver.Preserve(x_jitSlowPathData, jitSlowPathData);
         }
     }
     else
     {
-        m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
+        Value* coroCtx = GetExecFnContext()->GetValueAtEntry<RPV_CoroContext>();
+        coroCtx->setName(x_coroutineCtx);
+        m_valuePreserver.Preserve(x_coroutineCtx, coroCtx);
 
         UnreachableInst* tmpInst = new UnreachableInst(ctx, currentBlock);
-        Value* calleeStackBase = m_wrapper->getArg(1);
+        Value* calleeStackBase = GetExecFnContext()->GetValueAtEntry<RPV_StackBase>();
         Value* stackBase = CallDeegenCommonSnippet("GetCallerStackBaseFromStackBase", { calleeStackBase }, tmpInst);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
         tmpInst->eraseFromParent();
 
-        Value* retStart = m_wrapper->getArg(5);
+        Value* retStart = GetExecFnContext()->GetValueAtEntry<RPV_RetValsPtr>();
         retStart->setName(x_retStart);
         m_valuePreserver.Preserve(x_retStart, retStart);
 
-        Value* numRet = m_wrapper->getArg(6);
+        Value* numRet = GetExecFnContext()->GetValueAtEntry<RPV_NumRetVals>();
         numRet->setName(x_numRet);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
@@ -309,25 +260,31 @@ void JitImplCreatorBase::CreateWrapperFunction()
     }
 
     std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> alreadyDecodedArgs;
-    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
+    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath)
     {
-        alreadyDecodedArgs = TypeBasedHCSHelper::GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
+        // Only baseline JIT fast path attempts to pass bytecode operands to slow path
+        // DFG does not pass bytecode operands to the quickening slow path since it breaks reg alloc
+        //
+        if (IsBaselineJIT())
+        {
+            ReleaseAssert(m_bytecodeDef->HasQuickeningSlowPath());
+            alreadyDecodedArgs = TypeBasedHCSHelper::GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
+        }
     }
 
     // For DFG JIT fast path, some TValue operands may come directly in register
     //
-    std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> operandsInRegister;
-    if (!IsJitSlowPath() && GetTier() == DeegenEngineTier::DfgJIT)
+    std::unordered_set<size_t /*operandOrd*/> operandsInRegister;
+    if (!IsJitSlowPath() && IsDfgJIT())
     {
         for (auto& operand : m_bytecodeDef->m_list)
         {
-            if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+            if (AsDfgJIT()->OperandEligibleForRegAlloc(operand.get()))
             {
-                uint64_t argOrd = GetDfgRegisterSpecilaizationInfo(operand->OperandOrdinal());
-                if (argOrd != static_cast<uint64_t>(-1))
+                if (AsDfgJIT()->IsOperandRegAllocated(operand.get()))
                 {
                     ReleaseAssert(!operandsInRegister.count(operand->OperandOrdinal()));
-                    operandsInRegister[operand->OperandOrdinal()] = argOrd;
+                    operandsInRegister.insert(operand->OperandOrdinal());
                 }
             }
         }
@@ -373,22 +330,37 @@ void JitImplCreatorBase::CreateWrapperFunction()
 
     if (m_bytecodeDef->m_hasOutputValue)
     {
-        Value* outputSlot;
+        Value* outputSlot = nullptr;
         if (!IsJitSlowPath())
         {
-            outputSlot = CreateConstantPlaceholderForOperand(100 /*operandOrd*/,
-                                                             llvm_type_of<uint64_t>(ctx),
-                                                             0 /*valueLowerBound*/,
-                                                             1048576 /*valueUpperBound*/,
-                                                             currentBlock);
+            if (IsDfgJIT() && AsDfgJIT()->IsOutputRegAllocated())
+            {
+                // The output is reg-allocated, no output slot exists
+                //
+                outputSlot = nullptr;
+            }
+            else
+            {
+                outputSlot = CreateConstantPlaceholderForOperand(100 /*operandOrd*/,
+                                                                 llvm_type_of<uint64_t>(ctx),
+                                                                 0 /*valueLowerBound*/,
+                                                                 1048576 /*valueUpperBound*/,
+                                                                 currentBlock);
+            }
         }
         else
         {
+            // In slow path, the output is always stored to a slot in the stack,
+            // even if it is reg alloc'ed in the fast path (in that case it would be stored to the spill slot for that reg)
+            //
             outputSlot = jitSlowPathDataLayout->m_outputDest.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
         }
-        ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
-        m_valuePreserver.Preserve(x_outputSlot, outputSlot);
-        outputSlot->setName(x_outputSlot);
+        if (outputSlot != nullptr)
+        {
+            ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
+            m_valuePreserver.Preserve(x_outputSlot, outputSlot);
+            outputSlot->setName(x_outputSlot);
+        }
     }
 
     {
@@ -411,24 +383,64 @@ void JitImplCreatorBase::CreateWrapperFunction()
         fallthroughTarget->setName(x_fallthroughDest);
     }
 
-    if (m_bytecodeDef->m_hasConditionalBranchTarget)
+    if (IsBaselineJIT())
     {
-        Value* condBrTarget;
-        if (!IsJitSlowPath())
+        if (AsBaselineJIT()->HasCondBrTarget())
         {
-            condBrTarget = CreateConstantPlaceholderForOperand(102 /*operandOrd*/,
-                                                               llvm_type_of<void*>(ctx),
-                                                               1 /*valueLowerBound*/,
-                                                               m_stencilRcInserter.GetLowAddrRangeUB(),
-                                                               currentBlock);
+            // In baseline JIT, the bytecode directly branches to its target
+            //
+            Value* condBrTarget;
+            if (!IsJitSlowPath())
+            {
+                condBrTarget = CreateConstantPlaceholderForOperand(102 /*operandOrd*/,
+                                                                   llvm_type_of<void*>(ctx),
+                                                                   1 /*valueLowerBound*/,
+                                                                   m_stencilRcInserter.GetLowAddrRangeUB(),
+                                                                   currentBlock);
+            }
+            else
+            {
+                condBrTarget = jitSlowPathDataLayout->AsBaseline()->m_condBrJitAddr.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+            }
+            ReleaseAssert(llvm_value_has_type<void*>(condBrTarget));
+            m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
+            condBrTarget->setName(x_condBrDest);
         }
-        else
+    }
+    else
+    {
+        ReleaseAssert(IsDfgJIT());
+        if (AsDfgJIT()->HasBranchDecisionOutput())
         {
-            condBrTarget = jitSlowPathDataLayout->m_condBrJitAddr.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+            // In DFG JIT, whether the branch is taken is outputted as a branch decision stored into a GPR or spilled
+            //
+            if (AsDfgJIT()->IsBranchDecisionRegAllocated())
+            {
+               // Branch decision reg-alloc'ed, nothing to do
+               //
+            }
+            else
+            {
+                Value* brDecision;
+                if (!IsJitSlowPath())
+                {
+                    brDecision = CreateConstantPlaceholderForOperand(105 /*operandOrd*/,
+                                                                     llvm_type_of<uint64_t>(ctx),
+                                                                     0 /*valueLowerBound*/,
+                                                                     1048576 /*valueUpperBound*/,
+                                                                     currentBlock);
+                }
+                else
+                {
+                    brDecision = jitSlowPathDataLayout->AsDfg()->m_condBrDecisionSlot.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+                    ReleaseAssert(llvm_value_has_type<uint16_t>(brDecision));
+                    brDecision = CastInst::CreateZExtOrBitCast(brDecision, llvm_type_of<uint64_t>(ctx), "", currentBlock);
+                }
+                ReleaseAssert(llvm_value_has_type<uint64_t>(brDecision));
+                m_valuePreserver.Preserve(x_brDecision, brDecision);
+                brDecision->setName(x_brDecision);
+            }
         }
-        ReleaseAssert(llvm_value_has_type<void*>(condBrTarget));
-        m_valuePreserver.Preserve(x_condBrDest, condBrTarget);
-        condBrTarget->setName(x_condBrDest);
     }
 
     ReleaseAssert(m_bytecodeDef->IsBytecodeStructLengthFinalized());
@@ -447,9 +459,9 @@ void JitImplCreatorBase::CreateWrapperFunction()
             }
             else if (operandsInRegister.count(operand->OperandOrdinal()))
             {
-                size_t argOrd = operandsInRegister[operand->OperandOrdinal()];
-                Value* arg = InterpreterFunctionInterface::GetArgumentAsInt64Value(m_wrapper, argOrd, currentBlock);
-                usageValues.push_back(arg);
+                ReleaseAssert(IsDfgJIT());
+                Value* val = AsDfgJIT()->CreatePlaceholderForRegisterAllocatedOperand(operand->OperandOrdinal(), currentBlock);
+                usageValues.push_back(val);
             }
             else
             {
@@ -462,6 +474,8 @@ void JitImplCreatorBase::CreateWrapperFunction()
         }
         ReleaseAssert(ord == opcodeValues.size() && ord == usageValues.size());
     }
+
+    ReleaseAssert(usageValues.size() == m_bytecodeDef->m_list.size());
 
     if (m_processKind == BytecodeIrComponentKind::SlowPath)
     {
@@ -503,6 +517,111 @@ void JitImplCreatorBase::CreateWrapperFunction()
     }
 
     ValidateLLVMFunction(m_wrapper);
+}
+
+JitImplCreatorBase::JitImplCreatorBase(JitImplCreatorBase* other)
+    : DeegenBytecodeImplCreatorBase(other)
+{
+    m_biiInfo = other->m_biiInfo;
+    m_bicInfo = other->m_bicInfo;
+    m_isSlowPathReturnContinuation = other->m_isSlowPathReturnContinuation;
+    if (other->m_impl == nullptr)
+    {
+        m_impl = nullptr;
+    }
+    else
+    {
+        m_impl = m_module->getFunction(other->m_impl->getName());
+        ReleaseAssert(m_impl != nullptr);
+    }
+    if (other->m_wrapper == nullptr)
+    {
+        m_wrapper = nullptr;
+    }
+    else
+    {
+        m_wrapper = m_module->getFunction(other->m_wrapper->getName());
+        ReleaseAssert(m_wrapper != nullptr);
+    }
+    m_resultFuncName = other->m_resultFuncName;
+    m_stencilRcInserter = other->m_stencilRcInserter;
+    m_stencilRcDefinitions = other->m_stencilRcDefinitions;
+    m_numGenericIcCaptures = other->m_numGenericIcCaptures;
+    m_generated = other->m_generated;
+}
+
+std::string WARN_UNUSED JitImplCreatorBase::CompileToAssemblyFileForStencilGeneration()
+{
+    using namespace llvm;
+
+    // Compile the function to ASM (.s) file
+    // TODO: ideally we should think about properly setting function and loop alignments
+    // Currently we simply ignore alignments, which is fine for now since currently our none of our JIT fast path contains loops.
+    // But this will break down once any loop is introduced. To fix this, we need to be aware of the aligned BBs and manually generate NOPs.
+    //
+    return CompileLLVMModuleToAssemblyFileForStencilGeneration(
+        m_module.get(),
+        llvm::Reloc::Static,
+        llvm::CodeModel::Small,
+        [](TargetOptions& opt) {
+            // This is the option that is equivalent to the clang -fdata-sections flag
+            // Put each data symbol into a separate data section so our stencil creation pass can produce more efficient result
+            //
+            opt.DataSections = true;
+        });
+}
+
+JitSlowPathDataLayoutBase* WARN_UNUSED JitImplCreatorBase::GetJitSlowPathDataLayoutBase()
+{
+    if (IsBaselineJIT())
+    {
+        return AsBaselineJIT()->GetBaselineJitSlowPathDataLayout();
+    }
+    else
+    {
+        ReleaseAssert(IsDfgJIT());
+        return AsDfgJIT()->GetDfgJitSlowPathDataLayout();
+    }
+}
+
+bool WARN_UNUSED JitImplCreatorBase::IsLastJitStencilInBytecode()
+{
+    ReleaseAssert(!IsJitSlowPath());
+
+    if (m_processKind == BytecodeIrComponentKind::Main)
+    {
+        ReleaseAssert(GetBytecodeIrComponentInfo() == GetBytecodeIrInfo()->m_jitMainComponent.get());
+        bool hasJitReturnContinuations = false;
+        for (std::unique_ptr<BytecodeIrComponent>& rcBic : GetBytecodeIrInfo()->m_allRetConts)
+        {
+            if (!rcBic->IsReturnContinuationUsedBySlowPathOnly())
+            {
+                hasJitReturnContinuations = true;
+            }
+        }
+        return !hasJitReturnContinuations;
+    }
+    else
+    {
+        ReleaseAssert(m_processKind == BytecodeIrComponentKind::ReturnContinuation);
+        bool foundThisRc = false;
+        bool hasMoreJitRcAfterThisOne = false;
+        for (std::unique_ptr<BytecodeIrComponent>& rcBic : GetBytecodeIrInfo()->m_allRetConts)
+        {
+            if (rcBic.get() == GetBytecodeIrComponentInfo())
+            {
+                ReleaseAssert(!foundThisRc);
+                foundThisRc = true;
+                ReleaseAssert(!rcBic->IsReturnContinuationUsedBySlowPathOnly());
+            }
+            else if (foundThisRc && !rcBic->IsReturnContinuationUsedBySlowPathOnly())
+            {
+                hasMoreJitRcAfterThisOne = true;
+            }
+        }
+        ReleaseAssert(foundThisRc);
+        return !hasMoreJitRcAfterThisOne;
+    }
 }
 
 }   // namespace dast

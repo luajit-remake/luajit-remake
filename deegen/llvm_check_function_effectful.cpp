@@ -16,7 +16,7 @@ struct CheckLLVMFunctionEffectfulImpl
         using namespace llvm;
         ReleaseAssert(excludeArgs.size() == func->arg_size());
 
-        if (func->hasFnAttribute(Attribute::ReadNone) || func->hasFnAttribute(Attribute::ReadOnly))
+        if (func->onlyReadsMemory())
         {
             return false;
         }
@@ -290,7 +290,7 @@ struct CheckLLVMFunctionEffectfulImpl
                 {
                     auto handleCall = [&](CallBase* cb) ALWAYS_INLINE WARN_UNUSED -> bool
                     {
-                        if (cb->hasFnAttr(Attribute::ReadNone) || cb->hasFnAttr(Attribute::ReadOnly))
+                        if (cb->onlyReadsMemory())
                         {
                             return false;
                         }
@@ -298,7 +298,7 @@ struct CheckLLVMFunctionEffectfulImpl
                         Function* callee = cb->getCalledFunction();
                         if (callee != nullptr)
                         {
-                            if (callee->hasFnAttribute(Attribute::ReadNone) || callee->hasFnAttribute(Attribute::ReadOnly))
+                            if (callee->onlyReadsMemory())
                             {
                                 return false;
                             }

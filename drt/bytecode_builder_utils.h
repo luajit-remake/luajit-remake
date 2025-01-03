@@ -34,7 +34,7 @@ struct Local
 //
 struct TValueWithKnownType
 {
-    TypeSpeculationMask m_knownTypeMask;
+    TypeMaskTy m_knownTypeMask;
     TValue m_value;
 };
 
@@ -45,7 +45,7 @@ TValueWithKnownType ALWAYS_INLINE WARN_UNUSED Cst(arg_nth_t<decltype(&T::encode)
 {
     static_assert(IsValidTypeSpecialization<T>);
     return TValueWithKnownType {
-        .m_knownTypeMask = x_typeSpeculationMaskFor<T>,
+        .m_knownTypeMask = x_typeMaskFor<T>,
         .m_value = TValue::Create<T>(val)
     };
 }
@@ -55,7 +55,7 @@ TValueWithKnownType ALWAYS_INLINE WARN_UNUSED Cst()
 {
     static_assert(IsValidTypeSpecialization<T>);
     return TValueWithKnownType {
-        .m_knownTypeMask = x_typeSpeculationMaskFor<T>,
+        .m_knownTypeMask = x_typeMaskFor<T>,
         .m_value = TValue::Create<T>()
     };
 }
@@ -72,15 +72,15 @@ struct CstWrapper
     {
         if (m_hasKnownTypeMask)
         {
-            constexpr TypeSpeculationMask queryMask = x_typeSpeculationMaskFor<T>;
+            constexpr TypeMaskTy queryMask = x_typeMaskFor<T>;
             if ((m_knownTypeMask & queryMask) == m_knownTypeMask)
             {
-                assert(m_value.Is<T>());
+                Assert(m_value.Is<T>());
                 return true;
             }
             if ((m_knownTypeMask & queryMask) == 0)
             {
-                assert(!m_value.Is<T>());
+                Assert(!m_value.Is<T>());
                 return false;
             }
             return m_value.Is<T>();
@@ -95,7 +95,7 @@ struct CstWrapper
     bool operator==(const TValueWithKnownType& other) const { return m_value.m_value == other.m_value.m_value; }
 
     bool m_hasKnownTypeMask;
-    TypeSpeculationMask m_knownTypeMask;
+    TypeMaskTy m_knownTypeMask;
     TValue m_value;
 };
 
@@ -105,8 +105,8 @@ struct LocalOrCstWrapper
     LocalOrCstWrapper(TValue v) : m_isLocal(false), m_hasKnownTypeMask(false), m_value(v) { }
     LocalOrCstWrapper(TValueWithKnownType v) : m_isLocal(false), m_hasKnownTypeMask(true), m_knownTypeMask(v.m_knownTypeMask), m_value(v.m_value) { }
 
-    Local AsLocal() const { assert(m_isLocal); return Local(m_localOrd); }
-    TValue AsConstant() const { assert(!m_isLocal); return m_value; }
+    Local AsLocal() const { Assert(m_isLocal); return Local(m_localOrd); }
+    TValue AsConstant() const { Assert(!m_isLocal); return m_value; }
 
     bool operator==(const Local& other) const { return (m_isLocal && AsLocal() == other); }
     bool operator==(const TValue& other) const { return (!m_isLocal && AsConstant().m_value == other.m_value); }
@@ -121,15 +121,15 @@ struct LocalOrCstWrapper
         }
         if (m_hasKnownTypeMask)
         {
-            constexpr TypeSpeculationMask queryMask = x_typeSpeculationMaskFor<T>;
+            constexpr TypeMaskTy queryMask = x_typeMaskFor<T>;
             if ((m_knownTypeMask & queryMask) == m_knownTypeMask)
             {
-                assert(m_value.Is<T>());
+                Assert(m_value.Is<T>());
                 return true;
             }
             if ((m_knownTypeMask & queryMask) == 0)
             {
-                assert(!m_value.Is<T>());
+                Assert(!m_value.Is<T>());
                 return false;
             }
             return m_value.Is<T>();
@@ -143,7 +143,7 @@ struct LocalOrCstWrapper
     bool m_isLocal;
     uint64_t m_localOrd;
     bool m_hasKnownTypeMask;
-    TypeSpeculationMask m_knownTypeMask;
+    TypeMaskTy m_knownTypeMask;
     TValue m_value;
 };
 
@@ -185,7 +185,7 @@ public:
 
     std::pair<uint64_t*, size_t> GetBuiltConstantTable()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         // Internally, to better fit our implementation, we store the constant table reversed, and index it with negative indices.
         // So now it's time to reverse the constant table before returning to user.
         //
@@ -197,19 +197,19 @@ public:
 
     uint32_t GetBytecodeMetadataTotalLength()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         if (!m_metadataFieldPatched)
         {
             m_metadataFieldPatched = true;
             PatchMetadataFields();
         }
-        assert(m_bytecodeMetadataLength % 8 == 0);
+        Assert(m_bytecodeMetadataLength % 8 == 0);
         return m_bytecodeMetadataLength;
     }
 
     const std::array<uint16_t, x_numBytecodeMetadataKinds>& GetBytecodeMetadataUseCountArray()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         return m_bytecodeMetadataCnt;
     }
 
@@ -255,7 +255,7 @@ protected:
 
     std::pair<uint8_t*, size_t> GetBuiltBytecodeSequenceImpl()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         if (!m_metadataFieldPatched)
         {
             m_metadataFieldPatched = true;
@@ -271,7 +271,7 @@ protected:
 
     uint8_t* Reserve(size_t size)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         if (likely(m_bufferEnd - m_bufferCur >= static_cast<ssize_t>(size)))
         {
             return m_bufferCur;
@@ -291,9 +291,9 @@ protected:
 
     void MarkWritten(size_t size)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         m_bufferCur += size;
-        assert(m_bufferCur <= m_bufferEnd);
+        Assert(m_bufferCur <= m_bufferEnd);
     }
 
     uint8_t* GetBytecodeStart()
@@ -303,7 +303,7 @@ protected:
 
     int64_t InsertConstantIntoTable(TValue cst)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         uint64_t v = cst.m_value;
         auto res = m_constantTableLocationMap.emplace(std::make_pair(v, m_constantTable.size()));
         auto it = res.first;
@@ -311,7 +311,7 @@ protected:
         {
             // The constant 'v' didn't exist, and was just inserted into the map
             //
-            assert(it->second == m_constantTable.size());
+            Assert(it->second == m_constantTable.size());
             m_constantTable.push_back(v);
         }
         else
@@ -329,7 +329,7 @@ protected:
 public:
     TValue ALWAYS_INLINE GetConstantFromConstantTable(int64_t ord)
     {
-        assert(ord < 0);
+        Assert(ord < 0);
         if constexpr(isDecodingMode)
         {
             return m_constantTableEndInDecodingMode[ord];
@@ -337,7 +337,7 @@ public:
         else
         {
             ord = -(ord + 1);
-            assert(static_cast<size_t>(ord) < m_constantTable.size());
+            Assert(static_cast<size_t>(ord) < m_constantTable.size());
             TValue res; res.m_value = m_constantTable[static_cast<size_t>(ord)];
             return res;
         }
@@ -347,7 +347,7 @@ protected:
     template<typename MetadataType>
     void RegisterMetadataField(uint8_t* ptr)
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         constexpr size_t typeOrd = MetadataTypeListInfo::template typeOrdinal<MetadataType>;
         static_assert(typeOrd < x_numBytecodeMetadataKinds);
         uint16_t index = m_bytecodeMetadataCnt[typeOrd];
@@ -371,7 +371,7 @@ private:
 
     void PatchMetadataFields()
     {
-        assert(!isDecodingMode);
+        Assert(!isDecodingMode);
         // This is lame: due to header file dependency issues, this implementation has to sit in a CPP file..
         // So we are assuming that our template parameter 'MetadataTypeListInfo' is just the BytecodeMetadataTypeListInfo
         // define in bytecode_builder.h, but we cannot assert it. Honestly this is fragile, but let's go with it for now.

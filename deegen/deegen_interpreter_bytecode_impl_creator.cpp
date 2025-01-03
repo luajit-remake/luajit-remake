@@ -3,7 +3,7 @@
 #include "deegen_ast_make_call.h"
 #include "deegen_ast_return.h"
 #include "deegen_ast_return_value_accessor.h"
-#include "deegen_interpreter_function_interface.h"
+#include "deegen_register_pinning_scheme.h"
 #include "deegen_ast_throw_error.h"
 #include "deegen_options.h"
 #include "tvalue_typecheck_optimization.h"
@@ -32,59 +32,65 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     //
     ReleaseAssert(m_impl->hasExternalLinkage());
     m_impl->setLinkage(GlobalValue::InternalLinkage);
-    m_wrapper = InterpreterFunctionInterface::CreateFunction(m_module.get(), m_resultFuncName);
-    ReleaseAssert(m_wrapper->arg_size() == 16);
 
-    // Set up the function attributes
+    bool isReturnContinuation = (m_processKind == BytecodeIrComponentKind::ReturnContinuation);
+    SetExecFnContext(ExecutorFunctionContext::Create(DeegenEngineTier::Interpreter, false /*isJitCode*/, isReturnContinuation));
+
+    m_wrapper = GetExecFnContext()->CreateFunction(m_module.get(), m_resultFuncName);
+
+    // The function is temporarily no_return before the control transfer APIs are lowered to tail call
+    //
+    m_wrapper->addFnAttr(Attribute::NoReturn);
+
     // TODO: add alias attributes to parameters
     //
-    m_wrapper->addFnAttr(Attribute::AttrKind::NoReturn);
-    m_wrapper->addFnAttr(Attribute::AttrKind::NoUnwind);
+
     if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath || m_processKind == BytecodeIrComponentKind::SlowPath)
     {
-        m_wrapper->addFnAttr(Attribute::AttrKind::NoInline);
+        m_wrapper->addFnAttr(Attribute::NoInline);
     }
-    CopyFunctionAttributes(m_wrapper /*dst*/, m_impl /*src*/);
 
     BasicBlock* entryBlock = BasicBlock::Create(ctx, "", m_wrapper);
     BasicBlock* currentBlock = entryBlock;
 
-    if (m_processKind != BytecodeIrComponentKind::ReturnContinuation)
+    if (!isReturnContinuation)
     {
         // Note that we also set parameter names here.
         // These are not required, but just to make dumps more readable
         //
-        Value* coroCtx = m_wrapper->getArg(0);
+        Value* coroCtx = GetExecFnContext()->GetValueAtEntry<RPV_CoroContext>();
         coroCtx->setName(x_coroutineCtx);
         m_valuePreserver.Preserve(x_coroutineCtx, coroCtx);
 
-        Value* stackBase = m_wrapper->getArg(1);
+        Value* stackBase = GetExecFnContext()->GetValueAtEntry<RPV_StackBase>();
         stackBase->setName(x_stackBase);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
 
-        Value* curBytecode = m_wrapper->getArg(2);
+        Value* curBytecode = GetExecFnContext()->GetValueAtEntry<RPV_CurBytecode>();
         curBytecode->setName(x_curBytecode);
         m_valuePreserver.Preserve(x_curBytecode, curBytecode);
 
-        Value* codeBlock = m_wrapper->getArg(3);
+        Value* codeBlock = GetExecFnContext()->GetValueAtEntry<RPV_CodeBlock>();
         codeBlock->setName(x_interpreterCodeBlock);
         m_valuePreserver.Preserve(x_interpreterCodeBlock, codeBlock);
     }
     else
     {
-        m_valuePreserver.Preserve(x_coroutineCtx, m_wrapper->getArg(0));
+        Value* coroCtx = GetExecFnContext()->GetValueAtEntry<RPV_CoroContext>();
+        coroCtx->setName(x_coroutineCtx);
+        m_valuePreserver.Preserve(x_coroutineCtx, coroCtx);
 
         UnreachableInst* tmpInst = new UnreachableInst(ctx, currentBlock);
-        Value* calleeStackBase = m_wrapper->getArg(1);
+        Value* calleeStackBase = GetExecFnContext()->GetValueAtEntry<RPV_StackBase>();
         Value* stackBase = CallDeegenCommonSnippet("GetCallerStackBaseFromStackBase", { calleeStackBase }, tmpInst);
         m_valuePreserver.Preserve(x_stackBase, stackBase);
         tmpInst->eraseFromParent();
 
-        Value* retStart = m_wrapper->getArg(5);
+        Value* retStart = GetExecFnContext()->GetValueAtEntry<RPV_RetValsPtr>();
         retStart->setName(x_retStart);
         m_valuePreserver.Preserve(x_retStart, retStart);
 
-        Value* numRet = m_wrapper->getArg(6);
+        Value* numRet = GetExecFnContext()->GetValueAtEntry<RPV_NumRetVals>();
         numRet->setName(x_numRet);
         m_valuePreserver.Preserve(x_numRet, numRet);
 
@@ -106,17 +112,16 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         {
             // Set up the tier up BB implementation
             //
-            Function* tierUpFn = InterpreterFunctionInterface::CreateFunction(m_module.get(), "__deegen_interpreter_osr_entry_into_baseline_jit");
+            Function* tierUpFn = RegisterPinningScheme::CreateFunction(m_module.get(), "__deegen_interpreter_osr_entry_into_baseline_jit");
             tierUpFn->addFnAttr(Attribute::NoUnwind);
-            Instruction* dummyInst = new UnreachableInst(ctx, tierUpBB);
-            InterpreterFunctionInterface::CreateDispatchToBytecode(
-                tierUpFn,
-                GetCoroutineCtx(),
-                GetStackBase(),
-                GetCurBytecode(),
-                GetInterpreterCodeBlock(),
-                dummyInst /*insertBefore*/);
-            dummyInst->eraseFromParent();
+
+            // Note that the OSR entry function itself still uses interpreter interface, the transition to JIT interface happens inside it
+            //
+            GetExecFnContext()->PrepareDispatch<InterpreterInterface>()
+                .Set<RPV_StackBase>(GetStackBase())
+                .Set<RPV_CodeBlock>(GetInterpreterCodeBlock())
+                .Set<RPV_CurBytecode>(GetCurBytecode())
+                .Dispatch(tierUpFn, tierUpBB /*insertAtEnd*/);
         }
 
         // Check for osr entry
@@ -124,7 +129,7 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
         Value* tierUpCounter = CreateCallToDeegenCommonSnippet(m_module.get(), "GetInterpreterTierUpCounter", { GetInterpreterCodeBlock() }, currentBlock);
         ReleaseAssert(llvm_value_has_type<int64_t>(tierUpCounter));
 
-        Value* shouldTierUp = new ICmpInst(*currentBlock, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
+        Value* shouldTierUp = new ICmpInst(currentBlock, ICmpInst::ICMP_SLT, tierUpCounter, CreateLLVMConstantInt<int64_t>(ctx, 0));
         Function* expectIntrin = Intrinsic::getDeclaration(m_module.get(), Intrinsic::expect, { Type::getInt1Ty(ctx) });
         shouldTierUp = CallInst::Create(expectIntrin, { shouldTierUp, CreateLLVMConstantInt<bool>(ctx, false) }, "", currentBlock);
 
@@ -134,8 +139,9 @@ void InterpreterBytecodeImplCreator::CreateWrapperFunction()
     }
 
     std::unordered_map<uint64_t /*operandOrd*/, uint64_t /*argOrd*/> alreadyDecodedArgs;
-    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath && m_bytecodeDef->HasQuickeningSlowPath())
+    if (m_processKind == BytecodeIrComponentKind::QuickeningSlowPath)
     {
+        ReleaseAssert(m_bytecodeDef->HasQuickeningSlowPath());
         alreadyDecodedArgs = TypeBasedHCSHelper::GetQuickeningSlowPathAdditionalArgs(m_bytecodeDef);
     }
 
@@ -345,11 +351,11 @@ void InterpreterBytecodeImplCreator::DoLowering()
 
     // Inline 'm_impl' into 'm_wrapper'
     //
-    if (m_impl->hasFnAttribute(Attribute::AttrKind::NoInline))
+    if (m_impl->hasFnAttribute(Attribute::NoInline))
     {
-        m_impl->removeFnAttr(Attribute::AttrKind::NoInline);
+        m_impl->removeFnAttr(Attribute::NoInline);
     }
-    m_impl->addFnAttr(Attribute::AttrKind::AlwaysInline);
+    m_impl->addFnAttr(Attribute::AlwaysInline);
     m_impl->setLinkage(GlobalValue::InternalLinkage);
 
     DesugarAndSimplifyLLVMModule(m_module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
@@ -376,24 +382,16 @@ void InterpreterBytecodeImplCreator::DoLowering()
     //
     AstBytecodeReturn::LowerForInterpreter(this, m_wrapper);
     AstMakeCall::LowerForInterpreter(this, m_wrapper);
-    AstReturnValueAccessor::LowerForInterpreterOrBaselineJIT(this, m_wrapper);
+    AstReturnValueAccessor::LowerForInterpreterOrBaselineOrDfg(this, m_wrapper);
     DeegenAllSimpleApiLoweringPasses::LowerAllForInterpreter(this, m_wrapper);
     LowerGetBytecodeMetadataPtrAPI();
     LowerInterpreterGetBytecodePtrInternalAPI(this, m_wrapper);
-    AstSlowPath::LowerAllForInterpreterOrBaselineJIT(this, m_wrapper);
+    AstSlowPath::LowerAllForInterpreterOrBaselineOrDfg(this, m_wrapper);
 
     // All lowerings are complete.
     // Remove the NoReturn attribute since all pseudo no-return API calls have been replaced to dispatching tail calls
     //
-    m_wrapper->removeFnAttr(Attribute::AttrKind::NoReturn);
-    if (m_processKind == BytecodeIrComponentKind::Main && m_bytecodeDef->HasQuickeningSlowPath())
-    {
-        std::string slowPathFnName = BytecodeIrInfo::GetQuickeningSlowPathFuncName(m_bytecodeDef);
-        Function* slowPathFn = m_module->getFunction(slowPathFnName);
-        ReleaseAssert(slowPathFn != nullptr);
-        ReleaseAssert(slowPathFn->hasFnAttribute(Attribute::AttrKind::NoReturn));
-        slowPathFn->removeFnAttr(Attribute::AttrKind::NoReturn);
-    }
+    m_wrapper->removeFnAttr(Attribute::NoReturn);
 
     // Remove the value preserver annotations so optimizer can work fully
     //
@@ -443,6 +441,7 @@ void InterpreterBytecodeImplCreator::DoLowering()
         //
         m_wrapper = m_module->getFunction(m_resultFuncName);
         ReleaseAssert(m_wrapper != nullptr);
+        m_execFnContext->ResetFunction(m_wrapper);
     }
 }
 
@@ -888,7 +887,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED InterpreterBytecodeImplCreator::DoLowe
     std::vector<Function*> allFunctionsToRename;
     for (Function& func : *module)
     {
-        if (func.getName().startswith("__deegen_bytecode_"))
+        if (func.getName().starts_with("__deegen_bytecode_"))
         {
             allFunctionsToRename.push_back(&func);
         }

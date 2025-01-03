@@ -21,6 +21,8 @@ DEEGEN_DEFINE_BYTECODE(NewClosure)
     Result(BytecodeValue);
     Implementation(NewClosureImpl);
     Variant();
+    DfgVariant();
+    TypeDeductionRule([](TypeMask /*input*/) -> TypeMask { return x_typeMaskFor<tFunction>; });
     DeclareAsIntrinsic<Intrinsic::CreateClosure>({
         .proto = Op("unlinkedCb")
     });

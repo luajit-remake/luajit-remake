@@ -332,7 +332,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                                 }
                                 else
                                 {
-                                    assert(miv.IsBoolean());
+                                    Assert(miv.IsBoolean());
                                     fprintf(file, "%s", (miv.GetBooleanValue() ? "True" : "False"));
                                 }
                             }
@@ -340,7 +340,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                             {
                                 // TODO: unfortunately this is currently coupled with the guest language definition
                                 //
-                                assert(val.IsPointer());
+                                Assert(val.IsPointer());
                                 UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
                                 if (p->m_type == HeapEntityType::String)
                                 {
@@ -373,7 +373,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                         }
                         else if (inputNode->IsUnboxedConstantNode())
                         {
-                            fprintf(file, "%llu", static_cast<unsigned long long>(inputNode->GetNodeParamAsUInt64()));
+                            fprintf(file, "%llu", static_cast<unsigned long long>(inputNode->GetUnboxedConstantNodeValue()));
                         }
                         else if (inputNode->IsUndefValueNode())
                         {
@@ -389,7 +389,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                         }
                         else if (inputNode->IsGetKthVarArgNode())
                         {
-                            fprintf(file, "VarArg(%d)", static_cast<int>(inputNode->GetNodeParamAsUInt64()));
+                            fprintf(file, "VarArg(%d)", static_cast<int>(inputNode->GetNodeSpecificDataAsUInt64()));
                         }
                         else if (inputNode->IsGetFunctionObjectNode())
                         {
@@ -522,46 +522,47 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                 }
                 case NodeKind_GetKthVariadicRes:
                 {
-                    fprintf(file, ", %llu", static_cast<unsigned long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, ", %llu", static_cast<unsigned long long>(curNode->GetNodeSpecificDataAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
                 case NodeKind_CreateVariadicRes:
                 {
-                    fprintf(file, ", numFixedItms=%llu", static_cast<unsigned long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, ", numFixedItms=%llu", static_cast<unsigned long long>(curNode->GetNodeSpecificDataAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
                 case NodeKind_CheckU64InBound:
                 {
-                    fprintf(file, " <= %llu", static_cast<unsigned long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, " <= %llu", static_cast<unsigned long long>(curNode->GetNodeSpecificDataAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
-                case NodeKind_U64SaturateSub:
+                case NodeKind_I64SubSaturateToZero:
                 {
-                    fprintf(file, " - (%lld)", static_cast<long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, " - (%lld)", static_cast<long long>(curNode->GetI64SubSaturateToZeroNodeOperand()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
                 case NodeKind_CreateFunctionObject:
                 {
-                    fprintf(file, ", sr=%lld", static_cast<long long>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, ", sr=%lld", static_cast<long long>(curNode->GetNodeSpecificDataAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
-                case NodeKind_GetUpvalue:
+                case NodeKind_GetUpvalueImmutable:
+                case NodeKind_GetUpvalueMutable:
                 {
-                    Node::UpvalueInfo info = curNode->GetInfoForGetUpvalue();
+                    Nsd_UpvalueInfo info = curNode->GetInfoForGetUpvalue();
                     fprintf(file, ", ord=%u, mutable=%s",
                             static_cast<unsigned int>(info.m_ordinal),
-                            (info.m_isImmutable ? "false" : "true"));
+                            ((curNode->GetNodeKind() == NodeKind_GetUpvalueImmutable) ? "false" : "true"));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }
                 case NodeKind_SetUpvalue:
                 {
-                    fprintf(file, ", ord=%u", static_cast<unsigned int>(curNode->GetNodeParamAsUInt64()));
+                    fprintf(file, ", ord=%u", static_cast<unsigned int>(curNode->GetNodeSpecificDataAsUInt64()));
                     shouldPrefixCommaForFirstItem = true;
                     break;
                 }

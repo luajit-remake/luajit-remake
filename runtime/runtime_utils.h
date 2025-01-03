@@ -129,6 +129,28 @@ public:
     uint8_t m_reserved1;
     CoroutineStatus m_coroutineStatus;
 
+    // m_variadicRetStart[ord] holds variadic return value 'ord'
+    // TODO: maybe this can be directly stored in CPU register since it must be consumed by immediate next bytecode?
+    //
+    TValue* m_variadicRetStart;
+    uint32_t m_numVariadicRets;
+    uint32_t m_unused1;
+
+    // The linked list head of the list of open upvalues
+    //
+    UserHeapPointer<Upvalue> m_upvalueList;
+
+    // The global object of this coroutine
+    //
+    UserHeapPointer<TableObject> m_globalObject;
+
+    // A temporary buffer used by DFG JIT code to pass values between JIT code and AOT slow path
+    // This buffer should come before the "cold" members of this struct, so we can index this with disp8 addressing mode
+    // as much as possible, which saves a bit of DFG JIT code size.
+    //
+    static constexpr size_t x_dfg_temp_buffer_size = 5;
+    uint64_t m_dfgTempBuffer[x_dfg_temp_buffer_size];
+
     // The stack base of the suspend point.
     // This field is valid for all non-dead coroutine except the currently running one.
     //
@@ -147,20 +169,6 @@ public:
     // For non-active coroutines, the value in this field is undefined.
     //
     CoroutineRuntimeContext* m_parent;
-
-    // slot [m_variadicRetSlotBegin + ord] holds variadic return value 'ord'
-    // TODO: maybe this can be directly stored in CPU register since it must be consumed by immediate next bytecode?
-    //
-    uint32_t m_numVariadicRets;
-    int32_t m_variadicRetSlotBegin;
-
-    // The linked list head of the list of open upvalues
-    //
-    UserHeapPointer<Upvalue> m_upvalueList;
-
-    // The global object of this coroutine
-    //
-    UserHeapPointer<TableObject> m_globalObject;
 
     // The beginning of the stack
     //
@@ -233,7 +241,6 @@ public:
 static_assert(sizeof(ExecutableCode) == 24);
 
 class BaselineCodeBlock;
-class FLOCodeBlock;
 
 class UpvalueMetadata
 {
@@ -328,7 +335,7 @@ public:
         const JitCallInlineCacheTraits* trait = GetIcTrait();
         uint8_t* jitBaseAddr = GetJitRegionStart();
         size_t numPatches = trait->m_numCodePtrUpdatePatches;
-        assert(numPatches > 0);
+        Assert(numPatches > 0);
         size_t i = 0;
         do {
             uint8_t* addr = jitBaseAddr + trait->m_codePtrPatchRecords[i].m_offset;
@@ -532,7 +539,7 @@ public:
     {
         if (likely(globalObject == m_defaultGlobalObject))
         {
-            assert(m_defaultCodeBlock != nullptr);
+            Assert(m_defaultCodeBlock != nullptr);
             return m_defaultCodeBlock;
         }
         return GetCodeBlockSlowPath(globalObject);
@@ -638,7 +645,7 @@ public:
     //
     uint8_t* WARN_UNUSED GetSlowPathDataAtBytecodeIndex(size_t index)
     {
-        assert(index < m_numBytecodes);
+        Assert(index < m_numBytecodes);
         size_t offset = m_sbIndex[index].m_slowPathDataOffset;
         return reinterpret_cast<uint8_t*>(this) + offset;
     }
@@ -659,8 +666,8 @@ public:
     {
         uint32_t base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(m_owner));
         uint32_t targetOffset = bytecodePtr32 - base;
-        assert(m_owner->GetTrailingArrayOffset() <= targetOffset && targetOffset < m_owner->GetBytecodeLength() + m_owner->GetTrailingArrayOffset());
-        assert(m_numBytecodes > 0);
+        Assert(m_owner->GetTrailingArrayOffset() <= targetOffset && targetOffset < m_owner->GetBytecodeLength() + m_owner->GetTrailingArrayOffset());
+        Assert(m_numBytecodes > 0);
         size_t left = 0, right = m_numBytecodes - 1;
         while (left < right)
         {
@@ -670,12 +677,12 @@ public:
             //
             if (targetOffset == value)
             {
-                assert(m_sbIndex[mid].m_bytecodePtr32 == bytecodePtr32);
+                Assert(m_sbIndex[mid].m_bytecodePtr32 == bytecodePtr32);
                 return mid;
             }
             if (targetOffset < value)
             {
-                assert(mid > 0);
+                Assert(mid > 0);
                 right = mid - 1;
             }
             else
@@ -683,8 +690,8 @@ public:
                 left = mid + 1;
             }
         }
-        assert(left == right);
-        assert(m_sbIndex[left].m_bytecodePtr32 == bytecodePtr32);
+        Assert(left == right);
+        Assert(m_sbIndex[left].m_bytecodePtr32 == bytecodePtr32);
         return left;
     }
 
@@ -692,17 +699,17 @@ public:
     //
     size_t WARN_UNUSED GetBytecodeIndexFromBytecodePtr(void* bytecodePtr)
     {
-        assert(m_owner->GetBytecodeStream() <= bytecodePtr && bytecodePtr < m_owner->GetBytecodeStream() + m_owner->GetBytecodeLength());
+        Assert(m_owner->GetBytecodeStream() <= bytecodePtr && bytecodePtr < m_owner->GetBytecodeStream() + m_owner->GetBytecodeLength());
         return GetBytecodeIndexFromBytecodePtrLower32Bits(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(bytecodePtr)));
     }
 
     size_t WARN_UNUSED GetBytecodeOffsetFromBytecodeIndex(size_t bytecodeIndex)
     {
-        assert(bytecodeIndex < m_numBytecodes);
+        Assert(bytecodeIndex < m_numBytecodes);
         uint32_t ptr32 = m_sbIndex[bytecodeIndex].m_bytecodePtr32;
         uint32_t basePtr32 = static_cast<uint32_t>(reinterpret_cast<uint64_t>(m_owner->GetBytecodeStream()));
         uint32_t diff = ptr32 - basePtr32;
-        assert(diff < m_owner->m_bytecodeLengthIncludingTailPadding);
+        Assert(diff < m_owner->m_bytecodeLengthIncludingTailPadding);
         return diff;
     }
 
@@ -730,6 +737,35 @@ public:
     SlowPathDataAndBytecodeOffset m_sbIndex[0];
 };
 
+// Layout:
+// [ constant table ] [ DfgCodeBlock ] [ slowPathData ]
+//
+class alignas(8) DfgCodeBlock
+{
+public:
+    size_t GetStackRegSpillRegionOffset()
+    {
+        return m_stackRegSpillRegionOffset;
+    }
+
+    UserHeapPointer<TableObject> m_globalObject;
+
+    uint32_t m_stackFrameNumSlots;
+
+    // DFG stack layout:
+    // [ Arguments ]: the non-vararg arguments to the function
+    // [ Reg Spills ]: reserved spill locations for each register participating in reg alloc
+    // [ Locals ]: storage locations for the DFG locals
+    // [ Tmps ]: storage locations for spilled SSA values
+    // [ Range ]: scratch space for nodes that takes a list of operands that must be placed sequentially
+    //
+    uint32_t m_stackRegSpillRegionOffset;
+    uint32_t m_stackLocalRegionOffset;
+    uint32_t m_stackTmpRegionOffset;
+    uint32_t m_stackRangedOpRegionOffset;
+
+};
+
 class FunctionObject;
 
 class Upvalue
@@ -748,7 +784,10 @@ public:
         return r;
     }
 
-    static HeapPtr<Upvalue> WARN_UNUSED CreateClosed(VM* vm, TValue val)
+    // Create a closed upvalue
+    // Only used by DFG. By design, this will only be called for upvalues that are mutable
+    //
+    static Upvalue* WARN_UNUSED CreateClosed(VM* vm, TValue val)
     {
         HeapPtr<Upvalue> r = vm->AllocFromUserHeap(static_cast<uint32_t>(sizeof(Upvalue))).AsNoAssert<Upvalue>();
         Upvalue* raw = TranslateToRawPointer(vm, r);
@@ -757,8 +796,8 @@ public:
         raw->m_ptr = &raw->m_tv;
         raw->m_tv = val;
         raw->m_isClosed = true;
-        raw->m_isImmutable = true;
-        return r;
+        raw->m_isImmutable = false;
+        return raw;
     }
 
     static HeapPtr<Upvalue> WARN_UNUSED Create(CoroutineRuntimeContext* rc, TValue* dst, bool isImmutable)
@@ -781,8 +820,8 @@ public:
             UserHeapPointer<Upvalue> prev;
             while (true)
             {
-                assert(!cur->m_isClosed);
-                assert(dst <= curVal);
+                Assert(!cur->m_isClosed);
+                Assert(dst <= curVal);
                 if (curVal == dst)
                 {
                     // We found an open upvalue for that slot, we are good
@@ -798,9 +837,9 @@ public:
                     break;
                 }
 
-                assert(!prev.As()->m_isClosed);
+                Assert(!prev.As()->m_isClosed);
                 TValue* prevVal = prev.As()->m_ptr;
-                assert(prevVal < curVal);
+                Assert(prevVal < curVal);
                 if (prevVal < dst)
                 {
                     // prevVal < dst < curVal, so we found the insertion location
@@ -812,10 +851,10 @@ public:
                 curVal = prevVal;
             }
 
-            assert(curVal == cur->m_ptr);
-            assert(prev == TCGet(cur->m_prev));
-            assert(dst < curVal);
-            assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
+            Assert(curVal == cur->m_ptr);
+            Assert(prev == TCGet(cur->m_prev));
+            Assert(dst < curVal);
+            Assert(prev.m_value == 0 || prev.As()->m_ptr < dst);
             HeapPtr<Upvalue> newNode = CreateUpvalueImpl(prev, dst, isImmutable);
             TCSet(cur->m_prev, UserHeapPointer<Upvalue>(newNode));
             WriteBarrier(cur);
@@ -825,8 +864,8 @@ public:
 
     void Close()
     {
-        assert(!m_isClosed);
-        assert(m_ptr != &m_tv);
+        Assert(!m_isClosed);
+        Assert(m_ptr != &m_tv);
         m_tv = *m_ptr;
         m_ptr = &m_tv;
         m_isClosed = true;
@@ -870,10 +909,10 @@ inline void CoroutineRuntimeContext::CloseUpvalues(TValue* base)
         {
             break;
         }
-        assert(!cur.As()->m_isClosed);
+        Assert(!cur.As()->m_isClosed);
         Upvalue* uv = TranslateToRawPointer(vm, cur.As());
         cur = uv->m_prev;
-        assert(cur.m_value == 0 || cur.As()->m_ptr < uv->m_ptr);
+        Assert(cur.m_value == 0 || cur.As()->m_ptr < uv->m_ptr);
         uv->Close();
     }
     m_upvalueList = cur;
@@ -905,7 +944,7 @@ public:
     static UserHeapPointer<FunctionObject> WARN_UNUSED Create(VM* vm, CodeBlock* cb)
     {
         uint32_t numUpvalues = cb->m_numUpvalues;
-        assert(numUpvalues <= std::numeric_limits<uint8_t>::max());
+        Assert(numUpvalues <= std::numeric_limits<uint8_t>::max());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, static_cast<uint8_t>(numUpvalues));
         SystemHeapPointer<ExecutableCode> executable { static_cast<ExecutableCode*>(cb) };
         TCSet(r.As()->m_executable, executable);
@@ -914,7 +953,7 @@ public:
 
     static UserHeapPointer<FunctionObject> WARN_UNUSED CreateCFunc(VM* vm, SystemHeapPointer<ExecutableCode> executable, uint8_t numUpvalues = 0)
     {
-        assert(TranslateToRawPointer(executable.As())->IsUserCFunction());
+        Assert(TranslateToRawPointer(executable.As())->IsUserCFunction());
         UserHeapPointer<FunctionObject> r = CreateImpl(vm, numUpvalues);
         TCSet(r.As()->m_executable, executable);
         return r;
@@ -924,11 +963,11 @@ public:
     //
     static bool ALWAYS_INLINE IsUpvalueImmutable(HeapPtr<FunctionObject> self, size_t ord)
     {
-        assert(ord < self->m_numUpvalues);
-        assert(TranslateToRawPointer(TCGet(self->m_executable).As())->IsBytecodeFunction());
+        Assert(ord < self->m_numUpvalues);
+        Assert(TranslateToRawPointer(TCGet(self->m_executable).As())->IsBytecodeFunction());
         HeapPtr<CodeBlock> cb = static_cast<HeapPtr<CodeBlock>>(TCGet(self->m_executable).As());
-        assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
-        assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
+        Assert(cb->m_numUpvalues == self->m_numUpvalues && cb->m_owner->m_numUpvalues == self->m_numUpvalues);
+        Assert(cb->m_owner->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
         return cb->m_owner->m_upvalueInfo[ord].m_isImmutable;
     }
 
@@ -938,10 +977,10 @@ public:
     //
     static HeapPtr<Upvalue> ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
     {
-        assert(ord < self->m_numUpvalues);
-        assert(!IsUpvalueImmutable(self, ord));
+        Assert(ord < self->m_numUpvalues);
+        Assert(!IsUpvalueImmutable(self, ord));
         TValue tv = TCGet(self->m_upvalues[ord]);
-        assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
+        Assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
         return tv.AsPointer().As<Upvalue>();
     }
 
@@ -951,10 +990,10 @@ public:
     //
     static TValue ALWAYS_INLINE GetImmutableUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
     {
-        assert(ord < self->m_numUpvalues);
-        assert(IsUpvalueImmutable(self, ord));
+        Assert(ord < self->m_numUpvalues);
+        Assert(IsUpvalueImmutable(self, ord));
         TValue tv = TCGet(self->m_upvalues[ord]);
-        assert(!(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue));
+        Assert(!(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue));
         return tv;
     }
 
@@ -965,7 +1004,7 @@ public:
     //
     static TValue ALWAYS_INLINE GetUpvalueValue(HeapPtr<FunctionObject> self, size_t ord)
     {
-        assert(ord < self->m_numUpvalues);
+        Assert(ord < self->m_numUpvalues);
         if (IsUpvalueImmutable(self, ord))
         {
             return GetImmutableUpvalueValue(self, ord);
@@ -979,11 +1018,19 @@ public:
 
     static TValue GetMutableUpvaluePtrOrImmutableUpvalue(HeapPtr<FunctionObject> self, size_t ord)
     {
-        assert(ord < self->m_numUpvalues);
+        Assert(ord < self->m_numUpvalues);
         return TCGet(self->m_upvalues[ord]);
     }
 
-    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame);
+    static UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE CreateAndFillUpvalues(
+        CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame);
+
+    // Create the function object, and fill in all upvalues that come from parent upvalues (i.e., enclosing function's upvalues)
+    //
+    // All upvalues that comes from the enclosing function's local variables are not populated
+    //
+    static FunctionObject* WARN_UNUSED NO_INLINE CreateForDfgAndFillUpvaluesFromParent(
+        UnlinkedCodeBlock* ucb, HeapPtr<FunctionObject> parent);
 
     static constexpr size_t GetTrailingArrayOffset()
     {
@@ -1023,12 +1070,12 @@ inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableC
     ExecutableCode* ec;
     if (m_entity.IsUserHeapPointer())
     {
-        assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
+        Assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
         ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
     }
     else
     {
-        assert(m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
+        Assert(m_entity.As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::ExecutableCode);
         ec = TranslateToRawPointer(vm, m_entity.As<ExecutableCode>());
     }
     AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
@@ -1037,9 +1084,9 @@ inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableC
 
 inline ExecutableCode* WARN_UNUSED JitCallInlineCacheEntry::GetTargetExecutableCodeKnowingDirectCall(VM* vm)
 {
-    assert(GetIcTrait()->m_isDirectCallMode);
-    assert(m_entity.IsUserHeapPointer());
-    assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
+    Assert(GetIcTrait()->m_isDirectCallMode);
+    Assert(m_entity.IsUserHeapPointer());
+    Assert(m_entity.As<UserHeapGcObjectHeader>()->m_type == HeapEntityType::Function);
     ExecutableCode* ec = TranslateToRawPointer(vm, TCGet(m_entity.As<FunctionObject>()->m_executable).As());
     AssertIff(IsOnDoublyLinkedList(this), ec->IsBytecodeFunction());
     return ec;
@@ -1084,13 +1131,13 @@ inline void PrintTValue(FILE* fp, TValue val)
         }
         else
         {
-            assert(miv.IsBoolean());
+            Assert(miv.IsBoolean());
             fprintf(fp, "%s", (miv.GetBooleanValue() ? "true" : "false"));
         }
     }
     else
     {
-        assert(val.IsPointer());
+        Assert(val.IsPointer());
         UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
         if (p->m_type == HeapEntityType::String)
         {
@@ -1161,15 +1208,7 @@ public:
     // Varargs of this function
     //
     InlinedFunctionVarArgRepresentation m_varargs;
-
 };
-
-inline TValue WARN_UNUSED GetMetamethodFromMetatable(HeapPtr<TableObject> metatable, LuaMetamethodKind mtKind)
-{
-    GetByIdICInfo icInfo;
-    TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-    return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
-}
 
 inline TValue WARN_UNUSED GetMetamethodForValue(TValue value, LuaMetamethodKind mtKind)
 {
@@ -1315,7 +1354,7 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
 {
     if (likely(!lhs.Is<tString>() && !rhs.Is<tString>()))
     {
-        return { .success = false };
+        return { .success = false, .result = Undef<double>() };
     }
 
     double lhsNumber;
@@ -1333,12 +1372,12 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
         }
         else
         {
-            return { .success = false };
+            return { .success = false, .result = Undef<double>() };
         }
     }
     else
     {
-        return { .success = false };
+        return { .success = false, .result = Undef<double>() };
     }
 
     double rhsNumber;
@@ -1356,12 +1395,12 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
         }
         else
         {
-            return { .success = false };
+            return { .success = false, .result = Undef<double>() };
         }
     }
     else
     {
-        return { .success = false };
+        return { .success = false, .result = Undef<double>() };
     }
 
     // This is fine: string to integer coercion is already slow enough..
@@ -1382,7 +1421,7 @@ inline DoBinaryOperationConsideringStringConversionResult WARN_UNUSED NO_INLINE 
     case LuaMetamethodKind::Pow:
         return { .success = true, .result = pow(lhsNumber, rhsNumber) };
     default:
-        assert(false);
+        Assert(false);
         __builtin_unreachable();
     }
 }
@@ -1394,9 +1433,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
         if (lhsMetatableMaybeNull.m_value != 0)
         {
             HeapPtr<TableObject> metatable = lhsMetatableMaybeNull.As<TableObject>();
-            GetByIdICInfo icInfo;
-            TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-            TValue metamethod = TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+            TValue metamethod = GetMetamethodFromMetatable(metatable, mtKind);
             if (!metamethod.IsNil())
             {
                 return metamethod;
@@ -1412,9 +1449,7 @@ inline TValue WARN_UNUSED GetMetamethodForBinaryArithmeticOperation(TValue lhs, 
         }
 
         HeapPtr<TableObject> metatable = rhsMetatableMaybeNull.As<TableObject>();
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(metatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-        return TableObject::GetById(metatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+        return GetMetamethodFromMetatable(metatable, mtKind);
     }
 }
 
@@ -1440,9 +1475,7 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
                 return TValue::Nil();
             }
         }
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(lhsMetatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-        lhsMetamethod = TableObject::GetById(lhsMetatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+        lhsMetamethod = GetMetamethodFromMetatable(lhsMetatable, mtKind);
         if (lhsMetamethod.IsNil())
         {
             return lhsMetamethod;
@@ -1458,13 +1491,11 @@ TValue WARN_UNUSED GetMetamethodFromMetatableForComparisonOperation(HeapPtr<Tabl
                 return TValue::Nil();
             }
         }
-        GetByIdICInfo icInfo;
-        TableObject::PrepareGetById(rhsMetatable, VM_GetStringNameForMetatableKind(mtKind), icInfo /*out*/);
-        rhsMetamethod = TableObject::GetById(rhsMetatable, VM_GetStringNameForMetatableKind(mtKind).As<void>(), icInfo);
+        rhsMetamethod = GetMetamethodFromMetatable(rhsMetatable, mtKind);
     }
 
-    assert(!lhsMetamethod.IsInt32() && "unimplemented");
-    assert(!rhsMetamethod.IsInt32() && "unimplemented");
+    Assert(!lhsMetamethod.IsInt32() && "unimplemented");
+    Assert(!rhsMetamethod.IsInt32() && "unimplemented");
 
     // Now, perform a primitive comparison of lhsMetamethod and rhsMetamethod
     //

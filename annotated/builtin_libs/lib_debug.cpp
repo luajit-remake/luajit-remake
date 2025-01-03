@@ -234,13 +234,13 @@ DEEGEN_DEFINE_LIB_FUNC(debug_setmetatable)
         }
         else
         {
-            assert(value.Is<tBool>());
+            Assert(value.Is<tBool>());
             setExoticMetatable(vm->m_metatableForBoolean);
         }
     }
     else
     {
-        assert(value.Is<tDouble>() || value.Is<tInt32>());
+        Assert(value.Is<tDouble>() || value.Is<tInt32>());
         setExoticMetatable(vm->m_metatableForNumber);
     }
 

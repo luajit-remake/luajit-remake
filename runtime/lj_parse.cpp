@@ -67,6 +67,7 @@
 #pragma clang diagnostic ignored "-Wfloat-equal"
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #pragma clang diagnostic ignored "-Wunused-function"
+#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
 
 #include "common.h"
 
@@ -316,7 +317,7 @@ typedef struct ExpDesc {
     TValue aux2;
 } ExpDesc;
 
-#define check_exp(c, e)		(assert((c)), (e))
+#define check_exp(c, e)		(Assert((c)), (e))
 
 /* Macros for expressions. */
 #define expr_hasjump(e)		((e)->t != (e)->f)
@@ -345,14 +346,14 @@ static ALWAYS_INLINE void expr_init(ExpDesc *e, ExpKind k, uint32_t info)
 static int expr_numiszero(ExpDesc *e)
 {
     TValue *o = expr_numtv(e);
-    assert(o->Is<tInt32>() || o->Is<tDouble>());
+    Assert(o->Is<tInt32>() || o->Is<tDouble>());
     return o->Is<tInt32>() ? (o->As<tInt32>() == 0) : (o->As<tDouble>() == 0.0);
 }
 
 static double expr_numberV(ExpDesc *e)
 {
     TValue *o = expr_numtv(e);
-    assert(o->Is<tInt32>() || o->Is<tDouble>());
+    Assert(o->Is<tInt32>() || o->Is<tDouble>());
     return o->Is<tInt32>() ? (o->As<tInt32>()) : (o->As<tDouble>());
 }
 
@@ -484,13 +485,13 @@ NO_INLINE NO_RETURN static void err_limit(FuncState *fs, uint32_t /*limit*/, con
 
 static TValue WARN_UNUSED const_pri(ExpDesc *e)
 {
-    assert(e->k <= VKTRUE);
+    Assert(e->k <= VKTRUE);
     switch (e->k)
     {
     case VKNIL: return TValue::Create<tNil>();
     case VKFALSE: return TValue::Create<tBool>(false);
     case VKTRUE: return TValue::Create<tBool>(true);
-    default: { assert(false); __builtin_unreachable(); }
+    default: { Assert(false); __builtin_unreachable(); }
     }
 }
 
@@ -498,7 +499,7 @@ static TValue WARN_UNUSED const_pri(ExpDesc *e)
 static TValue WARN_UNUSED const_num(ExpDesc *e)
 {
     TValue ori = e->u.nval;
-    assert(ori.Is<tDouble>() || ori.Is<tInt32>());
+    Assert(ori.Is<tDouble>() || ori.Is<tInt32>());
     double doubleVal;
     doubleVal = (ori.Is<tDouble>()) ? ori.As<tDouble>() : ori.As<tInt32>();
     TValue num = TValue::Create<tDouble>(doubleVal);
@@ -510,7 +511,7 @@ static TValue WARN_UNUSED const_str(ExpDesc *e)
 {
     // TODO: we need to keep the object alive
     //
-    assert((expr_isstrk(e) || e->k == VGLOBAL) && "bad usage");
+    Assert((expr_isstrk(e) || e->k == VGLOBAL) && "bad usage");
     HeapPtr<HeapString> str = e->u.sval;
     return TValue::Create<tString>(str);
 }
@@ -544,39 +545,39 @@ static void ALWAYS_INLINE setbc_op(BCIns& ins, int op)
 
 static BCReg ALWAYS_INLINE bc_a(BCIns& ins)
 {
-    assert(ins.hasA);
+    Assert(ins.hasA);
     return ins.insA;
 }
 
 static void ALWAYS_INLINE setbc_a(BCIns& ins, BCReg val)
 {
-    assert(val <= BCMAX_A);
+    Assert(val <= BCMAX_A);
     DEBUG_ONLY(ins.hasA = true;)
     ins.insA = static_cast<uint16_t>(val);
 }
 
 static BCReg ALWAYS_INLINE bc_b(BCIns& ins)
 {
-    assert(ins.hasB);
+    Assert(ins.hasB);
     return ins.insB;
 }
 
 static void ALWAYS_INLINE setbc_b(BCIns& ins, BCReg val)
 {
-    assert(val <= BCMAX_B);
+    Assert(val <= BCMAX_B);
     DEBUG_ONLY(ins.hasB = true;)
     ins.insB = static_cast<uint16_t>(val);
 }
 
 static BCReg ALWAYS_INLINE bc_c(BCIns& ins)
 {
-    assert(ins.hasC);
+    Assert(ins.hasC);
     return ins.insC;
 }
 
 static void ALWAYS_INLINE setbc_c(BCIns& ins, BCReg val)
 {
-    assert(val <= BCMAX_C);
+    Assert(val <= BCMAX_C);
     DEBUG_ONLY(ins.hasC = true;)
     ins.insC = static_cast<uint16_t>(val);
 }
@@ -585,13 +586,13 @@ static void ALWAYS_INLINE setbc_c(BCIns& ins, BCReg val)
 //
 static BCReg ALWAYS_INLINE bc_d(BCIns& ins)
 {
-    assert(ins.hasD);
+    Assert(ins.hasD);
     return ins.insC;
 }
 
 static void ALWAYS_INLINE setbc_d(BCIns& ins, BCReg val)
 {
-    assert(val <= BCMAX_D);
+    Assert(val <= BCMAX_D);
     DEBUG_ONLY(ins.hasD = true;)
     ins.insC = static_cast<uint16_t>(val);
 }
@@ -609,7 +610,7 @@ static void ALWAYS_INLINE setbc_j(BCIns& ins, BCPos pos)
 
 static TValue ALWAYS_INLINE bc_cst(BCIns& ins)
 {
-    assert(ins.hasCst);
+    Assert(ins.hasCst);
     return ins.ctv;
 }
 
@@ -745,7 +746,7 @@ static void jmp_patchins(FuncState *fs, BCPos pc, BCPos dest)
 {
     BCIns& jmp = fs->bcbase[pc].inst;
     BCPos offset = dest-(pc+1)+BCBIAS_J;
-    assert(dest != NO_JMP && "uninitialized jump target");
+    Assert(dest != NO_JMP && "uninitialized jump target");
     if (offset > BCMAX_D)
         err_syntax(fs->ls, LJ_ERR_XJUMP);
     setbc_d(jmp, offset);
@@ -795,7 +796,7 @@ static void jmp_patch(FuncState *fs, BCPos list, BCPos target)
     if (target == fs->pc) {
         jmp_tohere(fs, list);
     } else {
-        assert(target < fs->pc && "bad jump target");
+        Assert(target < fs->pc && "bad jump target");
         jmp_patchval(fs, list, target, NO_REG, target);
     }
 }
@@ -825,7 +826,7 @@ static void bcreg_free(FuncState *fs, BCReg reg)
 {
     if (reg >= fs->nactvar) {
         fs->freereg--;
-        assert(reg == fs->freereg && "bad regfree");
+        Assert(reg == fs->freereg && "bad regfree");
     }
 }
 
@@ -846,18 +847,18 @@ static BCPos bcemit_impl(FuncState *fs, BCIns ins)
     jmp_patchval(fs, fs->jpc, pc, NO_REG, pc);
     fs->jpc = NO_JMP;
     if (unlikely(pc >= fs->bclim)) {
-        assert(fs->bcbase >= ls->bcstack.data());
+        Assert(fs->bcbase >= ls->bcstack.data());
         ptrdiff_t base = fs->bcbase - ls->bcstack.data();
         size_t newSize = std::max<uint64_t>(ls->bcstack.size() * 3 / 2, 16);
         checklimit(fs, newSize, LJ_MAX_BCINS, "too many bytecode instructions");
         ls->bcstack.resize(newSize);
-        assert(newSize >= static_cast<size_t>(base));
+        Assert(newSize >= static_cast<size_t>(base));
         fs->bclim = (BCPos)(newSize - base);
         fs->bcbase = ls->bcstack.data() + base;
     }
-    assert(fs->bcbase >= ls->bcstack.data());
-    assert(fs->bclim + static_cast<size_t>(fs->bcbase - ls->bcstack.data()) == ls->bcstack.size());
-    assert(pc < fs->bclim);
+    Assert(fs->bcbase >= ls->bcstack.data());
+    Assert(fs->bclim + static_cast<size_t>(fs->bcbase - ls->bcstack.data()) == ls->bcstack.size());
+    Assert(pc < fs->bclim);
     fs->bcbase[pc].inst = ins;
     fs->bcbase[pc].line = ls->lastline;
     fs->pc = pc+1;
@@ -1032,7 +1033,7 @@ static void expr_toreg_nobranch(FuncState *fs, ExpDesc *e, BCReg reg)
     } else if (e->k == VKNUM) {
 
         TValue *tv = expr_numtv(e);
-        assert(tv->Is<tInt32>() || tv->Is<tDouble>());
+        Assert(tv->Is<tInt32>() || tv->Is<tDouble>());
         if (tv->Is<tInt32>())
         {
             if (checki16(tv->As<tInt32>()))
@@ -1062,7 +1063,7 @@ static void expr_toreg_nobranch(FuncState *fs, ExpDesc *e, BCReg reg)
     } else if (e->k <= VKTRUE) {
         ins = BCINS_AD(BC_KPRI, reg, const_pri(e));
     } else {
-        assert((e->k == VVOID || e->k == VJMP) && "bad expr type");
+        Assert((e->k == VVOID || e->k == VJMP) && "bad expr type");
         return;
     }
     std::ignore = bcemit_INS(fs, ins);
@@ -1137,13 +1138,13 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
 {
     BCIns ins;
     if (var->k == VLOCAL) {
-        assert(var->u.s.aux < fs->ls->vstack.size());
+        Assert(var->u.s.aux < fs->ls->vstack.size());
         fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
         expr_free(fs, e);
         expr_toreg(fs, e, var->u.s.info);
         return;
     } else if (var->k == VUPVAL) {
-        assert(var->u.s.aux < fs->ls->vstack.size());
+        Assert(var->u.s.aux < fs->ls->vstack.size());
         fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
         expr_toval(fs, e);
         if (e->k <= VKTRUE)
@@ -1159,7 +1160,7 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
         ins = BCINS_AD(BC_GSET, ra, const_str(var));
     } else {
         BCReg ra, rc;
-        assert(var->k == VINDEXED && "bad expr type");
+        Assert(var->k == VINDEXED && "bad expr type");
         ra = expr_toanyreg(fs, e);
         rc = var->u.s.aux;
         if ((int32_t)rc < 0) {
@@ -1185,7 +1186,7 @@ static void bcemit_method(FuncState *fs, ExpDesc *e, ExpDesc *key)
     expr_free(fs, e);
     BCReg func = fs->freereg;
     std::ignore = bcemit_AD(fs, BC_MOV, func+1+LJ_FR2, obj);  /* Copy object to 1st argument. */
-    assert(expr_isstrk(key) && "bad usage");
+    Assert(expr_isstrk(key) && "bad usage");
     TValue idx = const_str(key);
     bcreg_reserve(fs, 2+LJ_FR2);
     std::ignore = bcemit_ABC(fs, BC_TGETS, func, obj, idx);
@@ -1299,7 +1300,7 @@ static double lj_vm_foldarith(double x, double y, int op)
     // TODO: Lua 5.3 compat
     case OPR_MOD - OPR_ADD: return x-floor(x/y)*y;
     case OPR_POW - OPR_ADD: return pow(x, y);
-    default: { assert(false); __builtin_unreachable(); }
+    default: { Assert(false); __builtin_unreachable(); }
     }
 }
 
@@ -1360,7 +1361,7 @@ static void bcemit_arith(FuncState *fs, BinOpr opr, ExpDesc *e1, ExpDesc *e2)
             rhs = expr_toanyreg(fs, e2);
         }
         /* 1st operand discharged by bcemit_binop_left, but need KNUM/KSHORT. */
-        assert((expr_isnumk(e1) || e1->k == VNONRELOC) && "bad expr type");
+        Assert((expr_isnumk(e1) || e1->k == VNONRELOC) && "bad expr type");
         expr_toval(fs, e1);
         /* Avoid two consts to satisfy bytecode constraints. */
         if (isRhsConstant)
@@ -1532,19 +1533,19 @@ static void bcemit_binop(FuncState *fs, BinOpr op, ExpDesc *e1, ExpDesc *e2)
     if (op <= OPR_POW) {
         bcemit_arith(fs, op, e1, e2);
     } else if (op == OPR_AND) {
-        assert(e1->t == NO_JMP && "jump list not closed");
+        Assert(e1->t == NO_JMP && "jump list not closed");
         expr_discharge(fs, e2);
         jmp_append(fs, &e2->f, e1->f);
         *e1 = *e2;
     } else if (op == OPR_OR) {
-        assert(e1->f == NO_JMP && "jump list not closed");
+        Assert(e1->f == NO_JMP && "jump list not closed");
         expr_discharge(fs, e2);
         jmp_append(fs, &e2->t, e1->t);
         *e1 = *e2;
     } else if (op == OPR_CONCAT) {
         expr_toval(fs, e2);
         if (e2->k == VRELOCABLE && bc_op(*bcptr(fs, e2)) == BC_CAT) {
-            assert(e1->u.s.info == bc_b(*bcptr(fs, e2))-1 && "bad CAT stack layout");
+            Assert(e1->u.s.info == bc_b(*bcptr(fs, e2))-1 && "bad CAT stack layout");
             expr_free(fs, e1);
             setbc_b(*bcptr(fs, e2), e1->u.s.info);
             e1->u.s.info = e2->u.s.info;
@@ -1556,7 +1557,7 @@ static void bcemit_binop(FuncState *fs, BinOpr op, ExpDesc *e1, ExpDesc *e2)
         }
         e1->k = VRELOCABLE;
     } else {
-        assert((op == OPR_NE || op == OPR_EQ || op == OPR_LT || op == OPR_GE || op == OPR_LE || op == OPR_GT) && "bad binop");
+        Assert((op == OPR_NE || op == OPR_EQ || op == OPR_LT || op == OPR_GE || op == OPR_LE || op == OPR_GT) && "bad binop");
         bcemit_comp(fs, op, e1, e2);
     }
 }
@@ -1585,14 +1586,14 @@ static void bcemit_unop(FuncState *fs, BCOp op, ExpDesc *e)
             e->u.s.info = fs->freereg-1;
             e->k = VNONRELOC;
         } else {
-            assert(e->k == VNONRELOC && "bad expr type");
+            Assert(e->k == VNONRELOC && "bad expr type");
         }
     } else {
-        assert((op == BC_UNM || op == BC_LEN) && "bad unop");
+        Assert((op == BC_UNM || op == BC_LEN) && "bad unop");
         if (op == BC_UNM && !expr_hasjump(e)) {  /* Constant-fold negations. */
                 if (expr_isnumk(e) && !expr_numiszero(e)) {  /* Avoid folding to -0. */
                     TValue *o = expr_numtv(e);
-                    assert(o->Is<tInt32>() || o->Is<tDouble>());
+                    Assert(o->Is<tInt32>() || o->Is<tDouble>());
                     if (o->Is<tInt32>()) {
                         int32_t k = o->As<tInt32>();
                         if (k == std::numeric_limits<int32_t>::min())
@@ -1654,7 +1655,7 @@ static HeapPtr<HeapString> lex_str(LexState *ls)
 {
     if (ls->tok != TK_name && (LJ_52 || ls->tok != TK_goto))
         err_token(ls, TK_name);
-    assert(ls->tokval.Is<tString>());
+    Assert(ls->tokval.Is<tString>());
     HeapPtr<HeapString> s = ls->tokval.As<tString>();
     lj_lex_next(ls);
     return s;
@@ -1664,9 +1665,9 @@ static HeapPtr<HeapString> lex_str(LexState *ls)
 
 VarInfo& var_get(LexState* ls, FuncState* fs, size_t i)
 {
-    assert(i < LJ_MAX_LOCVAR);
+    Assert(i < LJ_MAX_LOCVAR);
     VarIndex idx = fs->varmap[i];
-    assert(idx < ls->vstack.size());
+    Assert(idx < ls->vstack.size());
     return ls->vstack[idx];
 }
 
@@ -1733,7 +1734,7 @@ static MSize var_lookup_uv(FuncState *fs, MSize vidx, ExpDesc *e)
             return i;  /* Already exists. */
     /* Otherwise create a new one. */
     checklimit(fs, fs->nuv, LJ_MAX_UPVAL, "too many upvalues");
-    assert((e->k == VLOCAL || e->k == VUPVAL) && "bad expr type");
+    Assert((e->k == VLOCAL || e->k == VUPVAL) && "bad expr type");
     fs->uvmap[n] = (uint16_t)vidx;
     fs->uvtmp[n] = (uint16_t)(e->k == VLOCAL ? vidx : LJ_MAX_VSTACK+e->u.s.info);
     fs->nuv = n+1;
@@ -1810,8 +1811,8 @@ static void gola_close(LexState *ls, VarInfo *vg)
     FuncState *fs = ls->fs;
     BCPos pc = vg->startpc;
     BCIns *ip = &fs->bcbase[pc].inst;
-    assert(gola_isgoto(vg) && "expected goto");
-    assert((bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_JMP_LH || bc_op(*ip) == BC_UCLO || bc_op(*ip) == BC_UCLO_LH) && "bad bytecode op");
+    Assert(gola_isgoto(vg) && "expected goto");
+    Assert((bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_JMP_LH || bc_op(*ip) == BC_UCLO || bc_op(*ip) == BC_UCLO_LH) && "bad bytecode op");
     setbc_a(*ip, vg->slot);
     if (bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_JMP_LH) {
         BCPos next = jmp_next(fs, pc);
@@ -1831,7 +1832,7 @@ static void gola_resolve(LexState *ls, FuncScope *bl, MSize idx)
             if (vg->slot < vl->slot) {
                 // HeapPtr<HeapString> name = var_get(ls, ls->fs, vg->slot).name;
                 ls->linenumber = ls->fs->bcbase[vg->startpc].line;
-                assert(vg->name != NAME_BREAK && "unexpected break");
+                Assert(vg->name != NAME_BREAK && "unexpected break");
                 ls->errorCode = LJ_ERR_XGSCOPE;
                 parser_throw(ls);
             }
@@ -1896,7 +1897,7 @@ static void fscope_begin(FuncState *fs, FuncScope *bl, int flags)
     bl->vstart = fs->ls->vstack.size();
     bl->prev = fs->bl;
     fs->bl = bl;
-    assert(fs->freereg == fs->nactvar && "bad regalloc");
+    Assert(fs->freereg == fs->nactvar && "bad regalloc");
 }
 
 /* End a scope. */
@@ -1907,7 +1908,7 @@ static void fscope_end(FuncState *fs)
     fs->bl = bl->prev;
     var_remove(ls, bl->nactvar);
     fs->freereg = fs->nactvar;
-    assert(bl->nactvar == fs->nactvar && "bad regalloc");
+    Assert(bl->nactvar == fs->nactvar && "bad regalloc");
     if ((bl->flags & (FSCOPE_UPVAL|FSCOPE_NOCLOSE)) == FSCOPE_UPVAL)
         std::ignore = bcemit_AJ(fs, BC_UCLO, bl->nactvar, 0);
     if ((bl->flags & FSCOPE_BREAK)) {
@@ -1940,7 +1941,7 @@ static void fscope_uvmark(FuncState *fs, BCReg level)
 /* Fixup upvalues for child prototype, step #2. */
 static void fs_fixup_uv2(FuncState *fs, UnlinkedCodeBlock* ucb)
 {
-    assert(!ucb->m_uvFixUpCompleted);
+    Assert(!ucb->m_uvFixUpCompleted);
     ucb->m_uvFixUpCompleted = true;
     VarInfo *vstack = fs->ls->vstack.data();
     UpvalueMetadata* uv = ucb->m_upvalueInfo;
@@ -1952,14 +1953,14 @@ static void fs_fixup_uv2(FuncState *fs, UnlinkedCodeBlock* ucb)
         {
             // The m_isImmutable field will be populated in the final uv fixup step
             //
-            assert(!uv[i].m_immutabilityFieldFinalized);
+            Assert(!uv[i].m_immutabilityFieldFinalized);
             uv[i].m_isParentLocal = false;
             uv[i].m_slot = vidx - LJ_MAX_VSTACK;
         }
         else
         {
-            assert(vidx < fs->ls->vstack.size());
-            assert(!uv[i].m_immutabilityFieldFinalized);
+            Assert(vidx < fs->ls->vstack.size());
+            Assert(!uv[i].m_immutabilityFieldFinalized);
             DEBUG_ONLY(uv[i].m_immutabilityFieldFinalized = true;)
             if ((vstack[vidx].info & VSTACK_VAR_RW))
             {
@@ -1985,7 +1986,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
     std::vector<size_t> bytecodeLocation;
     std::vector<std::pair<size_t, size_t>> jumpPatches;
 
-    assert(ucb->m_parserUVGetFixupList == nullptr);
+    Assert(ucb->m_parserUVGetFixupList == nullptr);
     ucb->m_parserUVGetFixupList = new std::vector<uint32_t>();
 
     size_t bcOrd;
@@ -1998,9 +1999,9 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         int32_t selfBytecodeOrdinal = static_cast<int32_t>(bcOrd);
 
         bcOrd++;
-        assert(bcOrd < n);
+        Assert(bcOrd < n);
         BCIns nextIns = base[bcOrd].inst;
-        assert(bc_op(nextIns) == BC_JMP);
+        Assert(bc_op(nextIns) == BC_JMP);
 
         // The 'JMP' bytecode immediately following the comparsion should never be a valid jump target
         //
@@ -2008,7 +2009,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
 
         int32_t jumpTargetOffset = bc_j(nextIns) + 1;
         int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + 1 + jumpTargetOffset;
-        assert(jumpBytecodeOrdinal >= 0);
+        Assert(jumpBytecodeOrdinal >= 0);
         return static_cast<size_t>(jumpBytecodeOrdinal);
     };
 
@@ -2018,13 +2019,13 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
     {
         int32_t selfBytecodeOrdinal = static_cast<int32_t>(bcOrd);
 
-        assert(bc_op(base[bcOrd].inst) == BC_ITERC || bc_op(base[bcOrd].inst) == BC_ITERN);
+        Assert(bc_op(base[bcOrd].inst) == BC_ITERC || bc_op(base[bcOrd].inst) == BC_ITERN);
         [[maybe_unused]] int32_t curBase = bc_a(base[bcOrd].inst);
 
         bcOrd++;
-        assert(bcOrd < n);
+        Assert(bcOrd < n);
         BCIns nextIns = base[bcOrd].inst;
-        assert(bc_op(nextIns) == BC_ITERL);
+        Assert(bc_op(nextIns) == BC_ITERL);
 
         // This 'ITERL' bytecode should never be a valid jump target
         //
@@ -2033,11 +2034,11 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         // The 'ITERL' bytecode should have the same base as the ITERC/ITERN bytecode
         //
         [[maybe_unused]] int32_t baseA = bc_a(nextIns);
-        assert(baseA == curBase);
+        Assert(baseA == curBase);
 
         int32_t jumpTargetOffset = bc_j(nextIns) + 1;
         int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + 1 + jumpTargetOffset;
-        assert(jumpBytecodeOrdinal >= 0);
+        Assert(jumpBytecodeOrdinal >= 0);
         return static_cast<size_t>(jumpBytecodeOrdinal);
     };
 
@@ -2045,7 +2046,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
     {
         int32_t selfBytecodeOrdinal = static_cast<int32_t>(bcOrd);
         int32_t jumpBytecodeOrdinal = selfBytecodeOrdinal + offset + 1;
-        assert(jumpBytecodeOrdinal >= 0);
+        Assert(jumpBytecodeOrdinal >= 0);
         return static_cast<size_t>(jumpBytecodeOrdinal);
     };
 
@@ -2205,7 +2206,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
         case BC_CAT:
         {
-            assert(bc_c(ins) >= bc_b(ins));
+            Assert(bc_c(ins) >= bc_b(ins));
             uint16_t num = SafeIntegerCast<uint16_t>(bc_c(ins) - bc_b(ins) + 1);
             bw.CreateConcat({
                 .base = Local { bc_b(ins) },
@@ -2493,7 +2494,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         {
             // For RET, D holds 1 + # ret values
             //
-            assert(bc_d(ins) >= 1);
+            Assert(bc_d(ins) >= 1);
             uint16_t numReturnValues = SafeIntegerCast<uint16_t>(bc_d(ins) - 1);
             bw.CreateRet({
                 .retStart = Local { bc_a(ins) },
@@ -2546,7 +2547,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         {
             // For CALL, C holds 1 + # of fixed params
             //
-            assert(bc_c(ins) >= 1);
+            Assert(bc_c(ins) >= 1);
             uint32_t numFixedParams = SafeIntegerCast<uint32_t>(bc_c(ins) - 1);
 
             // B stores # fixed results + 1, and if opdata[1] == 0, it stores all results
@@ -2586,7 +2587,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         {
             // For CALLT, D holds 1 + # of fixed params
             //
-            assert(bc_d(ins) >= 1);
+            Assert(bc_d(ins) >= 1);
             uint32_t numFixedParams = SafeIntegerCast<uint32_t>(bc_d(ins) - 1);
             bw.CreateCallT({
                 .base = Local { bc_a(ins) },
@@ -2684,7 +2685,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         case BC_TDUP:
         {
             TValue tv = bc_cst(ins);
-            assert(tv.Is<tTable>());
+            Assert(tv.Is<tTable>());
             HeapPtr<TableObject> tab = tv.As<tTable>();
             bool usedSpecializedTableDup = false;
             if (TCGet(tab->m_hiddenClass).As<SystemHeapGcObjectHeader>()->m_type == HeapEntityType::Structure)
@@ -2694,7 +2695,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
                 {
                     uint8_t inlineCapacity = structure->m_inlineNamedStorageCapacity;
                     uint8_t stepping = Structure::GetInitialStructureSteppingForInlineCapacity(inlineCapacity);
-                    assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == inlineCapacity);
+                    Assert(internal::x_inlineStorageSizeForSteppingArray[stepping] == inlineCapacity);
                     if (tab->m_butterfly == nullptr)
                     {
                         if (stepping <= TableObject::TableDupMaxInlineCapacitySteppingForNoButterflyCase())
@@ -2790,10 +2791,10 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         {
             // This opcode reads from slot A-1...
             //
-            assert(bc_a(ins) >= 1);
+            Assert(bc_a(ins) >= 1);
             uint32_t localSlot = static_cast<uint32_t>(bc_a(ins) - 1);
             TValue tvIndex = bc_cst(ins);
-            assert(tvIndex.Is<tInt32>());
+            Assert(tvIndex.Is<tInt32>());
             int32_t idx = tvIndex.As<tInt32>();
             bw.CreateTableVariadicPutBySeq({
                 .base = Local { localSlot },
@@ -2930,7 +2931,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             }
             else
             {
-                assert(fieldB >= 1);
+                Assert(fieldB >= 1);
                 bw.CreateGetVarArgsPrefix({
                     .base = Local { bc_a(ins) },
                     .numToPut = SafeIntegerCast<uint16_t>(fieldB - 1)
@@ -2940,7 +2941,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
         case BC_KNIL:
         {
-            assert(bc_d(ins) >= bc_a(ins));
+            Assert(bc_d(ins) >= bc_a(ins));
             uint32_t numSlotsToFill = static_cast<uint32_t>(bc_d(ins) - bc_a(ins) + 1);
             bw.CreateRangeFillNils({
                 .base = Local { bc_a(ins) },
@@ -2953,11 +2954,11 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             // semantics:
             // [A], ... [A+B-2] = [A-3]([A-2], [A-1])
             //
-            assert(bc_c(ins) == 3);
-            assert(bc_b(ins) >= 2);
-            assert(bc_a(ins) >= 3);
+            Assert(bc_c(ins) == 3);
+            Assert(bc_b(ins) >= 2);
+            Assert(bc_a(ins) >= 3);
             uint8_t numRets = SafeIntegerCast<uint8_t>(bc_b(ins) - 1);
-            assert(1 <= numRets && numRets <= 2);
+            Assert(1 <= numRets && numRets <= 2);
             size_t jumpTarget = decodeAndSkipNextITERLBytecode();
             jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
             bw.CreateKVLoopIter({
@@ -2971,9 +2972,9 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
             // semantics:
             // [A], ... [A+B-2] = [A-3]([A-2], [A-1])
             //
-            assert(bc_c(ins) == 3);
-            assert(bc_b(ins) >= 2);
-            assert(bc_a(ins) >= 3);
+            Assert(bc_c(ins) == 3);
+            Assert(bc_b(ins) >= 2);
+            Assert(bc_a(ins) >= 3);
             uint16_t numRets = SafeIntegerCast<uint16_t>(bc_b(ins) - 1);
             size_t jumpTarget = decodeAndSkipNextITERLBytecode();
             jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
@@ -2985,12 +2986,12 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
         case BC_ITERL:
         {
-            assert(false && "should never hit here since ITERL should always be after a ITERN/ITERC and skipped when we process the ITERN/ITERC");
+            Assert(false && "should never hit here since ITERL should always be after a ITERN/ITERC and skipped when we process the ITERN/ITERC");
             __builtin_unreachable();
         }
         case BC_ISNEXT:
         {
-            assert(bc_a(ins) >= 3);
+            Assert(bc_a(ins) >= 3);
             size_t jumpTarget = getBytecodeOrdinalOfJump(bc_j(ins));
             jumpPatches.push_back(std::make_pair(jumpTarget, bw.GetCurLength()));
             bw.CreateValidateIsNextAndBranch({
@@ -3002,21 +3003,21 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         {
             // These opcodes should never be generated by LuaJIT parser
             //
-            assert(false && "Unexpected opcode");
+            Assert(false && "Unexpected opcode");
             __builtin_unreachable();
         }
         }   /* switch opcode */
     }
 
-    assert(bytecodeLocation.size() == n);
+    Assert(bytecodeLocation.size() == n);
 
     for (auto& jumpPatch : jumpPatches)
     {
         size_t ljBytecodeOrd = jumpPatch.first;
         size_t bcPos = jumpPatch.second;
-        assert(ljBytecodeOrd < bytecodeLocation.size());
+        Assert(ljBytecodeOrd < bytecodeLocation.size());
         size_t bytecodeOffset = bytecodeLocation[ljBytecodeOrd];
-        assert(bytecodeOffset < bw.GetCurLength());
+        Assert(bytecodeOffset < bw.GetCurLength());
         if (unlikely(!bw.SetBranchTarget(bcPos, bytecodeOffset)))
         {
             // TODO: gracefully handle
@@ -3025,7 +3026,7 @@ static void fs_fixup_bc(FuncState *fs, UnlinkedCodeBlock* ucb, BytecodeBuilder& 
         }
     }
 
-    assert(bw.CheckWellFormedness());
+    Assert(bw.CheckWellFormedness());
 }
 
 #if 0
@@ -3156,7 +3157,7 @@ static void fs_fixup_ret(FuncState *fs)
     }
     fs->bl->flags |= FSCOPE_NOCLOSE;  /* Handled above. */
     fscope_end(fs);
-    assert(fs->bl == NULL && "bad scope nesting");
+    Assert(fs->bl == NULL && "bad scope nesting");
     /* May need to fixup returns encoded before first function was created. */
     if (fs->flags & PROTO_FIXUP_RETURN) {
         BCPos pc;
@@ -3216,7 +3217,7 @@ static UnlinkedCodeBlock* fs_finish(LexState *ls, BCLine /*line*/)
 
     ls->vstack.resize(fs->vbase);  /* Reset variable stack. */
     ls->fs = fs->prev;
-    assert((ls->fs != NULL || ls->tok == TK_eof) && "bad parser state");
+    Assert((ls->fs != NULL || ls->tok == TK_eof) && "bad parser state");
     return ucb;
 }
 
@@ -3307,7 +3308,7 @@ static void expr_kvalue(FuncState * /*fs*/, TValue *v, ExpDesc *e)
         *v = TValue::Create<tString>(e->u.sval);
     } else {
         TValue val = *expr_numtv(e);
-        assert(val.Is<tInt32>() || val.Is<tDouble>());
+        Assert(val.Is<tInt32>() || val.Is<tDouble>());
         *v = val;
     }
 }
@@ -3387,7 +3388,7 @@ nonconst:
             TValue key = it.first;
             if (!key.Is<tInt32>() && !key.Is<tDouble>())
             {
-                assert(!key.Is<tNil>());
+                Assert(!key.Is<tNil>());
                 numPropertyPartKeys++;
             }
             else
@@ -3401,7 +3402,7 @@ nonconst:
                 }
                 else
                 {
-                    assert(key.Is<tDouble>());
+                    Assert(key.Is<tDouble>());
                     double num = key.As<tDouble>();
                     int32_t i32 = static_cast<int32_t>(num);
                     if (static_cast<double>(i32) == num)
@@ -3445,7 +3446,7 @@ nonconst:
         {
             TValue key = it.first;
             TValue value = it.second;
-            assert(!key.Is<tInt32>());
+            Assert(!key.Is<tInt32>());
             if (key.Is<tNil>()) { continue; }
             if (value.m_value == TValue::CreateImpossibleValue().m_value)
             {
@@ -3462,7 +3463,7 @@ nonconst:
             if (key.Is<tDouble>())
             {
                 double indexDouble = key.As<tDouble>();
-                assert(!IsNaN(indexDouble));
+                Assert(!IsNaN(indexDouble));
                 TableObject::RawPutByValDoubleIndex(tab, indexDouble, value);
             }
             else if (key.Is<tHeapEntity>())
@@ -3473,7 +3474,7 @@ nonconst:
             }
             else
             {
-                assert(key.Is<tBool>());
+                Assert(key.Is<tBool>());
                 UserHeapPointer<HeapString> specialKey = VM_GetSpecialKeyForBoolean(key.As<tBool>());
                 PutByIdICInfo icInfo;
                 TableObject::PreparePutById(tab, specialKey, icInfo /*out*/);
@@ -3490,7 +3491,7 @@ nonconst:
             {
                 int32_t key = it.first;
                 TValue value; value.m_value = it.second;
-                assert(value.m_value != TValue::CreateImpossibleValue().m_value);
+                Assert(value.m_value != TValue::CreateImpossibleValue().m_value);
                 if (x_debug_dump_table_info)
                 {
                     fprintf(stderr, "TDUP table KV (array part): key = %d, value = ", static_cast<int>(key));
@@ -3507,7 +3508,7 @@ nonconst:
     lex_match(ls, '}', '{', line);
     if (vcall) {
         BCInsLine *ilp = &fs->bcbase[fs->pc-1];
-        assert(bc_a(ilp->inst) == freg &&
+        Assert(bc_a(ilp->inst) == freg &&
                         bc_op(ilp->inst) == (narr > 256 ? BC_TSETV : BC_TSETB) &&
                     "bad CALL code generation");
         if (narr > 256) { fs->pc--; ilp--; }
@@ -3560,7 +3561,7 @@ static BCReg parse_params(LexState *ls, int needself)
         } while (lex_opt(ls, ','));
     }
     var_add(ls, nparams);
-    assert(fs->nactvar == nparams && "bad regalloc");
+    Assert(fs->nactvar == nparams && "bad regalloc");
     bcreg_reserve(fs, nparams);
     lex_check(ls, ')');
     return nparams;
@@ -3574,7 +3575,7 @@ static void parse_body(LexState *ls, ExpDesc *e, int needself, BCLine line)
 {
     FuncState fs, *pfs = ls->fs;
     FuncScope bl;
-    assert(pfs->bcbase >= ls->bcstack.data());
+    Assert(pfs->bcbase >= ls->bcstack.data());
     ptrdiff_t oldbase = pfs->bcbase - ls->bcstack.data();
     fs_init(ls, &fs);
     fscope_begin(&fs, &bl, 0);
@@ -3588,7 +3589,7 @@ static void parse_body(LexState *ls, ExpDesc *e, int needself, BCLine line)
     UnlinkedCodeBlock* childUcb = fs_finish(ls, (ls->lastline = ls->linenumber));
     ls->ucbList.push_back(childUcb);
     pfs->bcbase = ls->bcstack.data() + oldbase;  /* May have been reallocated. */
-    assert(ls->bcstack.size() >= static_cast<size_t>(oldbase));
+    Assert(ls->bcstack.size() >= static_cast<size_t>(oldbase));
     pfs->bclim = (BCPos)(ls->bcstack.size() - oldbase);
     /* Store new prototype in the constant array of the parent. */
     // TODO: this shouldn't be this hacky..
@@ -3650,7 +3651,7 @@ static void parse_args(LexState *ls, ExpDesc *e)
     } else {
         err_syntax(ls, LJ_ERR_XFUNARG);
     }
-    assert(e->k == VNONRELOC && "bad expr type");
+    Assert(e->k == VNONRELOC && "bad expr type");
     base = e->u.s.info;  /* Base register for call. */
     if (args.k == VCALL) {
         ins = BCINS_ABC(BC_CALLM, base, 2, args.u.s.aux - base - 1 - LJ_FR2);
@@ -3712,11 +3713,11 @@ static void expr_simple(LexState *ls, ExpDesc *v)
     case TK_number:
         expr_init(v, VKNUM, 0);
         v->u.nval = ls->tokval;
-        assert(v->u.nval.Is<tInt32>() || v->u.nval.Is<tDouble>());
+        Assert(v->u.nval.Is<tInt32>() || v->u.nval.Is<tDouble>());
         break;
     case TK_string:
         expr_init(v, VKSTR, 0);
-        assert(ls->tokval.Is<tString>());
+        Assert(ls->tokval.Is<tString>());
         v->u.sval = ls->tokval.As<tString>();
         break;
     case TK_nil:
@@ -4258,7 +4259,7 @@ static int predict_next(LexState *ls, FuncState *fs, BCPos pc)
     case BC_GGET:
     {
         TValue cst = bc_cst(ins);
-        assert(cst.Is<tString>());
+        Assert(cst.Is<tString>());
         name = cst.As<tString>();
         break;
     }
@@ -4443,7 +4444,7 @@ static void parse_chunk(LexState *ls)
     while (!islast && !parse_isend(ls->tok)) {
         islast = parse_stmt(ls);
         lex_opt(ls, ';');
-        assert(ls->fs->framesize >= ls->fs->freereg &&
+        Assert(ls->fs->framesize >= ls->fs->freereg &&
                         ls->fs->freereg >= ls->fs->nactvar &&
                     "bad regalloc");
         ls->fs->freereg = ls->fs->nactvar;  /* Free registers after each stmt. */
@@ -4471,8 +4472,8 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
     if (ls->tok != TK_eof)
         err_token(ls, TK_eof);
     UnlinkedCodeBlock* rootUcb = fs_finish(ls, ls->linenumber);
-    assert((fs.prev == NULL && ls->fs == NULL) && "mismatched frame nesting");
-    assert(rootUcb->m_numUpvalues == 0 && "toplevel proto has upvalues");
+    Assert((fs.prev == NULL && ls->fs == NULL) && "mismatched frame nesting");
+    Assert(rootUcb->m_numUpvalues == 0 && "toplevel proto has upvalues");
     ls->ucbList.push_back(rootUcb);
 
     // Due to how the parser is designed, the ucbList is already sorted in topological order.
@@ -4485,9 +4486,9 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
         for (size_t i = ls->ucbList.size() - 1; i-- > 0; /*no-op*/)
         {
             UnlinkedCodeBlock* u = ls->ucbList[i];
-            assert(u->m_parent != nullptr);
-            assert(existentUcbList.count(u->m_parent));
-            assert(!existentUcbList.count(u));
+            Assert(u->m_parent != nullptr);
+            Assert(existentUcbList.count(u->m_parent));
+            Assert(!existentUcbList.count(u));
             existentUcbList.insert(u);
         }
     }
@@ -4505,15 +4506,15 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
             UpvalueMetadata& uv = u->m_upvalueInfo[uvOrd];
             if (uv.m_isParentLocal)
             {
-                assert(uv.m_immutabilityFieldFinalized);
+                Assert(uv.m_immutabilityFieldFinalized);
             }
             else
             {
                 uint32_t parentSlot = uv.m_slot;
-                assert(!uv.m_immutabilityFieldFinalized);
-                assert(parentSlot < u->m_parent->m_numUpvalues);
+                Assert(!uv.m_immutabilityFieldFinalized);
+                Assert(parentSlot < u->m_parent->m_numUpvalues);
                 UpvalueMetadata& parentUv = u->m_parent->m_upvalueInfo[parentSlot];
-                assert(parentUv.m_immutabilityFieldFinalized);
+                Assert(parentUv.m_immutabilityFieldFinalized);
                 DEBUG_ONLY(uv.m_immutabilityFieldFinalized = true;)
                 uv.m_isImmutable = parentUv.m_isImmutable;
             }
@@ -4530,14 +4531,14 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
 
         // Rewrite all UGET on immutable upvalue to ImmutableUpvalueGet (required for correctness!)
         //
-        assert(u->m_parserUVGetFixupList != nullptr);
+        Assert(u->m_parserUVGetFixupList != nullptr);
         for (uint32_t offset : *u->m_parserUVGetFixupList)
         {
-            assert(bw.GetBytecodeKind(offset) == BCKind::UpvalueGetMutable);
+            Assert(bw.GetBytecodeKind(offset) == BCKind::UpvalueGetMutable);
             auto ops = bw.DecodeUpvalueGetMutable(offset);
             uint16_t ord = ops.ord.m_value;
-            assert(ord < u->m_numUpvalues);
-            assert(u->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
+            Assert(ord < u->m_numUpvalues);
+            Assert(u->m_upvalueInfo[ord].m_immutabilityFieldFinalized);
             if (u->m_upvalueInfo[ord].m_isImmutable)
             {
                 bw.ReplaceBytecode<BCKind::UpvalueGetImmutable>(offset, { .ord = ord, .output = ops.output });
@@ -4565,7 +4566,7 @@ UnlinkedCodeBlock* lj_parse(LexState *ls)
         u->m_bytecodeLengthIncludingTailPadding = static_cast<uint32_t>(bytecodeData.second);
         u->m_bytecodeMetadataLength = bw.GetBytecodeMetadataTotalLength();
         const auto& bmUseCounts = bw.GetBytecodeMetadataUseCountArray();
-        assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
+        Assert(bmUseCounts.size() == x_num_bytecode_metadata_struct_kinds_);
         memcpy(u->m_bytecodeMetadataUseCounts, bmUseCounts.data(), bmUseCounts.size() * sizeof(uint16_t));
 
         delete u->m_bytecodeBuilder;

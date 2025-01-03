@@ -7,6 +7,10 @@
 #include "deegen_stencil_reserved_placeholder_ords.h"
 #include "deegen_bytecode_operand.h"
 #include "deegen_jit_slow_path_data.h"
+#include "deegen_jit_impl_creator_base.h"
+#include "deegen_dfg_jit_impl_creator.h"
+#include "deegen_baseline_jit_impl_creator.h"
+#include "deegen_dfg_jit_regalloc_rt_call_wrapper.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -28,8 +32,9 @@ std::string WARN_UNUSED StencilSharedConstantDataObject::PrintDeclaration()
 {
     AnonymousFile file;
     FILE* fp = file.GetFStream("w");
-    fprintf(fp, "struct __attribute__((__packed__, __aligned__(%llu))) deegen_stencil_constant_%llu_ty {\n",
+    fprintf(fp, "struct __attribute__((__packed__, __aligned__(%llu))) %s%llu_ty {\n",
             static_cast<unsigned long long>(GetAlignment()),
+            x_varNamePrefix,
             static_cast<unsigned long long>(GetUniqueLabel()));
     for (size_t ord = 0; ord < m_valueDefs.size(); ord++)
     {
@@ -46,14 +51,17 @@ std::string WARN_UNUSED StencilSharedConstantDataObject::PrintDeclaration()
         fprintf(fp, "\n");
     }
     fprintf(fp, "};\n");
-    fprintf(fp, "static_assert(sizeof(deegen_stencil_constant_%llu_ty) == %llu);\n",
+    fprintf(fp, "static_assert(sizeof(%s%llu_ty) == %llu);\n",
+            x_varNamePrefix,
             static_cast<unsigned long long>(GetUniqueLabel()),
             static_cast<unsigned long long>(ComputeSizeWithPadding()));
 
     if (m_shouldForwardDeclare)
     {
-        fprintf(fp, "extern const deegen_stencil_constant_%llu_ty deegen_stencil_constant_%llu;\n",
+        fprintf(fp, "extern const %s%llu_ty %s%llu;\n",
+                x_varNamePrefix,
                 static_cast<unsigned long long>(GetUniqueLabel()),
+                x_varNamePrefix,
                 static_cast<unsigned long long>(GetUniqueLabel()));
     }
 
@@ -65,8 +73,10 @@ std::string WARN_UNUSED StencilSharedConstantDataObject::PrintDefinition()
 {
     AnonymousFile file;
     FILE* fp = file.GetFStream("w");
-    fprintf(fp, "[[maybe_unused]] constexpr deegen_stencil_constant_%llu_ty deegen_stencil_constant_%llu = {\n",
+    fprintf(fp, "[[maybe_unused]] constexpr %s%llu_ty %s%llu = {\n",
+            x_varNamePrefix,
             static_cast<unsigned long long>(GetUniqueLabel()),
+            x_varNamePrefix,
             static_cast<unsigned long long>(GetUniqueLabel()));
 
     for (size_t ord = 0; ord < m_valueDefs.size(); ord++)
@@ -83,8 +93,9 @@ std::string WARN_UNUSED StencilSharedConstantDataObject::PrintDefinition()
         else
         {
             ReleaseAssert(e.m_kind == Element::Kind::PointerWithAddend);
-            fprintf(fp, "    .e%llu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(&deegen_stencil_constant_%llu)) + %lluULL",
+            fprintf(fp, "    .e%llu = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(&%s%llu)) + %lluULL",
                     static_cast<unsigned long long>(ord),
+                    x_varNamePrefix,
                     static_cast<unsigned long long>(e.m_ptrValue->GetUniqueLabel()),
                     static_cast<unsigned long long>(e.m_addend));
         }
@@ -203,6 +214,7 @@ static const ElfSymbol* WARN_UNUSED GetSymbolFromSymbolRef(ELFObjectFileBase* ob
 DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                                                    const std::string& objFile,
                                                    bool isExtractIcLogic,
+                                                   bool isLastStencilInBytecode,
                                                    SectionToPdoOffsetMapTy mainLogicPdoLayout)
 {
     ELFObjectFileBase* obj = LoadElfObjectFile(ctx, objFile);
@@ -587,7 +599,7 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
         if (privateDataSections.count(sec))
         {
             StencilPrivateDataObject* pdo = new StencilPrivateDataObject();
-            pdo->m_alignment = sec.getAlignment();
+            pdo->m_alignment = sec.getAlignment().value();
 
             for (RelocationRef rref : relocMap[sec])
             {
@@ -612,7 +624,7 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
         else
         {
             StencilSharedConstantDataObject* cdo = new StencilSharedConstantDataObject();
-            cdo->m_alignment = sec.getAlignment();
+            cdo->m_alignment = sec.getAlignment().value();
 
             using Element = StencilSharedConstantDataObject::Element;
             std::map<uint64_t /*offset*/, Element> relocs;
@@ -627,8 +639,8 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                 ReleaseAssert(!relocs.count(rr.m_offset));
                 relocs[rr.m_offset] = Element {
                     .m_kind = Element::Kind::PointerWithAddend,
-                    .m_byteValue = 0,
-                    .m_ptrValue = nullptr,
+                    .m_byteValue = 0,                   // unused
+                    .m_ptrValue = nullptr,              // unused
                     .m_sectionRef = rr.m_sectionRef,
                     .m_addend = rr.m_addend
                 };
@@ -653,7 +665,10 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
                     uint8_t value = static_cast<uint8_t>(contents[i]);
                     cdo->m_valueDefs.push_back(Element {
                         .m_kind = Element::Kind::ByteConstant,
-                        .m_byteValue = value
+                        .m_byteValue = value,
+                        .m_ptrValue = nullptr,          // unused
+                        .m_sectionRef = SectionRef(),   // unused
+                        .m_addend = 0                   // unused
                     });
                     i += 1;
                 }
@@ -856,7 +871,13 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
         }
     };
 
+    ds.m_hasRegPatchInfo = false;
+    ds.m_usedFpuRegs = 0;
+    ds.m_regCtxUsedForRegParsing = nullptr;
     ds.m_isForIcLogicExtraction = isExtractIcLogic;
+    ds.m_isLastStencilInBytecode = isLastStencilInBytecode;
+    ReleaseAssertImp(ds.m_isForIcLogicExtraction, !ds.m_isLastStencilInBytecode);
+
     if (!isExtractIcLogic)
     {
         processTextSection(textSection, ds.m_fastPathCode /*out*/, ds.m_fastPathRelos /*out*/);
@@ -900,6 +921,84 @@ DeegenStencil WARN_UNUSED DeegenStencil::ParseImpl(llvm::LLVMContext& ctx,
     return ds;
 }
 
+void DeegenStencil::ParseRegisterPatches(StencilRegisterFileContext* regCtx)
+{
+    ReleaseAssert(!m_hasRegPatchInfo);
+    m_hasRegPatchInfo = true;
+    m_usedFpuRegs = 0;
+    ReleaseAssert(regCtx != nullptr && m_regCtxUsedForRegParsing == nullptr);
+    m_regCtxUsedForRegParsing = regCtx;
+
+    auto parseRegs = [&](const std::vector<uint8_t>& code,
+                         const std::vector<RelocationRecord>& relos) WARN_UNUSED -> std::vector<StencilRegRenamePatchItem>
+    {
+        StencilRegRenameParseResult parser;
+        parser.Parse(*regCtx, code);
+
+        // At this stage we should not see unexpected C calls, since we have checked and processed all the C calls earlier
+        //
+        ReleaseAssert(!parser.m_hasIndirectCall);
+
+        // Assert for sanity that all the calls are C calls expected by us
+        //
+        if (parser.m_directCallTargetOffsets.size() > 0)
+        {
+            std::unordered_map<size_t /*offset*/, const RelocationRecord*> relocMap;
+            for (const RelocationRecord& rr : relos)
+            {
+                ReleaseAssert(!relocMap.count(rr.m_offset));
+                relocMap[rr.m_offset] = &rr;
+            }
+            for (size_t offset : parser.m_directCallTargetOffsets)
+            {
+                ReleaseAssert(relocMap.count(offset));
+                ReleaseAssert(relocMap[offset]->m_symKind == RelocationRecord::SymKind::ExternalCSymbol);
+                m_rtCallFnNamesForRegAllocEnabledStencil.insert(relocMap[offset]->m_symbolName);
+            }
+        }
+
+        // For sanity, assert that none of the reg patches should overlap with the relocation record patches
+        //
+        {
+            std::vector<bool> byteUsedByRR;
+            byteUsedByRR.resize(code.size());
+            for (size_t i = 0; i < byteUsedByRR.size(); i++) { byteUsedByRR[i] = false; }
+            for (const RelocationRecord& rr : relos)
+            {
+                size_t start = rr.m_offset;
+                size_t length = (rr.Is64Bit() ? 8 : 4);
+                for (size_t i = start; i < start + length; i++)
+                {
+                    ReleaseAssert(i < byteUsedByRR.size());
+                    ReleaseAssert(!byteUsedByRR[i]);
+                    byteUsedByRR[i] = true;
+                }
+            }
+            for (StencilRegRenamePatchItem& item : parser.m_patches)
+            {
+                // Note that while all the reg bytes should not overlap with any reloc bytes,
+                // it's possible that the same byte encoded multiple regs, so the same reg byte can show up more than once
+                //
+                ReleaseAssert(item.m_byteOffset < byteUsedByRR.size());
+                ReleaseAssert(!byteUsedByRR[item.m_byteOffset]);
+            }
+        }
+
+        m_usedFpuRegs |= parser.m_usedFpuRegs;
+        return parser.m_patches;
+    };
+
+    if (!m_isForIcLogicExtraction)
+    {
+        m_fastPathRegPatches = parseRegs(m_fastPathCode, m_fastPathRelos);
+        m_slowPathRegPatches = parseRegs(m_slowPathCode, m_slowPathRelos);
+    }
+    else
+    {
+        m_icPathRegPatches = parseRegs(m_icPathCode, m_icPathRelos);
+    }
+}
+
 // There is no way to determine the C++ type of the symbol from object file. Furthermore, simply giving it a
 // fake type can cause conflict (e.g., if the symbol is 'memcpy'). So all the external symbols are printed
 // as fake symbols (prefixed with 'deegen_fakeglobal_') in C++ code first, and then fixed up at LLVM level.
@@ -930,6 +1029,7 @@ struct PrintStencilCodegenLogicResult
     //
     std::vector<CondBrLatePatchRecord> m_condBrFixupOffsets;
     std::vector<uint8_t> m_preFixupMachineCode;
+    EncodedStencilRegPatchStream m_encodedRegPatches;
     // Same length as m_preFixupMachineCode, marks whether each byte is part of some relocation
     // For printing audit dump purpose only
     //
@@ -945,6 +1045,8 @@ struct PrintStencilCodegenLogicResult
 static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
     const std::vector<uint8_t>& code,
     const std::vector<RelocationRecord>& relocs,
+    const std::vector<StencilRegRenamePatchItem>& regPatches,
+    StencilRegisterFileContext* regContext,
     const std::string& placeholderComputations,
     size_t placeholderOrdForFallthroughIfFastPath,  // -1 if not fast path or not exist
     size_t placeholderOrdForCondBranch,             // -1 if not exist
@@ -1168,7 +1270,8 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
         }
         case RelocationRecord::SymKind::SharedConstantDataObject:
         {
-            fprintf(fp, "uint64_t deegen_patch_symval = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(&deegen_stencil_constant_%llu));\n",
+            fprintf(fp, "uint64_t deegen_patch_symval = FOLD_CONSTEXPR(reinterpret_cast<uint64_t>(&%s%llu));\n",
+                    StencilSharedConstantDataObject::x_varNamePrefix,
                     static_cast<unsigned long long>(rr.m_sharedDataObject->GetUniqueLabel()));
             break;
         }
@@ -1189,7 +1292,7 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
                     // For bytecode, conditional branch targets are fixed up in the end
                     //
                     fprintf(fp, "uint64_t deegen_patch_symval = 0;\n");
-                    bool is64 = (rr.m_relocationType == ELF::R_X86_64_64);
+                    bool is64 = rr.Is64Bit();
                     res.m_condBrFixupOffsets.push_back({ .m_offset = rr.m_offset, .m_is64Bit = is64 });
                 }
                 else
@@ -1301,11 +1404,29 @@ static PrintStencilCodegenLogicResult WARN_UNUSED PrintStencilCodegenLogicImpl(
 
     res.m_isPartOfReloc = isPartOfRelocation;
 
+    // Even if the fallthrough jump is removed, all registers should still be in valid code range,
+    // since the fallthrough jump does not reference any register
+    //
+    for (const StencilRegRenamePatchItem& item : regPatches)
+    {
+        ReleaseAssert(item.m_byteOffset < res.m_preFixupMachineCode.size());
+    }
+
+    res.m_encodedRegPatches = EncodedStencilRegPatchStream::Create(res.m_preFixupMachineCode /*inout*/, regPatches);
+
+    ReleaseAssertIff(res.m_encodedRegPatches.IsEmpty(), regPatches.size() == 0);
+    if (regPatches.size() > 0)
+    {
+        ReleaseAssert(regContext != nullptr);
+        std::vector<uint8_t> codePatchTest = res.m_encodedRegPatches.ApplyOnCode(res.m_preFixupMachineCode, regContext);
+        ReleaseAssert(codePatchTest.size() == codeLen);
+        ReleaseAssert(memcmp(codePatchTest.data(), buf, codeLen) == 0);
+    }
+
     return res;
 }
 
 DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
-    bool mayAttemptToEliminateJmpToFallthrough,
     size_t numBytecodeOperands,
     size_t numGenericIcTotalCaptures,
     const std::vector<CPRuntimeConstantNodeBase*>& placeholders,
@@ -1370,13 +1491,15 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
 
     auto printFunctionProto = [&](const std::string& funcName)
     {
+        // DEVNOTE: The list below must be kept in sync with the value of x_cgFnArgOrdStartForSpecialPlaceholder!
+        //
         fprintf(fp, "extern \"C\" void %s(\n", funcName.c_str());
         fprintf(fp, "    [[maybe_unused]] RestrictPtr<uint8_t> deegen_dstAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_fastPathAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_slowPathAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_icPathAddr,\n");
         fprintf(fp, "    [[maybe_unused]] uint64_t deegen_icDataSecAddr,\n");
-        fprintf(fp, "    [[maybe_unused]] uint64_t deegen_dataSecAddr,\n");
+        fprintf(fp, "    [[maybe_unused]] uint64_t deegen_dataSecAddr\n");
         // This is hacky.. The conditional branch is fixed up in the end because we do not have a valid value until
         // after everything is generated. To ensure this, we do not provide deegen_rc_input_102 (the conditional
         // branch target input ordinal) so that we will get a compile error if it showed up unexpectingly...
@@ -1387,10 +1510,10 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         //
         // Print the remaining special ordinals
         //
-        fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_100,\n");
-        fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_101,\n");
-        fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_103,\n");
-        fprintf(fp, "    [[maybe_unused]] int64_t deegen_rc_input_104\n");
+        for (size_t specialPlaceholderOrd : x_cgFnSpecialPlaceholdersList)
+        {
+            fprintf(fp, "    , [[maybe_unused]] int64_t deegen_rc_input_%llu\n", static_cast<unsigned long long>(specialPlaceholderOrd));
+        }
         for (size_t i = 0; i < numBytecodeOperands; i++)
         {
             fprintf(fp, "    , [[maybe_unused]] int64_t deegen_rc_input_%llu\n", static_cast<unsigned long long>(i));
@@ -1434,7 +1557,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         }
     }
 
-    if (!mayAttemptToEliminateJmpToFallthrough)
+    if (!m_isLastStencilInBytecode)
     {
         fallthroughPlaceholderOrd = static_cast<size_t>(-1);
     }
@@ -1465,10 +1588,14 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         fastPathInfo = PrintStencilCodegenLogicImpl(
             m_fastPathCode,
             m_fastPathRelos,
+            m_fastPathRegPatches,
+            m_regCtxUsedForRegParsing,
             placeholderComputations,
             fallthroughPlaceholderOrd,
             condBrPlaceholderOrd,
             false /*isForIc*/);
+
+        ReleaseAssertImp(!m_hasRegPatchInfo, fastPathInfo.m_encodedRegPatches.IsEmpty());
 
         fprintf(fp, "%s\n", fastPathInfo.m_cppCode.c_str());
         fprintf(fp, "}\n\n");
@@ -1477,10 +1604,14 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         slowPathInfo = PrintStencilCodegenLogicImpl(
             m_slowPathCode,
             m_slowPathRelos,
+            m_slowPathRegPatches,
+            m_regCtxUsedForRegParsing,
             placeholderComputations,
             static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
             condBrPlaceholderOrd,
             false /*isForIc*/);
+
+        ReleaseAssertImp(!m_hasRegPatchInfo, slowPathInfo.m_encodedRegPatches.IsEmpty());
 
         fprintf(fp, "%s\n", slowPathInfo.m_cppCode.c_str());
         fprintf(fp, "}\n\n");
@@ -1491,6 +1622,8 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         icPathInfo = PrintStencilCodegenLogicImpl(
             m_icPathCode,
             m_icPathRelos,
+            m_icPathRegPatches,
+            m_regCtxUsedForRegParsing,
             placeholderComputations,
             static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
             condBrPlaceholderOrd,
@@ -1499,6 +1632,7 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         // For IC, CondBr placeholders are automatically redirected to CP_PLACEHOLDER_BYTECODE_CONDBR_DEST, no late patch should exist
         //
         ReleaseAssert(icPathInfo.m_condBrFixupOffsets.empty());
+        ReleaseAssertImp(!m_hasRegPatchInfo, icPathInfo.m_encodedRegPatches.IsEmpty());
 
         fprintf(fp, "%s\n", icPathInfo.m_cppCode.c_str());
         fprintf(fp, "}\n\n");
@@ -1508,12 +1642,15 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
     PrintStencilCodegenLogicResult dataSecInfo = PrintStencilCodegenLogicImpl(
         m_privateDataObject.m_bytes,
         m_privateDataObject.m_relocations,
+        {} /*regPatches*/,
+        nullptr /*regContextUsedForRegParsing*/,
         placeholderComputations,
         static_cast<size_t>(-1) /*fallthrough cannot be eliminated*/,
         condBrPlaceholderOrd,
         m_isForIcLogicExtraction /*isForIc*/);
 
     ReleaseAssertImp(m_isForIcLogicExtraction, dataSecInfo.m_condBrFixupOffsets.empty());
+    ReleaseAssert(dataSecInfo.m_encodedRegPatches.IsEmpty());
 
     fprintf(fp, "%s\n", dataSecInfo.m_cppCode.c_str());
     fprintf(fp, "}\n\n");
@@ -1531,6 +1668,9 @@ DeegenStencilCodegenResult WARN_UNUSED DeegenStencil::PrintCodegenFunctions(
         .m_condBrFixupOffsetsInFastPath = fastPathInfo.m_condBrFixupOffsets,
         .m_condBrFixupOffsetsInSlowPath = slowPathInfo.m_condBrFixupOffsets,
         .m_condBrFixupOffsetsInDataSec = dataSecInfo.m_condBrFixupOffsets,
+        .m_fastPathRegPatches = fastPathInfo.m_encodedRegPatches,
+        .m_slowPathRegPatches = slowPathInfo.m_encodedRegPatches,
+        .m_icPathRegPatches = icPathInfo.m_encodedRegPatches,
         .m_fastPathRelocMarker = fastPathInfo.m_isPartOfReloc,
         .m_slowPathRelocMarker = slowPathInfo.m_isPartOfReloc,
         .m_icPathRelocMarker = icPathInfo.m_isPartOfReloc,
@@ -1613,6 +1753,41 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
         fn->setDSOLocal(true);
     };
 
+    // Make a copy of the original module
+    //
+    std::unique_ptr<Module> module = CloneModule(*originModule);
+
+    auto getGlobalValueFromName = [&](const std::string& globalName) WARN_UNUSED -> GlobalValue*
+    {
+        GlobalValue* gv = module->getNamedValue(globalName);
+        if (gv != nullptr)
+        {
+            return gv;
+        }
+        if (DfgRegAllocCCallAsmTransformPass::IsWrappedName(globalName))
+        {
+            std::string originalName = DfgRegAllocCCallAsmTransformPass::GetOriginalNameFromWrappedName(globalName);
+            gv = module->getNamedValue(originalName);
+            if (gv == nullptr)
+            {
+                return nullptr;
+            }
+            ReleaseAssert(isa<Function>(gv));
+            Function* func = cast<Function>(gv);
+            ReleaseAssert(func->getCallingConv() == CallingConv::PreserveAll);
+            ValueToValueMapTy emptyMap;
+            Function* newFunc = CloneFunction(func, emptyMap /*inout*/);
+            newFunc->setName(globalName);
+            ReleaseAssert(newFunc->getName() == globalName);
+            ReleaseAssert(newFunc->getLinkage() == func->getLinkage());
+            return newFunc;
+        }
+        else
+        {
+            return nullptr;
+        }
+    };
+
     for (GlobalValue& gv : cgMod->global_values())
     {
         std::string name = gv.getName().str();
@@ -1629,7 +1804,7 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
             std::string realGlobalName = name.substr(strlen(x_fakeGlobalPrefix));
             if (!whitelistedGlobalNames.count(realGlobalName))
             {
-                GlobalValue* realGv = originModule->getNamedValue(realGlobalName);
+                GlobalValue* realGv = getGlobalValueFromName(realGlobalName);
                 if (realGv == nullptr)
                 {
                     fprintf(stderr, "[ERROR] Stencil generation introduced unknown global '%s'!", realGlobalName.c_str());
@@ -1661,9 +1836,8 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
         }
     }
 
-    // Make a copy of the original module, remove all function bodies
+    // Remove all function bodies in the original module
     //
-    std::unique_ptr<Module> module = CloneModule(*originModule);
     for (Function& func : module->functions())
     {
         if (!func.isDeclaration())
@@ -1735,18 +1909,20 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenStencilCodegenResult::GenerateCo
 
     RunLLVMDeadGlobalElimination(module.get());
 
+    ValidateLLVMModule(module.get());
+    RunLLVMOptimizePass(module.get());
+
     sanityCheckModule(module.get());
 
     for (GlobalValue& gv : module->global_values())
     {
-        ReleaseAssert(!gv.getName().startswith(x_fakeGlobalPrefix));
+        ReleaseAssert(!gv.getName().starts_with(x_fakeGlobalPrefix));
     }
 
     return module;
 }
 
-std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(DeegenEngineTier engineTier,
-                                                                                                             BytecodeVariantDefinition* bytecodeDef,
+std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeOperandVectorFromSlowPathData(JitImplCreatorBase* ifi,
                                                                                                              llvm::Value* slowPathData,
                                                                                                              llvm::Value* slowPathDataOffset,
                                                                                                              llvm::Value* baselineCodeBlock32,
@@ -1758,23 +1934,14 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     ReleaseAssertImp(slowPathDataOffset != nullptr, llvm_value_has_type<uint64_t>(slowPathDataOffset));
     ReleaseAssertImp(baselineCodeBlock32 != nullptr, llvm_value_has_type<uint64_t>(baselineCodeBlock32));
     ReleaseAssert(insertAtEnd != nullptr);
-    ReleaseAssert(engineTier == DeegenEngineTier::BaselineJIT || engineTier == DeegenEngineTier::DfgJIT);
+    ReleaseAssert(ifi->IsBaselineJIT() || ifi->IsDfgJIT());
 
-    JitSlowPathDataLayoutBase* slowPathDataLayout;
-    if (engineTier == DeegenEngineTier::BaselineJIT)
-    {
-        slowPathDataLayout = bytecodeDef->GetBaselineJitSlowPathDataLayout();
-    }
-    else
-    {
-        ReleaseAssert(engineTier == DeegenEngineTier::DfgJIT);
-        slowPathDataLayout = bytecodeDef->GetDfgJitSlowPathDataLayout();
-    }
+    JitSlowPathDataLayoutBase* slowPathDataLayout = ifi->GetJitSlowPathDataLayoutBase();
 
     LLVMContext& ctx = insertAtEnd->getContext();
     std::vector<Value*> opcodeRawValues;
 
-    for (auto& operand : bytecodeDef->m_list)
+    for (auto& operand : ifi->GetBytecodeDef()->m_list)
     {
         if (!operand->SupportsGetOperandValueFromBytecodeStruct())
         {
@@ -1788,7 +1955,7 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     }
 
     Value* outputSlot = nullptr;
-    if (bytecodeDef->m_hasOutputValue)
+    if (ifi->GetBytecodeDef()->m_hasOutputValue)
     {
         outputSlot = slowPathDataLayout->m_outputDest.EmitGetValueLogic(slowPathData, insertAtEnd);
         ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
@@ -1810,7 +1977,7 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
         }
         else
         {
-            return new ZExtInst(val, llvm_type_of<int64_t>(ctx), "", insertAtEnd);
+            return new ZExtInst(val, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
         }
     };
 
@@ -1826,13 +1993,23 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     }
     else
     {
-        bytecodeValList.push_back(extendTo64(outputSlot, bytecodeDef->m_outputOperand->IsSignedValue()));
+        bytecodeValList.push_back(extendTo64(outputSlot, ifi->GetBytecodeDef()->m_outputOperand->IsSignedValue()));
     }
 
     // ordinal 101 (nextBytecodeAddr)
     //
     {
-        Value* nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddress().EmitGetValueLogic(slowPathData, insertAtEnd);
+        Value* nextBytecodePtr;
+        if (ifi->GetJitSlowPathDataLayoutBase()->IsLayoutFinalized())
+        {
+            nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddress().EmitGetValueLogic(slowPathData, insertAtEnd);
+        }
+        else
+        {
+            ReleaseAssert(insertAtEnd->getParent() != nullptr && insertAtEnd->getParent()->getParent() != nullptr);
+            nextBytecodePtr = JitSlowPathDataLayoutBase::GetFallthroughJitAddressUsingPlaceholder(
+                insertAtEnd->getParent()->getParent() /*module*/, slowPathData, insertAtEnd);
+        }
         ReleaseAssert(llvm_value_has_type<void*>(nextBytecodePtr));
         Value* nextBytecodePtrI64 = new PtrToIntInst(nextBytecodePtr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
         bytecodeValList.push_back(nextBytecodePtrI64);
@@ -1843,7 +2020,25 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     bytecodeValList.push_back(slowPathDataOffset);
     bytecodeValList.push_back(baselineCodeBlock32);
 
-    for (size_t i = 0; i < bytecodeDef->m_list.size(); i++)
+    // ordinal 105 (condBrDecision)
+    //
+    {
+        Value* condBrDecision = nullptr;
+        if (ifi->IsDfgJIT())
+        {
+            DfgJitImplCreator* j = ifi->AsDfgJIT();
+            if (j->HasBranchDecisionOutput())
+            {
+                Value* slotI16 = slowPathDataLayout->AsDfg()->m_condBrDecisionSlot.EmitGetValueLogic(slowPathData, insertAtEnd);
+                ReleaseAssert(llvm_value_has_type<uint16_t>(slotI16));
+                condBrDecision = new ZExtInst(slotI16, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);
+                ReleaseAssert(llvm_value_has_type<uint64_t>(condBrDecision));
+            }
+        }
+        bytecodeValList.push_back(condBrDecision);
+    }
+
+    for (size_t i = 0; i < ifi->GetBytecodeDef()->m_list.size(); i++)
     {
         if (opcodeRawValues[i] == nullptr)
         {
@@ -1851,7 +2046,7 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
         }
         else
         {
-            bytecodeValList.push_back(extendTo64(opcodeRawValues[i], bytecodeDef->m_list[i]->IsSignedValue()));
+            bytecodeValList.push_back(extendTo64(opcodeRawValues[i], ifi->GetBytecodeDef()->m_list[i]->IsSignedValue()));
         }
     }
 
@@ -1964,31 +2159,177 @@ struct SimpleDisassembler
     std::unique_ptr<MCInstPrinter> IP;
 };
 
+// Helper utility in pretty-printing register in instruction based on their role
+// For example, if 'r8' is used as a scratch register, it would print something like '%scratch.eg0' instead (where eg means GPR8~15)
+//
+struct AuditFileDisasmRegisterSubstituter
+{
+    void Init(StencilRegisterFileContext* ctx)
+    {
+        m_regMap.clear();
+        m_noShowUpRegs.clear();
+
+        std::unordered_map<X64Reg, StencilRegIdent> regMap = ctx->GetRegPurposeForAllDfgRegisters();
+        for (auto& it : regMap)
+        {
+            X64Reg reg = it.first;
+            StencilRegIdent ident = it.second;
+            std::string identStr = ident.ToPrettyString();
+            if (ident.m_class == StencilRegIdentClass::Operand)
+            {
+                // For operand, we need to add the suffix part (which is not known to StencilRegIdent class)
+                //
+                identStr += ".";
+                if (reg.IsGPR())
+                {
+                    identStr += (reg.MachineOrd() < 8) ? "g" : "eg";
+                }
+                else
+                {
+                    identStr += "f";
+                }
+            }
+
+            auto addToMap = [&](const std::string& regName, const std::string& identName)
+            {
+                ReleaseAssert(!m_regMap.count(regName));
+                m_regMap[regName] = identName;
+            };
+
+            addToMap(GetAttRegName(reg.GetName()), identStr);
+            if (reg.IsGPR())
+            {
+                addToMap(GetAttRegName(reg.GetSubRegisterName<8>()), identStr + ".l");
+                addToMap(GetAttRegName(reg.GetSubRegisterName<16>()), identStr + ".w");
+                addToMap(GetAttRegName(reg.GetSubRegisterName<32>()), identStr + ".d");
+            }
+        }
+
+        ForEachDfgRegAllocRegister([&](X64Reg reg) {
+            if (!regMap.count(reg))
+            {
+                m_noShowUpRegs.push_back(GetAttRegName(reg.GetName()));
+                if (reg.IsGPR())
+                {
+                    m_noShowUpRegs.push_back(GetAttRegName(reg.GetSubRegisterName<8>()));
+                    m_noShowUpRegs.push_back(GetAttRegName(reg.GetSubRegisterName<16>()));
+                    m_noShowUpRegs.push_back(GetAttRegName(reg.GetSubRegisterName<32>()));
+                }
+            }
+        });
+    }
+
+    // Get the reg name in AT&T format, e.g., RAX -> %rax
+    //
+    static std::string GetAttRegName(const std::string& str)
+    {
+        return "%" + ConvertStringToLowerCase(str);
+    }
+
+    // We cannot simply use string.find since we must be case-insensitive and also workaround cases like xmm1 vs xmm10
+    //
+    size_t WARN_UNUSED FindFirstOccuranceOfRegInString(const std::string& strToFind, const std::string& reg)
+    {
+        ReleaseAssert(reg.length() > 0);
+        std::string str = ConvertStringToLowerCase(strToFind);
+        size_t curPos = 0;
+        while (curPos < str.length())
+        {
+            size_t loc = str.find(reg, curPos);
+            if (loc == std::string::npos)
+            {
+                return loc;
+            }
+            char nextChar = ' ';
+            if (loc + reg.length() < str.length())
+            {
+                nextChar = str[loc + reg.length()];
+            }
+            if (!('0' <= nextChar && nextChar <= '9'))
+            {
+                return loc;
+            }
+            curPos = loc + 1;
+        }
+        return std::string::npos;
+    }
+
+    void ReplaceRegs(std::string& str /*inout*/, size_t& numReplacementsMade /*out*/)
+    {
+        numReplacementsMade = 0;
+        for (const auto& it : m_regMap)
+        {
+            const std::string& regName = it.first;
+            const std::string& newName = it.second;
+            while (true)
+            {
+                size_t loc = FindFirstOccuranceOfRegInString(str, regName);
+                if (loc == std::string::npos)
+                {
+                    break;
+                }
+                ReleaseAssert(loc + regName.length() <= str.length());
+                ReleaseAssert(ConvertStringToLowerCase(str.substr(loc, regName.length())) == regName);
+                str = str.substr(0, loc) + newName + str.substr(loc + regName.length());
+                numReplacementsMade++;
+            }
+        }
+        // Assert that the registers that should not show up indeed does not show up
+        //
+        for (const std::string& regName : m_noShowUpRegs)
+        {
+            ReleaseAssert(FindFirstOccuranceOfRegInString(str, regName) == std::string::npos);
+        }
+    }
+
+    std::unordered_map<std::string /*lowerCaseRegName*/, std::string /*prettyPrint*/> m_regMap;
+    // regs that claimed to be unused by StencilRegisterFileContext must not show up in the instruction
+    //
+    std::vector<std::string> m_noShowUpRegs;
+};
+
 std::string WARN_UNUSED DumpStencilDisassemblyForAuditPurpose(
     llvm::Triple triple,
     bool isDataSection,
     const std::vector<uint8_t>& preFixupCode,
     const std::vector<bool>& isPartOfReloc,
+    const EncodedStencilRegPatchStream& regPatches,
+    StencilRegisterFileContext* regCtx,
     const std::string& linePrefix)
 {
     using namespace llvm;
+
+    bool hasRegPatch = regPatches.IsValid() && !regPatches.IsEmpty();
+    ReleaseAssertImp(hasRegPatch, regCtx != nullptr);
+    ReleaseAssertImp(hasRegPatch, regPatches.m_numRegsInEachCodeByte.size() == preFixupCode.size());
+    ReleaseAssertImp(isDataSection, !hasRegPatch);
+
     AnonymousFile file;
     FILE* fp = file.GetFStream("w");
 
     ReleaseAssert(preFixupCode.size() == isPartOfReloc.size());
 
+    AuditFileDisasmRegisterSubstituter regSubstituter;
+
+    std::vector<uint8_t> code = preFixupCode;
+    if (hasRegPatch)
+    {
+        code = regPatches.ApplyOnCode(code, regCtx);
+        regSubstituter.Init(regCtx);
+    }
+
     SimpleDisassembler disas(triple);
 
     auto printByteAtOffset = [&](uint64_t offset)
     {
-        ReleaseAssert(offset < preFixupCode.size());
+        ReleaseAssert(offset < code.size());
         if (isPartOfReloc[offset])
         {
             fprintf(fp, " **");
         }
         else
         {
-            fprintf(fp, " %1x%1x", static_cast<int>(preFixupCode[offset] / 16), static_cast<int>(preFixupCode[offset] % 16));
+            fprintf(fp, " %1x%1x", static_cast<unsigned int>(code[offset] / 16), static_cast<unsigned int>(code[offset] % 16));
         }
     };
 
@@ -2006,17 +2347,35 @@ std::string WARN_UNUSED DumpStencilDisassemblyForAuditPurpose(
         }
     };
 
+    auto countNumRegPatchesInRange = [&](size_t start, size_t length)
+    {
+        ReleaseAssert(regPatches.m_numRegsInEachCodeByte.size() >= start + length);
+        size_t result = 0;
+        for (size_t i = start; i < start + length; i++)
+        {
+            result += regPatches.m_numRegsInEachCodeByte[i];
+        }
+        return result;
+    };
+
     if (!isDataSection)
     {
         uint64_t offset = 0;
-        while (offset < preFixupCode.size())
+        while (offset < code.size())
         {
-            auto [size, asmStr] = disas.Disassemble(preFixupCode, offset);
-            ReleaseAssert(offset + size <= preFixupCode.size());
+            auto [size, asmStr] = disas.Disassemble(code, offset);
+            ReleaseAssert(offset + size <= code.size());
 
             fprintf(fp, "%s%3llx:", linePrefix.c_str(), static_cast<unsigned long long>(offset));
 
             printAndAlignOneLineOfBytes(offset, std::min(maxBytesPerLine, size));
+
+            if (hasRegPatch)
+            {
+                size_t numReplacementsMade = 0;
+                regSubstituter.ReplaceRegs(asmStr /*inout*/, numReplacementsMade /*out*/);
+                ReleaseAssert(numReplacementsMade == countNumRegPatchesInRange(offset, size));
+            }
 
             fprintf(fp, "%s\n", asmStr.c_str());
 
@@ -2036,13 +2395,13 @@ std::string WARN_UNUSED DumpStencilDisassemblyForAuditPurpose(
             }
 
             offset += size;
-            ReleaseAssert(offset <= preFixupCode.size());
+            ReleaseAssert(offset <= code.size());
         }
     }
     else
     {
         uint64_t offset = 0;
-        uint64_t remainingBytes = preFixupCode.size();
+        uint64_t remainingBytes = code.size();
         while (remainingBytes > 0)
         {
             uint64_t numBytesToPrint = std::min(remainingBytes, maxBytesPerLine);

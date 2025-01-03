@@ -29,6 +29,10 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestAndBranchOperation, bool testForFalsy)
     Result(ConditionalBranch);
     Implementation(TestAndBranchOperationImpl<testForFalsy>);
     Variant();
+    DfgVariant();
+    RegAllocHint(
+        Op("testValue").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(BranchIfTruthy, TestAndBranchOperation, false /*testForFalsy*/);
@@ -62,6 +66,15 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestSelectAndBranchOperation, bool testForFalsy)
     Result(BytecodeValue, ConditionalBranch);
     Implementation(TestSelectAndBranchOperationImpl<testForFalsy>);
     Variant();
+    DfgVariant();
+    TypeDeductionRule(
+        [](TypeMask testValue, TypeMask defaultValue) -> TypeMask
+        {
+            return testValue.m_mask | defaultValue.m_mask;
+        });
+    RegAllocHint(
+        Op("testValue").RegHint(RegHint::GPR)
+    );
 }
 
 DEEGEN_DEFINE_BYTECODE_BY_TEMPLATE_INSTANTIATION(SelectAndBranchIfTruthy, TestSelectAndBranchOperation, false /*testForFalsy*/);

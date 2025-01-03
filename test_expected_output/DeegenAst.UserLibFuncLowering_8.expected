@@ -1,30 +1,26 @@
 ; ModuleID = 'extracted_ir'
 source_filename = "/home/u/project/annotated/unit_test/user_lib_func_api.cpp"
-target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-%struct.TValue = type { i64 }
-%class.StackFrameHeader = type { ptr addrspace(256), ptr, ptr, %struct.SystemHeapPointer, i32 }
-%struct.SystemHeapPointer = type { i32 }
-
 ; Function Attrs: nounwind
-define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn8(ptr %0, ptr %1, ptr nocapture readnone %2, ptr nocapture readnone %3, i64 %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, i64 %9, double %10, double %11, double %12, double %13, double %14, double %15) local_unnamed_addr #0 {
+define dso_local ghccc void @DeegenInternal_UserLibFunctionTrueEntryPoint_testfn8(i64 %0, ptr nocapture readnone %1, i64 %2, ptr %3, ptr nocapture readnone %4, ptr nocapture readnone %5, i64 %6, i64 %7, i64 %8, ptr %9, i64 %10, i64 %11, ptr nocapture readnone %12, double %13, double %14, double %15, double %16, double %17, double %18) local_unnamed_addr #0 {
 __DeegenImpl_CommonSnippetLib_PopulateNilForReturnValues.exit:
-  %16 = getelementptr inbounds %struct.TValue, ptr %1, i64 -3
-  %17 = load ptr, ptr %16, align 8, !tbaa !2
-  %18 = add i64 %9, -3
-  store i64 %18, ptr %1, align 8, !tbaa.struct !9
-  %19 = getelementptr inbounds i64, ptr %1, i64 1
-  store i64 %9, ptr %19, align 8, !tbaa !10
-  %20 = getelementptr inbounds i64, ptr %1, i64 2
-  store i64 %9, ptr %20, align 8, !tbaa !10
-  %21 = getelementptr %class.StackFrameHeader, ptr %17, i64 -1, i32 2
-  %22 = load ptr, ptr %21, align 8, !tbaa !12
-  musttail call ghccc void %22(ptr %0, ptr %17, ptr undef, ptr undef, i64 %4, ptr nonnull %1, i64 1, i64 undef, i64 undef, i64 %9, double undef, double undef, double undef, double undef, double undef, double undef) #1
+  %19 = getelementptr inbounds i8, ptr %3, i64 -24
+  %20 = load ptr, ptr %19, align 8, !tbaa !2
+  %21 = add i64 %0, -3
+  store i64 %21, ptr %3, align 8, !tbaa !9
+  %22 = getelementptr inbounds i8, ptr %3, i64 8
+  store i64 %0, ptr %22, align 8, !tbaa !9
+  %23 = getelementptr inbounds i8, ptr %3, i64 16
+  store i64 %0, ptr %23, align 8, !tbaa !9
+  %24 = getelementptr inbounds i8, ptr %20, i64 -16
+  %25 = load ptr, ptr %24, align 8, !tbaa !11
+  musttail call ghccc void %25(i64 %0, ptr undef, i64 %2, ptr %20, ptr undef, ptr nonnull %3, i64 1, i64 undef, i64 undef, ptr %9, i64 undef, i64 undef, ptr undef, double undef, double undef, double undef, double undef, double undef, double undef) #1
   ret void
 }
 
-attributes #0 = { nounwind "frame-pointer"="none" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
+attributes #0 = { nounwind "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+bmi,+cmov,+crc32,+cx8,+fsgsbase,+fxsr,+mmx,+popcnt,+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+x87" "tune-cpu"="generic" }
 attributes #1 = { nounwind }
 
 !llvm.linker.options = !{}
@@ -39,7 +35,6 @@ attributes #1 = { nounwind }
 !6 = !{!"Simple C++ TBAA"}
 !7 = !{!"_ZTS17SystemHeapPointerIhE", !8, i64 0}
 !8 = !{!"int", !5, i64 0}
-!9 = !{i64 0, i64 8, !10}
-!10 = !{!11, !11, i64 0}
-!11 = !{!"long", !5, i64 0}
-!12 = !{!3, !4, i64 16}
+!9 = !{!10, !10, i64 0}
+!10 = !{!"long", !5, i64 0}
+!11 = !{!3, !4, i64 16}

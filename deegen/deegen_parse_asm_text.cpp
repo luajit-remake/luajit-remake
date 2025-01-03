@@ -222,6 +222,23 @@ X64AsmLine WARN_UNUSED X64AsmLine::Parse(std::string line)
     }
     res.m_components.push_back(curStr);
     if (!isSpace) { res.m_nonWhiteSpaceIdx.push_back(res.m_components.size() - 1); }
+
+    if (res.IsInstruction())
+    {
+        // Various places assume that the instruction opcode is written
+        // in lower-case (despite that upper-case is legal assembly), so assert this.
+        //
+        std::string& instOp = res.GetWord(0);
+        for (size_t i = 0; i < instOp.size(); i++)
+        {
+            if ('A' <= instOp[i] && instOp[i] <= 'Z')
+            {
+                fprintf(stderr, "Instruction with upper-case opcode is unexpected! Offending instruction:%s\n", line.c_str());
+                ReleaseAssert(false);
+            }
+        }
+    }
+
     return res;
 }
 
@@ -905,13 +922,30 @@ X64AsmBlock* WARN_UNUSED X64AsmBlock::Clone(X64AsmFile* owner)
 
 X64AsmBlock* WARN_UNUSED X64AsmBlock::Create(X64AsmFile* owner, X64AsmBlock* jmpDst)
 {
+    X64AsmBlock* res = Create(owner, jmpDst->m_normalizedLabelName);
+    ReleaseAssert(res->m_endsWithJmpToLocalLabel);
+    return res;
+}
+
+X64AsmBlock* WARN_UNUSED X64AsmBlock::Create(X64AsmFile* owner, std::string dstLabel)
+{
     std::unique_ptr<X64AsmBlock> holder = std::make_unique<X64AsmBlock>();
     X64AsmBlock* res = holder.get();
     res->m_normalizedLabelName = owner->m_labelNormalizer.GetUniqueLabel();
     res->m_prefixText = res->m_normalizedLabelName + ":\n";
-    res->m_endsWithJmpToLocalLabel = true;
-    res->m_terminalJmpTargetLabel = jmpDst->m_normalizedLabelName;
-    res->m_lines.push_back(X64AsmLine::Parse("\tjmp\t" + jmpDst->m_normalizedLabelName));
+    bool isJmpToLocalLabel = owner->m_labelNormalizer.QueryLabelExists(dstLabel);
+    if (isJmpToLocalLabel)
+    {
+        std::string normalizedLabel = owner->m_labelNormalizer.GetNormalizedLabel(dstLabel);
+        res->m_endsWithJmpToLocalLabel = true;
+        res->m_terminalJmpTargetLabel = normalizedLabel;
+        res->m_lines.push_back(X64AsmLine::Parse("\tjmp\t" + normalizedLabel));
+    }
+    else
+    {
+        res->m_endsWithJmpToLocalLabel = false;
+        res->m_lines.push_back(X64AsmLine::Parse("\tjmp\t" + dstLabel));
+    }
     owner->m_blockHolders.push_back(std::move(holder));
     return res;
 }
@@ -940,7 +974,7 @@ std::vector<X64AsmBlock*> WARN_UNUSED X64AsmBlock::ReorderBlocksToMaximizeFallth
     {
         X64AsmBlock* pred = input[i];
         X64AsmBlock* succ = input[i + 1];
-        if (pred->m_endsWithJmpToLocalLabel && pred->m_terminalJmpTargetLabel == succ->m_normalizedLabelName)
+        if (X64AsmBlock::IsTerminatorInstructionFallthrough(pred, succ))
         {
             ReleaseAssert(!existingFallthrough.count(succ));
             existingFallthrough[succ] = pred;
@@ -1168,9 +1202,9 @@ std::string WARN_UNUSED X64AsmFile::ToString()
         {
             X64AsmBlock* block = blockList[i];
             bool elideTailJmp = false;
-            if (i + 1 < blockList.size() && block->m_endsWithJmpToLocalLabel)
+            if (i + 1 < blockList.size() && X64AsmBlock::IsTerminatorInstructionFallthrough(block, blockList[i + 1]))
             {
-                elideTailJmp = (block->m_terminalJmpTargetLabel == blockList[i + 1]->m_normalizedLabelName);
+                elideTailJmp = true;
             }
 
             fprintf(fp, "%s", block->m_prefixText.c_str());
@@ -1271,6 +1305,30 @@ std::string WARN_UNUSED X64AsmFile::ToStringAndRemoveDebugInfo()
 
     fclose(fp);
     return file.GetFileContents();
+}
+
+size_t WARN_UNUSED X64AsmFile::CountEffectiveNumInstructionsInBlockList(const std::vector<X64AsmBlock*>& blocks)
+{
+    size_t res = 0;
+    for (size_t idx = 0; idx < blocks.size(); idx++)
+    {
+        X64AsmBlock* block = blocks[idx];
+
+        ReleaseAssert(block->m_lines.size() > 0);
+        res += block->m_lines.size();
+
+        if (idx + 1 < blocks.size())
+        {
+            // If this block ends with a jump that is actually a fallthrough to the next block,
+            // the jump instruction does not really exist
+            //
+            if (X64AsmBlock::IsTerminatorInstructionFallthrough(blocks[idx], blocks[idx + 1]))
+            {
+                res--;
+            }
+        }
+    }
+    return res;
 }
 
 }   // namespace dast

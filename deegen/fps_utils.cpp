@@ -4,6 +4,7 @@
 #include "deegen_bytecode_operand.h"
 #include "read_file.h"
 #include "json_utils.h"
+#include "json_parse_dump.h"
 #include "deegen_global_bytecode_trait_accessor.h"
 
 void FPS_EmitHeaderFileCommonHeader(FILE* fp)
@@ -104,8 +105,7 @@ BytecodeOpcodeRawValueMap WARN_UNUSED BytecodeOpcodeRawValueMap::ParseFromComman
 {
     std::string bytecodeNameTablePath = cl_bytecodeNameTable;
     ReleaseAssert(bytecodeNameTablePath != "");
-    std::string jsonContents = ReadFileContentAsString(bytecodeNameTablePath);
-    json j = json::parse(jsonContents);
+    json_t j = ParseJsonFromFileName(bytecodeNameTablePath);
     return BytecodeOpcodeRawValueMap::ParseFromJSON(j);
 }
 
@@ -113,8 +113,7 @@ DeegenGlobalBytecodeTraitAccessor WARN_UNUSED DeegenGlobalBytecodeTraitAccessor:
 {
     std::string filename = cl_bytecodeTraitTable;
     ReleaseAssert(filename != "");
-    std::string jsonContents = ReadFileContentAsString(filename);
-    json j = json::parse(jsonContents);
+    json_t j = ParseJsonFromFileName(filename);
     return DeegenGlobalBytecodeTraitAccessor::LoadFromJson(j);
 }
 

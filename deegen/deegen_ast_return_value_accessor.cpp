@@ -77,7 +77,7 @@ std::vector<AstReturnValueAccessor> WARN_UNUSED AstReturnValueAccessor::GetAllUs
     return result;
 }
 
-void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineJIT(DeegenBytecodeImplCreatorBase* ifi)
+void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineOrDfg(DeegenBytecodeImplCreatorBase* ifi)
 {
     using namespace llvm;
     ReleaseAssert(ifi->IsReturnContinuation());
@@ -149,18 +149,12 @@ void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineJIT(DeegenBytecod
 
         if (canDoQuickCopy)
         {
-            std::vector<Value*> loadedValues;
-            for (size_t i = 0; i < knownNumForQuickCopy; i++)
-            {
-                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), ifi->GetRetStart(), { CreateLLVMConstantInt<uint64_t>(ctx, i) }, "", m_origin);
-                LoadInst* loadInst = new LoadInst(llvm_type_of<uint64_t>(ctx), gep, "", m_origin);
-                loadedValues.push_back(loadInst);
-            }
-            for (size_t i = 0; i < knownNumForQuickCopy; i++)
-            {
-                GetElementPtrInst* gep = GetElementPtrInst::CreateInBounds(llvm_type_of<uint64_t>(ctx), dst, { CreateLLVMConstantInt<uint64_t>(ctx, i) }, "", m_origin);
-                std::ignore = new StoreInst(loadedValues[i], gep, m_origin);
-            }
+            EmitLLVMIntrinsicMemcpy<true /*forceInline*/>(
+                ifi->GetModule(),
+                dst,
+                ifi->GetRetStart() /*src*/,
+                CreateLLVMConstantInt<uint64_t>(ctx, knownNumForQuickCopy * sizeof(TValue)) /*bytesToCopy*/,
+                m_origin);
         }
         else
         {
@@ -187,7 +181,6 @@ void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineJIT(DeegenBytecod
             "StoreReturnValuesAsVariadicResults",
             {
                 ifi->GetCoroutineCtx(),
-                ifi->GetStackBase(),
                 ifi->GetRetStart(),
                 ifi->GetNumRet()
             },

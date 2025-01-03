@@ -1,5 +1,3 @@
-#include "force_release_build.h"
-
 #include "define_deegen_common_snippet.h"
 
 static void* DeegenSnippet_RoundPtrUpToMultipleOf(void* ptr, uint64_t mult)

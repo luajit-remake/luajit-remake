@@ -203,7 +203,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
                 ord++;
             }
         }
-        assert(ord == numItems);
+        Assert(ord == numItems);
     }
 
     // Stringify all the numbers in the table
@@ -221,7 +221,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
             if (strings[i].first == nullptr)
             {
                 TValue tv; tv.m_value = strings[i].second;
-                assert(tv.Is<tDouble>() || tv.Is<tInt32>());
+                Assert(tv.Is<tDouble>() || tv.Is<tInt32>());
                 strings[i].first = buf;
                 if (tv.Is<tDouble>())
                 {
@@ -240,8 +240,8 @@ DEEGEN_DEFINE_LIB_FUNC(table_concat)
                 DEBUG_ONLY(numbersFound++;)
             }
         }
-        assert(numbersFound == numNumbers);
-        assert(buf <= tempBufferForStringifiedNumber.m_bufferEnd);
+        Assert(numbersFound == numNumbers);
+        Assert(buf <= tempBufferForStringifiedNumber.m_bufferEnd);
     }
 
     // Now, concat everything
@@ -302,7 +302,7 @@ static bool LuaLibCheckStringHasNoExoticLtMetamethod(VM* vm)
     }
 
     HeapPtr<TableObject> mt = vm->m_metatableForString.As<TableObject>();
-    assert(mt->m_type == HeapEntityType::Table);
+    Assert(mt->m_type == HeapEntityType::Table);
     if (mt->m_hiddenClass.m_value == vm->m_initialHiddenClassOfMetatableForString.m_value)
     {
         return true;
@@ -318,7 +318,7 @@ static void LuaLibTableSortDoubleContinuousArrayNoMM(TValue* arr, size_t n)
 #ifndef NDEBUG
     for (size_t i = 1; i <= n; i++)
     {
-        assert(arr[i].Is<tDouble>());
+        Assert(arr[i].Is<tDouble>());
     }
 #endif
     double* arrDbl = reinterpret_cast<double*>(arr);
@@ -345,7 +345,7 @@ static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab
         for (uint32_t i = 1; i <= n; i++)
         {
             TValue tv = TableObject::GetByIntegerIndex(tab, i, info);
-            assert(tv.Is<tDouble>());
+            Assert(tv.Is<tDouble>());
             ptr[i - 1] = tv.As<tDouble>();
         }
     }
@@ -368,7 +368,7 @@ static void LuaLibTableSortDoubleNonContinuousArrayNoMM(HeapPtr<TableObject> tab
 
 static bool LuaLibTableSortStringComparator(TValue lhs, TValue rhs)
 {
-    assert(lhs.Is<tString>() && rhs.Is<tString>());
+    Assert(lhs.Is<tString>() && rhs.Is<tString>());
     HeapPtr<HeapString> lstr = lhs.As<tString>();
     HeapPtr<HeapString> rstr = rhs.As<tString>();
     if (lstr == rstr)
@@ -385,7 +385,7 @@ static void LuaLibTableSortStringContinuousArrayNoMM(TValue* arr, size_t n)
 #ifndef NDEBUG
     for (size_t i = 1; i <= n; i++)
     {
-        assert(arr[i].Is<tString>());
+        Assert(arr[i].Is<tString>());
     }
 #endif
     // Use stable_sort because it generally produces less comparisons than std::sort (but at the cost of more iteration work).
@@ -414,7 +414,7 @@ static void LuaLibTableSortStringNonContinuousArrayNoMM(HeapPtr<TableObject> tab
         for (uint32_t i = 1; i <= n; i++)
         {
             ptr[i - 1] = TableObject::GetByIntegerIndex(tab, i, info);
-            assert(ptr[i - 1].Is<tString>());
+            Assert(ptr[i - 1].Is<tString>());
         }
     }
 
@@ -512,7 +512,7 @@ struct QuickSortStateMachine
 
     static QuickSortStateMachine WARN_UNUSED Init(TValue* stackBase, HeapPtr<TableObject> tableObj, int32_t n)
     {
-        assert(n >= 2);
+        Assert(n >= 2);
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
         if (n > x_limit_for_ins_sort)
@@ -561,11 +561,11 @@ struct QuickSortStateMachine
 
     static QuickSortStateMachine WARN_UNUSED GetFromStack(TValue* stackBase)
     {
-        assert(stackBase[0].Is<tTable>());
-        assert(stackBase[2].Is<tInt32>() && stackBase[2].As<tInt32>() > 0);
-        assert(stackBase[4].Is<tInt32>());
-        assert(stackBase[5].Is<tInt32>());
-        assert(stackBase[6].Is<tInt32>() && 0 <= stackBase[6].As<tInt32>() && stackBase[6].As<tInt32>() <= 2);
+        Assert(stackBase[0].Is<tTable>());
+        Assert(stackBase[2].Is<tInt32>() && stackBase[2].As<tInt32>() > 0);
+        Assert(stackBase[4].Is<tInt32>());
+        Assert(stackBase[5].Is<tInt32>());
+        Assert(stackBase[6].Is<tInt32>() && 0 <= stackBase[6].As<tInt32>() && stackBase[6].As<tInt32>() <= 2);
         HeapPtr<TableObject> tableObj = stackBase[0].As<tTable>();
         GetByIntegerIndexICInfo info;
         TableObject::PrepareGetByIntegerIndex(tableObj, info /*out*/);
@@ -585,7 +585,7 @@ struct QuickSortStateMachine
     //
     Result WARN_UNUSED InitialAdvance()
     {
-        assert(state == 0 || state == 2);
+        Assert(state == 0 || state == 2);
         if (state == 0)
         {
             return FirstLoopCompare();
@@ -614,10 +614,10 @@ struct QuickSortStateMachine
             }
             else
             {
-                assert(state == 2);
+                Assert(state == 2);
                 j -= 1;
                 int32_t lo = sb[5 + 2 * h].As<tInt32>();
-                assert(j >= lo);
+                Assert(j >= lo);
                 if (j > lo)
                 {
                     return ThirdLoopCompare();
@@ -637,7 +637,7 @@ struct QuickSortStateMachine
             }
             else
             {
-                assert(state == 2);
+                Assert(state == 2);
                 return ThirdInnerLoopFinished();
             }
         }
@@ -651,7 +651,7 @@ struct QuickSortStateMachine
 private:
     Result FirstLoopCompare()
     {
-        assert(state == 0);
+        Assert(state == 0);
         return Result {
             .finish = false,
             .lhs = TableObject::GetByIntegerIndex(tab, i, info),
@@ -661,7 +661,7 @@ private:
 
     Result SecondLoopCompare()
     {
-        assert(state == 1);
+        Assert(state == 1);
         return Result {
             .finish = false,
             .lhs = pivot,
@@ -671,7 +671,7 @@ private:
 
     Result ThirdLoopCompare()
     {
-        assert(state == 2);
+        Assert(state == 2);
         return Result {
             .finish = false,
             .lhs = pivot,
@@ -681,14 +681,14 @@ private:
 
     Result FirstPartitionInnerLoopFinished()
     {
-        assert(state == 0);
+        Assert(state == 0);
         state = 1;
         return SecondLoopCompare();
     }
 
     Result SecondPartitionInnerLoopFinished()
     {
-        assert(state == 1);
+        Assert(state == 1);
         if (i >= j)
         {
             return PartitionFunctionFinished(j);
@@ -705,7 +705,7 @@ private:
 
     Result ThirdInnerLoopFinished()
     {
-        assert(state == 2);
+        Assert(state == 2);
         // A[j..i-1] should be moved by one slot, and A[i] should take position of A[j]
         //
         if (j < i)
@@ -729,19 +729,19 @@ private:
         }
         else
         {
-            assert(i == hi + 1);
+            Assert(i == hi + 1);
             return InsertionSortFinished();
         }
     }
 
     Result PartitionFunctionFinished(int32_t pv)
     {
-        assert(h > 0);
-        assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
+        Assert(h > 0);
+        Assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
         int32_t lo = sb[5 + 2 * h].As<tInt32>();
         int32_t hi = sb[6 + 2 * h].As<tInt32>();
-        assert(lo < hi);
-        assert(lo <= pv && pv <= hi);
+        Assert(lo < hi);
+        Assert(lo <= pv && pv <= hi);
         h--;
         if (lo < pv)
         {
@@ -761,9 +761,9 @@ private:
 
     Result InsertionSortFinished()
     {
-        assert(state == 2);
-        assert(h > 0);
-        assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
+        Assert(state == 2);
+        Assert(h > 0);
+        Assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
         h--;
         return GetNextWorkItem();
     }
@@ -773,14 +773,16 @@ private:
         if (h == 0)
         {
             return Result {
-                .finish = true
+                .finish = true,
+                .lhs = Undef<TValue>(),
+                .rhs = Undef<TValue>()
             };
         }
 
-        assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
+        Assert(sb[5 + 2 * h].Is<tInt32>() && sb[6 + 2 * h].Is<tInt32>());
         int32_t lo = sb[5 + 2 * h].As<tInt32>();
         int32_t hi = sb[6 + 2 * h].As<tInt32>();
-        assert(lo < hi);
+        Assert(lo < hi);
         if (hi - lo + 1 > x_limit_for_ins_sort)
         {
             i = lo;
@@ -890,7 +892,7 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
             return (lhsString->Compare(rhsString) < 0) ? LessThanComparisonResult::True : LessThanComparisonResult::False;
         }
 
-        assert(!lhs.Is<tUserdata>() && "unimplemented");
+        Assert(!lhs.Is<tUserdata>() && "unimplemented");
 
         metamethod = GetMetamethodForValue(lhs, LuaMetamethodKind::Lt);
         if (metamethod.IsNil())
@@ -910,9 +912,9 @@ LessThanComparisonResult WARN_UNUSED LuaLibTableSortDoLessThanComparison(TValue 
         return lhs.As<tDouble>() < rhs.As<tDouble>() ? LessThanComparisonResult::True : LessThanComparisonResult::False;
     }
 
-    assert(!lhs.Is<tInt32>() && "unimplemented");
+    Assert(!lhs.Is<tInt32>() && "unimplemented");
 
-    assert(lhs.Is<tMIV>());
+    Assert(lhs.Is<tMIV>());
     if (!rhs.Is<tMIV>())
     {
         return LessThanComparisonResult::Error;
@@ -1017,7 +1019,7 @@ DEEGEN_DEFINE_LIB_FUNC_CONTINUATION(table_sort_usr_comparator_continuation)
     }
 
     TValue fn = sb[1];
-    assert(fn.Is<tFunction>());
+    Assert(fn.Is<tFunction>());
     qsm.PutToStack();
     TValue* callFrame = qsm.CallFrameEnd();
     callFrame[0] = fn;
@@ -1073,7 +1075,7 @@ DEEGEN_DEFINE_LIB_FUNC(table_sort)
         TValue* sb = GetStackBase();
         QuickSortStateMachine qsm = QuickSortStateMachine::Init(sb, tab, static_cast<int32_t>(n));
         QuickSortStateMachine::Result action = qsm.InitialAdvance();
-        assert(!action.finish);
+        Assert(!action.finish);
 
         qsm.PutToStack();
         TValue* callFrame = qsm.CallFrameEnd();
@@ -1193,7 +1195,7 @@ slowpath:
         TValue* sb = GetStackBase();
         QuickSortStateMachine qsm = QuickSortStateMachine::Init(sb, tab, static_cast<int32_t>(n));
         QuickSortStateMachine::Result action = qsm.InitialAdvance();
-        assert(!action.finish);
+        Assert(!action.finish);
 
         TValue lhs, rhs, mm;
         while (true)
