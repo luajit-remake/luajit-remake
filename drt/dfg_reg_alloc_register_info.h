@@ -5,7 +5,7 @@
 
 // The general-purpose registers that participate in DFG register allocation
 //
-constexpr X64Reg x_dfg_reg_alloc_gprs[] = {
+inline constexpr X64Reg x_dfg_reg_alloc_gprs[] = {
     X64Reg::R10,
     X64Reg::R11,
     X64Reg::R14,
@@ -17,7 +17,7 @@ constexpr X64Reg x_dfg_reg_alloc_gprs[] = {
 
 // The floating-point registers that participate in DFG register allocation
 //
-constexpr X64Reg x_dfg_reg_alloc_fprs[] = {
+inline constexpr X64Reg x_dfg_reg_alloc_fprs[] = {
     X64Reg::XMM1,
     X64Reg::XMM2,
     X64Reg::XMM3,
@@ -56,27 +56,27 @@ void ALWAYS_INLINE ForEachDfgRegAllocRegister(const ActionFunc& action)
 
 namespace internal {
 
-    constexpr std::array<uint8_t, X64Reg::x_totalNumGprs> x_gpr_to_seq_ord_map = []() {
-        std::array<uint8_t, X64Reg::x_totalNumGprs> result;
-        for (size_t i = 0; i < X64Reg::x_totalNumGprs; i++) { result[i] = static_cast<uint8_t>(-1); }
-        for (size_t i = 0; i < x_dfg_reg_alloc_num_gprs; i++)
-        {
-            ReleaseAssert(result[x_dfg_reg_alloc_gprs[i].MachineOrd()] == static_cast<uint8_t>(-1));
-            result[x_dfg_reg_alloc_gprs[i].MachineOrd()] = static_cast<uint8_t>(i);
-        }
-        return result;
-    }();
+inline constexpr std::array<uint8_t, X64Reg::x_totalNumGprs> x_gpr_to_seq_ord_map = []() {
+    std::array<uint8_t, X64Reg::x_totalNumGprs> result;
+    for (size_t i = 0; i < X64Reg::x_totalNumGprs; i++) { result[i] = static_cast<uint8_t>(-1); }
+    for (size_t i = 0; i < x_dfg_reg_alloc_num_gprs; i++)
+    {
+        ReleaseAssert(result[x_dfg_reg_alloc_gprs[i].MachineOrd()] == static_cast<uint8_t>(-1));
+        result[x_dfg_reg_alloc_gprs[i].MachineOrd()] = static_cast<uint8_t>(i);
+    }
+    return result;
+}();
 
-    constexpr std::array<uint8_t, X64Reg::x_totalNumFprs> x_fpr_to_seq_ord_map = []() {
-        std::array<uint8_t, X64Reg::x_totalNumFprs> result;
-        for (size_t i = 0; i < X64Reg::x_totalNumFprs; i++) { result[i] = static_cast<uint8_t>(-1); }
-        for (size_t i = 0; i < x_dfg_reg_alloc_num_fprs; i++)
-        {
-            ReleaseAssert(result[x_dfg_reg_alloc_fprs[i].MachineOrd()] == static_cast<uint8_t>(-1));
-            result[x_dfg_reg_alloc_fprs[i].MachineOrd()] = static_cast<uint8_t>(x_dfg_reg_alloc_num_gprs + i);
-        }
-        return result;
-    }();
+inline constexpr std::array<uint8_t, X64Reg::x_totalNumFprs> x_fpr_to_seq_ord_map = []() {
+    std::array<uint8_t, X64Reg::x_totalNumFprs> result;
+    for (size_t i = 0; i < X64Reg::x_totalNumFprs; i++) { result[i] = static_cast<uint8_t>(-1); }
+    for (size_t i = 0; i < x_dfg_reg_alloc_num_fprs; i++)
+    {
+        ReleaseAssert(result[x_dfg_reg_alloc_fprs[i].MachineOrd()] == static_cast<uint8_t>(-1));
+        result[x_dfg_reg_alloc_fprs[i].MachineOrd()] = static_cast<uint8_t>(x_dfg_reg_alloc_num_gprs + i);
+    }
+    return result;
+}();
 
 }   // namespace internal
 

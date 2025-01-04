@@ -65,13 +65,13 @@ constexpr LuaMetamethodBitVectorT x_luaMetamethodBitVectorFullMask = static_cast
 
 // This corresponds to the m_high field in corresponding HeapString
 //
-constexpr std::array<uint8_t, x_totalLuaMetamethodKind> x_luaMetamethodHashes = {
+inline constexpr std::array<uint8_t, x_totalLuaMetamethodKind> x_luaMetamethodHashes = {
 #define macro(e) constexpr_xxh3::XXH3_64bits_const( std::string_view { PP_STRINGIFY(PP_TUPLE_GET_2(e)) } ) >> 56,
         PP_FOR_EACH(macro, METAMETHOD_NAME_LIST)
 #undef macro
 };
 
-constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
+inline constexpr std::array<uint8_t, 64> x_luaMetamethodNamesSimpleHashTable = []() {
     for (size_t i = 0; i < x_totalLuaMetamethodKind; i++)
     {
         for (size_t j = i + 1; j < x_totalLuaMetamethodKind; j++)
@@ -344,7 +344,7 @@ constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeOptimalInlineStora
     return r;
 }
 
-constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacityArray = ComputeOptimalInlineStorageCapacityArray();
+inline constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacityArray = ComputeOptimalInlineStorageCapacityArray();
 
 constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeInlineStorageCapacitySteppingArray()
 {
@@ -358,7 +358,7 @@ constexpr std::array<uint8_t, x_maxInlineCapacity + 1> ComputeInlineStorageCapac
     return r;
 }
 
-constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacitySteppingArray = ComputeInlineStorageCapacitySteppingArray();
+inline constexpr std::array<uint8_t, x_maxInlineCapacity + 1> x_optimalInlineCapacitySteppingArray = ComputeInlineStorageCapacitySteppingArray();
 
 }   // namespace internal
 
@@ -374,7 +374,7 @@ constexpr std::array<uint8_t, x_numInlineCapacitySteppings> ComputeInlineStorage
     return r;
 }
 
-constexpr std::array<uint8_t, x_numInlineCapacitySteppings> x_inlineStorageSizeForSteppingArray = ComputeInlineStorageSizeForSteppingArray();
+inline constexpr std::array<uint8_t, x_numInlineCapacitySteppings> x_inlineStorageSizeForSteppingArray = ComputeInlineStorageSizeForSteppingArray();
 
 }   // namespace internal
 

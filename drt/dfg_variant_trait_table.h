@@ -46,17 +46,17 @@ struct ConstructDfgOpcodeInfoTable : DfgConstEvalForEachOpcode<ConstructDfgOpcod
     std::array<CodegenImplFn, x_totalNumDfgUserNodeCodegenFuncs> m_codegenImplFns;
 };
 
-constexpr ConstructDfgOpcodeInfoTable x_dfgOpcodeInfoTableData = ConstructDfgOpcodeInfoTable();
+inline constexpr ConstructDfgOpcodeInfoTable x_dfgOpcodeInfoTableData = ConstructDfgOpcodeInfoTable();
 
 }   // namespace detail
 
-constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalNumDfgUserNodeCodegenFuncs>
+inline constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalNumDfgUserNodeCodegenFuncs>
     x_dfgOpcodeJitCodeSizeInfoTable = detail::x_dfgOpcodeInfoTableData.m_jitCodeSizes;
 
-constexpr std::array<DfgVariantValidityCheckerFn, x_totalNumDfgUserNodeCodegenFuncs>
+inline constexpr std::array<DfgVariantValidityCheckerFn, x_totalNumDfgUserNodeCodegenFuncs>
     x_dfgOpcodeCheckValidityFnTable = detail::x_dfgOpcodeInfoTableData.m_checkValidityFns;
 
-constexpr std::array<CodegenImplFn, x_totalNumDfgUserNodeCodegenFuncs>
+inline constexpr std::array<CodegenImplFn, x_totalNumDfgUserNodeCodegenFuncs>
     x_dfgOpcodeCodegenImplFnTable = detail::x_dfgOpcodeInfoTableData.m_codegenImplFns;
 
 }   // namespace dfg

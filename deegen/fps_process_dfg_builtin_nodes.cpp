@@ -354,7 +354,7 @@ void FPS_ProcessDfgBuiltinNodes()
         }
     }
 
-    fprintf(hdrFp, "constexpr std::array<const DfgVariantTraits*, x_numTotalDfgBuiltinNodeKinds> x_dfg_builtin_node_standard_codegen_handler = {\n");
+    fprintf(hdrFp, "inline constexpr std::array<const DfgVariantTraits*, x_numTotalDfgBuiltinNodeKinds> x_dfg_builtin_node_standard_codegen_handler = {\n");
     for (size_t idx = 0; idx < dfg::x_numTotalDfgBuiltinNodeKinds; idx++)
     {
         ReleaseAssert(idx < standardState.m_standardNodeMainEntryTable.size());
@@ -364,7 +364,7 @@ void FPS_ProcessDfgBuiltinNodes()
     }
     fprintf(hdrFp, "};\n\n");
 
-    fprintf(hdrFp, "constexpr std::array<const DfgVariantTraits*, static_cast<size_t>(DfgBuiltinNodeCustomCgFn::X_END_OF_ENUM)> x_dfg_builtin_node_custom_codegen_handler = []() {\n");
+    fprintf(hdrFp, "inline constexpr std::array<const DfgVariantTraits*, static_cast<size_t>(DfgBuiltinNodeCustomCgFn::X_END_OF_ENUM)> x_dfg_builtin_node_custom_codegen_handler = []() {\n");
     fprintf(hdrFp, "    constexpr size_t n = static_cast<size_t>(DfgBuiltinNodeCustomCgFn::X_END_OF_ENUM);\n");
     fprintf(hdrFp, "    std::array<const DfgVariantTraits*, n> arr;\n");
     fprintf(hdrFp, "    for (size_t i = 0; i < n; i++) { arr[i] = nullptr; }\n");
@@ -376,19 +376,19 @@ void FPS_ProcessDfgBuiltinNodes()
     fprintf(hdrFp, "constexpr size_t x_totalDfgBuiltinNodeStandardCgFns = %d;\n\n", static_cast<int>(standardState.GetNumCgFns()));
     fprintf(hdrFp, "constexpr size_t x_totalDfgBuiltinNodeCustomCgFns = %d;\n\n", static_cast<int>(customState.GetNumCgFns()));
 
-    fprintf(hdrFp, "constexpr std::array<CodegenImplFn, x_totalDfgBuiltinNodeStandardCgFns> x_dfgBuiltinNodeStandardCgFnArray = {\n");
+    fprintf(hdrFp, "inline constexpr std::array<CodegenImplFn, x_totalDfgBuiltinNodeStandardCgFns> x_dfgBuiltinNodeStandardCgFnArray = {\n");
     standardState.PrintCodegenFnArray(hdrFp);
     fprintf(hdrFp, "};\n");
 
-    fprintf(hdrFp, "constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalDfgBuiltinNodeStandardCgFns> x_dfgBuiltinNodeStandardCgFnJitCodeSizeArray = {\n");
+    fprintf(hdrFp, "inline constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalDfgBuiltinNodeStandardCgFns> x_dfgBuiltinNodeStandardCgFnJitCodeSizeArray = {\n");
     standardState.PrintJitCodeSizeArray(hdrFp);
     fprintf(hdrFp, "};\n");
 
-    fprintf(hdrFp, "constexpr std::array<CustomBuiltinNodeCodegenImplFn, x_totalDfgBuiltinNodeCustomCgFns> x_dfgBuiltinNodeCustomCgFnArray = {\n");
+    fprintf(hdrFp, "inline constexpr std::array<CustomBuiltinNodeCodegenImplFn, x_totalDfgBuiltinNodeCustomCgFns> x_dfgBuiltinNodeCustomCgFnArray = {\n");
     customState.PrintCodegenFnArray(hdrFp);
     fprintf(hdrFp, "};\n");
 
-    fprintf(hdrFp, "constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalDfgBuiltinNodeCustomCgFns> x_dfgBuiltinNodeCustomCgFnJitCodeSizeArray = {\n");
+    fprintf(hdrFp, "inline constexpr std::array<CodegenFnJitCodeSizeInfo, x_totalDfgBuiltinNodeCustomCgFns> x_dfgBuiltinNodeCustomCgFnJitCodeSizeArray = {\n");
     customState.PrintJitCodeSizeArray(hdrFp);
     fprintf(hdrFp, "};\n");
 

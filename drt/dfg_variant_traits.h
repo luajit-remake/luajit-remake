@@ -107,7 +107,7 @@ struct DfgOpcodeMiscInfoCollector : DfgConstEvalForEachOpcode<DfgOpcodeMiscInfoC
     std::array<size_t, static_cast<size_t>(BCKind::X_END_OF_ENUM) + 1> m_codegenFuncOrdBaseInBCKind;
 };
 
-constexpr DfgOpcodeMiscInfoCollector x_dfg_omic = DfgOpcodeMiscInfoCollector();
+inline constexpr DfgOpcodeMiscInfoCollector x_dfg_omic = DfgOpcodeMiscInfoCollector();
 
 }   // namespace detail
 
@@ -160,7 +160,7 @@ struct DfgCodegenFuncOrdBaseForDfgVariantConstructor : DfgConstEvalForEachOpcode
     std::array<size_t, x_numVariants + 1> m_codegenFuncOrdBaseForVariant;
 };
 
-constexpr DfgCodegenFuncOrdBaseForDfgVariantConstructor x_dfg_cgfnOrdBaseInfo = DfgCodegenFuncOrdBaseForDfgVariantConstructor();
+inline constexpr DfgCodegenFuncOrdBaseForDfgVariantConstructor x_dfg_cgfnOrdBaseInfo = DfgCodegenFuncOrdBaseForDfgVariantConstructor();
 
 template<BCKind bcKind, size_t dvOrd>
 struct CodegenFuncOrdBaseForDfgVariantImpl
