@@ -65,6 +65,7 @@ SET(DEEGEN_UTIL_LIBRARY_SOURCES
   deegen_dfg_reg_alloc_variants.cpp
   deegen_dfg_builtin_node_impl_creator.cpp
   deegen_dfg_builtin_nodes.cpp
+  typemask_overapprox_automata_generator.cpp
 ) 
 
 # Always compile these files with O3 to save build time since we won't need to debug into these anyway

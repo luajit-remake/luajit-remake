@@ -228,6 +228,7 @@ set(UNIT_TEST_SRC
   test_zydis_register_parser.cpp
   test_dfg_reg_alloc_state.cpp
   test_dfg_reg_move_inst_generator.cpp
+  test_typemask_automata_generator.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES

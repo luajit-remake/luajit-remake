@@ -35,6 +35,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <span>
 #include "pp_common.h"
 #include "function_ref.h"
 
