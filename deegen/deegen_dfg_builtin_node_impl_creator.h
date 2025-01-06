@@ -51,11 +51,23 @@ public:
         , m_funcCtx(nullptr)
         , m_module(nullptr)
     {
-        ReleaseAssert(associatedNodeKind < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
-        m_nodeName = dfg::GetDfgBuiltinNodeKindName(associatedNodeKind);
-        if (dfg::DfgBuiltinNodeUseCustomCodegenImpl(associatedNodeKind))
+        ReleaseAssert(associatedNodeKind <= dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
+        if (associatedNodeKind < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind)
         {
-            SetShouldUseCustomCodegenInterface();
+            m_nodeName = dfg::GetDfgBuiltinNodeKindName(associatedNodeKind);
+            if (dfg::DfgBuiltinNodeUseCustomCodegenImpl(associatedNodeKind))
+            {
+                SetShouldUseCustomCodegenInterface();
+            }
+        }
+        else
+        {
+            // Ugly: TypeCheck nodes identify themselves by NodeKind_FirstAvailableGuestLanguageNodeKind
+            //
+            m_nodeName = "TypeCheck";
+            // TypeCheck nodes never use custom codegen interface
+            //
+            ReleaseAssert(!m_shouldUseCustomInterface);
         }
     }
 
@@ -242,6 +254,7 @@ public:
         // Catch bugs where a wrong Nsd type is passed in
         //
         using ClassTy = classof_member_t<memberObjPtr>;
+        ReleaseAssert(GetAssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
         ReleaseAssert(dfg::DfgNodeIsBuiltinNodeWithNsdType<ClassTy>(GetAssociatedNodeKind()));
         ReleaseAssert(!m_isSingletonLiteralOp);
         size_t offsetInNsd = offsetof_member_v<memberObjPtr>;
@@ -272,6 +285,7 @@ public:
         ReleaseAssert(IntegerCanBeRepresentedIn<StorageTy>(valueUb));
         // Catch bugs where a wrong Nsd type is passed in
         //
+        ReleaseAssert(GetAssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
         ReleaseAssert(dfg::DfgNodeIsBuiltinNodeWithNsdType<StorageTy>(GetAssociatedNodeKind()));
         size_t sizeInNsd = sizeof(StorageTy);
         ReleaseAssert(m_extraLiteralOps.empty());
@@ -412,7 +426,11 @@ struct DfgBuiltinNodeCodegenProcessorBase
 
     // This name is only used for distinguish purposes and becomes part of the generated C++ names
     //
-    virtual std::string NodeName() { return dfg::GetDfgBuiltinNodeKindName(AssociatedNodeKind()); }
+    virtual std::string NodeName()
+    {
+        ReleaseAssert(AssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
+        return dfg::GetDfgBuiltinNodeKindName(AssociatedNodeKind());
+    }
 
     // The total number of operands (including those not register-allocated)
     //

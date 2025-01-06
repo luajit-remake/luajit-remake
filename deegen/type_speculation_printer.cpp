@@ -131,3 +131,40 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeMaskTy mask, bool p
     std::string result = ss.str();
     return result;
 }
+
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculationForUseKind(TypeMaskTy mask)
+{
+    constexpr auto arr = x_list_of_type_speculation_mask_and_name;
+    constexpr size_t n = arr.size();
+
+    std::stringstream ss;
+    if (mask == 0)
+    {
+        ss << "Bottom";
+    }
+    else
+    {
+        bool first = true;
+        for (size_t i = 0; i < n; i++)
+        {
+            TypeMaskTy curMask = arr[i].first;
+            if (curMask == 0) { continue; }
+            if ((mask & curMask) == curMask)
+            {
+                if (!first)
+                {
+                    ss << "Or";
+                }
+                first = false;
+                std::string name = std::string(arr[i].second);
+                ReleaseAssert(name.starts_with("t") && name.length() > 1);
+                ss << name.substr(1);
+                mask ^= curMask;
+            }
+        }
+        ReleaseAssert(mask == 0);
+    }
+    std::string result = ss.str();
+    return result;
+}
+

@@ -464,14 +464,14 @@ struct tInt32
     }
 };
 
-// This function is only for internal use, user should never call this function
-// Don't change this function name: it is hardcoded for our LLVM logic
-//
 // The compiler cannot automatically figure out that the pointer dereference here always yield the
 // same value for the same pointer, since this fact comes from high-level knowledge of the system.
 // So we manually add 'readnone' (which is GCC/Clang attribute '__const__') to this function.
 //
-inline HeapEntityType WARN_UNUSED __attribute__((__const__)) DeegenImpl_TValueGetPointerType(TValue v)
+// TODO: I don't think we are making use of the "__const__" anywhere, it seems like it's due to some very old
+// design that is no longer relavent.. This file is a pile of mess now, clean up later...
+//
+inline HeapEntityType ALWAYS_INLINE WARN_UNUSED __attribute__((__const__, __flatten__)) DeegenImpl_TValueGetPointerType(TValue v)
 {
     return v.AsPointer<UserHeapGcObjectHeader>().As()->m_type;
 }
@@ -855,7 +855,16 @@ struct get_type_speculation_defs<std::tuple<Args...>>
 
 }   // namespace detail
 
-constexpr auto x_list_of_type_speculation_mask_and_name = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+inline constexpr auto x_list_of_type_speculation_mask_and_name = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+
+inline constexpr auto x_list_of_type_speculation_masks = []() {
+    std::array<TypeMaskTy, x_list_of_type_speculation_mask_and_name.size()> res;
+    for (size_t i = 0; i < x_list_of_type_speculation_mask_and_name.size(); i++)
+    {
+        res[i] = x_list_of_type_speculation_mask_and_name[i].first;
+    }
+    return res;
+}();
 
 // Returns the human readable definitions of each type speculation mask
 //
@@ -1083,31 +1092,52 @@ struct TypeMask
 {
     ALWAYS_INLINE TypeMask() : m_mask(0) { }
     ALWAYS_INLINE TypeMask(TypeMaskTy mask) : m_mask(mask) { }
+    TypeMask(bool) = delete;
 
-    bool WARN_UNUSED ALWAYS_INLINE SubsetOf(TypeMask other)
+    bool WARN_UNUSED ALWAYS_INLINE Empty() const
+    {
+        return m_mask == 0;
+    }
+
+    bool WARN_UNUSED ALWAYS_INLINE SubsetOf(TypeMask other) const
     {
         return (m_mask & other.m_mask) == m_mask;
     }
 
-    bool WARN_UNUSED ALWAYS_INLINE SupersetOf(TypeMask other)
+    bool WARN_UNUSED ALWAYS_INLINE SupersetOf(TypeMask other) const
     {
         return (m_mask & other.m_mask) == other.m_mask;
     }
 
-    bool WARN_UNUSED ALWAYS_INLINE DisjointFrom(TypeMask other)
+    bool WARN_UNUSED ALWAYS_INLINE DisjointFrom(TypeMask other) const
     {
         return (m_mask & other.m_mask) == 0;
     }
 
-    bool WARN_UNUSED ALWAYS_INLINE OverlapsWith(TypeMask other)
+    bool WARN_UNUSED ALWAYS_INLINE OverlapsWith(TypeMask other) const
     {
         return (m_mask & other.m_mask) != 0;
     }
 
-    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SubsetOf() { return SubsetOf(x_typeMaskFor<tMask>); }
-    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SupersetOf() { return SupersetOf(x_typeMaskFor<tMask>); }
-    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE DisjointFrom() { return DisjointFrom(x_typeMaskFor<tMask>); }
-    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE OverlapsWith() { return OverlapsWith(x_typeMaskFor<tMask>); }
+    TypeMask WARN_UNUSED ALWAYS_INLINE Cap(TypeMask other) const
+    {
+        return TypeMask { m_mask & other.m_mask };
+    }
+
+    TypeMask WARN_UNUSED ALWAYS_INLINE Cup(TypeMask other) const
+    {
+        return TypeMask { m_mask | other.m_mask };
+    }
+
+    TypeMask WARN_UNUSED ALWAYS_INLINE Subtract(TypeMask other) const
+    {
+        return TypeMask { m_mask & (~other.m_mask) };
+    }
+
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SubsetOf() const { return SubsetOf(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE SupersetOf() const { return SupersetOf(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE DisjointFrom() const { return DisjointFrom(x_typeMaskFor<tMask>); }
+    template<typename tMask> bool WARN_UNUSED ALWAYS_INLINE OverlapsWith() const { return OverlapsWith(x_typeMaskFor<tMask>); }
 
     TypeMaskTy m_mask;
 };

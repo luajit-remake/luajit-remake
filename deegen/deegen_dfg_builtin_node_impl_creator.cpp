@@ -756,7 +756,17 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
     {
         DfgRegAllocCCallAsmTransformPass cctPass(slPass.m_workFile.get(), m_module.get());
         std::string regAllocCCallWrapperPrefix = GetCCallWrapperPrefix();
-        ReleaseAssert(cctPass.RunPass(regAllocCCallWrapperPrefix));
+        if (!cctPass.RunPass(regAllocCCallWrapperPrefix))
+        {
+            m_module->dump();
+            // Always print 'typecheck implementation' as the error message, since this error shouldn't hit for DFG builtin nodes
+            //
+            fprintf(stderr, "[ERROR] Cannot enable register allocation for a typecheck implementation because it "
+                            "contains a C call that is incompatible with reg alloc (reason: %s). "
+                            "You may want to mark the functions as always_inline (if commonly used) or preserve_most (if rarely used).\n",
+                    cctPass.GetFailReasonStringName(cctPass.m_failReason));
+            abort();
+        }
 
         m_rtCCallWrappers = cctPass.m_calledFns;
 

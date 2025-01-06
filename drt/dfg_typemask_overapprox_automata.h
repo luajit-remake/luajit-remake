@@ -46,42 +46,69 @@ namespace dfg {
 // -- End proof --
 //
 // Note that T can be viewed as an automata where the [M] dimension is the node and the [N] dimension are the edges.
-// To make things more CPU-friendly, we can convert the up-to-n edges to a series of binary choices.
+// To make things more CPU-friendly, we can convert the up-to-n edges to a series of binary choices, then vectorize it to perform 4 tests at once.
 //
 // This yields the following automata model:
-//   Each automata node is described by <clearMask, answer, testMask, dest1, dest2>.
+//   Each automata node is described by <clearMask, answer, testMasks[4], dests...>.
 //   Query F(x) can be solved by:
 //     A = entryNode
 //     while True:
-//       x &= A.clearMask;
-//       if (x == 0) return A.answer
-//       if (x & testMask) A = A.dest0 else A = A.dest1
+//       if ((x & A.clearMask) == 0) return A.answer
+//       idx = 0
+//       for i in [0,4):
+//         idx += (x & testMasks[i]) ? (1<<i) : 0;
+//       A = A.dests[idx]
 //
-struct __attribute__((__packed__)) TypeMaskOverapproxAutomataNode
+struct __attribute__((__packed__)) TypeMaskOverapproxAutomataNodeCommon
 {
     TypeMaskTy m_clearMask;
-    TypeMaskTy m_testMask;
     // The meaning of 'm_answer' depend on the usage
     //
     uint16_t m_answer;
-    // Note that this offset is always positive since the edge always points to a later node
-    //
-    uint16_t m_dest0Offset;
-    uint16_t m_dest1Offset;
+};
 
-    static uint16_t WARN_UNUSED Run(const TypeMaskOverapproxAutomataNode* node, TypeMaskTy mask)
+// Only non-terminal nodes have these extra fields
+//
+struct __attribute__((__packed__)) TypeMaskOverapproxAutomataNode : TypeMaskOverapproxAutomataNodeCommon
+{
+    static constexpr size_t x_maxTestMasks = 4;
+
+    TypeMaskTy m_testMasks[x_maxTestMasks];
+    // Note that this offset is always positive since the edge always points to a later node
+    // The length of the array depends on how many masks we *actually* have: if we do not have 4 masks to test,
+    // we will set the non-existent masks to 0, so we will only need 2^K entries where K is the actually existent masks
+    //
+    uint16_t m_dests[0];
+
+    const TypeMaskOverapproxAutomataNodeCommon* ALWAYS_INLINE TestAndGetNext(TypeMaskTy mask) const
+    {
+        // uiCA says the vectorized version has higher latency than the plain version
+        // vectorized version (and + cmpne 0 + movemask) has 19 cycle latency and even higher before steady state,
+        // plain version 17.67 cycle latency and also performs better before steady state, so just use plain version
+        //
+        size_t idx = 0;
+        for (size_t i = 0; i < x_maxTestMasks; i++)
+        {
+            if (mask & m_testMasks[i])
+            {
+                idx += (1U << i);
+            }
+        }
+        TestAssert(m_dests[idx] != static_cast<uint16_t>(-1));
+        uintptr_t addr = reinterpret_cast<uintptr_t>(this) + m_dests[idx];
+        return reinterpret_cast<const TypeMaskOverapproxAutomataNodeCommon*>(addr);
+    }
+
+    static uint16_t WARN_UNUSED Run(const TypeMaskOverapproxAutomataNodeCommon* node, TypeMaskTy mask)
     {
         TestAssert(mask <= x_typeMaskFor<tTop>);
         while (true)
         {
-            mask &= node->m_clearMask;
-            if (mask == 0)
+            if ((mask & node->m_clearMask) == 0)
             {
                 return node->m_answer;
             }
-            const uint8_t* addr = reinterpret_cast<const uint8_t*>(node);
-            addr += ((mask & node->m_testMask) != 0) ? node->m_dest0Offset : node->m_dest1Offset;
-            node = reinterpret_cast<const TypeMaskOverapproxAutomataNode*>(addr);
+            node = static_cast<const TypeMaskOverapproxAutomataNode*>(node)->TestAndGetNext(mask);
         }
     }
 };
@@ -93,7 +120,7 @@ struct TypeMaskOverapproxAutomata
 
     uint16_t WARN_UNUSED ALWAYS_INLINE RunAutomataMayFail(TypeMaskTy mask) const
     {
-        return TypeMaskOverapproxAutomataNode::Run(reinterpret_cast<const TypeMaskOverapproxAutomataNode*>(m_entry), mask);
+        return TypeMaskOverapproxAutomataNode::Run(reinterpret_cast<const TypeMaskOverapproxAutomataNodeCommon*>(m_entry), mask);
     }
 
     uint16_t WARN_UNUSED ALWAYS_INLINE RunAutomata(TypeMaskTy mask) const
@@ -133,7 +160,7 @@ struct TypeMaskOverapproxAutomataLeafOpted
         TestAssert(ord < x_numUsefulBitsInTypeMask);
         uint16_t offset = UnalignedLoad<uint16_t>(m_entry + sizeof(TypeMaskTy) + 2 + ord * 2);
         TestAssert(offset != static_cast<uint16_t>(-1));
-        const TypeMaskOverapproxAutomataNode* entryNode = reinterpret_cast<const TypeMaskOverapproxAutomataNode*>(m_entry + offset);
+        const TypeMaskOverapproxAutomataNodeCommon* entryNode = reinterpret_cast<const TypeMaskOverapproxAutomataNodeCommon*>(m_entry + offset);
         return TypeMaskOverapproxAutomataNode::Run(entryNode, mask);
     }
 

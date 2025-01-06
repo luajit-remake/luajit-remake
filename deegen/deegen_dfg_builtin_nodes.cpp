@@ -594,4 +594,47 @@ void DfgBuiltinNodeImplReturn_Ret0::GenerateImpl(DfgBuiltinNodeImplCreator* impl
     impl->CreateDispatchForGuestLanguageFunctionReturn(stackBase, CreateLLVMConstantInt<uint64_t>(ctx, 0 /*value*/), bb);
 }
 
+void DfgBuiltinNodeImplTypeCheck::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_srcModule->getContext();
+
+    // Note that SetBaseModule clones the module
+    //
+    impl->SetBaseModule(m_srcModule);
+
+    Module* m = impl->GetModule();
+    ExecutorFunctionContext* funcCtx = impl->CreateFunction(ctx);
+    Function* func = funcCtx->GetFunction();
+    BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+
+    Function* implFn = m->getFunction(m_implFuncName);
+    ReleaseAssert(implFn != nullptr);
+    ReleaseAssert(implFn->getReturnType()->isIntegerTy(1 /*bitWidth*/));
+    ReleaseAssert(implFn->arg_size() == 1 && llvm_value_has_type<uint64_t>(implFn->getArg(0)));
+
+    Value* val = impl->EmitGetOperand(llvm_type_of<uint64_t>(ctx), 0 /*opOrd*/, bb);
+
+    Function* expectIntrin = Intrinsic::getDeclaration(m, Intrinsic::expect, { Type::getInt1Ty(ctx) });
+
+    CallInst* ci = CallInst::Create(implFn, { val }, "", bb);
+    ReleaseAssert(ci->getType()->isIntegerTy(1 /*bitWidth*/));
+    ci->addRetAttr(Attribute::ZExt);
+
+    Value* checkPassed = ci;
+    if (m_shouldFlipResult)
+    {
+        checkPassed = BinaryOperator::CreateXor(checkPassed, CreateLLVMConstantInt<bool>(ctx, true), "", bb);
+    }
+
+    checkPassed = CallInst::Create(expectIntrin, { checkPassed, CreateLLVMConstantInt<bool>(ctx, true) }, "", bb);
+
+    BasicBlock* trueBB = BasicBlock::Create(ctx, "", func);
+    BasicBlock* falseBB = BasicBlock::Create(ctx, "", func);
+    BranchInst::Create(trueBB, falseBB, checkPassed, bb);
+
+    impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, trueBB);
+    impl->CreateDispatchToOsrExit(falseBB);
+}
+
 }   // namespace dast

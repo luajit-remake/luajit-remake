@@ -149,6 +149,19 @@ struct DfgRegAllocCCallAsmTransformPass
         FprArgumentRegConflict
     };
 
+    static const char* GetFailReasonStringName(FailReason reason)
+    {
+        switch (reason)
+        {
+        case FailReason::Unknown: { return "Unknown"; }
+        case FailReason::HasIndirectCall: { return "HasIndirectCall"; }
+        case FailReason::NotPreserveMostCC: { return "NotPreserveMostCC"; }
+        case FailReason::ReturnRegConflict: { return "ReturnRegConflict"; }
+        case FailReason::FprArgumentRegConflict: { return "FprArgumentRegConflict"; }
+        }   /*switch*/
+        ReleaseAssert(false);
+    }
+
     // Rewrite all calls to preserve_most functions to preserve_all
     // Return false if the rewrite failed because of the presense of indirect calls
     //

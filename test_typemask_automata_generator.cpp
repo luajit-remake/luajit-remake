@@ -1,6 +1,9 @@
 #include "gtest/gtest.h"
 
+#include "misc_llvm_helper.h"
 #include "typemask_overapprox_automata_generator.h"
+#include "drt/dfg_variant_trait_table.h"
+#include "tvalue_typecheck_optimization.h"
 
 using namespace dast;
 using namespace dfg;
@@ -297,6 +300,66 @@ TEST(DfgTypemaskAutomataGen, Sanity)
         for (size_t numElements = 0; numElements <= 8; numElements++)
         {
             DoTest2(rdgen, numElements);
+        }
+    }
+}
+
+TEST(DfgTypemaskAutomataGen, UseKindSolver)
+{
+    std::random_device rd;
+    std::mt19937_64 rdgen(rd());
+
+    TypeCheckFunctionSelector gold(x_dfg_typecheck_impl_info_list.data(), x_dfg_typecheck_impl_info_list.size());
+
+    for (size_t idx = 0; idx < x_list_of_type_speculation_masks.size(); idx++)
+    {
+        std::vector<TypeMaskTy> testcases;
+        for (size_t k = 0; k < 1500; k++)
+        {
+            testcases.push_back(rdgen() % (x_typeMaskFor<tTop> + 1));
+        }
+        testcases.push_back(x_typeMaskFor<tBottom>);
+        testcases.push_back(x_typeMaskFor<tTop>);
+
+        for (TypeMaskTy mask : testcases)
+        {
+            UseKind res = GetEdgeUseKindFromCheckAndPrecondition(static_cast<TypeMaskOrd>(idx), mask);
+            TypeCheckFunctionSelector::QueryResult goldRes = gold.Query(x_list_of_type_speculation_masks[idx], mask);
+
+            ReleaseAssert(goldRes.m_opKind != TypeCheckFunctionSelector::QueryResult::NoSolutionFound);
+            if (mask == x_typeMaskFor<tBottom>)
+            {
+                ReleaseAssert(res == dfg::UseKind_Unreachable);
+            }
+            else if (goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::TriviallyTrue)
+            {
+                if (x_list_of_type_speculation_masks[idx] == x_typeMaskFor<tTop>)
+                {
+                    ReleaseAssert(res == dfg::UseKind_Untyped);
+                }
+                else
+                {
+                    ReleaseAssert(res == dfg::UseKind_FirstProvenUseKind + idx - 1);
+                }
+            }
+            else if (goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::TriviallyFalse)
+            {
+                ReleaseAssert(res == dfg::UseKind_AlwaysOsrExit);
+            }
+            else
+            {
+                ReleaseAssert(goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::CallFunction ||
+                              goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::CallFunctionAndFlipResult);
+                ReleaseAssert(res >= dfg::UseKind_FirstUnprovenUseKind);
+                size_t ord = res - dfg::UseKind_FirstUnprovenUseKind;
+                size_t fnOrd = ord / 2;
+                ReleaseAssert(fnOrd < x_dfg_typecheck_impl_info_list.size());
+                ReleaseAssert(x_dfg_typecheck_impl_info_list[fnOrd].m_checkMask == goldRes.m_info->m_checkedMask);
+                ReleaseAssert(x_dfg_typecheck_impl_info_list[fnOrd].m_precondMask == goldRes.m_info->m_precondMask);
+                ReleaseAssert(x_dfg_typecheck_impl_info_list[fnOrd].m_cost == goldRes.m_info->m_estimatedCost);
+                bool flipRes = (ord % 2 == 1);
+                ReleaseAssertIff(flipRes, goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::CallFunctionAndFlipResult);
+            }
         }
     }
 }

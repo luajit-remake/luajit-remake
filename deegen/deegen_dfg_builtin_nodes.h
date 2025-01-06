@@ -749,4 +749,59 @@ struct DfgBuiltinNodeImplReturn_Ret0 final : DfgBuiltinNodeCodegenProcessorBase
     llvm::LLVMContext& m_llvmCtx;
 };
 
+// Generate a type check implementation
+//
+struct DfgBuiltinNodeImplTypeCheck final : DfgBuiltinNodeCodegenProcessorBase
+{
+    // TypeCheck nodes identify themselves by NodeKind_FirstAvailableGuestLanguageNodeKind
+    //
+    virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_FirstAvailableGuestLanguageNodeKind; }
+
+    virtual std::string NodeName() override
+    {
+        return "TypeCheck_" + std::to_string(m_checkMask.m_mask) + "_precond_" + std::to_string(m_precondMask.m_mask) + (m_shouldFlipResult ? "_flip" : "");
+    }
+
+    virtual size_t NumOperands() override { return 1; }
+
+    virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
+
+    DfgBuiltinNodeImplTypeCheck(TypeMask checkMask,
+                                TypeMask precondMask,
+                                bool shouldFlipResult,
+                                bool allowGPR,
+                                bool allowFPR,
+                                llvm::Module* module,
+                                std::string implFuncName)
+        : DfgBuiltinNodeCodegenProcessorBase()
+        , m_checkMask(checkMask)
+        , m_precondMask(precondMask)
+        , m_shouldFlipResult(shouldFlipResult)
+        , m_srcModule(module)
+        , m_implFuncName(implFuncName)
+    {
+        ReleaseAssert(m_precondMask.SupersetOf(m_checkMask));
+
+        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
+        info->m_hasOutput = false;
+
+        {
+            DfgNodeRegAllocRootInfo::OpInfo opInfo;
+            opInfo.m_opOrd = 0;
+            opInfo.m_allowFPR = allowFPR;
+            opInfo.m_allowGPR = allowGPR;
+            opInfo.m_preferGPR = allowGPR;
+            info->m_operandInfo.push_back(opInfo);
+        }
+
+        ProcessWithRegAllocEnabled(std::move(info));
+    }
+
+    TypeMask m_checkMask;
+    TypeMask m_precondMask;
+    bool m_shouldFlipResult;
+    llvm::Module* m_srcModule;
+    std::string m_implFuncName;
+};
+
 }   // namespace dast

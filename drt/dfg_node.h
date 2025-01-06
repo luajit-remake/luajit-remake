@@ -7,6 +7,7 @@
 #include "dfg_virtual_register.h"
 #include "dfg_code_origin.h"
 #include "dfg_builtin_nodes.h"
+#include "dfg_edge_use_kind.h"
 
 namespace DeegenBytecodeBuilder {
 
@@ -24,23 +25,6 @@ extern const BCKind x_bcKindEndOfEnum;          // for assertion purpose only
 
 enum class DfgVariantId : uint16_t;
 extern const DfgVariantId x_dfgVariantIdEndOfEnum;
-
-enum UseKind : uint16_t
-{
-    // Must be first member
-    // This is a boxed value, but no type assumption on the type of the value
-    //
-    UseKind_Untyped,
-    // This is an unboxed pointer pointing to a closed Upvalue object
-    //
-    UseKind_KnownCapturedVar,
-    // This is a value that is statically known to be an unboxed 64-bit integer
-    //
-    UseKind_KnownUnboxedInt64,
-    // Must be last member
-    //
-    UseKind_FirstAvailableGuestLanguageUseKind
-};
 
 struct Graph;
 

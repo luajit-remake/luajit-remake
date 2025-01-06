@@ -7,8 +7,12 @@
 #include "drt/dfg_codegen_protocol.h"
 #include "drt/jit_memory_allocator.h"
 #include "drt/dfg_builtin_nodes.h"
+#include "tvalue_typecheck_optimization.h"
+#include "deegen_postprocess_module_linker.h"
 
 using namespace dast;
+
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculationForUseKind(TypeMaskTy mask);
 
 struct DfgBuiltinNodeProcessorState
 {
@@ -52,13 +56,13 @@ struct DfgBuiltinNodeProcessorState
     {
         using namespace llvm;
         {
-            std::string auditFileName = "_builtin_" + nodeImplName + std::to_string(info.m_variantOrd) + ".s";
+            std::string auditFileName = "_builtin_" + nodeImplName + "_" + std::to_string(info.m_variantOrd) + ".s";
             std::string content = info.m_jitCodeAuditLog;
             content += CompileLLVMModuleToAssemblyFile(info.m_cgMod.get(), Reloc::Static, CodeModel::Small);
             m_auditFiles.push_back(std::make_pair(auditFileName, content));
         }
         {
-            std::string auditFileName = "_builtin_" + nodeImplName + std::to_string(info.m_variantOrd) + ".ll";
+            std::string auditFileName = "_builtin_" + nodeImplName + "_" + std::to_string(info.m_variantOrd) + ".ll";
             m_extraAuditFiles.push_back(std::make_pair(auditFileName, DumpLLVMModuleAsString(info.m_implMod.get())));
         }
 
@@ -140,16 +144,21 @@ private:
     void SetStandardNodeMainEntry(DfgBuiltinNodeCodegenProcessorBase& impl)
     {
         ReleaseAssert(!m_isCustomCgFnProtocol);
-        ReleaseAssert(!dfg::DfgBuiltinNodeUseCustomCodegenImpl(impl.AssociatedNodeKind()));
-        size_t nodeKind = static_cast<size_t>(impl.AssociatedNodeKind());
-        ReleaseAssert(nodeKind < m_standardNodeMainEntryTable.size());
-        ReleaseAssert(m_standardNodeMainEntryTable[nodeKind] == "nullptr");
-        m_standardNodeMainEntryTable[nodeKind] = "&x_deegen_dfg_variant__dfg_builtin_" + impl.NodeName();
+        ReleaseAssert(impl.AssociatedNodeKind() <= dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
+        if (impl.AssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind)
+        {
+            ReleaseAssert(!dfg::DfgBuiltinNodeUseCustomCodegenImpl(impl.AssociatedNodeKind()));
+            size_t nodeKind = static_cast<size_t>(impl.AssociatedNodeKind());
+            ReleaseAssert(nodeKind < m_standardNodeMainEntryTable.size());
+            ReleaseAssert(m_standardNodeMainEntryTable[nodeKind] == "nullptr");
+            m_standardNodeMainEntryTable[nodeKind] = "&x_deegen_dfg_variant__dfg_builtin_" + impl.NodeName();
+        }
     }
 
     void AddCustomNodeMainEntry(DfgBuiltinNodeCodegenProcessorBase& impl)
     {
         ReleaseAssert(m_isCustomCgFnProtocol);
+        ReleaseAssert(impl.AssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
         ReleaseAssert(dfg::DfgBuiltinNodeUseCustomCodegenImpl(impl.AssociatedNodeKind()));
         m_customNodeMainEntryLambda += "    ReleaseAssert(arr[static_cast<size_t>(DfgBuiltinNodeCustomCgFn::" + impl.NodeName() + ")] == nullptr);\n";
         m_customNodeMainEntryLambda += "    arr[static_cast<size_t>(DfgBuiltinNodeCustomCgFn::" + impl.NodeName() + ")] = &x_deegen_dfg_variant__dfg_builtin_" + impl.NodeName() + ";\n";
@@ -278,6 +287,18 @@ void FPS_ProcessDfgBuiltinNodes()
     std::unique_ptr<LLVMContext> llvmCtxHolder = std::make_unique<llvm::LLVMContext>();
     LLVMContext& ctx = *llvmCtxHolder.get();
 
+    ReleaseAssert(cl_irInputFilename != "");
+
+    SMDiagnostic llvmErr;
+    std::unique_ptr<Module> typeCheckInfoMod = parseIRFile(cl_irInputFilename, llvmErr, ctx);
+    if (typeCheckInfoMod == nullptr)
+    {
+        fprintf(stderr, "[INTERNAL ERROR] Bitcode for %s cannot be read or parsed.\n", cl_irInputFilename.c_str());
+        abort();
+    }
+
+    DesugarAndSimplifyLLVMModule(typeCheckInfoMod.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
+
     TransactionalOutputFile hdrOutFile(cl_headerOutputFilename);
     FPS_EmitHeaderFileCommonHeader(hdrOutFile.fp());
 
@@ -288,6 +309,7 @@ void FPS_ProcessDfgBuiltinNodes()
     FILE* cppFp = cppOutFile.fp();
 
     fprintf(hdrFp, "#include \"drt/dfg_variant_traits_internal.h\"\n");
+    fprintf(hdrFp, "#include \"drt/dfg_edge_use_kind.h\"\n");
 
     fprintf(cppFp, "#define DEEGEN_POST_FUTAMURA_PROJECTION\n\n");
     fprintf(cppFp, "#include \"drt/dfg_variant_traits.h\"\n");
@@ -328,6 +350,34 @@ void FPS_ProcessDfgBuiltinNodes()
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_RetNoVariadicRes>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_Ret1>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_Ret0>(ctx));
+
+    TypeCheckFunctionSelector tcInfo(typeCheckInfoMod.get());
+    const std::vector<TypecheckStrengthReductionCandidate>& tcInfoList = tcInfo.GetStrengthReductionList();
+
+    std::vector<std::string> tcVarNameList;
+    for (const TypecheckStrengthReductionCandidate& rule : tcInfoList)
+    {
+        // Order is important: the order must agree exactly with the output of the typecheck selector automata, so noFlipResult must come first
+        //
+        for (bool shouldFlipResult : { false, true })
+        {
+            // Passing argument in FPR is only beneficial for checking tDoubleNotNaN, other cases always use GPR
+            //
+            bool shouldUseFpr = (rule.m_checkedMask == x_typeMaskFor<tDoubleNotNaN>);
+            std::unique_ptr<DfgBuiltinNodeImplTypeCheck> tcImpl(
+                new DfgBuiltinNodeImplTypeCheck(rule.m_checkedMask,
+                                                rule.m_precondMask,
+                                                shouldFlipResult,
+                                                !shouldUseFpr /*allowGPR*/,
+                                                shouldUseFpr /*allowFPR*/,
+                                                typeCheckInfoMod.get(),
+                                                rule.m_func->getName().str()));
+
+            tcVarNameList.push_back("&x_deegen_dfg_variant__dfg_builtin_" + tcImpl->NodeName());
+            ProcessDfgBuiltinNode(standardState, std::move(tcImpl));
+        }
+    }
+    ReleaseAssert(tcVarNameList.size() == tcInfoList.size() * 2);
 
     // Make sure we provided implementations for all standard nodes
     //
@@ -392,14 +442,133 @@ void FPS_ProcessDfgBuiltinNodes()
     customState.PrintJitCodeSizeArray(hdrFp);
     fprintf(hdrFp, "};\n");
 
-    fprintf(hdrFp, "} // namespace dfg\n");
-    fprintf(cppFp, "} // namespace dfg\n");
+    fprintf(hdrFp, "inline constexpr std::array<const DfgVariantTraits*, %d> x_dfg_typecheck_impl_codegen_handler = {\n", static_cast<int>(tcVarNameList.size()));
+    for (size_t idx = 0; idx < tcVarNameList.size(); idx++)
+    {
+        ReleaseAssert(tcVarNameList[idx] != "");
+        fprintf(hdrFp, "    %s", tcVarNameList[idx].c_str());
+        if (idx + 1 < tcVarNameList.size()) { fprintf(hdrFp, ","); }
+        fprintf(hdrFp, "\n");
+    }
+    fprintf(hdrFp, "};\n\n");
+
+    fprintf(hdrFp, "inline constexpr std::array<TypeCheckerMethodCostInfo, %d> x_dfg_typecheck_impl_info_list = {\n", static_cast<int>(tcInfoList.size()));
+    for (size_t idx = 0; idx < tcInfoList.size(); idx++)
+    {
+        fprintf(hdrFp, "    TypeCheckerMethodCostInfo {\n        .m_precondMask = %llu,    // %s\n        .m_checkMask = %llu,    // %s\n        .m_cost = %llu\n    }",
+                static_cast<unsigned long long>(tcInfoList[idx].m_precondMask),
+                DumpHumanReadableTypeSpeculation(tcInfoList[idx].m_precondMask).c_str(),
+                static_cast<unsigned long long>(tcInfoList[idx].m_checkedMask),
+                DumpHumanReadableTypeSpeculation(tcInfoList[idx].m_checkedMask).c_str(),
+                static_cast<unsigned long long>(tcInfoList[idx].m_estimatedCost));
+        if (idx + 1 < tcInfoList.size()) { fprintf(hdrFp, ","); }
+        fprintf(hdrFp, "\n");
+    }
+    fprintf(hdrFp, "};\n\n");
+
+    // Generate typecheck function selector automata for each mask to check
+    //
+    std::vector<std::pair<std::string, TypeMask>> tcAutomataNameList;
+    for (TypeMask mask : x_list_of_type_speculation_masks)
+    {
+        DfgSelectTypeCheckFnAutomataGenerator agen(tcInfo);
+        size_t automataDepth = static_cast<size_t>(-1);
+        std::vector<uint8_t> automata = agen.BuildAutomata(mask /*maskToCheck*/, &automataDepth /*out*/);
+        ReleaseAssert(automataDepth != static_cast<size_t>(-1));
+        fprintf(hdrFp, "// Conservative automata max depth: %llu\n", static_cast<unsigned long long>(automataDepth));
+        std::string automataName = "x_dfg_typecheck_select_impl_automata_for_" + std::to_string(mask.m_mask);
+        PrintCppCodeToDefineUInt8Array(hdrFp, cppFp, automata, automataName);
+        tcAutomataNameList.push_back(std::make_pair(automataName, mask));
+    }
+    ReleaseAssert(tcAutomataNameList.size() == x_list_of_type_speculation_masks.size());
+
+    fprintf(hdrFp, "inline constexpr std::array<const uint8_t*, %d> x_dfg_typecheck_select_impl_automata_list = {\n", static_cast<int>(tcAutomataNameList.size()));
+    for (size_t idx = 0; idx < tcAutomataNameList.size(); idx++)
+    {
+        fprintf(hdrFp, "    %s", tcAutomataNameList[idx].first.c_str());
+        if (idx + 1 < tcAutomataNameList.size()) { fprintf(hdrFp, ","); }
+        fprintf(hdrFp, "    // %s\n", DumpHumanReadableTypeSpeculation(tcAutomataNameList[idx].second.m_mask).c_str());
+    }
+    fprintf(hdrFp, "};\n\n");
+
+    // Print the name of each UseKind
+    //
+    {
+        size_t numProvenUseKinds = x_list_of_type_speculation_masks.size() - 2;
+        size_t numUnprovenUseKinds = tcInfoList.size() * 2;
+        fprintf(hdrFp, "static_assert(UseKind_FirstUnprovenUseKind - UseKind_FirstProvenUseKind == %d);\n", static_cast<int>(numProvenUseKinds));
+        fprintf(hdrFp, "inline constexpr std::array<const char*, %d> x_dfg_guest_language_usekind_debug_names = {\n", static_cast<int>(numProvenUseKinds + numUnprovenUseKinds));
+
+        std::vector<std::string> nameList;
+        for (size_t idx = 1; idx + 1 < x_list_of_type_speculation_mask_and_name.size(); idx++)
+        {
+            std::string name = std::string(x_list_of_type_speculation_mask_and_name[idx].second);
+            ReleaseAssert(name.starts_with("t") && name.length() > 1);
+            name = name.substr(1);
+            name = "Proven" + name + "Use";
+            nameList.push_back(name);
+        }
+        ReleaseAssert(nameList.size() == numProvenUseKinds);
+
+        for (size_t idx = 0; idx < tcInfoList.size(); idx++)
+        {
+            TypeMaskTy precondMask = tcInfoList[idx].m_precondMask;
+            TypeMaskTy checkedMask = tcInfoList[idx].m_checkedMask;
+            if (precondMask == x_typeMaskFor<tTop> && (checkedMask == x_typeMaskFor<tTop> || checkedMask == x_typeMaskFor<tBottom>))
+            {
+                // The type checkers will contain the trivial checks for tTop and tBottom for completeness, but we will never select them at runtime
+                //
+                if (checkedMask == x_typeMaskFor<tTop>)
+                {
+                    nameList.push_back("InvalidUseKind (TopUseKnowingTop)");
+                    nameList.push_back("InvalidUseKind (NotTopUseKnowingTop)");
+                }
+                else
+                {
+                    nameList.push_back("InvalidUseKind (BottomUseKnowingTop)");
+                    nameList.push_back("InvalidUseKind (NotBottomUseKnowingTop)");
+                }
+            }
+            else
+            {
+                std::string nameForPrecond = DumpHumanReadableTypeSpeculationForUseKind(precondMask);
+                std::string nameForCheck = DumpHumanReadableTypeSpeculationForUseKind(checkedMask);
+                std::string name;
+                if (precondMask == x_typeMaskFor<tTop>)
+                {
+                    name = nameForCheck + "Use";
+                }
+                else
+                {
+                    name = nameForCheck + "UseKnowing" + nameForPrecond;
+                }
+                nameList.push_back(name);
+                nameList.push_back("Not" + name);
+            }
+        }
+        ReleaseAssert(nameList.size() == numProvenUseKinds + numUnprovenUseKinds);
+
+        for (size_t idx = 0; idx < nameList.size(); idx++)
+        {
+            ReleaseAssert(nameList[idx].find("\"") == std::string::npos);
+            ReleaseAssert(nameList[idx].find("\\") == std::string::npos);
+            fprintf(hdrFp, "    \"%s\"", nameList[idx].c_str());
+            if (idx + 1 < nameList.size()) { fprintf(hdrFp, ","); }
+            fprintf(hdrFp, "\n");
+        }
+        fprintf(hdrFp, "};\n\n");
+    }
 
     {
+        DeegenPostProcessModuleLinker modLinker(std::move(typeCheckInfoMod));
         ReleaseAssert(standardState.m_allCgModules.get() != nullptr && customState.m_allCgModules.get() != nullptr);
-        Linker linker(*standardState.m_allCgModules.get());
-        ReleaseAssert(linker.linkInModule(std::move(customState.m_allCgModules)) == false);
+        modLinker.AddModule(std::move(standardState.m_allCgModules), true /*shouldSetDsoLocalForAllFunc*/);
+        modLinker.AddModule(std::move(customState.m_allCgModules), true /*shouldSetDsoLocalForAllFunc*/);
+        typeCheckInfoMod = modLinker.DoLinking();
     }
+
+    fprintf(hdrFp, "} // namespace dfg\n");
+    fprintf(cppFp, "} // namespace dfg\n");
 
     standardState.m_auditFiles.insert(standardState.m_auditFiles.end(),
                                       customState.m_auditFiles.begin(),
@@ -414,7 +583,7 @@ void FPS_ProcessDfgBuiltinNodes()
                                                customState.m_allCCallWrapperReqs.end());
 
     TransactionalOutputFile asmOutFile(cl_assemblyOutputFilename);
-    asmOutFile.write(CompileLLVMModuleToAssemblyFile(standardState.m_allCgModules.get(), Reloc::Static, CodeModel::Small));
+    asmOutFile.write(CompileLLVMModuleToAssemblyFile(typeCheckInfoMod.get(), Reloc::Static, CodeModel::Small));
 
     TransactionalOutputFile jsonOutFile(cl_jsonOutputFilename);
     {

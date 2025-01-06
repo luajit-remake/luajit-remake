@@ -13,21 +13,24 @@ struct TypemaskOverapproxAutomataGenerator
         m_items.push_back(std::make_pair(mask, value));
     }
 
-    std::vector<uint8_t> WARN_UNUSED GenerateAutomata()
+    std::vector<uint8_t> WARN_UNUSED GenerateAutomata(size_t* automataMaxDepth = nullptr /*out*/)
     {
-        return GenerateImpl(false /*forLeafOpted*/);
+        return GenerateImpl(false /*forLeafOpted*/, automataMaxDepth /*out*/);
     }
 
-    std::vector<uint8_t> WARN_UNUSED GenerateAutomataLeafOpted()
+    std::vector<uint8_t> WARN_UNUSED GenerateAutomataLeafOpted(size_t* automataMaxDepth = nullptr /*out*/)
     {
-        return GenerateImpl(true /*forLeafOpted*/);
+        return GenerateImpl(true /*forLeafOpted*/, automataMaxDepth /*out*/);
     }
 
-private:
     using ItemTy = std::pair<TypeMaskTy, uint16_t>;
 
+    // Return the bitwise-and-closure of the given items.
+    //
     std::vector<ItemTy> WARN_UNUSED MakeClosure();
-    std::vector<uint8_t> WARN_UNUSED GenerateImpl(bool forLeafOpted);
+
+private:
+    std::vector<uint8_t> WARN_UNUSED GenerateImpl(bool forLeafOpted, size_t* automataMaxDepth /*out*/);
 
     std::vector<ItemTy> m_items;
 };

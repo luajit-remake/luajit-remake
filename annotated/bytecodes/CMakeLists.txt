@@ -35,6 +35,11 @@ SET(DEEGEN_BYTECODE_DEFINITION_SOURCES
 
 set(fps_exec "${PROJECT_BINARY_DIR}/deegen/fps")
 
+add_library(guest_lang_typecheck_impl_info OBJECT
+  typecheck_impl_info.cpp
+)
+set_target_properties(guest_lang_typecheck_impl_info PROPERTIES COMPILE_FLAGS " ${EXTRA_CXX_FLAGS_FOR_LLVM_IR} -DDEEGEN_ANNOTATED_SOURCE_FOR_BYTECODE_DEFINITION ")
+
 # generate the interpreter 
 #
 set(generated_json_list "")
@@ -189,8 +194,8 @@ add_custom_command(
   OUTPUT ${dfg_jit_builtin_node_codegen_info_hdr}
   OUTPUT ${post_process_json}
   OUTPUT ${dfg_jit_builtin_node_code_generator_asm}
-  COMMAND ${fps_exec} --process-dfg-jit-builtin-nodes --hdr-output=${dfg_jit_builtin_node_codegen_info_hdr} --cpp-output=${post_process_cpp} --json-output=${post_process_json} --asm-output=${dfg_jit_builtin_node_code_generator_asm} --audit-dir=${GENERATED_FILES_DIR}/../audit 
-  DEPENDS fps 
+  COMMAND ${fps_exec} --process-dfg-jit-builtin-nodes --ir-input=$<TARGET_OBJECTS:guest_lang_typecheck_impl_info> --hdr-output=${dfg_jit_builtin_node_codegen_info_hdr} --cpp-output=${post_process_cpp} --json-output=${post_process_json} --asm-output=${dfg_jit_builtin_node_code_generator_asm} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+  DEPENDS fps $<TARGET_OBJECTS:guest_lang_typecheck_impl_info>
 )
 
 # Process each bytecode for DFG JIT

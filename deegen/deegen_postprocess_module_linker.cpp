@@ -202,6 +202,15 @@ std::unique_ptr<llvm::Module> WARN_UNUSED DeegenPostProcessModuleLinker::DoLinki
 
     ValidateLLVMModule(m_originModule.get());
 
+    // Set DSOLocal for all function marked to need to do so
+    //
+    for (const std::string& fnName : m_fnNamesNeedToBeMadeDsoLocal)
+    {
+        Function* fn = m_originModule->getFunction(fnName);
+        ReleaseAssert(fn != nullptr);
+        fn->setDSOLocal(true);
+    }
+
     return std::move(m_originModule);
 }
 

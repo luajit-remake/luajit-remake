@@ -47,9 +47,21 @@ public:
 
     // Add a post-processed module to be linked back into the original module
     //
-    void AddModule(std::unique_ptr<llvm::Module> module)
+    void AddModule(std::unique_ptr<llvm::Module> module, bool shouldSetDsoLocalForAllFunctions)
     {
+        using namespace llvm;
         ReleaseAssert(module.get() != nullptr);
+        if (shouldSetDsoLocalForAllFunctions)
+        {
+            for (Function& fn : *module.get())
+            {
+                m_fnNamesNeedToBeMadeDsoLocal.insert(fn.getName().str());
+                if (!fn.empty())
+                {
+                    ReleaseAssert(fn.hasExternalLinkage());
+                }
+            }
+        }
         m_moduleList.push_back(std::move(module));
     }
 
@@ -79,6 +91,20 @@ private:
     std::unique_ptr<llvm::Module> m_originModule;
     std::vector<std::unique_ptr<llvm::Module>> m_moduleList;
     std::unordered_set<std::string> m_newlyIntroducedGvWhitelist;
+    // We need to make sure that all the external symbols used by the JIT logic are local to the linkage unit
+    // (e.g., if the symbol is from a dynamic library, we must use its PLT address which resides in the first 2GB address range,
+    // not the real address in the dynamic library) to satisfy our small CodeModel assumption.
+    //
+    // However, it turns out that LLVM optimizer can sometimes introduce new symbols that does not have dso_local set
+    // (for example, it may rewrite 'fprintf' of a literal string to 'fwrite', and the 'fwrite' declaration is not dso_local).
+    //
+    // And it seems like if two LLVM modules are linked together using LLVM linker, a declaration would become non-dso_local
+    // if *either* module's declaration is not dso_local.
+    //
+    // So we record all the symbols needed to be made dso_local here, and after all LLVM linker work finishes, we scan the
+    // final module and change all those symbols dso_local.
+    //
+    std::unordered_set<std::string> m_fnNamesNeedToBeMadeDsoLocal;
 };
 
 }   // namespace dast
