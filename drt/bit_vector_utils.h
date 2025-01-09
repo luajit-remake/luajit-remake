@@ -196,6 +196,12 @@ struct BitVectorView : BitVectorImpl<bvdetail::NoOpDeleter>
         InitializeForBitVectorView(bv.m_data.get(), bv.m_length);
     }
 
+    BitVectorView(uint64_t* data, size_t bitVectorLength)
+        : BitVectorImpl<bvdetail::NoOpDeleter>(bvdetail::NoOpDeleter())
+    {
+        InitializeForBitVectorView(data, bitVectorLength);
+    }
+
     // Make it copyable and movable
     // Note that the copy and move constructors doesn't respect constness (e.g., you get a writable view by copying a const view),
     // but we are not being very strict about constness throughout the codebase anyway..

@@ -229,6 +229,7 @@ set(UNIT_TEST_SRC
   test_dfg_reg_alloc_state.cpp
   test_dfg_reg_move_inst_generator.cpp
   test_typemask_automata_generator.cpp
+  test_strongly_connected_components.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES
