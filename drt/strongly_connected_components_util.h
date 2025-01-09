@@ -112,9 +112,11 @@ private:
     {
         TestAssert(numNodes < (1U << 30));
         TestAssert(m_rindexComposite != nullptr);
-        m_vfBase = reinterpret_cast<EdgeIteratorImpl*>(m_alloc.AllocateWithAlignment(alignof(U32InEdgeIter), sizeof(U32InEdgeIter) * (numNodes + 1)));
+        static_assert(sizeof(EdgeIteratorImpl) >= 4, "please pad EdgeIteratorImpl to at least 4 bytes!");
+        m_vfBase = reinterpret_cast<EdgeIteratorImpl*>(m_alloc.AllocateWithAlignment(std::max(alignof(EdgeIteratorImpl), alignof(uint32_t)),
+                                                                                     sizeof(EdgeIteratorImpl) * (numNodes + 1)));
         m_vfTop = m_vfBase - 1;
-        m_vbTop = reinterpret_cast<U32InEdgeIter*>(m_vfBase) + numNodes;
+        m_vbTop = reinterpret_cast<uint32_t*>(m_vfBase + numNodes);
         m_vbBase = m_vbTop;
     }
 
@@ -180,7 +182,7 @@ finished_visiting_edges:
         if (IsRoot(nodeOrd))
         {
             uint32_t rindex_nodeOrd_0 = RIndexComposite(nodeOrd);
-            m_vbBase->m_value = nodeOrd;
+            *m_vbBase = nodeOrd;
             TestAssert(m_componentIndex % 2 == 1);
             TestAssert(m_componentIndex > 2 * m_numNodes);
             while (true)
@@ -236,7 +238,7 @@ finished_visiting_edges:
     void ALWAYS_INLINE PushVfTop(uint32_t nodeOrd)
     {
         m_vfTop++;
-        TestAssert(m_vfTop < reinterpret_cast<EdgeIteratorImpl*>(m_vbTop));
+        TestAssert(m_vfTop + 1 <= reinterpret_cast<EdgeIteratorImpl*>(m_vbTop));
         ConstructInPlace(m_vfTop, *m_graph, nodeOrd);
     }
 
@@ -262,8 +264,8 @@ finished_visiting_edges:
     void ALWAYS_INLINE PushVb(uint32_t value)
     {
         m_vbTop--;
-        TestAssert(m_vfTop < reinterpret_cast<EdgeIteratorImpl*>(m_vbTop));
-        m_vbTop->m_value = value;
+        TestAssert(m_vfTop + 1 <= reinterpret_cast<EdgeIteratorImpl*>(m_vbTop));
+        *m_vbTop = value;
     }
 
     // Note that we allow peeking top even if it is empty,
@@ -272,7 +274,7 @@ finished_visiting_edges:
     uint32_t WARN_UNUSED ALWAYS_INLINE VbTop()
     {
         TestAssert(m_vbTop <= m_vbBase);
-        return m_vbTop->m_value;
+        return *m_vbTop;
     }
 
     void ALWAYS_INLINE PopVbTop()
@@ -308,17 +310,10 @@ finished_visiting_edges:
     EdgeIteratorImpl* m_vfBase;
     RestrictPtr<EdgeIteratorImpl> m_vfTop;
 
-    union U32InEdgeIter
-    {
-        alignas(alignof(EdgeIteratorImpl)) uint8_t m_buf[sizeof(EdgeIteratorImpl)];
-        uint32_t m_value;
-    };
-    static_assert(sizeof(U32InEdgeIter) == sizeof(EdgeIteratorImpl), "please pad EdgeIteratorImpl to at least 4 bytes!");
-
     // [m_vbTop, m_vbBase) are valid, but [m_vbBase] will be valid memory and can be used to hold a sentry value
     //
-    U32InEdgeIter* m_vbTop;
-    U32InEdgeIter* m_vbBase;
+    uint32_t* m_vbTop;
+    uint32_t* m_vbBase;
 
     // Bit 0 = 0 means isRoot. This is critical since we directly compare the composite value in many places.
     //
