@@ -448,7 +448,15 @@ BytecodeLiveness* WARN_UNUSED BytecodeLiveness::ComputeBytecodeLiveness(CodeBloc
 
     // Sort the basic blocks in reverse order of the starting bytecodeIndex
     // This doesn't affect correctness, but may affect how many iterations we need to reach fixpoint.
-    // Why do we sort them by bytecodeIndex? Because that's the heuristic JSC uses..
+    //
+    // It turns out that sorting by reverse order (which is also the heuristic JSC uses) is a very good
+    // heuristic. With this heuristic, the # of calls to ComputeHeadBasedOnTailFast is only on average
+    // about 1.15x #BBs on our luatest testfiles, which is near-optimal.
+    // (And without sorting, the # of calls would increase a lot.)
+    //
+    // We can further slightly reduce the # of ComputeHeadBasedOnTailFast calls by computing SCC and
+    // work on each SCC in topological order, but it turns out that the benefit of doing so is very small
+    // (only <0.5% calls removed), so that the gain is unlikely to compensate the cost of computing SCC.
     //
     TempVector<BasicBlockUpvalueInfo*> bbInReverseOrder(alloc);
     for (BasicBlockUpvalueInfo* bb : cfUvInfo.m_basicBlocks)

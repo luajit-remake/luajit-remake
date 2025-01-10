@@ -375,6 +375,12 @@ struct Nsd_CapturedVarInfo
     // When an OSR-exit happens, we must flush the values of the still-opening CapturedVar back to the stack frame.
     //
     uint32_t m_localOrdForOsrExit;
+    // A CreateCapturedVar/SetCapturedVar and a GetCapturedVar has the same m_logicalCapturedVarOrd iff the
+    // CreateCapturedVar/SetCapturedVar can flow to the GetCapturedVar in the data flow graph
+    //
+    // (This is analogous to the relation between GetLocal/SetLocal and LogicalVariable)
+    //
+    uint32_t m_logicalCapturedVarOrd;
 };
 static_assert(sizeof(Nsd_CapturedVarInfo) <= 8);
 
