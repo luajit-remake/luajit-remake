@@ -77,8 +77,17 @@ TEST(JITMemoryAllocator, Sanity)
     ReleaseAssert(reportedUseSize <= totalMem * 3 / 2);
 
     size_t reportedOsSize = alloc.GetMemorySizeAllocatedFromOs();
+
+    size_t unusedMemory = 0;
+    for (size_t i = 0; i < x_jit_mem_alloc_total_steppings; i++)
+    {
+        if (alloc.m_freeList[i] != nullptr) {
+            unusedMemory += (x_jit_mem_alloc_stepping_cell_array[i] - alloc.m_freeList[i]->m_numAllocatedCells) * x_jit_mem_alloc_stepping_array[i];
+        }
+    }
+
     ReleaseAssert(reportedOsSize >= reportedUseSize);
-    ReleaseAssert(reportedOsSize <= reportedUseSize + x_jit_mem_alloc_total_steppings * JitMemoryPageHeader::x_pageSize);
+    ReleaseAssert(reportedOsSize == reportedUseSize + alloc.GetTotalMemorySpilled() + unusedMemory);
 
     for (AllocationDesc& desc : allDesc)
     {
