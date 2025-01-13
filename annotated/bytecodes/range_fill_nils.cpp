@@ -32,11 +32,7 @@ DEEGEN_DEFINE_BYTECODE(RangeFillNils)
     DfgVariant();
     DeclareReads();
     DeclareWrites(
-        Range(Op("base"), Op("numToPut")).TypeDeductionRule(
-            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/, uint16_t /*numToPut*/) -> TypeMask
-            {
-                return x_typeMaskFor<tNil>;
-            })
+        Range(Op("base"), Op("numToPut")).TypeDeductionRule(AlwaysOutput<tNil>)
     );
 }
 

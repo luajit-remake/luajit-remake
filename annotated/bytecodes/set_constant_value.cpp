@@ -19,7 +19,7 @@ DEEGEN_DEFINE_BYTECODE(SetConstInt16)
     Implementation(SetConstInt16Impl);
     Variant();
     DfgVariant();
-    TypeDeductionRule([](int16_t /*value*/) -> TypeMask { return x_typeMaskFor<tDouble>; });
+    TypeDeductionRule(AlwaysOutput<tDouble>);
     RegAllocHint(Op("output").RegHint(RegHint::FPR));
 }
 

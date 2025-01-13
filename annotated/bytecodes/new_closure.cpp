@@ -22,7 +22,7 @@ DEEGEN_DEFINE_BYTECODE(NewClosure)
     Implementation(NewClosureImpl);
     Variant();
     DfgVariant();
-    TypeDeductionRule([](TypeMask /*input*/) -> TypeMask { return x_typeMaskFor<tFunction>; });
+    TypeDeductionRule(AlwaysOutput<tFunction>);
     DeclareAsIntrinsic<Intrinsic::CreateClosure>({
         .proto = Op("unlinkedCb")
     });

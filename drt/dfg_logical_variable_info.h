@@ -42,4 +42,38 @@ struct LogicalVariableInfo
     uint32_t m_logicalVariableOrdinal;
 };
 
+struct CapturedVarLogicalVariableInfo
+{
+    static CapturedVarLogicalVariableInfo* WARN_UNUSED Create(uint32_t localOrdForOsrExit)
+    {
+        CapturedVarLogicalVariableInfo* r = DfgAlloc()->AllocateObject<CapturedVarLogicalVariableInfo>(localOrdForOsrExit);
+        return r;
+    }
+
+    CapturedVarLogicalVariableInfo(uint32_t localOrdForOsrExit)
+        : m_localOrdForOsrExit(localOrdForOsrExit)
+        , m_logicalVariableOrdinal(static_cast<uint32_t>(-1))
+    { }
+
+    void SetLogicalVariableOrdinal(uint32_t ord)
+    {
+        TestAssert(m_logicalVariableOrdinal == static_cast<uint32_t>(-1) && ord != static_cast<uint32_t>(-1));
+        m_logicalVariableOrdinal = ord;
+    }
+
+    uint32_t GetLogicalVariableOrdinal()
+    {
+        TestAssert(m_logicalVariableOrdinal != static_cast<uint32_t>(-1));
+        return m_logicalVariableOrdinal;
+    }
+
+    // The local ordinal that the value of this CapturedVar should be written back to on OSR exit
+    //
+    uint32_t m_localOrdForOsrExit;
+
+    // Each CapturedVarLogicalVariableInfo is assigned an unique ordinal
+    //
+    uint32_t m_logicalVariableOrdinal;
+};
+
 }   // namespace dfg

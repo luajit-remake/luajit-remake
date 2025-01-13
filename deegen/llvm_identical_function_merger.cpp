@@ -3,7 +3,7 @@
 
 namespace dast {
 
-void LLVMIdenticalFunctionMerger::DoMerge()
+void LLVMIdenticalFunctionMerger::DoMergeImpl(bool replaceWithAlias)
 {
     using namespace llvm;
     if (m_list.size() == 0)
@@ -118,10 +118,35 @@ void LLVMIdenticalFunctionMerger::DoMerge()
         for (size_t i = 1; i < grp.size(); i++)
         {
             Function* fnToMerge = grp[i];
-            fnToMerge->replaceAllUsesWith(fnToKeep);
-            fnToMerge->deleteBody();
-            fnToMerge->setLinkage(GlobalValue::ExternalLinkage);
-            fnNameExpectedToBeDeleted.push_back(fnToMerge->getName().str());
+            if (replaceWithAlias)
+            {
+                // Logic stolen from LLVM MergeFunctions.cpp writeAlias
+                //
+                PointerType* PtrType = fnToMerge->getType();
+                auto* GA = GlobalAlias::create(fnToMerge->getValueType(), PtrType->getAddressSpace(),
+                                               fnToMerge->getLinkage(), "", fnToKeep, fnToMerge->getParent());
+
+                const MaybeAlign FAlign = fnToKeep->getAlign();
+                const MaybeAlign GAlign = fnToMerge->getAlign();
+                if (FAlign || GAlign)
+                    fnToKeep->setAlignment(std::max(FAlign.valueOrOne(), GAlign.valueOrOne()));
+                else
+                    fnToKeep->setAlignment(std::nullopt);
+
+                GA->takeName(fnToMerge);
+                GA->setVisibility(fnToMerge->getVisibility());
+                GA->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
+
+                fnToMerge->replaceAllUsesWith(GA);
+                fnToMerge->eraseFromParent();
+            }
+            else
+            {
+                fnToMerge->replaceAllUsesWith(fnToKeep);
+                fnToMerge->deleteBody();
+                fnToMerge->setLinkage(GlobalValue::ExternalLinkage);
+                fnNameExpectedToBeDeleted.push_back(fnToMerge->getName().str());
+            }
         }
     }
 

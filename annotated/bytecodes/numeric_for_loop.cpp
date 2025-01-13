@@ -131,11 +131,7 @@ DEEGEN_DEFINE_BYTECODE(ForLoopInit)
     DfgVariant();
     DeclareReads(Range(Op("base"), 3));
     DeclareWrites(
-        Range(Op("base"), 4).TypeDeductionRule(
-            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
-            {
-                return x_typeMaskFor<tDouble>;
-            })
+        Range(Op("base"), 4).TypeDeductionRule(AlwaysOutput<tDouble>)
     );
 }
 
@@ -202,16 +198,8 @@ DEEGEN_DEFINE_BYTECODE(ForLoopStep)
     DfgVariant();
     DeclareReads(Range(Op("base"), 3));
     DeclareWrites(
-        Range(Op("base"), 1).TypeDeductionRule(
-            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
-            {
-                return x_typeMaskFor<tDouble>;
-            }),
-        Range(Op("base") + 3, 1).TypeDeductionRule(
-            [](size_t /*ord*/, RangedInputTypeMaskGetter* /*base*/) -> TypeMask
-            {
-                return x_typeMaskFor<tDouble>;
-            })
+        Range(Op("base"), 1).TypeDeductionRule(AlwaysOutput<tDouble>),
+        Range(Op("base") + 3, 1).TypeDeductionRule(AlwaysOutput<tDouble>)
     );
 }
 

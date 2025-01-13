@@ -36,6 +36,7 @@ DEEGEN_DEFINE_BYTECODE(MyOpcode1)
         Op("lhs").IsBytecodeSlot(),
         Op("rhs").IsBytecodeSlot()
     );
+    TypeDeductionRule(DoNotProfile);
 }
 
 DEEGEN_END_BYTECODE_DEFINITIONS

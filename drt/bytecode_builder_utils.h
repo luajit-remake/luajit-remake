@@ -6,6 +6,7 @@
 #include "deegen_metadata_accessor.h"
 #include "bytecode_rwc_info.h"
 #include "bytecode_intrinsic_info.h"
+#include "dfg_prediction_propagation_util.h"
 
 // We need two extra bytes to store the "stopper" bytecode opcode at the end for baseline JIT codegen,
 // but for legacy reason this value is 4 and I don't want to change it anymore
@@ -402,5 +403,8 @@ private:
     uint32_t m_bytecodeMetadataLength;
     std::vector<MetadataFieldPatchRecord> m_metadataFieldPatchRecords;
 };
+
+template<template<typename> class T>
+struct DfgPredictionPropagationImplFuncPtr;
 
 }   // namespace DeegenBytecodeBuilder

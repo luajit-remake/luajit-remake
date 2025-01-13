@@ -30,8 +30,6 @@ enum class DeegenSpecializationKind : uint8_t
     BytecodeConstantWithType
 };
 
-extern "C" TypeMaskTy DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(void*, size_t);
-
 namespace detail
 {
 
@@ -457,6 +455,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             , m_typeDeductionRuleFn(nullptr)
             , m_shouldValueProfileRange(false)
             , m_isExplicitlyNoProfile(false)
+            , m_isFixedOutputTypeMask(false)
+            , m_fixedOutputTypeMask(0)
         { }
 
         consteval Range(OperandExpr start, OperandExpr len)
@@ -465,6 +465,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             , m_typeDeductionRuleFn(nullptr)
             , m_shouldValueProfileRange(false)
             , m_isExplicitlyNoProfile(false)
+            , m_isFixedOutputTypeMask(false)
+            , m_fixedOutputTypeMask(0)
         { }
 
         consteval Range(OperandExpr start, OperandRef len)
@@ -542,6 +544,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         void* m_typeDeductionRuleFn;
         bool m_shouldValueProfileRange;
         bool m_isExplicitlyNoProfile;
+        bool m_isFixedOutputTypeMask;
+        TypeMaskTy m_fixedOutputTypeMask;
     };
 
     struct VariadicArguments
@@ -620,6 +624,11 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                     ReleaseAssert(rangeWithTDR.second == DoNotProfile);
                     m_ranges[m_numRanges].m_isExplicitlyNoProfile = true;
                 }
+            }
+            else if constexpr(std::is_same_v<T, AlwaysOutputMask>)
+            {
+                m_ranges[m_numRanges].m_isFixedOutputTypeMask = true;
+                m_ranges[m_numRanges].m_fixedOutputTypeMask = rangeWithTDR.second.m_mask;
             }
             else
             {
@@ -886,7 +895,8 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         //
         TypeMask WARN_UNUSED ALWAYS_INLINE Get(size_t ordInRange)
         {
-            return TypeMask(DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(this, ordInRange));
+            TypeMask* msk = reinterpret_cast<TypeMask**>(this)[ordInRange];
+            return *msk;
         }
     };
 
@@ -994,6 +1004,15 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         DoNotProfile
     };
 
+    struct AlwaysOutputMask
+    {
+        constexpr AlwaysOutputMask(TypeMaskTy mask) : m_mask(mask) { }
+        TypeMaskTy m_mask;
+    };
+
+    template<typename T>
+    static constexpr AlwaysOutputMask AlwaysOutput = AlwaysOutputMask(x_typeMaskFor<T>);
+
     // Specify output type deduction rule
     //
     template<typename T>
@@ -1011,6 +1030,11 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                 ReleaseAssert(func == DoNotProfile);
                 m_outputShouldExplicitlyNotProfiled = true;
             }
+        }
+        else if constexpr(std::is_same_v<T, AlwaysOutputMask>)
+        {
+            m_outputHasFixedTypeMask = true;
+            m_outputFixedTypeMask = func.m_mask;
         }
         else
         {
@@ -1296,9 +1320,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         , m_isInterpreterTierUpPoint(false)
         , m_disableRegAllocMustBeEnabledAssert(false)
         , m_implementationFn(nullptr)
-        , m_bcLevelDeclareReadsCalled(false)
         , m_outputShouldBeValueProfiled(false)
         , m_outputShouldExplicitlyNotProfiled(false)
+        , m_outputHasFixedTypeMask(false)
         , m_numOperands(0)
         , m_numVariants(0)
         , m_numDfgVariants(0)
@@ -1314,6 +1338,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         , m_numIntrinsicArgs(0)
         , m_intrinsicArgOperandOrd()
         , m_outputTypeDeductionRule(nullptr)
+        , m_outputFixedTypeMask(0)
     { }
 
     bool m_operandTypeListInitialized;
@@ -1325,9 +1350,9 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     bool m_isInterpreterTierUpPoint;
     bool m_disableRegAllocMustBeEnabledAssert;
     void* m_implementationFn;
-    bool m_bcLevelDeclareReadsCalled;
     bool m_outputShouldBeValueProfiled;
     bool m_outputShouldExplicitlyNotProfiled;
+    bool m_outputHasFixedTypeMask;
     size_t m_numOperands;
     size_t m_numVariants;
     size_t m_numDfgVariants;
@@ -1343,6 +1368,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     size_t m_numIntrinsicArgs;
     size_t m_intrinsicArgOperandOrd[x_maxIntrinsicArgCount];
     void* m_outputTypeDeductionRule;
+    TypeMaskTy m_outputFixedTypeMask;
 };
 
 using DFBDD = DeegenFrontendBytecodeDefinitionDescriptor;

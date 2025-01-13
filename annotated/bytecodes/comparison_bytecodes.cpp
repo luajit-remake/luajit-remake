@@ -330,7 +330,7 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ComparisonOperation, bool shouldBranch, Comparat
         RegAllocHint(
             Op("output").RegHint(RegHint::GPR)
         );
-        TypeDeductionRule([](TypeMask /*lhs*/, TypeMask /*rhs*/) -> TypeMask { return x_typeMaskFor<tBool>; });
+        TypeDeductionRule(AlwaysOutput<tBool>);
     }
 }
 

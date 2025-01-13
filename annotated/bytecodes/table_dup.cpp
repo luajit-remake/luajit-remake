@@ -27,7 +27,7 @@ DEEGEN_DEFINE_BYTECODE(TableDupGeneral)
         Op("src").IsConstant<tTable>()
     );
     DfgVariant();
-    TypeDeductionRule([](TypeMask /*src*/) -> TypeMask { return x_typeMaskFor<tTable>; });
+    TypeDeductionRule(AlwaysOutput<tTable>);
     RegAllocHint(
         Op("src").RegHint(RegHint::GPR),
         Op("output").RegHint(RegHint::GPR)
@@ -78,11 +78,7 @@ DEEGEN_DEFINE_BYTECODE(TableDup)
             Op("hasButterfly").HasValue(1)
         );
     }
-    TypeDeductionRule(
-        [](TypeMask /*src*/, uint8_t /*inlineCapacityStepping*/, uint8_t /*hasButterfly*/) -> TypeMask
-        {
-            return x_typeMaskFor<tTable>;
-        });
+    TypeDeductionRule(AlwaysOutput<tTable>);
     RegAllocHint(
         Op("src").RegHint(RegHint::GPR),
         Op("output").RegHint(RegHint::GPR)

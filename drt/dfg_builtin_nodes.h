@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
+#include "dfg_arena.h"
 #include "tvalue.h"
 
 namespace dfg {
@@ -296,8 +297,8 @@ namespace dfg {
     , (ShadowStoreUndefToRange    , Nsd_InterpSlotRange       , true            , true)             \
     , (Phantom                    , void                      , true            , true)             \
     , (CreateCapturedVar          , Nsd_CapturedVarInfo       , true            , false)            \
-    , (GetCapturedVar             , void                      , true            , false)            \
-    , (SetCapturedVar             , void                      , true            , false)            \
+    , (GetCapturedVar             , Nsd_CapturedVarInfo       , true            , false)            \
+    , (SetCapturedVar             , Nsd_CapturedVarInfo       , true            , false)            \
     , (GetKthVariadicRes          , uint64_t                  , true            , false)            \
     , (GetNumVariadicRes          , void                      , true            , false)            \
     , (CreateVariadicRes          , uint64_t                  , true            , true)             \
@@ -320,6 +321,8 @@ struct Nsd_InterpSlotRange
     uint32_t m_slotStart;
     uint32_t m_numSlots;
 };
+
+struct CapturedVarLogicalVariableInfo;
 
 // Some notes about Captured Variables:
 //
@@ -380,7 +383,7 @@ struct Nsd_CapturedVarInfo
     //
     // (This is analogous to the relation between GetLocal/SetLocal and LogicalVariable)
     //
-    uint32_t m_logicalCapturedVarOrd;
+    ArenaPtr<CapturedVarLogicalVariableInfo> m_logicalCV;
 };
 static_assert(sizeof(Nsd_CapturedVarInfo) <= 8);
 

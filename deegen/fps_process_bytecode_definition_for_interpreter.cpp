@@ -53,6 +53,7 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
         bytecodeModuleList.push_back(base64_encode(DumpLLVMModuleAsString(m.get())));
     }
     j["bytecode_module_list"] = std::move(bytecodeModuleList);
+    j["extra_dfg_func_stubs"] = std::move(result.m_dfgFunctionStubs);
 
     jsonOutFile.write(SerializeJsonWithIndent(j, 4 /*indent*/));
 
@@ -62,6 +63,21 @@ void FPS_ProcessBytecodeDefinitionForInterpreter()
         std::string& content = it.second;
         TransactionalOutputFile auditFile(FPS_GetAuditFilePath(fileName));
         auditFile.write(content);
+        auditFile.Commit();
+    }
+
+    {
+        ReleaseAssert(cl_curSrcFileName != "");
+        std::string srcName = cl_curSrcFileName;
+        size_t lastDot = srcName.find_last_of('.');
+        if (lastDot != std::string::npos)
+        {
+            srcName = srcName.substr(0, lastDot);
+        }
+        std::string fileName = "prediction_propagation_" + srcName + ".s";
+        std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("dfg_jit" /*dirSuffix*/, fileName);
+        TransactionalOutputFile auditFile(auditFilePath);
+        auditFile.write(result.m_dfgPredictionPropagationFnAuditFile);
         auditFile.Commit();
     }
 

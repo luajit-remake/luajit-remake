@@ -43,6 +43,10 @@ void Fps_PostProcessLinkImplementations()
     //
     std::vector<std::string> listOfFunctionsOkToMerge;
 
+    // Similar to listOfFunctionsOkToMerge, but these functions may have outside users, so they must be replaced by aliasing
+    //
+    std::vector<std::string> listOfFunctionsOkToMergeByAlias;
+
     // For assertion purpose only
     //
     std::vector<std::string> bytecodeOriginalImplFunctionNames;
@@ -92,6 +96,33 @@ void Fps_PostProcessLinkImplementations()
             json_t& val = listOfReturnContFnNamesFromInterpreterLowering[i];
             ReleaseAssert(val.is_string());
             listOfFunctionsOkToMerge.push_back(val.get<std::string>());
+        }
+
+        {
+            ReleaseAssert(interpreterJson.count("extra_dfg_func_stubs"));
+            json_t& list = interpreterJson["extra_dfg_func_stubs"];
+            ReleaseAssert(list.is_array());
+            for (size_t i = 0; i < list.size(); i++)
+            {
+                json_t& element = list[i];
+                ReleaseAssert(element.is_string());
+                std::unique_ptr<Module> m = getModuleFromBase64EncodedString(element.get<std::string>());
+
+                Function* onlyNonEmptyFn = nullptr;
+                for (Function& fn : *m.get())
+                {
+                    if (!fn.empty())
+                    {
+                        ReleaseAssert(fn.hasExternalLinkage());
+                        ReleaseAssert(onlyNonEmptyFn == nullptr);
+                        onlyNonEmptyFn = &fn;
+                    }
+                }
+                ReleaseAssert(onlyNonEmptyFn != nullptr);
+
+                listOfFunctionsOkToMergeByAlias.push_back(onlyNonEmptyFn->getName().str());
+                moduleToLinkWithAllDsoLocal.push_back(std::move(m));
+            }
         }
     }
 
@@ -207,8 +238,7 @@ void Fps_PostProcessLinkImplementations()
         }
     }
 
-    // Try to merge identical return continuations
-    //
+    auto initMerger = []() WARN_UNUSED -> LLVMIdenticalFunctionMerger
     {
         LLVMIdenticalFunctionMerger ifm;
         ifm.SetSectionPriority(InterpreterBytecodeImplCreator::x_cold_code_section_name, 100);
@@ -216,6 +246,13 @@ void Fps_PostProcessLinkImplementations()
         ifm.SetSectionPriority(DfgJitImplCreator::x_slowPathSectionName, 120);
         ifm.SetSectionPriority("", 200);
         ifm.SetSectionPriority(InterpreterBytecodeImplCreator::x_hot_code_section_name, 300);
+        return ifm;
+    };
+
+    // Try to merge identical return continuations
+    //
+    {
+        LLVMIdenticalFunctionMerger ifm = initMerger();
         for (const std::string& fnName : listOfFunctionsOkToMerge)
         {
             Function* fn = module->getFunction(fnName);
@@ -223,6 +260,17 @@ void Fps_PostProcessLinkImplementations()
             ifm.AddFunction(fn);
         }
         ifm.DoMerge();
+    }
+
+    {
+        LLVMIdenticalFunctionMerger ifm = initMerger();
+        for (const std::string& fnName : listOfFunctionsOkToMergeByAlias)
+        {
+            Function* fn = module->getFunction(fnName);
+            ReleaseAssert(fn != nullptr);
+            ifm.AddFunction(fn);
+        }
+        ifm.DoMergeByReplacingWithAlias();
     }
 
     // Assert that the bytecode definition symbols, and all the implementation functions are gone

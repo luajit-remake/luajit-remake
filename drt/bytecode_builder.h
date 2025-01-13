@@ -800,20 +800,13 @@ private:
     using DfgRangeOpRWInfoGetterFn = void(*)(uint8_t*, uint32_t*, uint32_t*, size_t&, size_t&, size_t&);
 
     template<typename T>
-    static constexpr const DfgRangeOpRWInfoGetterFn* GetDfgRangeOpRWInfoGetterFnArrayForBytecode()
+    static constexpr DfgRangeOpRWInfoGetterFn GetDfgRangeOpRWInfoGetterFnArrayForBytecode()
     {
-        if constexpr(T::x_bytecodeHasRangedOperand)
-        {
-            return T::x_dfgRangeOpRWInfoGetterFns.data();
-        }
-        else
-        {
-            return nullptr;
-        }
+        return T::x_dfgRangeOpRWInfoGetterFns;
     }
 
-    static constexpr std::array<const DfgRangeOpRWInfoGetterFn*, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgRangeOpRWInfoGetterArrays = []() {
-        std::array<const DfgRangeOpRWInfoGetterFn*, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+    static constexpr std::array<DfgRangeOpRWInfoGetterFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgRangeOpRWInfoGetterArrays = []() {
+        std::array<DfgRangeOpRWInfoGetterFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
 #define macro(e)   \
         res[static_cast<size_t>(BCKind::e)] = GetDfgRangeOpRWInfoGetterFnArrayForBytecode<DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>>();
 
@@ -822,23 +815,18 @@ private:
         return res;
     }();
 
+    using DfgPredictionPropagationSetupFn = void(*)(DfgPredictionPropagationSetupInfo&, uint8_t*);
+
     template<typename T>
-    static constexpr size_t GetDfgRangeOpRWInfoGetterFnArraySizeForBytecode()
+    static constexpr DfgPredictionPropagationSetupFn GetDfgPredictionPropagationSetupFuncForBytecode()
     {
-        if constexpr(T::x_bytecodeHasRangedOperand)
-        {
-            return T::x_dfgRangeOpRWInfoGetterFns.size();
-        }
-        else
-        {
-            return 0;
-        }
+        return T::x_dfgPredictionPropagationSetupFn;
     }
 
-    static constexpr std::array<size_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgRangeOpRWInfoGetterArraySizes = []() {
-        std::array<size_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+    static constexpr std::array<DfgPredictionPropagationSetupFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_dfgPredictionPropagationSetupFnArrays = []() {
+        std::array<DfgPredictionPropagationSetupFn, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
 #define macro(e)   \
-        res[static_cast<size_t>(BCKind::e)] = GetDfgRangeOpRWInfoGetterFnArraySizeForBytecode<DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>>();
+        res[static_cast<size_t>(BCKind::e)] = GetDfgPredictionPropagationSetupFuncForBytecode<DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>>();
 
         PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
@@ -873,23 +861,27 @@ public:
     {
         Assert(isDecodingMode);
         TestAssert(bcKind < BCKind::X_END_OF_ENUM);
-        const DfgRangeOpRWInfoGetterFn* arr = x_dfgRangeOpRWInfoGetterArrays[static_cast<size_t>(bcKind)];
-        if (arr == nullptr)
+        DfgRangeOpRWInfoGetterFn func = x_dfgRangeOpRWInfoGetterArrays[static_cast<size_t>(bcKind)];
+        if (func == nullptr)
         {
-            TestAssert(x_dfgRangeOpRWInfoGetterArraySizes[static_cast<size_t>(bcKind)] == 0);
             numInputs = 0;
             numOutputs = 0;
             rangeLen = 0;
             return;
         }
 
-        // The bytecode variant ordinal is always stored as an uint8_t at offset 0 of nsd
-        //
-        uint8_t variantOrd = nsd[0];
-        TestAssert(variantOrd < x_dfgRangeOpRWInfoGetterArraySizes[static_cast<size_t>(bcKind)]);
-
-        DfgRangeOpRWInfoGetterFn func = arr[variantOrd];
         return func(nsd, inputOrds, outputOrds, numInputs, numOutputs, rangeLen);
+    }
+
+    static void ALWAYS_INLINE SetupPredictionPropagationData(BCKind bcKind,
+                                                             DfgPredictionPropagationSetupInfo& state /*inout*/,
+                                                             uint8_t* nsd)
+    {
+        Assert(isDecodingMode);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        DfgPredictionPropagationSetupFn func = x_dfgPredictionPropagationSetupFnArrays[static_cast<size_t>(bcKind)];
+        TestAssert(func != nullptr);
+        func(state, nsd);
     }
 
     static bool ALWAYS_INLINE BytecodeHasRangeOperand(BCKind bcKind)
@@ -972,3 +964,13 @@ void ALWAYS_INLINE ForEachBytecodeMetadata(CodeBlock* cb, const Lambda& lambda)
     uintptr_t mdStart = cb->GetBytecodeMetadataStart();
     detail::ForEachBytecodeMetadataHelper<BytecodeMetadataStructTypeList>::Run<0>(mdStart, ucb->m_bytecodeMetadataUseCounts, lambda);
 }
+
+inline constexpr std::array<DfgPredictionPropagationImplFuncTy, static_cast<size_t>(DeegenBytecodeBuilder::BCKind::X_END_OF_ENUM)> x_dfgPredictionPropagationFuncs = []()
+{
+    using namespace DeegenBytecodeBuilder;
+    std::array<DfgPredictionPropagationImplFuncTy, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e) res[static_cast<size_t>(BCKind::e)] = DfgPredictionPropagationImplFuncPtr<DeegenGenerated_BytecodeBuilder_ ## e>::value;
+    PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+    return res;
+}();

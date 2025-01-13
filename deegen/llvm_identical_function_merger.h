@@ -28,9 +28,19 @@ struct LLVMIdenticalFunctionMerger
         m_sectionPriorityMap[sectionName] = priority;
     }
 
-    void DoMerge();
+    void DoMerge()
+    {
+        DoMergeImpl(false /*replaceWithAlias*/);
+    }
+
+    void DoMergeByReplacingWithAlias()
+    {
+        DoMergeImpl(true /*replaceWithAlias*/);
+    }
 
 private:
+    void DoMergeImpl(bool replaceWithAlias);
+
     std::vector<llvm::Function*> m_list;
 
     // Just as a precaution, use std::map to provide determinism even if the priority values are not distinct

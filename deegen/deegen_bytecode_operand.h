@@ -1014,6 +1014,41 @@ public:
         };
     }
 
+    enum class TypeDeductionKind
+    {
+        Invalid,
+        ValueProfile,
+        NeverProfile,
+        Constant,
+        Function,
+        // We should use value profile for the purpose of prediction propagation,
+        // but we also have a type deduction function that can be used for type proof
+        //
+        ValueProfileWithFunction
+    };
+
+    struct TypeDeductionInfo
+    {
+        TypeDeductionInfo()
+            : m_typeDeductionKind(TypeDeductionKind::Invalid)
+            , m_fixedMask(0)
+            , m_typeDeductionFnName("")
+        { }
+
+        TypeDeductionKind m_typeDeductionKind;
+        TypeMaskTy m_fixedMask;
+        std::string m_typeDeductionFnName;
+    };
+
+    struct RangeRcwInfoItem
+    {
+        std::string m_startExpr;
+        std::string m_lenExpr;
+        TypeDeductionKind m_typeDeductionKind;
+        TypeMaskTy m_fixedMask;
+        std::string m_typeDeductionFnName;
+    };
+
     json_t WARN_UNUSED SaveToJSON();
 
     // For now we have a fixed 2-byte opcode header for simplicity
@@ -1076,9 +1111,9 @@ public:
     std::vector<BytecodeVariantDefinition*> m_sameLengthConstraintList;
 
     std::string m_rcwInfoFuncs;
-    std::vector<std::pair<std::string, std::string>> m_rawReadRangeExprs;
-    std::vector<std::pair<std::string, std::string>> m_rawWriteRangeExprs;
-    std::vector<std::pair<std::string, std::string>> m_rawClobberRangeExprs;
+    std::vector<RangeRcwInfoItem> m_rawReadRangeExprs;
+    std::vector<RangeRcwInfoItem> m_rawWriteRangeExprs;
+    std::vector<RangeRcwInfoItem> m_rawClobberRangeExprs;
 
     std::vector<OperandRegPreferenceInfo> m_operandRegPrefInfo;
     OperandRegPreferenceInfo m_outputRegPrefInfo;
@@ -1096,6 +1131,8 @@ public:
     bool m_isInterpreterToBaselineJitOsrEntryPoint;
 
     bool m_disableRegAllocEnabledAssertEvenIfRegHintGiven;
+
+    TypeDeductionInfo m_outputTypeDeductionInfo;
 
 private:
     void AssignMetadataStructInfo(BytecodeMetadataStructBase::StructInfo info)

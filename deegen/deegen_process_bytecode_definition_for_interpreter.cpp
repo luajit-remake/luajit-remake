@@ -602,6 +602,7 @@ std::string WARN_UNUSED DumpAuditFileIR(llvm::Module* module)
 ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinitionForInterpreter(std::unique_ptr<llvm::Module> module)
 {
     using namespace llvm;
+    LLVMContext& ctx = module->getContext();
 
     ProcessBytecodeDefinitionForInterpreterResult finalRes;
 
@@ -625,6 +626,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     DesugarAndSimplifyLLVMModule(module.get(), DesugaringLevel::PerFunctionSimplifyOnlyAggresive);
 
     std::vector<BytecodeVariantCollection> defs = BytecodeVariantDefinition::ParseAllFromModule(module.get());
+
+    std::unique_ptr<Module> optModForTypeDeductionFns = CloneModule(*module.get());
+    RunLLVMOptimizePass(optModForTypeDeductionFns.get());
+
+    struct PredictionPropagationFnInfo
+    {
+        std::string m_fnName;
+        std::unique_ptr<Module> m_module;
+    };
+
+    std::unordered_map<std::string /*bytecodeName*/, PredictionPropagationFnInfo> bcToPredictionPropagationFnMap;
 
     std::vector<std::unique_ptr<Module>> allBytecodeFunctions;
     std::vector<std::string> allReturnContinuationNames;
@@ -759,6 +771,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         std::unordered_map<size_t /*variantOrd*/, size_t /*opcodeVariantOrdinal*/> opcodeVariantOrdinalMap;
 
         bool needRangedOperandInfoGetter = false;
+        bool hasPredictionPropagationFn = false;
 
         size_t bytecodeDfgNsdLength = static_cast<size_t>(-1);
         size_t currentBytecodeVariantOrdinal = 0;
@@ -1218,6 +1231,123 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 ReleaseAssert(bytecodeDfgNsdLength == nsdLayout.m_nsdLength);
             }
 
+            bool hasBytecodeRangeOperand = false;
+            BcOpBytecodeRangeBase* rangeOperand = nullptr;
+            for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+            {
+                BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                {
+                    // To make DFG logic easier, lockdown cases where the bytecode has >1 range operand
+                    //
+                    ReleaseAssert(!hasBytecodeRangeOperand && "for now only one bytecode Range operand is supported");
+                    hasBytecodeRangeOperand = true;
+                    rangeOperand = assert_cast<BcOpBytecodeRangeBase*>(operand);
+
+                    needRangedOperandInfoGetter = true;
+                }
+            }
+
+            auto getRangeExprFromNsd = [&](DeegenFrontendBytecodeDefinitionDescriptor::Range& rangeDesc) WARN_UNUSED -> std::pair<std::string /*start*/, std::string /*length*/>
+            {
+                using OperandExpr = DeegenFrontendBytecodeDefinitionDescriptor::OperandExpr;
+                using OperandExprNode = DeegenFrontendBytecodeDefinitionDescriptor::OperandExprNode;
+
+                ReleaseAssert(rangeOperand != nullptr);
+
+                std::function<std::string(OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp)> printExprImpl;
+                printExprImpl = [&](OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp) -> std::string
+                {
+                    switch (node.m_kind)
+                    {
+                    case OperandExprNode::Number:
+                    {
+                        return "(" + std::to_string(node.m_number) + ")";
+                    }
+                    case OperandExprNode::Operand:
+                    {
+                        std::string opName = node.m_operandName;
+                        if (opName == rangeOperand->OperandName())
+                        {
+                            rangedOperandShowedUp = true;
+                            return "(0)";
+                        }
+                        if (!operandToNsdOffsetMap.count(opName))
+                        {
+                            fprintf(stderr, "Invalid use of operand in DeclareRead/Write/Clobber expression: only RangeOperand and literal operands are allowed!\n");
+                            abort();
+                        }
+                        BcOperand* op = operandToNsdOffsetMap[opName].first;
+                        size_t offsetInNsd = operandToNsdOffsetMap[opName].second;
+
+                        ReleaseAssert(op->GetKind() == BcOperandKind::Literal || op->GetKind() == BcOperandKind::SpecializedLiteral);
+                        BcOpLiteral* lit = assert_cast<BcOpLiteral*>(op);
+                        ReleaseAssert(lit != nullptr);
+                        size_t numBytes = lit->m_numBytes;
+                        bool isSigned = lit->m_isSigned;
+                        std::string loadExpr = std::string("UnalignedLoad<") + (isSigned ? "" : "u") + "int" + std::to_string(numBytes * 8)
+                            + "_t>(nsdPtr + " + std::to_string(offsetInNsd) + ")";
+                        std::string i32Expr = std::string("SafeIntegerCast<int32_t>(SafeIntegerCast<") + (isSigned ? "" : "u") + "int32_t>(" + loadExpr + "))";
+                        return "(" + i32Expr + ")";
+                    }
+                    case OperandExprNode::Infinity:
+                    {
+                        ReleaseAssert(false);
+                    }
+                    case OperandExprNode::Add:
+                    {
+                        ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
+                        return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "+"
+                            + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
+                    }
+                    case OperandExprNode::Sub:
+                    {
+                        ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
+                        return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "-"
+                            + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
+                    }
+                    case OperandExprNode::BadKind:
+                    {
+                        ReleaseAssert(false);
+                    }
+                    }   /*switch*/
+                };
+
+                auto printExpr = [&](OperandExpr& expr, bool& rangedOperandShowedUp) -> std::string
+                {
+                    ReleaseAssert(expr.m_numNodes > 0);
+                    return printExprImpl(expr.m_nodes, expr.m_numNodes, expr.m_nodes[0], rangedOperandShowedUp);
+                };
+
+                bool rangedOperandShowedUp = false;
+                std::string startExpr = printExpr(rangeDesc.m_start, rangedOperandShowedUp /*out*/);
+                ReleaseAssert(rangedOperandShowedUp);
+                rangedOperandShowedUp = false;
+                std::string lenExpr = printExpr(rangeDesc.m_len, rangedOperandShowedUp /*out*/);
+                ReleaseAssert(!rangedOperandShowedUp);
+
+                return std::make_pair(startExpr, lenExpr);
+            };
+
+            using RangeDesc = DeegenFrontendBytecodeDefinitionDescriptor::Range;
+            auto parseRangeDesc = [&](BytecodeVariantDefinition::RangeRcwInfoItem& data) WARN_UNUSED -> RangeDesc
+            {
+                using OperandExpr = DeegenFrontendBytecodeDefinitionDescriptor::OperandExpr;
+
+                auto decodeOperandExpr = [&](std::string& s) -> OperandExpr
+                {
+                    std::string str = base64_decode(s);
+                    ReleaseAssert(str.length() == sizeof(OperandExpr));
+                    OperandExpr e;
+                    memcpy(&e, str.data(), sizeof(OperandExpr));
+                    return e;
+                };
+                RangeDesc rd;
+                rd.m_start = decodeOperandExpr(data.m_startExpr);
+                rd.m_len = decodeOperandExpr(data.m_lenExpr);
+                return rd;
+            };
+
             // Generate getter functions for the mapping of the ranged operand to input/output using the NodeSpecificData
             // Note that this must agree exactly with the result of the RWC functions, even though the RWC
             // functions are not printed here: this is very fragile and should be refactored, but for now..
@@ -1237,54 +1367,21 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             // numOutputs: similar but for outputs
             // rangeLen: stores the required length for this range.
             //
+            // Note that we do not support per-variant DeclareRead/Write/Clobber, so this implementation function is the same for each variant
+            // Thus, we only need to print this function for variant 0
+            //
+            if (bytecodeVariantDef->m_variantOrd == 0)
             {
-                bool hasBytecodeRangeOperand = false;
-                BcOpBytecodeRangeBase* rangeOperand = nullptr;
-                for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
-                {
-                    BcOperand* operand = bytecodeVariantDef->m_list[i].get();
-                    if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
-                    {
-                        // To make DFG logic easier, lockdown cases where the bytecode has >1 range operand
-                        //
-                        ReleaseAssert(!hasBytecodeRangeOperand && "for now only one bytecode Range operand is supported");
-                        hasBytecodeRangeOperand = true;
-                        rangeOperand = assert_cast<BcOpBytecodeRangeBase*>(operand);
-
-                        needRangedOperandInfoGetter = true;
-                    }
-                }
-
                 if (hasBytecodeRangeOperand)
                 {
-                    fprintf(fp, "\n    static void GetRangeOperandRWInfoImpl%u([[maybe_unused]] RestrictPtr<uint8_t> nsdPtr, "
+                    fprintf(fp, "\n    static void GetRangeOperandRWInfoImpl([[maybe_unused]] RestrictPtr<uint8_t> nsdPtr, "
                                 "[[maybe_unused]] RestrictPtr<uint32_t> inputOrds, "
                                 "[[maybe_unused]] RestrictPtr<uint32_t> outputOrds, "
                                 "size_t& numInputs /*inout*/, "
                                 "size_t& numOutputs /*inout*/, "
-                                "size_t& rangeLen /*out*/)\n", SafeIntegerCast<unsigned int>(bytecodeVariantDef->m_variantOrd));
+                                "size_t& rangeLen /*out*/)\n");
                     fprintf(fp, "    {\n");
                     fprintf(fp, "        size_t curMaxRangeLength = 0;\n");
-
-                    using RangeDesc = DeegenFrontendBytecodeDefinitionDescriptor::Range;
-                    using OperandExpr = DeegenFrontendBytecodeDefinitionDescriptor::OperandExpr;
-                    using OperandExprNode = DeegenFrontendBytecodeDefinitionDescriptor::OperandExprNode;
-
-                    auto parseRangeDesc = [&](std::pair<std::string, std::string>& data) -> RangeDesc
-                    {
-                        auto decodeOperandExpr = [&](std::string& s) -> OperandExpr
-                        {
-                            std::string str = base64_decode(s);
-                            ReleaseAssert(str.length() == sizeof(OperandExpr));
-                            OperandExpr e;
-                            memcpy(&e, str.data(), sizeof(OperandExpr));
-                            return e;
-                        };
-                        RangeDesc rd;
-                        rd.m_start = decodeOperandExpr(data.first);
-                        rd.m_len = decodeOperandExpr(data.second);
-                        return rd;
-                    };
 
                     enum class RCWKind
                     {
@@ -1293,71 +1390,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         Clobber
                     };
 
-                    std::function<std::string(OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp)> printExprImpl;
-                    printExprImpl = [&](OperandExprNode* holder, size_t holderLen, OperandExprNode& node, bool& rangedOperandShowedUp) -> std::string
-                    {
-                        switch (node.m_kind)
-                        {
-                        case OperandExprNode::Number:
-                        {
-                            return "(" + std::to_string(node.m_number) + ")";
-                        }
-                        case OperandExprNode::Operand:
-                        {
-                            std::string opName = node.m_operandName;
-                            if (opName == rangeOperand->OperandName())
-                            {
-                                rangedOperandShowedUp = true;
-                                return "(0)";
-                            }
-                            if (!operandToNsdOffsetMap.count(opName))
-                            {
-                                fprintf(stderr, "Invalid use of operand in DeclareRead/Write/Clobber expression: only RangeOperand and literal operands are allowed!\n");
-                                abort();
-                            }
-                            BcOperand* op = operandToNsdOffsetMap[opName].first;
-                            size_t offsetInNsd = operandToNsdOffsetMap[opName].second;
-
-                            ReleaseAssert(op->GetKind() == BcOperandKind::Literal || op->GetKind() == BcOperandKind::SpecializedLiteral);
-                            BcOpLiteral* lit = assert_cast<BcOpLiteral*>(op);
-                            ReleaseAssert(lit != nullptr);
-                            size_t numBytes = lit->m_numBytes;
-                            bool isSigned = lit->m_isSigned;
-                            std::string loadExpr = std::string("UnalignedLoad<") + (isSigned ? "" : "u") + "int" + std::to_string(numBytes * 8)
-                                + "_t>(nsdPtr + " + std::to_string(offsetInNsd) + ")";
-                            std::string i32Expr = std::string("SafeIntegerCast<int32_t>(SafeIntegerCast<") + (isSigned ? "" : "u") + "int32_t>(" + loadExpr + "))";
-                            return "(" + i32Expr + ")";
-                        }
-                        case OperandExprNode::Infinity:
-                        {
-                            ReleaseAssert(false);
-                        }
-                        case OperandExprNode::Add:
-                        {
-                            ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
-                            return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "+"
-                                + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
-                        }
-                        case OperandExprNode::Sub:
-                        {
-                            ReleaseAssert(node.m_left < holderLen && node.m_right < holderLen);
-                            return "(" + printExprImpl(holder, holderLen, holder[node.m_left], rangedOperandShowedUp) + "-"
-                                + printExprImpl(holder, holderLen, holder[node.m_right], rangedOperandShowedUp) + ")";
-                        }
-                        case OperandExprNode::BadKind:
-                        {
-                            ReleaseAssert(false);
-                        }
-                        }   /*switch*/
-                    };
-
-                    auto printExpr = [&](OperandExpr& expr, bool& rangedOperandShowedUp) -> std::string
-                    {
-                        ReleaseAssert(expr.m_numNodes > 0);
-                        return printExprImpl(expr.m_nodes, expr.m_numNodes, expr.m_nodes[0], rangedOperandShowedUp);
-                    };
-
-                    auto handleRangeList = [&](std::vector<std::pair<std::string, std::string>>& rangeList, RCWKind rcwKind)
+                    auto handleRangeList = [&](std::vector<BytecodeVariantDefinition::RangeRcwInfoItem>& rangeList, RCWKind rcwKind)
                     {
                         std::string dstArrName, dstCntName;
                         if (rcwKind == RCWKind::Read)
@@ -1376,7 +1409,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         {
                             fprintf(fp, "            size_t numItems = 0;\n");
                         }
-                        for (auto& item : rangeList)
+                        for (BytecodeVariantDefinition::RangeRcwInfoItem& item : rangeList)
                         {
                             RangeDesc rdesc = parseRangeDesc(item);
                             ReleaseAssert(!rdesc.m_start.IsInfinity());
@@ -1389,12 +1422,10 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                                 }
                                 continue;
                             }
-                            bool rangedOperandShowedUp = false;
-                            std::string startExpr = printExpr(rdesc.m_start, rangedOperandShowedUp /*out*/);
-                            ReleaseAssert(rangedOperandShowedUp);
-                            rangedOperandShowedUp = false;
-                            std::string lenExpr = printExpr(rdesc.m_len, rangedOperandShowedUp /*out*/);
-                            ReleaseAssert(!rangedOperandShowedUp);
+
+                            auto rangeExpr = getRangeExprFromNsd(rdesc);
+                            std::string startExpr = rangeExpr.first;
+                            std::string lenExpr = rangeExpr.second;
 
                             fprintf(fp, "            {\n");
                             fprintf(fp, "                uint32_t start = SafeIntegerCast<uint32_t>(%s);\n", startExpr.c_str());
@@ -1421,6 +1452,645 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
                     fprintf(fp, "        rangeLen = curMaxRangeLength;\n");
                     fprintf(fp, "    }\n\n");
+                }
+            }
+
+            // Generate the prediction propagation initialization function
+            //
+            if (bytecodeVariantDef->m_variantOrd == 0)
+            {
+                using RangeRcwInfoItem = BytecodeVariantDefinition::RangeRcwInfoItem;
+                using TypeDeductionKind = BytecodeVariantDefinition::TypeDeductionKind;
+
+                if (bytecodeVariantDef->m_hasOutputValue || !bytecodeVariantDef->m_rawWriteRangeExprs.empty())
+                {
+                    hasPredictionPropagationFn = true;
+
+                    fprintf(fp, "\n    static void InitializePredictionPropagationDataImpl("
+                                "DfgPredictionPropagationSetupInfo& state /*inout*/, "
+                                "[[maybe_unused]] RestrictPtr<uint8_t> nsdPtr)\n");
+                    fprintf(fp, "    {\n");
+
+                    fprintf(fp, "        TempArenaAllocator& alloc = state.m_alloc;\n");
+                    fprintf(fp, "        state.m_valueProfileOrds.clear();\n");
+
+                    // If we need complex node state
+                    //
+                    bool needComplexState = false;
+
+                    // Check if we can elide some of the fixed inputs or the the range parts of the inputs
+                    // We can do so if none of the type deduction functions care about the operand
+                    //
+                    std::vector<bool> operandUsedByDeductionFn;
+                    operandUsedByDeductionFn.resize(bytecodeVariantDef->m_list.size(), false /*value*/);
+                    bool rangedOperandUsedByDeductionFn = false;
+
+                    auto updateDeductionFnUsedOperands = [&](std::string fnName, bool isRangeDeductionFn)
+                    {
+                        ReleaseAssert(fnName != "");
+                        Function* func = optModForTypeDeductionFns->getFunction(fnName);
+                        ReleaseAssert(func != nullptr);
+                        ReleaseAssert(func->arg_size() == bytecodeVariantDef->m_list.size() + (isRangeDeductionFn ? 1 : 0));
+                        if (isRangeDeductionFn)
+                        {
+                            ReleaseAssert(llvm_value_has_type<uint64_t>(func->getArg(0)));
+                        }
+                        for (uint32_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                        {
+                            Argument* arg = func->getArg(i + (isRangeDeductionFn ? 1 : 0));
+                            BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                            if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+                            {
+                                ReleaseAssert(llvm_value_has_type<TypeMaskTy>(arg));
+                                if (!arg->use_empty())
+                                {
+                                    operandUsedByDeductionFn[i] = true;
+                                }
+                            }
+                            else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                            {
+                                ReleaseAssert(llvm_value_has_type<void*>(arg));
+                                if (!arg->use_empty())
+                                {
+                                    rangedOperandUsedByDeductionFn = true;
+                                }
+                            }
+                            else
+                            {
+                                ReleaseAssert(operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral);
+                                ReleaseAssert(arg->getType()->isIntegerTy(static_cast<uint32_t>(assert_cast<BcOpLiteral*>(operand)->m_numBytes * 8)));
+                            }
+                        }
+                        ReleaseAssert(llvm_type_has_type<TypeMaskTy>(func->getReturnType()));
+                    };
+
+                    // Note that we only check for Function
+                    // For ValueProfileWithFunction, ValueProfile is used instead of the function in prediction propagation
+                    //
+                    if (bytecodeVariantDef->m_hasOutputValue &&
+                        bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionKind == TypeDeductionKind::Function)
+                    {
+                        updateDeductionFnUsedOperands(bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionFnName, false /*isRangeDeductionFn*/);
+                    }
+
+                    size_t numRangeUpdaters = 0;
+                    if (hasBytecodeRangeOperand)
+                    {
+                        for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawWriteRangeExprs)
+                        {
+                            if (item.m_typeDeductionKind == TypeDeductionKind::Function)
+                            {
+                                updateDeductionFnUsedOperands(item.m_typeDeductionFnName, true /*isRangeDeductionFn*/);
+
+                                numRangeUpdaters++;
+
+                                // We need complex state, since one of the subrange TypeDeductionKind is Function
+                                //
+                                needComplexState = true;
+                            }
+                        }
+                    }
+
+                    if (rangedOperandUsedByDeductionFn)
+                    {
+                        // We need complex state, since the input ranged part cannot be elided
+                        //
+                        needComplexState = true;
+                    }
+
+                    size_t ssaInputOrd = 0;
+                    std::unordered_map<BcOperand*, size_t> operandToInputOrdMap;
+                    std::vector<size_t> inputOperandsSSAOrdVec;
+
+                    for (size_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                    {
+                        BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                        if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+                        {
+                            // Only push to the input vec if the SSA value is used
+                            //
+                            if (operandUsedByDeductionFn[i])
+                            {
+                                ReleaseAssert(!operandToInputOrdMap.count(operand));
+                                operandToInputOrdMap[operand] = inputOperandsSSAOrdVec.size();
+                                inputOperandsSSAOrdVec.push_back(ssaInputOrd);
+                            }
+                            ssaInputOrd++;
+                        }
+                    }
+
+                    // Compute the # of output operands
+                    //
+                    fprintf(fp, "        size_t numOutputOperands = %d;\n", static_cast<int>(bytecodeVariantDef->m_hasOutputValue ? 1 : 0));
+
+                    if (hasBytecodeRangeOperand)
+                    {
+                        for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawWriteRangeExprs)
+                        {
+                            RangeDesc rdesc = parseRangeDesc(item);
+                            ReleaseAssert(!rdesc.m_start.IsInfinity() && !rdesc.m_len.IsInfinity());
+
+                            auto rangeExpr = getRangeExprFromNsd(rdesc);
+                            std::string lenExpr = rangeExpr.second;
+
+                            fprintf(fp, "        {\n");
+                            fprintf(fp, "            uint32_t len = SafeIntegerCast<uint32_t>(%s);\n", lenExpr.c_str());
+                            fprintf(fp, "            numOutputOperands += len;\n");
+                            fprintf(fp, "        }\n");
+                        }
+                    }
+
+                    if (rangedOperandUsedByDeductionFn)
+                    {
+                        // The input operands must include the ranged part
+                        //
+                        fprintf(fp, "        size_t maxRangeLength = 0;\n");
+
+                        for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawReadRangeExprs)
+                        {
+                            RangeDesc rdesc = parseRangeDesc(item);
+                            ReleaseAssert(!rdesc.m_start.IsInfinity() && !rdesc.m_len.IsInfinity());
+
+                            auto rangeExpr = getRangeExprFromNsd(rdesc);
+                            std::string startExpr = rangeExpr.first;
+                            std::string lenExpr = rangeExpr.second;
+
+                            fprintf(fp, "        {\n");
+                            fprintf(fp, "            uint32_t start = SafeIntegerCast<uint32_t>(%s);\n", startExpr.c_str());
+                            fprintf(fp, "            uint32_t len = SafeIntegerCast<uint32_t>(%s);\n", lenExpr.c_str());
+                            fprintf(fp, "            maxRangeLength = std::max(maxRangeLength, static_cast<size_t>(start) + len);\n");
+                            fprintf(fp, "        }\n");
+                        }
+
+                        ReleaseAssert(needComplexState);
+                        fprintf(fp, "        uint64_t* inputData = alloc.AllocateArray<uint64_t>(maxRangeLength + %d);\n",
+                                static_cast<int>(inputOperandsSSAOrdVec.size()));
+                        fprintf(fp, "        state.m_inputOrds = reinterpret_cast<TypeMaskTy**>(inputData);\n");
+                        fprintf(fp, "        state.m_inputListLen = maxRangeLength + %d;\n",
+                                static_cast<int>(inputOperandsSSAOrdVec.size()));
+                        for (size_t i = 0; i < inputOperandsSSAOrdVec.size(); i++)
+                        {
+                            fprintf(fp, "        inputData[%d] = %d;\n", static_cast<int>(i), static_cast<int>(inputOperandsSSAOrdVec[i]));
+                        }
+
+                        fprintf(fp, "        for (size_t i = %d; i < maxRangeLength + %d; i++) { inputData[i] = static_cast<uint64_t>(-1); }\n",
+                                static_cast<int>(inputOperandsSSAOrdVec.size()), static_cast<int>(inputOperandsSSAOrdVec.size()));
+
+                        fprintf(fp, "        [[maybe_unused]] uint64_t curInputSSAOrd = %d;\n", static_cast<int>(ssaInputOrd));
+
+                        for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawReadRangeExprs)
+                        {
+                            RangeDesc rdesc = parseRangeDesc(item);
+                            ReleaseAssert(!rdesc.m_start.IsInfinity() && !rdesc.m_len.IsInfinity());
+
+                            auto rangeExpr = getRangeExprFromNsd(rdesc);
+                            std::string startExpr = rangeExpr.first;
+                            std::string lenExpr = rangeExpr.second;
+
+                            fprintf(fp, "        {\n");
+                            fprintf(fp, "            size_t start = SafeIntegerCast<uint32_t>(%s) + %d;\n", startExpr.c_str(), static_cast<int>(inputOperandsSSAOrdVec.size()));
+                            fprintf(fp, "            uint32_t len = SafeIntegerCast<uint32_t>(%s);\n", lenExpr.c_str());
+                            fprintf(fp, "            for (size_t i = start; i < start + len; i++) { inputData[i] = curInputSSAOrd; curInputSSAOrd++; }\n");
+                            fprintf(fp, "        }\n");
+                        }
+
+                        fprintf(fp, "        DfgComplexNodePredictionPropagationData* r = "
+                                    "DfgComplexNodePredictionPropagationData::Create(alloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
+                                static_cast<int>(numRangeUpdaters));
+                        fprintf(fp, "        r->m_inputMaskAddrs = reinterpret_cast<TypeMaskTy**>(inputData);\n");
+                    }
+                    else
+                    {
+                        if (needComplexState)
+                        {
+                            fprintf(fp, "        uint64_t* inputData = alloc.AllocateArray<uint64_t>(%d);\n",
+                                    static_cast<int>(inputOperandsSSAOrdVec.size()));
+                            fprintf(fp, "        state.m_inputOrds = reinterpret_cast<TypeMaskTy**>(inputData);\n");
+                            fprintf(fp, "        state.m_inputListLen = %d;\n", static_cast<int>(inputOperandsSSAOrdVec.size()));
+                            for (size_t i = 0; i < inputOperandsSSAOrdVec.size(); i++)
+                            {
+                                fprintf(fp, "        inputData[%d] = %d;\n", static_cast<int>(i), static_cast<int>(inputOperandsSSAOrdVec[i]));
+                            }
+
+                            fprintf(fp, "        DfgComplexNodePredictionPropagationData* r = "
+                                        "DfgComplexNodePredictionPropagationData::Create(alloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
+                                    static_cast<int>(numRangeUpdaters));
+                            fprintf(fp, "        r->m_inputMaskAddrs = reinterpret_cast<TypeMaskTy**>(inputData);\n");
+                        }
+                        else
+                        {
+                            fprintf(fp, "        DfgSimpleNodePredictionPropagationData* r = "
+                                        "DfgSimpleNodePredictionPropagationData::Create(alloc, %d /*numInputs*/, numOutputOperands);\n",
+                                    static_cast<int>(inputOperandsSSAOrdVec.size()));
+                            for (size_t i = 0; i < inputOperandsSSAOrdVec.size(); i++)
+                            {
+                                fprintf(fp, "        r->SetInputMaskVal(%d, %d);\n", static_cast<int>(i), static_cast<int>(inputOperandsSSAOrdVec[i]));
+                            }
+                            fprintf(fp, "        state.m_inputOrds = reinterpret_cast<TypeMaskTy**>(r->GetInputMaskAddrArrayStart(%d));\n",
+                                    static_cast<int>(inputOperandsSSAOrdVec.size()));
+                            fprintf(fp, "        state.m_inputListLen = %d;\n", static_cast<int>(inputOperandsSSAOrdVec.size()));
+                        }
+                    }
+
+                    fprintf(fp, "        state.m_predictions = r->m_predictions;\n");
+                    fprintf(fp, "        state.m_data = r;\n");
+
+                    fprintf(fp, "        size_t curOutputOrd = 0;\n");
+
+                    bool needPropagationFn = false;
+                    if (bytecodeVariantDef->m_hasOutputValue)
+                    {
+                        switch (bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionKind)
+                        {
+                        case TypeDeductionKind::ValueProfile:
+                        case TypeDeductionKind::ValueProfileWithFunction:
+                        {
+                            fprintf(fp, "        state.m_valueProfileOrds.push_back(curOutputOrd);\n");
+                            break;
+                        }
+                        case TypeDeductionKind::NeverProfile:
+                        {
+                            fprintf(fp, "        r->m_predictions[curOutputOrd] = x_typeMaskFor<tTop>;\n");
+                            break;
+                        }
+                        case TypeDeductionKind::Constant:
+                        {
+                            fprintf(fp, "        r->m_predictions[curOutputOrd] = %llu;\n",
+                                    static_cast<unsigned long long>(bytecodeVariantDef->m_outputTypeDeductionInfo.m_fixedMask));
+                            break;
+                        }
+                        case TypeDeductionKind::Function:
+                        {
+                            needPropagationFn = true;
+                            fprintf(fp, "        r->m_predictions[curOutputOrd] = x_typeMaskFor<tBottom>;\n");
+                            break;
+                        }
+                        default:
+                        {
+                            ReleaseAssert(false);
+                        }
+                        }   /*switch*/
+                        fprintf(fp, "        curOutputOrd += 1;\n");
+                    }
+
+                    if (hasBytecodeRangeOperand)
+                    {
+                        size_t curRangeUpdaterOrd = 0;
+                        for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawWriteRangeExprs)
+                        {
+                            RangeDesc rdesc = parseRangeDesc(item);
+                            ReleaseAssert(!rdesc.m_start.IsInfinity() && !rdesc.m_len.IsInfinity());
+
+                            auto rangeExpr = getRangeExprFromNsd(rdesc);
+                            std::string startExpr = rangeExpr.first;
+                            std::string lenExpr = rangeExpr.second;
+
+                            fprintf(fp, "        {\n");
+                            fprintf(fp, "            uint32_t len = SafeIntegerCast<uint32_t>(%s);\n", lenExpr.c_str());
+
+                            switch (item.m_typeDeductionKind)
+                            {
+                            case TypeDeductionKind::ValueProfile:
+                            case TypeDeductionKind::ValueProfileWithFunction:
+                            {
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { state.m_valueProfileOrds.push_back(curOutputOrd); curOutputOrd++; }\n");
+                                break;
+                            }
+                            case TypeDeductionKind::NeverProfile:
+                            {
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { r->m_predictions[curOutputOrd] = x_typeMaskFor<tTop>; curOutputOrd++; }\n");
+                                break;
+                            }
+                            case TypeDeductionKind::Constant:
+                            {
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { r->m_predictions[curOutputOrd] = %llu; curOutputOrd++; }\n",
+                                        static_cast<unsigned long long>(item.m_fixedMask));
+                                break;
+                            }
+                            case TypeDeductionKind::Function:
+                            {
+                                needPropagationFn = true;
+                                fprintf(fp, "            uint32_t start = SafeIntegerCast<uint32_t>(%s);\n", startExpr.c_str());
+                                ReleaseAssert(curRangeUpdaterOrd < numRangeUpdaters);
+                                ReleaseAssert(needComplexState);
+                                fprintf(fp, "            *(r->GetRangeInfo(%d)) = {\n", static_cast<int>(curRangeUpdaterOrd));
+                                fprintf(fp, "                .m_outputOffset = SafeIntegerCast<uint16_t>(curOutputOrd),\n");
+                                fprintf(fp, "                .m_rangeOffset = SafeIntegerCast<uint16_t>(start),\n");
+                                fprintf(fp, "                .m_numValues = SafeIntegerCast<uint16_t>(len)\n");
+                                fprintf(fp, "            };\n");
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { r->m_predictions[curOutputOrd] = x_typeMaskFor<tBottom>; curOutputOrd++; }\n");
+                                curRangeUpdaterOrd++;
+                                break;
+                            }
+                            default:
+                            {
+                                ReleaseAssert(false);
+                            }
+                            }
+
+                            fprintf(fp, "        }\n");
+                        }
+                        ReleaseAssert(curRangeUpdaterOrd == numRangeUpdaters);
+                    }
+
+                    fprintf(fp, "        TestAssert(curOutputOrd == numOutputOperands);\n");
+
+                    fprintf(fp, "    }\n\n");
+
+                    ReleaseAssert(!bcToPredictionPropagationFnMap.count(bytecodeVariantDef->m_bytecodeName));
+
+                    if (needPropagationFn)
+                    {
+                        std::unique_ptr<Module> m = CloneModule(*optModForTypeDeductionFns.get());
+                        std::string ppFnName = "__deegen_dfg_prediction_propagation_" + bytecodeVariantDef->m_bytecodeName;
+                        FunctionType* fty = FunctionType::get(
+                            llvm_type_of<bool>(ctx),
+                            {
+                                llvm_type_of<void*>(ctx) /*data*/,
+                                llvm_type_of<void*>(ctx) /*nsd*/
+                            },
+                            false /*isVarArg*/);
+                        Function* ppFn = Function::Create(fty, GlobalValue::ExternalLinkage, ppFnName, m.get());
+                        ReleaseAssert(ppFn->getName().str() == ppFnName);
+                        ppFn->setDSOLocal(true);
+                        ppFn->addRetAttr(Attribute::ZExt);
+                        ppFn->addParamAttr(0, Attribute::NoAlias);
+                        ppFn->addParamAttr(1, Attribute::NoAlias);
+
+                        if (bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionKind == TypeDeductionKind::Function)
+                        {
+                            Function* f = m->getFunction(bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionFnName);
+                            ReleaseAssert(f != nullptr);
+                            CopyFunctionAttributes(ppFn, f);
+                        }
+                        else
+                        {
+                            bool found = false;
+                            for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawWriteRangeExprs)
+                            {
+                                if (item.m_typeDeductionKind == TypeDeductionKind::Function)
+                                {
+                                    Function* f = m->getFunction(item.m_typeDeductionFnName);
+                                    ReleaseAssert(f != nullptr);
+                                    CopyFunctionAttributes(ppFn, f);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            ReleaseAssert(found);
+                        }
+
+                        BasicBlock* entryBB = BasicBlock::Create(ctx, "", ppFn);
+                        AllocaInst* changedAlloca = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", entryBB);
+                        new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), changedAlloca, entryBB);
+
+                        Value* ppData = ppFn->getArg(0);
+                        Value* nsdData = ppFn->getArg(1);
+
+                        auto emitGetLiteralLogic = [&](BcOperand* operand, BasicBlock* insertAtEnd) WARN_UNUSED -> Value*
+                        {
+                            ReleaseAssert(operand->GetKind() == BcOperandKind::Literal || operand->GetKind() == BcOperandKind::SpecializedLiteral);
+                            ReleaseAssert(operandToNsdOffsetMap.count(operand->OperandName()));
+                            ReleaseAssert(operandToNsdOffsetMap[operand->OperandName()].first == operand);
+                            size_t offsetInNsd = operandToNsdOffsetMap[operand->OperandName()].second;
+                            BcOpLiteral* lit = assert_cast<BcOpLiteral*>(operand);
+                            Value* addr = GetElementPtrInst::CreateInBounds(
+                                llvm_type_of<uint8_t>(ctx), nsdData, { CreateLLVMConstantInt<uint64_t>(ctx, offsetInNsd) }, "", insertAtEnd);
+                            Type* intTy = IntegerType::get(ctx, static_cast<uint32_t>(lit->m_numBytes * 8));
+                            Value* val = new LoadInst(intTy, addr, "", false, Align(1), insertAtEnd);
+                            return val;
+                        };
+
+                        if (!needComplexState)
+                        {
+                            std::vector<Value*> callArgs;
+
+                            for (uint32_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                            {
+                                BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                                if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+                                {
+                                    if (operandToInputOrdMap.count(operand))
+                                    {
+                                        size_t ord = operandToInputOrdMap[operand];
+                                        Value* val = CreateCallToDeegenCommonSnippet(
+                                            m.get(), "GetInputPredictionMaskForSimpleNode", { ppData, CreateLLVMConstantInt<uint64_t>(ctx, ord) }, entryBB);
+                                        ReleaseAssert(llvm_value_has_type<TypeMaskTy>(val));
+                                        callArgs.push_back(val);
+                                    }
+                                    else
+                                    {
+                                        callArgs.push_back(UndefValue::get(llvm_type_of<TypeMaskTy>(ctx)));
+                                    }
+                                }
+                                else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                                {
+                                    ReleaseAssert(!rangedOperandUsedByDeductionFn);
+                                    callArgs.push_back(UndefValue::get(llvm_type_of<void*>(ctx)));
+                                }
+                                else
+                                {
+                                    callArgs.push_back(emitGetLiteralLogic(operand, entryBB));
+                                }
+                            }
+
+                            ReleaseAssert(numRangeUpdaters == 0);
+                            ReleaseAssert(bytecodeVariantDef->m_hasOutputValue &&
+                                          bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionKind == TypeDeductionKind::Function);
+                            Function* callee = m->getFunction(bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionFnName);
+                            ReleaseAssert(callee != nullptr);
+                            ReleaseAssert(callArgs.size() == callee->arg_size());
+                            for (uint32_t i = 0; i < callArgs.size(); i++)
+                            {
+                                ReleaseAssert(callArgs[i]->getType() == callee->getArg(i)->getType());
+                                if (isa<UndefValue>(callArgs[i]))
+                                {
+                                    ReleaseAssert(callee->getArg(i)->use_empty());
+                                }
+                            }
+                            ReleaseAssert(!callee->hasFnAttribute(Attribute::NoInline));
+                            callee->addFnAttr(Attribute::AlwaysInline);
+                            Value* mskVal = CallInst::Create(callee, callArgs, "", entryBB);
+                            Value* dstAddr = GetElementPtrInst::CreateInBounds(
+                                llvm_type_of<uint8_t>(ctx),
+                                ppData,
+                                { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&DfgSimpleNodePredictionPropagationData::m_predictions>) },
+                                "", entryBB);
+                            CreateCallToDeegenCommonSnippet(
+                                m.get(), "UpdateTypeMaskForPredictionPropagation", { dstAddr, mskVal, changedAlloca }, entryBB);
+
+                            Value* changedVal = new LoadInst(llvm_type_of<uint8_t>(ctx), changedAlloca, "", entryBB);
+                            changedVal = new TruncInst(changedVal, llvm_type_of<bool>(ctx), "", entryBB);
+                            ReturnInst::Create(ctx, changedVal, entryBB);
+                        }
+                        else
+                        {
+                            std::vector<Value*> commonCallArgs;
+                            for (uint32_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
+                            {
+                                BcOperand* operand = bytecodeVariantDef->m_list[i].get();
+                                if (operand->GetKind() == BcOperandKind::Slot || operand->GetKind() == BcOperandKind::Constant)
+                                {
+                                    if (operandToInputOrdMap.count(operand))
+                                    {
+                                        size_t ord = operandToInputOrdMap[operand];
+                                        Value* val = CreateCallToDeegenCommonSnippet(
+                                            m.get(), "GetInputPredictionMaskForComplexNode", { ppData, CreateLLVMConstantInt<uint64_t>(ctx, ord) }, entryBB);
+                                        ReleaseAssert(llvm_value_has_type<TypeMaskTy>(val));
+                                        commonCallArgs.push_back(val);
+                                    }
+                                    else
+                                    {
+                                        commonCallArgs.push_back(UndefValue::get(llvm_type_of<TypeMaskTy>(ctx)));
+                                    }
+                                }
+                                else if (operand->GetKind() == BcOperandKind::BytecodeRangeBase)
+                                {
+                                    if (rangedOperandUsedByDeductionFn)
+                                    {
+                                        Value* val = CreateCallToDeegenCommonSnippet(
+                                            m.get(), "GetInputPredictionMaskRangeForComplexNode", { ppData, CreateLLVMConstantInt<uint64_t>(ctx, inputOperandsSSAOrdVec.size()) }, entryBB);
+                                        ReleaseAssert(llvm_value_has_type<void*>(val));
+                                        commonCallArgs.push_back(val);
+                                    }
+                                    else
+                                    {
+                                        commonCallArgs.push_back(UndefValue::get(llvm_type_of<void*>(ctx)));
+                                    }
+                                }
+                                else
+                                {
+                                    commonCallArgs.push_back(emitGetLiteralLogic(operand, entryBB));
+                                }
+                            }
+
+                            if (bytecodeVariantDef->m_hasOutputValue && bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionKind == TypeDeductionKind::Function)
+                            {
+                                Function* callee = m->getFunction(bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionFnName);
+                                ReleaseAssert(callee != nullptr);
+                                ReleaseAssert(commonCallArgs.size() == callee->arg_size());
+                                for (uint32_t i = 0; i < commonCallArgs.size(); i++)
+                                {
+                                    ReleaseAssert(commonCallArgs[i]->getType() == callee->getArg(i)->getType());
+                                    if (isa<UndefValue>(commonCallArgs[i]))
+                                    {
+                                        ReleaseAssert(callee->getArg(i)->use_empty());
+                                    }
+                                }
+                                ReleaseAssert(!callee->hasFnAttribute(Attribute::NoInline));
+                                callee->addFnAttr(Attribute::AlwaysInline);
+                                Value* mskVal = CallInst::Create(callee, commonCallArgs, "", entryBB);
+                                Value* dstAddr = GetElementPtrInst::CreateInBounds(
+                                    llvm_type_of<uint8_t>(ctx),
+                                    ppData,
+                                    { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&DfgComplexNodePredictionPropagationData::m_predictions>) },
+                                    "", entryBB);
+                                CreateCallToDeegenCommonSnippet(
+                                    m.get(), "UpdateTypeMaskForPredictionPropagation", { dstAddr, mskVal, changedAlloca }, entryBB);
+                            }
+
+                            Value* predictionArrayAddr = GetElementPtrInst::CreateInBounds(
+                                llvm_type_of<uint8_t>(ctx),
+                                ppData,
+                                { CreateLLVMConstantInt<uint64_t>(ctx, offsetof_member_v<&DfgComplexNodePredictionPropagationData::m_predictions>) },
+                                "", entryBB);
+
+                            BasicBlock* curBB = entryBB;
+                            size_t curRangeUpdaterOrd = 0;
+                            for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawWriteRangeExprs)
+                            {
+                                if (item.m_typeDeductionKind == TypeDeductionKind::Function)
+                                {
+                                    Value* rangeInfo = CreateCallToDeegenCommonSnippet(
+                                        m.get(),
+                                        "GetRangeInfoForPredictionPropagationComplexNode",
+                                        { ppData, CreateLLVMConstantInt<uint64_t>(ctx, curRangeUpdaterOrd) },
+                                        curBB);
+                                    ReleaseAssert(llvm_value_has_type<void*>(rangeInfo));
+
+                                    using RangeInfo = DfgComplexNodePredictionPropagationData::RangeInfo;
+                                    Value* rangeOffset = GetMemberFromCppStruct<&RangeInfo::m_rangeOffset>(rangeInfo, curBB);
+                                    rangeOffset = new ZExtInst(rangeOffset, llvm_type_of<uint64_t>(ctx), "", curBB);
+
+                                    Value* outputOffset = GetMemberFromCppStruct<&RangeInfo::m_outputOffset>(rangeInfo, curBB);
+                                    outputOffset = new ZExtInst(outputOffset, llvm_type_of<uint64_t>(ctx), "", curBB);
+
+                                    Value* numValues = GetMemberFromCppStruct<&RangeInfo::m_numValues>(rangeInfo, curBB);
+                                    numValues = new ZExtInst(numValues, llvm_type_of<uint64_t>(ctx), "", curBB);
+
+                                    Value* rangeEnd = CreateUnsignedAddNoOverflow(rangeOffset, numValues, curBB);
+
+                                    Value* startDstAddr = GetElementPtrInst::CreateInBounds(
+                                        llvm_type_of<TypeMaskTy>(ctx),
+                                        predictionArrayAddr,
+                                        { outputOffset },
+                                        "", curBB);
+
+                                    BasicBlock* loopBB = BasicBlock::Create(ctx, "", ppFn);
+                                    BranchInst::Create(loopBB, curBB /*insertAtEnd*/);
+
+                                    PHINode* curRangeOffset = PHINode::Create(llvm_type_of<uint64_t>(ctx), 2 /*numReservedVals*/, "", loopBB);
+                                    curRangeOffset->addIncoming(rangeOffset, curBB);
+
+                                    PHINode* curDstAddr = PHINode::Create(llvm_type_of<void*>(ctx), 2 /*numReservedVals*/, "", loopBB);
+                                    curDstAddr->addIncoming(startDstAddr, curBB);
+
+                                    Function* callee = m->getFunction(item.m_typeDeductionFnName);
+                                    ReleaseAssert(callee != nullptr);
+
+                                    std::vector<Value*> callArgs;
+                                    callArgs.push_back(curRangeOffset);
+                                    callArgs.insert(callArgs.end(), commonCallArgs.begin(), commonCallArgs.end());
+                                    for (uint32_t i = 0; i < callArgs.size(); i++)
+                                    {
+                                        ReleaseAssert(callArgs[i]->getType() == callee->getArg(i)->getType());
+                                        if (isa<UndefValue>(callArgs[i]))
+                                        {
+                                            ReleaseAssert(callee->getArg(i)->use_empty());
+                                        }
+                                    }
+                                    ReleaseAssert(!callee->hasFnAttribute(Attribute::NoInline));
+                                    callee->addFnAttr(Attribute::AlwaysInline);
+                                    Value* mskVal = CallInst::Create(callee, callArgs, "", loopBB);
+
+                                    CreateCallToDeegenCommonSnippet(
+                                        m.get(), "UpdateTypeMaskForPredictionPropagation", { curDstAddr, mskVal, changedAlloca }, loopBB);
+
+                                    Value* nextRangeoffset = CreateUnsignedAddNoOverflow(curRangeOffset, CreateLLVMConstantInt<uint64_t>(ctx, 1), loopBB);
+                                    Value* nextDstAddr = GetElementPtrInst::CreateInBounds(
+                                        llvm_type_of<TypeMaskTy>(ctx),
+                                        curDstAddr,
+                                        { CreateLLVMConstantInt<uint64_t>(ctx, 1) },
+                                        "", loopBB);
+
+                                    Value* loopEnd = new ICmpInst(loopBB /*insertAtEnd*/, ICmpInst::ICMP_EQ, nextRangeoffset, rangeEnd);
+                                    BasicBlock* loopEndBB = BasicBlock::Create(ctx, "", ppFn);
+                                    BranchInst::Create(loopEndBB, loopBB, loopEnd, loopBB /*insertAtEnd*/);
+
+                                    curRangeOffset->addIncoming(nextRangeoffset, loopBB);
+                                    curDstAddr->addIncoming(nextDstAddr, loopBB);
+
+                                    curBB = loopEndBB;
+                                    curRangeUpdaterOrd++;
+                                }
+                            }
+                            ReleaseAssert(curRangeUpdaterOrd == numRangeUpdaters);
+
+                            Value* changedVal = new LoadInst(llvm_type_of<uint8_t>(ctx), changedAlloca, "", curBB);
+                            changedVal = new TruncInst(changedVal, llvm_type_of<bool>(ctx), "", curBB);
+                            ReturnInst::Create(ctx, changedVal, curBB);
+                        }
+
+                        ValidateLLVMModule(m.get());
+
+                        RunLLVMOptimizePass(m.get());
+                        std::unique_ptr<Module> ppImplMod = ExtractFunction(m.get(), ppFnName);
+                        ReleaseAssert(!bcToPredictionPropagationFnMap.count(bytecodeVariantDef->m_bytecodeName));
+                        bcToPredictionPropagationFnMap[bytecodeVariantDef->m_bytecodeName] = {
+                            .m_fnName = ppFnName,
+                            .m_module = std::move(ppImplMod)
+                        };
+                    }
                 }
             }
 
@@ -1649,22 +2319,30 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         fprintf(fp, " };\n");
 
         fprintf(fp, "    using DfgRangeOpRWInfoGetterFn = void(*)(uint8_t*, uint32_t*, uint32_t*, size_t&, size_t&, size_t&);\n");
+        fprintf(fp, "    using DfgPredictionPropagationSetupFn = void(*)(DfgPredictionPropagationSetupInfo&, uint8_t*);\n");
 
         if (needRangedOperandInfoGetter)
         {
             fprintf(fp, "    static constexpr bool x_bytecodeHasRangedOperand = true;\n");
-            fprintf(fp, "    static constexpr std::array<DfgRangeOpRWInfoGetterFn, %d> x_dfgRangeOpRWInfoGetterFns = { ", static_cast<int>(bytecodeDef.m_variants.size()));
-            for (size_t i = 0; i < bytecodeDef.m_variants.size(); i++)
-            {
-                if (i > 0) { fprintf(fp, ", "); }
-                fprintf(fp, "&%s<CRTP>::GetRangeOperandRWInfoImpl%d", generatedClassName.c_str(), static_cast<int>(i));
-            }
-            fprintf(fp, " };\n\n");
+            fprintf(fp, "    static constexpr DfgRangeOpRWInfoGetterFn x_dfgRangeOpRWInfoGetterFns = ");
+            fprintf(fp, "&%s<CRTP>::GetRangeOperandRWInfoImpl", generatedClassName.c_str());
+            fprintf(fp, ";\n\n");
         }
         else
         {
             fprintf(fp, "    static constexpr bool x_bytecodeHasRangedOperand = false;\n");
-            fprintf(fp, "    static constexpr std::array<DfgRangeOpRWInfoGetterFn, 0> x_dfgRangeOpRWInfoGetterFns = {};\n");
+            fprintf(fp, "    static constexpr DfgRangeOpRWInfoGetterFn x_dfgRangeOpRWInfoGetterFns = nullptr;\n");
+        }
+
+        if (hasPredictionPropagationFn)
+        {
+            fprintf(fp, "    static constexpr DfgPredictionPropagationSetupFn x_dfgPredictionPropagationSetupFn = ");
+            fprintf(fp, "&%s<CRTP>::InitializePredictionPropagationDataImpl", generatedClassName.c_str());
+            fprintf(fp, ";\n\n");
+        }
+        else
+        {
+            fprintf(fp, "    static constexpr DfgPredictionPropagationSetupFn x_dfgPredictionPropagationSetupFn = nullptr;\n");
         }
 
         // Emit the DFG node-specific-data dump function
@@ -1718,6 +2396,33 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         fprintf(fp, "};\n\n");
     }
 
+    for (auto& it : bcToPredictionPropagationFnMap)
+    {
+        fprintf(fp, "extern \"C\" bool %s(void*, void*);\n", it.second.m_fnName.c_str());
+    }
+
+    for (auto& it : bcToPredictionPropagationFnMap)
+    {
+        fprintf(fp, "template<> struct DfgPredictionPropagationImplFuncPtr<DeegenGenerated_BytecodeBuilder_%s> {\n",
+                it.first.c_str());
+        fprintf(fp, "    static constexpr DfgPredictionPropagationImplFuncTy value = %s;\n",
+                it.second.m_fnName.c_str());
+        fprintf(fp, "};\n");
+    }
+
+    for (BytecodeVariantCollection& bytecodeDef : defs)
+    {
+        ReleaseAssert(bytecodeDef.m_variants.size() > 0);
+        std::string bytecodeName = bytecodeDef.m_variants[0]->m_bytecodeName;
+        if (!bcToPredictionPropagationFnMap.count(bytecodeName))
+        {
+            fprintf(fp, "template<> struct DfgPredictionPropagationImplFuncPtr<DeegenGenerated_BytecodeBuilder_%s> {\n",
+                    bytecodeName.c_str());
+            fprintf(fp, "    static constexpr DfgPredictionPropagationImplFuncTy value = nullptr;\n");
+            fprintf(fp, "};\n");
+        }
+    }
+
     fclose(preFp);
     fclose(fp);
     finalRes.m_generatedHeaderFile = hdrPreheader.GetFileContents() + hdrOut.GetFileContents();
@@ -1729,6 +2434,30 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
     }
 
     finalRes.m_returnContinuationNameList = allReturnContinuationNames;
+
+    // Dump audit file for type prediction propagation function implementations
+    //
+    if (bcToPredictionPropagationFnMap.size() > 0)
+    {
+        auto it = bcToPredictionPropagationFnMap.begin();
+        std::unique_ptr<Module> summaryMod = CloneModule(*it->second.m_module.get());
+        {
+            Linker linker(*summaryMod.get());
+            while (true)
+            {
+                it++;
+                if (it == bcToPredictionPropagationFnMap.end()) { break; }
+                ReleaseAssert(linker.linkInModule(CloneModule(*it->second.m_module.get())) == false);
+            }
+        }
+
+        std::string asmFile = CompileLLVMModuleToAssemblyFile(summaryMod.get(), llvm::Reloc::Static, llvm::CodeModel::Small);
+        finalRes.m_dfgPredictionPropagationFnAuditFile = asmFile;
+    }
+    else
+    {
+        finalRes.m_dfgPredictionPropagationFnAuditFile = "(no prediction propagation functions)\n";
+    }
 
     // Important to generate the JSON file after all processing, since the interpreter processor
     // also removes unused slowpaths and return continuations from the bytecode definition,
@@ -1774,6 +2503,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
         finalRes.m_dfgVariantInfoJson = std::move(allJsonList);
 
         ReleaseAssert(totalDfgVariants + finalRes.m_bytecodeInfoJson.size() == bvdImplMap.size());
+    }
+
+    // Save DFG prediction propagation functions
+    //
+    {
+        json_t allJsonList = json_t::array();
+        for (auto& it : bcToPredictionPropagationFnMap)
+        {
+            allJsonList.push_back(base64_encode(DumpLLVMModuleAsString(it.second.m_module.get())));
+        }
+        finalRes.m_dfgFunctionStubs = allJsonList;
     }
 
     return finalRes;

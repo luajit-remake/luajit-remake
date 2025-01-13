@@ -91,6 +91,11 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_mutable_upvalue_from_function_obj.cpp
   put_upvalue_from_function_obj.cpp
   move_variadic_results_for_return.cpp
+  get_input_prediction_mask_for_simple_node.cpp
+  get_input_prediction_mask_for_complex_node.cpp
+  get_input_prediction_mask_range_for_complex_node.cpp
+  update_type_mask_for_prediction_propagation.cpp
+  get_prediction_propagation_output_range_info.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

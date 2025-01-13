@@ -1348,6 +1348,8 @@ public:
     bool IsGetKthVariadicResNode() { return m_nodeKind == NodeKind_GetKthVariadicRes; }
     bool IsPrependVariadicResNode() { return m_nodeKind == NodeKind_PrependVariadicRes; }
     bool IsCreateCapturedVarNode() { return m_nodeKind == NodeKind_CreateCapturedVar; }
+    bool IsSetCapturedVarNode() { return m_nodeKind == NodeKind_SetCapturedVar; }
+    bool IsGetCapturedVarNode() { return m_nodeKind == NodeKind_GetCapturedVar; }
     bool IsPhantomNode() { return m_nodeKind == NodeKind_Phantom; }
 
     static Node* WARN_UNUSED CreateNoopNode()
@@ -1397,6 +1399,10 @@ public:
         r->SetNumInputs(1);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(capturedVar);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
+        r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
+            .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
+            .m_logicalCV = nullptr
+        };
         return r;
     }
 
@@ -1407,6 +1413,10 @@ public:
         r->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = Edge(capturedVar);
         r->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = Edge(valueToStore);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
+        r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
+            .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
+            .m_logicalCV = nullptr
+        };
         return r;
     }
 
@@ -1418,6 +1428,10 @@ public:
         r->SetNumInputs(1);
         r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
+        r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
+            .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
+            .m_logicalCV = nullptr
+        };
         return r;
     }
 
@@ -2606,6 +2620,13 @@ public:
         m_allLogicalVariables.push_back(info);
     }
 
+    void RegisterCapturedVarLogicalVariable(CapturedVarLogicalVariableInfo* info)
+    {
+        size_t ord = m_allCapturedVarLogicalVariables.size();
+        info->SetLogicalVariableOrdinal(SafeIntegerCast<uint32_t>(ord));
+        m_allCapturedVarLogicalVariables.push_back(info);
+    }
+
     const DVector<ArenaPtr<LogicalVariableInfo>>& GetAllLogicalVariables()
     {
         return m_allLogicalVariables;
@@ -2795,6 +2816,7 @@ private:
     DUnorderedMap<CodeBlock*, BytecodeLiveness*> m_bytecodeLivenessInfo;
     TempArenaAllocator m_phiNodeAllocator;
     DVector<ArenaPtr<LogicalVariableInfo>> m_allLogicalVariables;
+    DVector<ArenaPtr<CapturedVarLogicalVariableInfo>> m_allCapturedVarLogicalVariables;
     uint32_t m_totalNumLocals;
     uint32_t m_totalNumInterpreterSlots;
     Form m_graphForm;

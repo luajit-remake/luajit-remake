@@ -85,6 +85,7 @@ inline cl::opt<std::string> cl_cppOutputFilename2("cpp-output-2", cl::desc("The 
 inline cl::opt<std::string> cl_assemblyOutputFilename("asm-output", cl::desc("The output file name for the generated assembly"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonOutputFilename("json-output", cl::desc("The output file name for the generated JSON"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_jsonOutputFilename2("json-output-2", cl::desc("The output file name for the generated JSON #2"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
+inline cl::opt<std::string> cl_curSrcFileName("cur-src-filename", cl::desc("The C++ source file name for audit purpose"), cl::value_desc("filename"), cl::init(""), cl::cat(FPSOptions));
 inline cl::opt<std::string> cl_auditDirPath("audit-dir", cl::desc("The directory for outputting audit information. These are not used for the build, but for human inspection only."), cl::value_desc("path"), cl::init(""), cl::cat(FPSOptions));
 
 std::vector<std::string> WARN_UNUSED ParseCommaSeparatedFileList(const std::string& commaSeparatedFiles);

@@ -945,6 +945,111 @@ struct ConstructBlockLocalSSAPass
         }
     }
 
+    // Set up Logical Variable for each CreateCapturedVar, SetCapturedVar and GetCapturedVar
+    //
+    // Similar to GetLocal/SetLocal, the invariant here is that for any CreateCapturedVar/SetCapturedVar
+    // that can flow to a GetCapturedVar, they must have the same logical variable.
+    //
+    void SetupLogicalVariableForCaptures()
+    {
+        ArenaPtr<CapturedVarLogicalVariableInfo>* info = m_alloc.AllocateArray<ArenaPtr<CapturedVarLogicalVariableInfo>>(
+            m_graph->GetAllLogicalVariables().size(), nullptr /*value*/);
+
+        auto allocateNewCVI = [&](uint32_t localOrdForOsrExit) ALWAYS_INLINE WARN_UNUSED -> CapturedVarLogicalVariableInfo*
+        {
+            CapturedVarLogicalVariableInfo* cvi = CapturedVarLogicalVariableInfo::Create(localOrdForOsrExit);
+            m_graph->RegisterCapturedVarLogicalVariable(cvi);
+            return cvi;
+        };
+
+        auto getOrAllocateNewCVIForLV = [&](uint32_t logicalVarOrd, uint32_t localOrdForOsrExit) ALWAYS_INLINE WARN_UNUSED -> ArenaPtr<CapturedVarLogicalVariableInfo>
+        {
+            TestAssert(logicalVarOrd < m_graph->GetAllLogicalVariables().size());
+            if (info[logicalVarOrd] == nullptr)
+            {
+                info[logicalVarOrd] = allocateNewCVI(localOrdForOsrExit);
+            }
+            TestAssert(DfgAlloc()->GetPtr(info[logicalVarOrd])->m_localOrdForOsrExit == localOrdForOsrExit);
+            return info[logicalVarOrd];
+        };
+
+        for (BasicBlock* bb : m_graph->m_blocks)
+        {
+            auto& nodes = bb->m_nodes;
+            for (size_t nodeIdx = nodes.size(); nodeIdx--;)
+            {
+                Node* node = nodes[nodeIdx];
+                if (node->IsSetLocalNode())
+                {
+                    // This CreateCapturedVar node is accessed in multiple basic blocks
+                    // They must share the same CapturedVarLogicalVariable, which can be identified by the LogicalVariable of the SetLocal
+                    //
+                    Node* operand = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetOperand();
+                    if (operand->IsCreateCapturedVarNode())
+                    {
+                        Nsd_CapturedVarInfo& nsd = operand->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>();
+                        TestAssert(nsd.m_logicalCV == nullptr);
+                        uint32_t ord = node->GetLogicalVariable()->GetLogicalVariableOrdinal();
+                        nsd.m_logicalCV = getOrAllocateNewCVIForLV(ord, nsd.m_localOrdForOsrExit);
+                    }
+                }
+                else if (node->IsCreateCapturedVarNode())
+                {
+                    Nsd_CapturedVarInfo& nsd = node->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>();
+                    if (nsd.m_logicalCV == nullptr)
+                    {
+                        // This CreateCapturedVar is only used inside this basic block (since we are iterating the nodes in this BB in reverse order,
+                        // we are certain that no SetLocal has stored it into a local). It should have its own CapturedVarLogicalVariable
+                        //
+                        nsd.m_logicalCV = allocateNewCVI(nsd.m_localOrdForOsrExit);
+                    }
+                }
+            }
+
+            // Now we have assigned CapturedVarLogicalVariable for each CreateCaptureVar in this BB,
+            // we can assign CapturedVarLogicalVariable for each GetCapturedVar and SetCapturedVar as well
+            //
+            for (Node* node : nodes)
+            {
+                if (node->IsGetCapturedVarNode() || node->IsSetCapturedVarNode())
+                {
+                    Nsd_CapturedVarInfo& nsd = node->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>();
+                    Node* capturedVar = node->GetInputEdge(0).GetOperand();
+                    if (capturedVar->IsGetLocalNode())
+                    {
+                        uint32_t ord = capturedVar->GetLogicalVariable()->GetLogicalVariableOrdinal();
+                        nsd.m_logicalCV = getOrAllocateNewCVIForLV(ord, nsd.m_localOrdForOsrExit);
+                    }
+                    else
+                    {
+                        TestAssert(capturedVar->IsCreateCapturedVarNode());
+                        Nsd_CapturedVarInfo& cvNsd = capturedVar->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>();
+                        TestAssert(cvNsd.m_logicalCV != nullptr);
+                        TestAssert(cvNsd.m_localOrdForOsrExit == nsd.m_localOrdForOsrExit);
+                        nsd.m_logicalCV = cvNsd.m_logicalCV;
+                    }
+                }
+            }
+        }
+
+        // Sanity checks
+        //
+#ifdef TESTBUILD
+        for (BasicBlock* bb : m_graph->m_blocks)
+        {
+            for (Node* node : bb->m_nodes)
+            {
+                if (node->IsSetLocalNode())
+                {
+                    size_t ord = node->GetLogicalVariable()->GetLogicalVariableOrdinal();
+                    TestAssert(ord < m_graph->GetAllLogicalVariables().size());
+                    TestAssertIff(info[ord] != nullptr, node->GetInputEdge(0).GetOperand()->IsCreateCapturedVarNode());
+                }
+            }
+        }
+#endif
+    }
+
     // This pass turns unnecessary GetLocal/SetLocal to nop nodes, remove them in the end
     //
     void RemoveNopNodes()
@@ -970,6 +1075,7 @@ struct ConstructBlockLocalSSAPass
         if (isPreUnification)
         {
             SetupLogicalVariables();
+            SetupLogicalVariableForCaptures();
             AssertBlockLocalSSAInvariant(false /*isPreUnification*/);
         }
         RemoveNopNodes();

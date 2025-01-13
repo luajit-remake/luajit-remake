@@ -24,6 +24,22 @@ struct ArenaPtr
 
     bool IsNull() const { return m_value == 0; }
 
+    bool operator==(std::nullptr_t) const { return IsNull(); }
+    bool operator==(const ArenaPtr<T>& other) const { return m_value == other.m_value; }
+
+    bool operator==(T* other) const
+    {
+        if (other == nullptr)
+        {
+            return IsNull();
+        }
+        else
+        {
+            T* val = *this;
+            return val == other;
+        }
+    }
+
     uint32_t m_value;
 };
 static_assert(sizeof(ArenaPtr<void>) == 4);

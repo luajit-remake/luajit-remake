@@ -18,7 +18,7 @@ DEEGEN_DEFINE_BYTECODE(LogicalNot)
     Implementation(LogicalNotImpl);
     Variant();
     DfgVariant();
-    TypeDeductionRule([](TypeMask /*input*/) -> TypeMask { return x_typeMaskFor<tBool>; });
+    TypeDeductionRule(AlwaysOutput<tBool>);
     RegAllocHint(
         Op("value").RegHint(RegHint::GPR),
         Op("output").RegHint(RegHint::GPR)

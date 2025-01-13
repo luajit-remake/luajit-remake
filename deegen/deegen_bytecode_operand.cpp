@@ -590,7 +590,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
         bool isApiCalled;
         std::vector<std::string> preheaderLines;
         std::vector<std::string> ctorItems;
-        std::vector<std::pair<std::string, std::string>> allRawRangeItems;
+        std::vector<RangeRcwInfoItem> allRawRangeItems;
     };
 
     auto readRCWExprList = [&](Constant* cst) -> ReadRCWExprResult {
@@ -649,7 +649,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
         }
 
         std::vector<std::string> ctorItems, preheaderItems;
-        std::vector<std::pair<std::string, std::string>> allRawRangeItems;
+        std::vector<RangeRcwInfoItem> allRawRangeItems;
 
         if (reader.GetValue<&RCWDesc::m_accessesVariadicArgs>())
         {
@@ -670,7 +670,72 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             LLVMConstantStructReader rangeDescReader(module, exprArrayReader.Get<RangeDesc>(i));
             OperandExpr start = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_start>());
             OperandExpr len = readOperandExpr(rangeDescReader.Get<&RangeDesc::m_len>());
-            allRawRangeItems.push_back(std::make_pair(stringifyOperandExprBase64(start), stringifyOperandExprBase64(len)));
+
+            bool shouldValueProfileRange = rangeDescReader.GetValue<&RangeDesc::m_shouldValueProfileRange>();
+            bool shouldExplicitNoProfileRange = rangeDescReader.GetValue<&RangeDesc::m_isExplicitlyNoProfile>();
+            bool isFixedOutputTypeMaskRange = rangeDescReader.GetValue<&RangeDesc::m_isFixedOutputTypeMask>();
+            TypeMaskTy fixedOutputTypeMask = rangeDescReader.GetValue<&RangeDesc::m_fixedOutputTypeMask>();
+            Constant* typeDeductionRuleFnCst = rangeDescReader.Get<&RangeDesc::m_typeDeductionRuleFn>();
+            Function* typeDeductionRuleFn = nullptr;
+            bool hasTypeDeductionRuleFn;
+            if (isa<ConstantPointerNull>(typeDeductionRuleFnCst))
+            {
+                hasTypeDeductionRuleFn = false;
+            }
+            else
+            {
+                ReleaseAssert(isa<Function>(typeDeductionRuleFnCst));
+                hasTypeDeductionRuleFn = true;
+                typeDeductionRuleFn = cast<Function>(typeDeductionRuleFnCst);
+                if (!typeDeductionRuleFn->hasInternalLinkage())
+                {
+                    fprintf(stderr, "Type deduction function should be marked 'static'!\n");
+                    abort();
+                }
+            }
+
+            RangeRcwInfoItem item;
+            item.m_startExpr = stringifyOperandExprBase64(start);
+            item.m_lenExpr = stringifyOperandExprBase64(len);
+            item.m_fixedMask = 0;
+            item.m_typeDeductionFnName = "";
+            if (shouldValueProfileRange)
+            {
+                ReleaseAssert(!shouldExplicitNoProfileRange && !isFixedOutputTypeMaskRange);
+                if (hasTypeDeductionRuleFn)
+                {
+                    item.m_typeDeductionKind = TypeDeductionKind::ValueProfileWithFunction;
+                    item.m_typeDeductionFnName = typeDeductionRuleFn->getName().str();
+                }
+                else
+                {
+                    item.m_typeDeductionKind = TypeDeductionKind::ValueProfile;
+                }
+            }
+            else if (shouldExplicitNoProfileRange)
+            {
+                ReleaseAssert(!shouldValueProfileRange && !isFixedOutputTypeMaskRange && !hasTypeDeductionRuleFn);
+                item.m_typeDeductionKind = TypeDeductionKind::NeverProfile;
+            }
+            else if (isFixedOutputTypeMaskRange)
+            {
+                ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !hasTypeDeductionRuleFn);
+                ReleaseAssert(fixedOutputTypeMask != 0);
+                ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tTop>);
+                item.m_typeDeductionKind = TypeDeductionKind::Constant;
+                item.m_fixedMask = fixedOutputTypeMask;
+            }
+            else if (hasTypeDeductionRuleFn)
+            {
+                ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !isFixedOutputTypeMaskRange);
+                item.m_typeDeductionKind = TypeDeductionKind::Function;
+                item.m_typeDeductionFnName = typeDeductionRuleFn->getName().str();
+            }
+            else
+            {
+                item.m_typeDeductionKind = TypeDeductionKind::Invalid;
+            }
+            allRawRangeItems.push_back(item);
             ReleaseAssert(!start.IsInfinity());
             preheaderItems.push_back("int64_t range_start_" + std::to_string(i) + " = " + start.PrintCppExpression("ops") + ";");
             preheaderItems.push_back("TestAssert(range_start_" + std::to_string(i) + " >= 0);");
@@ -1126,7 +1191,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                 + generateRCWGetterFunc(bcwiseRCWWriteInfo, GenerateRCWKind::Write)
                 + generateRCWGetterFunc(bcwiseRCWClobberInfo, GenerateRCWKind::Clobber);
 
-            auto getRCWRawRangeExprs = [&](ReadRCWExprResult& bcwiseInfo) -> std::vector<std::pair<std::string, std::string>>
+            auto getRCWRawRangeExprs = [&](ReadRCWExprResult& bcwiseInfo) -> std::vector<RangeRcwInfoItem>
             {
                 if (bcwiseInfo.isApiCalled)
                 {
@@ -1142,6 +1207,111 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             def->m_rawReadRangeExprs = getRCWRawRangeExprs(bcwiseRCWReadInfo);
             def->m_rawWriteRangeExprs = getRCWRawRangeExprs(bcwiseRCWWriteInfo);
             def->m_rawClobberRangeExprs = getRCWRawRangeExprs(bcwiseRCWClobberInfo);
+
+            for (RangeRcwInfoItem& item : def->m_rawReadRangeExprs)
+            {
+                if (item.m_typeDeductionKind != TypeDeductionKind::Invalid)
+                {
+                    fprintf(stderr, "Read ranges must NOT have a type deduction rule!\n");
+                    abort();
+                }
+            }
+            for (RangeRcwInfoItem& item : def->m_rawWriteRangeExprs)
+            {
+                if (item.m_typeDeductionKind == TypeDeductionKind::Invalid)
+                {
+                    fprintf(stderr, "Write ranges must provide a valid type deduction rule!\n");
+                    abort();
+                }
+            }
+            for (RangeRcwInfoItem& item : def->m_rawClobberRangeExprs)
+            {
+                if (item.m_typeDeductionKind != TypeDeductionKind::Invalid)
+                {
+                    fprintf(stderr, "Clobber ranges must NOT have a type deduction rule!\n");
+                    abort();
+                }
+            }
+
+            // Parse and populate output type deduction info
+            //
+            {
+                bool shouldValueProfileRange = curDefReader.GetValue<&Desc::m_outputShouldBeValueProfiled>();
+                bool shouldExplicitNoProfileRange = curDefReader.GetValue<&Desc::m_outputShouldExplicitlyNotProfiled>();
+                bool isFixedOutputTypeMaskRange = curDefReader.GetValue<&Desc::m_outputHasFixedTypeMask>();
+                TypeMaskTy fixedOutputTypeMask = curDefReader.GetValue<&Desc::m_outputFixedTypeMask>();
+                Constant* typeDeductionRuleFnCst = curDefReader.Get<&Desc::m_outputTypeDeductionRule>();
+                Function* typeDeductionRuleFn = nullptr;
+                bool hasTypeDeductionRuleFn;
+                if (isa<ConstantPointerNull>(typeDeductionRuleFnCst))
+                {
+                    hasTypeDeductionRuleFn = false;
+                }
+                else
+                {
+                    ReleaseAssert(isa<Function>(typeDeductionRuleFnCst));
+                    hasTypeDeductionRuleFn = true;
+                    typeDeductionRuleFn = cast<Function>(typeDeductionRuleFnCst);
+                    if (!typeDeductionRuleFn->hasInternalLinkage())
+                    {
+                        fprintf(stderr, "Type deduction function should be marked 'static'!\n");
+                        abort();
+                    }
+                }
+
+                def->m_outputTypeDeductionInfo.m_fixedMask = 0;
+                def->m_outputTypeDeductionInfo.m_typeDeductionFnName = "";
+
+                if (hasTValueOutput)
+                {
+                    if (shouldValueProfileRange)
+                    {
+                        ReleaseAssert(!shouldExplicitNoProfileRange && !isFixedOutputTypeMaskRange);
+                        if (hasTypeDeductionRuleFn)
+                        {
+                            def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::ValueProfileWithFunction;
+                            def->m_outputTypeDeductionInfo.m_typeDeductionFnName = typeDeductionRuleFn->getName().str();
+                        }
+                        else
+                        {
+                            def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::ValueProfile;
+                        }
+                    }
+                    else if (shouldExplicitNoProfileRange)
+                    {
+                        ReleaseAssert(!shouldValueProfileRange && !isFixedOutputTypeMaskRange && !hasTypeDeductionRuleFn);
+                        def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::NeverProfile;
+                    }
+                    else if (isFixedOutputTypeMaskRange)
+                    {
+                        ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !hasTypeDeductionRuleFn);
+                        ReleaseAssert(fixedOutputTypeMask != 0);
+                        ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tTop>);
+                        def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::Constant;
+                        def->m_outputTypeDeductionInfo.m_fixedMask = fixedOutputTypeMask;
+                    }
+                    else if (hasTypeDeductionRuleFn)
+                    {
+                        ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !isFixedOutputTypeMaskRange);
+                        def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::Function;
+                        def->m_outputTypeDeductionInfo.m_typeDeductionFnName = typeDeductionRuleFn->getName().str();
+                    }
+                    else
+                    {
+                        fprintf(stderr, "No output type deduction rule specified for node with an output value!\n");
+                        abort();
+                    }
+                }
+                else
+                {
+                    def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::Invalid;
+                    if (shouldValueProfileRange || shouldExplicitNoProfileRange || isFixedOutputTypeMaskRange || hasTypeDeductionRuleFn)
+                    {
+                        fprintf(stderr, "Output type deduction rule should only be specified for nodes with an output value!\n");
+                        abort();
+                    }
+                }
+            }
 
             def->m_bcIntrinsicOrd = intrinsicOrd;
 
@@ -1366,16 +1536,30 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json_t& j)
     JSONCheckedGet(j, "disable_reg_alloc_enabled_assert_even_if_reg_hint_given", m_disableRegAllocEnabledAssertEvenIfRegHintGiven);
     JSONCheckedGet(j, "rcw_info_funcs", m_rcwInfoFuncs);
 
-    auto getRcwRangeInfo = [&](json_t& data) -> std::vector<std::pair<std::string, std::string>>
+    auto checkTdkValid = [&](uint32_t val) -> TypeDeductionKind
+    {
+        ReleaseAssert(val == static_cast<uint32_t>(TypeDeductionKind::Invalid) ||
+                      val == static_cast<uint32_t>(TypeDeductionKind::ValueProfile) ||
+                      val == static_cast<uint32_t>(TypeDeductionKind::NeverProfile) ||
+                      val == static_cast<uint32_t>(TypeDeductionKind::Constant) ||
+                      val == static_cast<uint32_t>(TypeDeductionKind::Function) ||
+                      val == static_cast<uint32_t>(TypeDeductionKind::ValueProfileWithFunction));
+        return static_cast<TypeDeductionKind>(val);
+    };
+
+    auto getRcwRangeInfo = [&](json_t& data) -> std::vector<RangeRcwInfoItem>
     {
         ReleaseAssert(data.is_array());
-        std::vector<std::pair<std::string, std::string>> resList;
-        for (json_t& item : data)
+        std::vector<RangeRcwInfoItem> resList;
+        for (json_t& jdata : data)
         {
-            std::string s1, s2;
-            JSONCheckedGet(item, "start", s1);
-            JSONCheckedGet(item, "length", s2);
-            resList.push_back(std::make_pair(s1, s2));
+            RangeRcwInfoItem item;
+            JSONCheckedGet(jdata, "start", item.m_startExpr);
+            JSONCheckedGet(jdata, "length", item.m_lenExpr);
+            item.m_typeDeductionKind = checkTdkValid(JSONCheckedGet<uint32_t>(jdata, "type_deduction_kind"));
+            JSONCheckedGet(jdata, "type_deduction_fixed_mask", item.m_fixedMask);
+            JSONCheckedGet(jdata, "type_deduction_fn_name", item.m_typeDeductionFnName);
+            resList.push_back(item);
         }
         return resList;
     };
@@ -1388,6 +1572,10 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json_t& j)
 
     ReleaseAssert(j.count("rcw_range_operand_clobbers"));
     m_rawClobberRangeExprs = getRcwRangeInfo(j["rcw_range_operand_clobbers"]);
+
+    m_outputTypeDeductionInfo.m_typeDeductionKind = checkTdkValid(JSONCheckedGet<uint32_t>(j, "output_type_deduction_kind"));
+    JSONCheckedGet(j, "output_type_deduction_fixed_mask", m_outputTypeDeductionInfo.m_fixedMask);
+    JSONCheckedGet(j, "output_type_deduction_fn_name", m_outputTypeDeductionInfo.m_typeDeductionFnName);
 
     {
         ReleaseAssert(j.count("operand_reg_pref_info_list"));
@@ -1492,14 +1680,17 @@ json_t WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
     j["disable_reg_alloc_enabled_assert_even_if_reg_hint_given"] = m_disableRegAllocEnabledAssertEvenIfRegHintGiven;
     j["rcw_info_funcs"] = m_rcwInfoFuncs;
 
-    auto saveRcwRangeInfo = [&](const std::vector<std::pair<std::string, std::string>>& data) -> json_t
+    auto saveRcwRangeInfo = [&](const std::vector<RangeRcwInfoItem>& data) -> json_t
     {
         json_t r = json_t::array();
-        for (auto& it : data)
+        for (const RangeRcwInfoItem& it : data)
         {
             json_t item = json_t::object();
-            item["start"] = it.first;
-            item["length"] = it.second;
+            item["start"] = it.m_startExpr;
+            item["length"] = it.m_lenExpr;
+            item["type_deduction_kind"] = static_cast<uint32_t>(it.m_typeDeductionKind);
+            item["type_deduction_fixed_mask"] = it.m_fixedMask;
+            item["type_deduction_fn_name"] = it.m_typeDeductionFnName;
             r.push_back(std::move(item));
         }
         return r;
@@ -1508,6 +1699,10 @@ json_t WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
     j["rcw_range_operand_reads"] = saveRcwRangeInfo(m_rawReadRangeExprs);
     j["rcw_range_operand_writes"] = saveRcwRangeInfo(m_rawWriteRangeExprs);
     j["rcw_range_operand_clobbers"] = saveRcwRangeInfo(m_rawClobberRangeExprs);
+
+    j["output_type_deduction_kind"] = static_cast<uint32_t>(m_outputTypeDeductionInfo.m_typeDeductionKind);
+    j["output_type_deduction_fixed_mask"] = m_outputTypeDeductionInfo.m_fixedMask;
+    j["output_type_deduction_fn_name"] = m_outputTypeDeductionInfo.m_typeDeductionFnName;
 
     {
         json_t arr = json_t::array();

@@ -40,11 +40,7 @@ DEEGEN_DEFINE_BYTECODE(TableNew)
     }
     Variant();
     DfgVariant();
-    TypeDeductionRule(
-        [](uint8_t /*inlineStorageSizeStepping*/, uint16_t /*arrayPartSizeHint*/) -> TypeMask
-        {
-            return x_typeMaskFor<tTable>;
-        });
+    TypeDeductionRule(AlwaysOutput<tTable>);
     RegAllocHint(Op("output").RegHint(RegHint::GPR));
     RegAllocMayBeDisabledDespiteRegHintGiven();
 }

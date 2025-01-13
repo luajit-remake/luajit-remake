@@ -25,6 +25,7 @@ DEEGEN_DEFINE_BYTECODE(test1)
     Result(BytecodeValue);
     Implementation(fn1);
     Variant();
+    TypeDeductionRule(DoNotProfile);
 }
 
 static void NO_RETURN rc2()
@@ -43,6 +44,7 @@ DEEGEN_DEFINE_BYTECODE(test2)
     Result(BytecodeValue);
     Implementation(fn2);
     Variant();
+    TypeDeductionRule(DoNotProfile);
 }
 
 static void NO_RETURN rc3()
@@ -61,6 +63,7 @@ DEEGEN_DEFINE_BYTECODE(test3)
     Result(BytecodeValue);
     Implementation(fn3);
     Variant();
+    TypeDeductionRule(DoNotProfile);
 }
 
 static void NO_RETURN rc4()
@@ -79,6 +82,7 @@ DEEGEN_DEFINE_BYTECODE(test4)
     Result(BytecodeValue);
     Implementation(fn4);
     Variant();
+    TypeDeductionRule(DoNotProfile);
 }
 
 static void NO_RETURN rc5()
