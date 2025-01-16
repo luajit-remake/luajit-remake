@@ -16,8 +16,8 @@ TEST(Deegen, DumpTypeSpeculation)
     s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tBottom>);
     ReleaseAssert(s == "tBottom");
 
-    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tTop>);
-    ReleaseAssert(s == "tTop");
+    s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tBoxedValueTop>);
+    ReleaseAssert(s == "tBoxedValueTop");
 
     s = DumpHumanReadableTypeSpeculation(x_typeMaskFor<tTable>);
     ReleaseAssert(s == "tTable");

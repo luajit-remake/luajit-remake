@@ -114,7 +114,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
             //
             for (uint32_t inputOrd = 0; inputOrd < node->GetNumInputs(); inputOrd++)
             {
-                Edge e = node->GetInputEdge(inputOrd);
+                Edge& e = node->GetInputEdge(inputOrd);
                 Node* inputNode = e.GetOperand();
                 if (!inputNode->IsConstantLikeNode())
                 {
@@ -185,7 +185,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
         {
             if (node->IsShadowStoreNode())
             {
-                return node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                return node->GetSoleInput().GetValue();
             }
             else
             {
@@ -204,7 +204,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                                   "SetLocal is not preceded by a ShadowStore on the same location");
                 {
                     Node* shadowStoreNode = shadowStoreWrites[slot.Value()];
-                    Value setLocalValue = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                    Value setLocalValue = node->GetSoleInput().GetValue();
                     Value shadowStoreValue = getShadowStoreValue(shadowStoreNode);
                     CHECK_REPORT_NODE(setLocalValue.IsIdenticalAs(shadowStoreValue),
                                       node,
@@ -247,7 +247,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
             InterpreterSlot slot = InterpreterSlot(it.first);
             Node* setLocalNode = it.second;
             TestAssert(setLocalNode->IsSetLocalNode());
-            Value setLocalVal = setLocalNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+            Value setLocalVal = setLocalNode->GetSoleInput().GetValue();
 
             CHECK_REPORT_NODE(shadowStoreWrites.count(slot.Value()),
                               setLocalNode,
@@ -296,7 +296,7 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
             {
                 Node* setLocalNode = setLocalWrites[slot.Value()];
                 TestAssert(setLocalNode->IsSetLocalNode());
-                Value setLocalVal = setLocalNode->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                Value setLocalVal = setLocalNode->GetSoleInput().GetValue();
 
                 CHECK_REPORT_NODE(setLocalVal.IsIdenticalAs(shadowStoreVal),
                                   shadowStoreNode,

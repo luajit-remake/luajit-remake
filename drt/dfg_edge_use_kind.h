@@ -9,9 +9,12 @@ enum UseKind : uint16_t
 {
     // Must be first member
     // This is a boxed value, but no type assumption on the type of the value
-    // Equivalent to: precond = tTop, check = tTop
+    // Equivalent to: precond = tBoxedValueTop, check = tBoxedValueTop
     //
     UseKind_Untyped,
+    // This may be anything
+    //
+    UseKind_FullTop,
     // This is an unboxed pointer pointing to a closed Upvalue object
     //
     UseKind_KnownCapturedVar,
@@ -23,13 +26,13 @@ enum UseKind : uint16_t
     //
     UseKind_Unreachable,
     // This edge always causes an OSR exit
-    // Equivalent to: precond = tTop, check = tBottom
+    // Equivalent to: precond = tBoxedValueTop, check = tBottom
     //
     UseKind_AlwaysOsrExit,
     // Guest language use kinds start here, all built-in use kind must come before this
     //
     // The first proven (i.e., no runtime check needed) non-trivial use kind
-    // Equivalent to precond = tXXX, check = tXXX where tXXX != tTop && tXXX != tBottom,
+    // Equivalent to precond = tXXX, check = tXXX where tXXX != tBoxedValueTop && tXXX != tBottom,
     // defined in the same order as x_list_of_type_speculation_mask_and_name
     //
     UseKind_FirstProvenUseKind,

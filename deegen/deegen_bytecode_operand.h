@@ -207,8 +207,9 @@ private:
 class BcOpSlot final : public BcOperand
 {
 public:
-    BcOpSlot(const std::string& name)
+    BcOpSlot(const std::string& name, bool maybeInvalidBoxedValue)
         : BcOperand(name)
+        , m_maybeInvalidBoxedValue(maybeInvalidBoxedValue)
         , m_hasSpeculation(false)
         , m_specMask(0)
     { }
@@ -258,10 +259,15 @@ public:
 
     virtual json_t WARN_UNUSED SaveToJSON() override final;
 
+    bool MaybeInvalidBoxedValue() const
+    {
+        return m_maybeInvalidBoxedValue;
+    }
+
     void SetDfgSpeculation(uint64_t specMask)
     {
         ReleaseAssert(!m_hasSpeculation);
-        ReleaseAssert(specMask <= x_typeMaskFor<tTop>);
+        ReleaseAssert(specMask <= x_typeMaskFor<tBoxedValueTop>);
         m_hasSpeculation = true;
         m_specMask = SafeIntegerCast<TypeMaskTy>(specMask);
     }
@@ -271,13 +277,14 @@ public:
     TypeMaskTy WARN_UNUSED GetDfgSpecMask()
     {
         ReleaseAssert(HasDfgSpeculation());
-        ReleaseAssert(m_specMask <= x_typeMaskFor<tTop>);
+        ReleaseAssert(m_specMask <= x_typeMaskFor<tBoxedValueTop>);
         return m_specMask;
     }
 
     static constexpr int64_t x_localOrdinalUpperBound = 1048576;
 
 private:
+    bool m_maybeInvalidBoxedValue;
     bool m_hasSpeculation;
     TypeMaskTy m_specMask;
 };
@@ -287,8 +294,9 @@ private:
 class BcOpConstant final : public BcOperand
 {
 public:
-    BcOpConstant(const std::string& name, TypeMaskTy mask)
+    BcOpConstant(const std::string& name, TypeMaskTy mask, bool maybeInvalidBoxedValue)
         : BcOperand(name)
+        , m_maybeInvalidBoxedValue(maybeInvalidBoxedValue)
         , m_typeMask(mask)
     { }
 
@@ -343,7 +351,14 @@ public:
 
     virtual json_t WARN_UNUSED SaveToJSON() override final;
 
+    bool MaybeInvalidBoxedValue() const
+    {
+        return m_maybeInvalidBoxedValue;
+    }
+
     static constexpr int64_t x_constantTableOrdLowerBound = -1048576;
+
+    bool m_maybeInvalidBoxedValue;
 
     // The statically-known type mask of this constant
     //
@@ -1047,6 +1062,7 @@ public:
         TypeDeductionKind m_typeDeductionKind;
         TypeMaskTy m_fixedMask;
         std::string m_typeDeductionFnName;
+        bool m_maybeInvalidBoxedValue;      // only useful for DeclareReads
     };
 
     json_t WARN_UNUSED SaveToJSON();

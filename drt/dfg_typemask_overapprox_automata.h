@@ -101,7 +101,7 @@ struct __attribute__((__packed__)) TypeMaskOverapproxAutomataNode : TypeMaskOver
 
     static uint16_t WARN_UNUSED Run(const TypeMaskOverapproxAutomataNodeCommon* node, TypeMaskTy mask)
     {
-        TestAssert(mask <= x_typeMaskFor<tTop>);
+        TestAssert(mask <= x_typeMaskFor<tBoxedValueTop>);
         while (true)
         {
             if ((mask & node->m_clearMask) == 0)
@@ -150,14 +150,14 @@ struct TypeMaskOverapproxAutomataLeafOpted
     {
         // [ TypeMask ] [ u16 ] [ u16 * N ] [ automata... ]
         //
-        TestAssert(mask <= x_typeMaskFor<tTop>);
+        TestAssert(mask <= x_typeMaskFor<tBoxedValueTop>);
         mask &= UnalignedLoad<TypeMaskTy>(m_entry);
         if (mask == 0)
         {
             return UnalignedLoad<uint16_t>(m_entry + sizeof(TypeMaskTy));
         }
         size_t ord = CountTrailingZeros(mask);
-        TestAssert(ord < x_numUsefulBitsInTypeMask);
+        TestAssert(ord < x_numUsefulBitsInBytecodeTypeMask);
         uint16_t offset = UnalignedLoad<uint16_t>(m_entry + sizeof(TypeMaskTy) + 2 + ord * 2);
         TestAssert(offset != static_cast<uint16_t>(-1));
         const TypeMaskOverapproxAutomataNodeCommon* entryNode = reinterpret_cast<const TypeMaskOverapproxAutomataNodeCommon*>(m_entry + offset);

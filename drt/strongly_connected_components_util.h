@@ -41,14 +41,32 @@ struct StronglyConnectedComponentsFinder
     //
     static uint32_t WARN_UNUSED ComputeForGenericGraph(GraphContext* graph, uint32_t numNodes, uint32_t* result /*out*/)
     {
-        return StronglyConnectedComponentsFinder::RunImpl(graph, numNodes, 0 /*entryNode*/, false /*entryNodeOnly*/, result /*out*/);
+        TempArenaAllocator alloc;
+        return StronglyConnectedComponentsFinder::RunImpl(alloc, graph, numNodes, 0 /*entryNode*/, false /*entryNodeOnly*/, result /*out*/);
+    }
+
+    static uint32_t WARN_UNUSED ComputeForGenericGraph(TempArenaAllocator& alloc, GraphContext* graph, uint32_t numNodes, uint32_t* result /*out*/)
+    {
+        TempArenaAllocator::Mark mark = alloc.TakeMark();
+        uint32_t numSCCs = StronglyConnectedComponentsFinder::RunImpl(alloc, graph, numNodes, 0 /*entryNode*/, false /*entryNodeOnly*/, result /*out*/);
+        alloc.ResetToMark(mark);
+        return numSCCs;
     }
 
     // Similar to FindForGenericGraph, but with the promise that all nodes are reachable from entryNode
     //
     static uint32_t WARN_UNUSED ComputeForCFG(GraphContext* graph, uint32_t numNodes, uint32_t entryNode, uint32_t* result /*out*/)
     {
-        return StronglyConnectedComponentsFinder::RunImpl(graph, numNodes, entryNode, true /*entryNodeOnly*/, result /*out*/);
+        TempArenaAllocator alloc;
+        return StronglyConnectedComponentsFinder::RunImpl(alloc, graph, numNodes, entryNode, true /*entryNodeOnly*/, result /*out*/);
+    }
+
+    static uint32_t WARN_UNUSED ComputeForCFG(TempArenaAllocator& alloc, GraphContext* graph, uint32_t numNodes, uint32_t entryNode, uint32_t* result /*out*/)
+    {
+        TempArenaAllocator::Mark mark = alloc.TakeMark();
+        uint32_t numSCCs = StronglyConnectedComponentsFinder::RunImpl(alloc, graph, numNodes, entryNode, true /*entryNodeOnly*/, result /*out*/);
+        alloc.ResetToMark(mark);
+        return numSCCs;
     }
 
 private:
@@ -72,11 +90,11 @@ private:
         return iter.Advance(*m_graph);
     }
 
-    static uint32_t NO_INLINE RunImpl(RestrictPtr<GraphContext> graph, uint32_t numNodes, uint32_t entryNode, bool entryNodeOnly, RestrictPtr<uint32_t> result /*out*/)
+    static uint32_t NO_INLINE RunImpl(TempArenaAllocator& alloc, RestrictPtr<GraphContext> graph, uint32_t numNodes, uint32_t entryNode, bool entryNodeOnly, RestrictPtr<uint32_t> result /*out*/)
     {
         memset(result, 0, sizeof(uint32_t) * numNodes);
 
-        StronglyConnectedComponentsFinder impl(graph, numNodes, result);
+        StronglyConnectedComponentsFinder impl(alloc, graph, numNodes, result);
         TestAssert(entryNode < numNodes);
         while (true)
         {
@@ -102,8 +120,8 @@ private:
         return impl.FinishComputation();
     }
 
-    ALWAYS_INLINE StronglyConnectedComponentsFinder(RestrictPtr<GraphContext> graph, uint32_t numNodes, RestrictPtr<uint32_t> result)
-        : m_alloc()
+    ALWAYS_INLINE StronglyConnectedComponentsFinder(TempArenaAllocator& alloc, RestrictPtr<GraphContext> graph, uint32_t numNodes, RestrictPtr<uint32_t> result)
+        : m_alloc(alloc)
         , m_graph(graph)
         , m_rindexComposite(result)
         , m_index(2)
@@ -301,7 +319,7 @@ finished_visiting_edges:
         return m_rindexComposite[nodeOrd];
     }
 
-    TempArenaAllocator m_alloc;
+    TempArenaAllocator& m_alloc;
 
     RestrictPtr<GraphContext> m_graph;
 

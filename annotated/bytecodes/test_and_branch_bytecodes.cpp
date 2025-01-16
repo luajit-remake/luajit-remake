@@ -61,7 +61,10 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(TestSelectAndBranchOperation, bool testForFalsy)
 {
     Operands(
         BytecodeSlot("testValue"),
-        BytecodeSlot("defaultValue")
+        // In rare cases LuaJIT parser will generate this bytecode on uninitialized local.
+        // Ideally we should fix the parser, but doing so is harder than I expected
+        //
+        BytecodeSlot("defaultValue").MaybeInvalidBoxedValue()
     );
     Result(BytecodeValue, ConditionalBranch);
     Implementation(TestSelectAndBranchOperationImpl<testForFalsy>);

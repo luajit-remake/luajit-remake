@@ -323,7 +323,7 @@ struct PassImpl
 #ifdef TESTBUILD
         {
             for (size_t i = 0; i < n; i++) { TestAssert(!isInQueue[i]); }
-            std::unordered_map<BasicBlockUpvalueInfo*, std::vector<BasicBlockUpvalueInfo*>> predecessorMap;
+            TempUnorderedMap<BasicBlockUpvalueInfo*, std::vector<BasicBlockUpvalueInfo*>> predecessorMap(m_tempAlloc);
             for (size_t bbOrd = 0; bbOrd < n; bbOrd++)
             {
                 BasicBlockUpvalueInfo* bb = m_bbInNaturalOrder[bbOrd];

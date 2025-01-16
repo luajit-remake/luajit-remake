@@ -82,7 +82,7 @@ DEEGEN_DEFINE_BYTECODE(UnaryMinus)
             }
             else
             {
-                return x_typeMaskFor<tTop>;
+                return x_typeMaskFor<tBoxedValueTop>;
             }
         });
     RegAllocHint(

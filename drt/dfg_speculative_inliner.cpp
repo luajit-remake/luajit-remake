@@ -370,7 +370,10 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         {
             size_t localOrd = m_tempInputEdgeRes[i];
             Value val = m_bbContext->GetLocalVariableValue(localOrd);
-            prologue->GetInputEdge(static_cast<uint32_t>(i)) = Edge(val);
+            // TODO: currently 'm_tempInputEdgeRes' does not carry info about whether the value may not be a boxed value
+            // It would be bizzare to imagine a use case where the value is not a valid boxed value, but in theory it can
+            //
+            prologue->GetInputEdge(static_cast<uint32_t>(i)).InitEdge(val, false /*maybeInvalidBoxedValue*/);
         }
         // The prologue must not access VR and VA, as that would be considered an effectful operation by our check
         //
@@ -1374,7 +1377,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             resNode->SetNumInputs(terminator->GetNumInputs());
                             for (uint32_t i = 0; i < terminator->GetNumInputs(); i++)
                             {
-                                resNode->GetInputEdge(i) = terminator->GetInputEdge(i);
+                                resNode->GetInputEdge(i).InitEdgeByCopy(terminator->GetInputEdge(i));
                             }
                             resNode->SetExitOK(false);
                             resNode->SetNodeOrigin(codeOrigin);
@@ -1386,10 +1389,10 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                             size_t numResults = terminator->GetNumInputs();
                             Node* resNode = Node::CreateCreateVariadicResNode(numResults);
                             resNode->SetNumInputs(numResults + 1);
-                            resNode->GetInputEdge(0) = m_graph->GetUnboxedConstant(0);
+                            resNode->GetInputEdge(0).InitEdgeWithKnownUseKind(m_graph->GetUnboxedConstant(0), UseKind_KnownUnboxedInt64);
                             for (uint32_t i = 0; i < numResults; i++)
                             {
-                                resNode->GetInputEdge(i + 1) = terminator->GetInputEdge(i);
+                                resNode->GetInputEdge(i + 1).InitEdgeByCopy(terminator->GetInputEdge(i));
                             }
                             resNode->SetExitOK(false);
                             resNode->SetNodeOrigin(codeOrigin);

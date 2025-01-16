@@ -514,11 +514,11 @@ void FPS_ProcessDfgBuiltinNodes()
         {
             TypeMaskTy precondMask = tcInfoList[idx].m_precondMask;
             TypeMaskTy checkedMask = tcInfoList[idx].m_checkedMask;
-            if (precondMask == x_typeMaskFor<tTop> && (checkedMask == x_typeMaskFor<tTop> || checkedMask == x_typeMaskFor<tBottom>))
+            if (precondMask == x_typeMaskFor<tBoxedValueTop> && (checkedMask == x_typeMaskFor<tBoxedValueTop> || checkedMask == x_typeMaskFor<tBottom>))
             {
-                // The type checkers will contain the trivial checks for tTop and tBottom for completeness, but we will never select them at runtime
+                // The type checkers will contain the trivial checks for tBoxedValueTop and tBottom for completeness, but we will never select them at runtime
                 //
-                if (checkedMask == x_typeMaskFor<tTop>)
+                if (checkedMask == x_typeMaskFor<tBoxedValueTop>)
                 {
                     nameList.push_back("InvalidUseKind (TopUseKnowingTop)");
                     nameList.push_back("InvalidUseKind (NotTopUseKnowingTop)");
@@ -534,7 +534,7 @@ void FPS_ProcessDfgBuiltinNodes()
                 std::string nameForPrecond = DumpHumanReadableTypeSpeculationForUseKind(precondMask);
                 std::string nameForCheck = DumpHumanReadableTypeSpeculationForUseKind(checkedMask);
                 std::string name;
-                if (precondMask == x_typeMaskFor<tTop>)
+                if (precondMask == x_typeMaskFor<tBoxedValueTop>)
                 {
                     name = nameForCheck + "Use";
                 }

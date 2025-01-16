@@ -162,7 +162,7 @@ struct ConstructBlockLocalSSAPass
                         // SetLocal -> GetLocal, this GetLocal can be replaced by the value of the SetLocal
                         //
                         Node* setLocal = event.AsNode();
-                        Value value = setLocal->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                        Value value = setLocal->GetSoleInput().GetValue();
                         node->SetReplacement(value);
                         node->ConvertToNop();
                         break;
@@ -456,6 +456,7 @@ struct ConstructBlockLocalSSAPass
             TestAssertImp(expectNoTriviallyUndefPhi, !phi->IsTriviallyUndefValue());
 
             bool hasSetLocal = false;
+            bool maybeUndefVal = false;
             TestAssert(phi->GetBasicBlock()->m_predecessors.size() == phi->GetNumIncomingValues());
             for (size_t idx = 0; idx < phi->GetNumIncomingValues(); idx++)
             {
@@ -472,6 +473,7 @@ struct ConstructBlockLocalSSAPass
                     TestAssert(pred == incomingPhi->GetBasicBlock());
                     assertPhiShowsUpAtTail(incomingPhi);
                     hasSetLocal |= !incomingVal.AsPhi()->IsTriviallyUndefValue();
+                    maybeUndefVal |= incomingVal.AsPhi()->MaybeUndefValue();
                 }
                 else if (nodeKind == NodeKind_SetLocal)
                 {
@@ -488,6 +490,7 @@ struct ConstructBlockLocalSSAPass
                     PhiOrNode valueAtTail = pred->m_localInfoAtTail[phi->GetLocalOrd()];
                     TestAssert(!valueAtTail.IsNull());
                     TestAssert(valueAtTail.GetNodeKind() == NodeKind_UndefValue);
+                    maybeUndefVal = true;
                 }
 
                 if (!isPreUnification)
@@ -503,6 +506,7 @@ struct ConstructBlockLocalSSAPass
                 }
             }
             TestAssertIff(hasSetLocal, !phi->IsTriviallyUndefValue());
+            TestAssertIff(maybeUndefVal, phi->MaybeUndefValue());
         }
 
         if (expectNoDeadStores)
@@ -638,6 +642,10 @@ struct ConstructBlockLocalSSAPass
         // This is the work queue for computing whether a Phi is trivially an UndefValue
         //
         TempVector<Phi*> q2(m_alloc);
+
+        // This is the work queue for computing whether a Phi can see an UndefValue
+        //
+        TempVector<Phi*> q3(m_alloc);
         bool hasPhiReferenceUndefValue = false;
 
         while (!q.empty())
@@ -697,6 +705,8 @@ struct ConstructBlockLocalSSAPass
                     {
                         hasPhiReferenceUndefValue = true;
                         phi->IncomingValue(predOrd) = valueAtTail;
+                        phi->SetMaybeUndefValue();
+                        q3.push_back(phi);
                         break;
                     }
                     case NodeKind_Phi:
@@ -736,6 +746,22 @@ struct ConstructBlockLocalSSAPass
                     if (succPhi->IsTriviallyUndefValue())
                     {
                         succPhi->SetNotTriviallyUndefValue();
+                        q.push_back(succPhi);
+                    }
+                });
+            }
+
+            q = std::move(q3);
+            while (!q.empty())
+            {
+                Phi* phi = q.back();
+                q.pop_back();
+
+                TestAssert(phi->MaybeUndefValue());
+                ForEachPhiSuccessor(phi, [&](Phi* succPhi, size_t /*incomingOrd*/) ALWAYS_INLINE {
+                    if (!succPhi->MaybeUndefValue())
+                    {
+                        succPhi->SetMaybeUndefValue();
                         q.push_back(succPhi);
                     }
                 });
@@ -949,6 +975,8 @@ struct ConstructBlockLocalSSAPass
     //
     // Similar to GetLocal/SetLocal, the invariant here is that for any CreateCapturedVar/SetCapturedVar
     // that can flow to a GetCapturedVar, they must have the same logical variable.
+    // Note that unlike local variables, the LogicalVariable for CapturedVar is not sensitive to live-range:
+    // all Get/SetCapturedVar operating on the same CreateCapturedVar will always have the same logical variable.
     //
     void SetupLogicalVariableForCaptures()
     {
@@ -984,7 +1012,7 @@ struct ConstructBlockLocalSSAPass
                     // This CreateCapturedVar node is accessed in multiple basic blocks
                     // They must share the same CapturedVarLogicalVariable, which can be identified by the LogicalVariable of the SetLocal
                     //
-                    Node* operand = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetOperand();
+                    Node* operand = node->GetSoleInput().GetOperand();
                     if (operand->IsCreateCapturedVarNode())
                     {
                         Nsd_CapturedVarInfo& nsd = operand->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>();

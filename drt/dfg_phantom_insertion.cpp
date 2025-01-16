@@ -66,7 +66,7 @@ struct PhantomInsertionPassImpl
         Value value = m_interpSlotVal[interpSlotOrd];
         if (!value.GetOperand()->IsConstantLikeNode())
         {
-            size_t ssaOrd = value.GetOperand()->m_customMarker + value.m_outputOrd;
+            size_t ssaOrd = value.GetOperand()->GetCustomMarker() + value.m_outputOrd;
             TestAssert(ssaOrd < m_totalSSAValuesInBB);
 
             TestAssert(m_lastUseExitOrd[ssaOrd] != 0);
@@ -115,7 +115,7 @@ struct PhantomInsertionPassImpl
         size_t numSSAValues = 0;
         for (Node* node : nodes)
         {
-            node->m_customMarker = numSSAValues;
+            node->SetCustomMarker(numSSAValues);
             // For simplicity, reserve a slot for direct output even if the node doesn't have one
             //
             numSSAValues += 1 + node->GetNumExtraOutputs();
@@ -289,7 +289,7 @@ struct PhantomInsertionPassImpl
                 node->ForEachInputEdge([&](Edge& e) ALWAYS_INLINE {
                     Node* inputNode = e.GetOperand();
                     if (inputNode->IsConstantLikeNode()) { return; }
-                    size_t ssaOrd = inputNode->m_customMarker + e.GetOutputOrdinal();
+                    size_t ssaOrd = inputNode->GetCustomMarker() + e.GetOutputOrdinal();
                     TestAssert(ssaOrd < numSSAValues);
                     m_lastUseExitOrd[ssaOrd] = exitOrd;
                 });
@@ -298,7 +298,7 @@ struct PhantomInsertionPassImpl
                      outputOrd <= numExtraOutputs;
                      outputOrd++)
                 {
-                    size_t ssaOrd = node->m_customMarker + outputOrd;
+                    size_t ssaOrd = node->GetCustomMarker() + outputOrd;
                     TestAssert(ssaOrd < numSSAValues);
                     m_lastUseExitOrd[ssaOrd] = exitOrd;
                 }
@@ -324,7 +324,7 @@ struct PhantomInsertionPassImpl
             if (node->IsShadowStoreNode())
             {
                 InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
-                Value value = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                Value value = node->GetSoleInput().GetValue();
                 processShadowStore(slot, value);
             }
             else if (node->IsShadowStoreUndefToRangeNode())
@@ -350,7 +350,7 @@ struct PhantomInsertionPassImpl
                 TestAssert(m_interpSlotHasValue.IsSet(slot));
                 // The SSA value currently stored in the interpreter slot must equal the value stored by the SetLocal
                 //
-                TestAssert(node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue().IsIdenticalAs(m_interpSlotVal[slot]));
+                TestAssert(node->GetSoleInput().GetValue().IsIdenticalAs(m_interpSlotVal[slot]));
                 // The SSA value is stored into the DFG slot, so it is available until the end of BB. No Phantoms needed.
                 //
                 m_interpSlotVal[slot] = nullptr;
@@ -430,7 +430,7 @@ struct PhantomInsertionPassImpl
             Node* operand = val.GetOperand();
             TestAssert(!operand->IsPhantomNode());
             TestAssert(!operand->IsConstantLikeNode());
-            size_t ssaOrd = operand->m_customMarker + val.m_outputOrd;
+            size_t ssaOrd = operand->GetCustomMarker() + val.m_outputOrd;
             TestAssert(ssaOrd < m_totalSSAValuesInBB);
             return ssaOrd;
         };
@@ -445,7 +445,7 @@ struct PhantomInsertionPassImpl
             Node* node = m_currentBasicBlock->m_nodes[nodeIdx];
             if (node->IsPhantomNode())
             {
-                Value val = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                Value val = node->GetSoleInput().GetValue();
                 TestAssert(!val.GetOperand()->IsConstantLikeNode());
                 updateUse(val, nodeIdx);
                 continue;
@@ -458,7 +458,7 @@ struct PhantomInsertionPassImpl
 
             for (size_t outputOrd = (node->HasDirectOutput() ? 0 : 1); outputOrd <= node->GetNumExtraOutputs(); outputOrd++)
             {
-                size_t ssaOrd = node->m_customMarker + outputOrd;
+                size_t ssaOrd = node->GetCustomMarker() + outputOrd;
                 TestAssert(ssaOrd < m_totalSSAValuesInBB);
                 m_lastUseExitOrd[ssaOrd] = SafeIntegerCast<uint32_t>(nodeIdx);
             }
@@ -513,7 +513,7 @@ struct PhantomInsertionPassImpl
             {
                 InterpreterSlot slot = node->GetShadowStoreInterpreterSlotOrd();
                 TestAssert(slot.Value() < m_interpSlotVal.size());
-                m_interpSlotVal[slot.Value()] = node->GetInputEdgeForNodeWithFixedNumInputs<1>(0).GetValue();
+                m_interpSlotVal[slot.Value()] = node->GetSoleInput().GetValue();
             }
             else if (node->IsShadowStoreUndefToRangeNode())
             {

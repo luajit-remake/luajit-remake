@@ -873,7 +873,7 @@ std::vector<DeegenCallIcLogicCreator::BaselineJitLLVMLoweringResult> WARN_UNUSED
                 ReleaseAssert(IsTValueTypeCheckAPIFunction(originalCondFn) || IsTValueTypeCheckStrengthReductionFunction(originalCondFn));
                 TypeMaskTy checkedMask = GetCheckedMaskOfTValueTypecheckFunction(originalCondFn);
                 // Having passed this assert, we know brInst is checking a typemask at least as strict as tHeapEntity
-                // (which should always be true since tHeapEntity is the only thing between tFunction and tTop, and we have
+                // (which should always be true since tHeapEntity is the only thing between tFunction and tBoxedValueTop, and we have
                 // checked earlier that the condition covers tFunction), so we are good
                 //
                 ReleaseAssert((checkedMask & x_typeMaskFor<tHeapEntity>) == checkedMask);

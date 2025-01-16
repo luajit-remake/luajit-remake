@@ -93,12 +93,24 @@ struct BitmapAdjacencyGraph
             this, m_numNodes, entryNode, sccInfo /*out*/);
     }
 
+    uint32_t WARN_UNUSED ComputeSCCForCFG(TempArenaAllocator& alloc, uint32_t entryNode, uint32_t* sccInfo /*out*/)
+    {
+        return StronglyConnectedComponentsFinder<BitmapAdjacencyGraph, BitmapAdjacencyGraph::EdgeIter>::ComputeForCFG(
+            alloc, this, m_numNodes, entryNode, sccInfo /*out*/);
+    }
+
     // Similar to ComputeSCCForCFG, but works for any graph
     //
     uint32_t WARN_UNUSED ComputeSCC(uint32_t* sccInfo /*out*/)
     {
         return StronglyConnectedComponentsFinder<BitmapAdjacencyGraph, BitmapAdjacencyGraph::EdgeIter>::ComputeForGenericGraph(
             this, m_numNodes, sccInfo /*out*/);
+    }
+
+    uint32_t WARN_UNUSED ComputeSCC(TempArenaAllocator& alloc, uint32_t* sccInfo /*out*/)
+    {
+        return StronglyConnectedComponentsFinder<BitmapAdjacencyGraph, BitmapAdjacencyGraph::EdgeIter>::ComputeForGenericGraph(
+            alloc, this, m_numNodes, sccInfo /*out*/);
     }
 
     uint32_t m_numNodes;

@@ -310,6 +310,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                         TestAssert(localOrd < m_codeBlock->m_stackFrameNumSlots);
                         if (!m_isLocalCaptured[localOrd])
                         {
+                            bool isMutableSelfReference = false;
                             Value value;
                             if (uvmt.m_slot == destLocalOrd)
                             {
@@ -317,6 +318,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                                 // as it will be overwritten by this bytecode.
                                 //
                                 value = m_graph->GetUndefValue();
+                                isMutableSelfReference = true;
                             }
                             else
                             {
@@ -325,6 +327,10 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                                 value = GetLocalVariableValue(localOrd);
                             }
                             Node* createClosureVar = Node::CreateCreateCapturedVarNode(value);
+                            if (isMutableSelfReference)
+                            {
+                                createClosureVar->SetCreateCapturedVarMutableSelfReferenceFlag();
+                            }
                             SetupNodeCommonInfoAndPushBack(createClosureVar);
                             Node* shadowStore = Node::CreateShadowStoreNode(GetInterpreterSlotForLocalOrd(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
                             SetupNodeCommonInfoAndPushBack(shadowStore);
@@ -342,8 +348,8 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
 
             node->m_nodeKind = NodeKind_CreateFunctionObject;
             node->SetNumInputs(numNodeInputs);
-            node->GetInputEdge(0) = GetCurrentFunctionObject();
-            node->GetInputEdge(1) = m_graph->GetUnboxedConstant(reinterpret_cast<uint64_t>(createClosureUcb));
+            node->GetInputEdge(0).InitEdgeWithKnownUseKind(GetCurrentFunctionObject(), UseKind_KnownUnboxedInt64);
+            node->GetInputEdge(1).InitEdgeWithKnownUseKind(m_graph->GetUnboxedConstant(reinterpret_cast<uint64_t>(createClosureUcb)), UseKind_KnownUnboxedInt64);
 
             uint32_t curInputOrd = 2;
             // We need to additionally add all the immutable locals and CapturedVar objects to the node's input
@@ -364,7 +370,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                         //
                         m_isLocalCaptured[localOrd] = false;
                         TestAssert(curInputOrd < numNodeInputs);
-                        node->GetInputEdge(curInputOrd) = GetLocalVariableValue(localOrd);
+                        node->GetInputEdge(curInputOrd).InitEdgeWithKnownUseKind(GetLocalVariableValue(localOrd), UseKind_KnownCapturedVar);
                         curInputOrd++;
                         m_isLocalCaptured[localOrd] = true;
                     }
@@ -382,7 +388,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                             // We need to pass the value of the local to the node
                             //
                             TestAssert(curInputOrd < numNodeInputs);
-                            node->GetInputEdge(curInputOrd) = GetLocalVariableValue(localOrd);
+                            node->GetInputEdge(curInputOrd).InitEdge(GetLocalVariableValue(localOrd), false /*maybeInvalidBoxedValue*/);
                             curInputOrd++;
                         }
                     }
@@ -405,7 +411,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             TestAssert(numNodeInputs == 0);
             node->m_nodeKind = NodeKind_GetUpvalueImmutable;
             node->SetNumInputs(1);
-            node->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = GetCurrentFunctionObject();
+            node->GetSoleInput().InitEdgeWithKnownUseKind(GetCurrentFunctionObject(), UseKind_KnownUnboxedInt64);
             node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal };
             skipStandardInputGenerationStep = true;
         }
@@ -420,7 +426,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             TestAssert(numNodeInputs == 0);
             node->m_nodeKind = NodeKind_GetUpvalueMutable;
             node->SetNumInputs(1);
-            node->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = GetCurrentFunctionObject();
+            node->GetSoleInput().InitEdgeWithKnownUseKind(GetCurrentFunctionObject(), UseKind_KnownUnboxedInt64);
             node->GetInfoForGetUpvalue() = { .m_ordinal = upvalueGetOrdinal };
             skipStandardInputGenerationStep = true;
         }
@@ -447,8 +453,8 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             TestAssert(numNodeInputs == 1);
             node->m_nodeKind = NodeKind_SetUpvalue;
             node->SetNumInputs(2);
-            node->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = GetCurrentFunctionObject();
-            node->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = valueToPut;
+            node->GetInputEdgeForNodeWithFixedNumInputs<2>(0).InitEdgeWithKnownUseKind(GetCurrentFunctionObject(), UseKind_KnownUnboxedInt64);
+            node->GetInputEdgeForNodeWithFixedNumInputs<2>(1).InitEdge(valueToPut, false /*maybeInvalidBoxedValue*/);
             node->SetNodeSpecificDataAsUInt64(upvalueGetOrdinal);
 
             skipStandardInputGenerationStep = true;
@@ -504,21 +510,21 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                 {
                     size_t numVarArgs = m_inlinedCallFrame->GetNumVarArgs();
                     node->SetNumInputs(numVarArgs + 1);
-                    node->GetInputEdge(0) = m_graph->GetUnboxedConstant(0);
+                    node->GetInputEdge(0).InitEdgeWithKnownUseKind(m_graph->GetUnboxedConstant(0), UseKind_KnownUnboxedInt64);
                     node->SetNodeSpecificDataAsUInt64(numVarArgs);
                     for (uint32_t i = 0; i < numVarArgs; i++)
                     {
-                        node->GetInputEdge(i + 1) = GetVariadicArgument(i);
+                        node->GetInputEdge(i + 1).InitEdge(GetVariadicArgument(i), false /*maybeInvalidBoxedValue*/);
                     }
                 }
                 else
                 {
                     size_t maxNumVarArgs = m_inlinedCallFrame->MaxVarArgsAllowed();
                     node->SetNumInputs(maxNumVarArgs + 1);
-                    node->GetInputEdge(0) = GetNumVariadicArguments();
+                    node->GetInputEdge(0).InitEdgeWithKnownUseKind(GetNumVariadicArguments(), UseKind_KnownUnboxedInt64);
                     for (uint32_t i = 0; i < maxNumVarArgs; i++)
                     {
-                        node->GetInputEdge(i + 1) = GetVariadicArgument(i);
+                        node->GetInputEdge(i + 1).InitEdge(GetVariadicArgument(i), false /*maybeInvalidBoxedValue*/);
                     }
                     node->SetNodeSpecificDataAsUInt64(0);
                 }
@@ -550,7 +556,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             node->SetNumInputs(numSlots);
             for (uint32_t i = 0; i < numSlots; i++)
             {
-                node->GetInputEdge(i) = GetLocalVariableValue(srcSlotStart + i);
+                node->GetInputEdge(i).InitEdge(GetLocalVariableValue(srcSlotStart + i), false /*maybeInvalidBoxedValue*/);
             }
             TestAssert(node->GetNumNodeControlFlowSuccessors() == 0 && !node->IsNodeMakesTailCallNotConsideringTransform());
             skipStandardInputGenerationStep = true;
@@ -569,7 +575,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             node->SetNumInputs(numSlots);
             for (uint32_t i = 0; i < numSlots; i++)
             {
-                node->GetInputEdge(i) = GetLocalVariableValue(srcSlotStart + i);
+                node->GetInputEdge(i).InitEdge(GetLocalVariableValue(srcSlotStart + i), false /*maybeInvalidBoxedValue*/);
             }
             TestAssert(node->GetNumNodeControlFlowSuccessors() == 0 && !node->IsNodeMakesTailCallNotConsideringTransform());
             skipStandardInputGenerationStep = true;
@@ -586,13 +592,13 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                 if (item.IsLocal())
                 {
                     TestAssert(curInputOrd < numNodeInputs);
-                    node->GetInputEdge(curInputOrd) = GetLocalVariableValue(item.GetLocalOrd());
+                    node->GetInputEdge(curInputOrd).InitEdge(GetLocalVariableValue(item.GetLocalOrd()), item.MaybeInvalidBoxedValue());
                     curInputOrd++;
                 }
                 else if (item.IsConstant())
                 {
                     TestAssert(curInputOrd < numNodeInputs);
-                    node->GetInputEdge(curInputOrd) = m_graph->GetConstant(item.GetConstant());
+                    node->GetInputEdge(curInputOrd).InitEdge(m_graph->GetConstant(item.GetConstant()), item.MaybeInvalidBoxedValue());
                     curInputOrd++;
                 }
                 else if (item.IsRange())
@@ -600,11 +606,23 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                     size_t rangeBegin = item.GetRangeStart();
                     int64_t rangeLen = item.GetRangeLength();
                     TestAssert(rangeLen >= 0);
-                    for (size_t i = rangeBegin; i < rangeBegin + static_cast<size_t>(rangeLen); i++)
+                    if (unlikely(item.MaybeInvalidBoxedValue()))
                     {
-                        TestAssert(curInputOrd < numNodeInputs);
-                        node->GetInputEdge(curInputOrd) = GetLocalVariableValue(i);
-                        curInputOrd++;
+                        for (size_t i = rangeBegin; i < rangeBegin + static_cast<size_t>(rangeLen); i++)
+                        {
+                            TestAssert(curInputOrd < numNodeInputs);
+                            node->GetInputEdge(curInputOrd).InitEdge(GetLocalVariableValue(i), true /*maybeInvalidBoxedValue*/);
+                            curInputOrd++;
+                        }
+                    }
+                    else
+                    {
+                        for (size_t i = rangeBegin; i < rangeBegin + static_cast<size_t>(rangeLen); i++)
+                        {
+                            TestAssert(curInputOrd < numNodeInputs);
+                            node->GetInputEdge(curInputOrd).InitEdge(GetLocalVariableValue(i), false /*maybeInvalidBoxedValue*/);
+                            curInputOrd++;
+                        }
                     }
                 }
             }

@@ -150,7 +150,7 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(ArithmeticOperation, LuaMetamethodKind opKind)
             }
             else
             {
-                return x_typeMaskFor<tTop>;
+                return x_typeMaskFor<tBoxedValueTop>;
             }
         });
     RegAllocHint(

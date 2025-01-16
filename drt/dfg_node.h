@@ -109,9 +109,10 @@ private:
     Node(NodeKind kind)
         : m_nodeKind(kind)
         , m_flags(0)
-        , m_outputInfoArray(nullptr)
         , m_variadicResultInput(nullptr)
-        , m_replacement(nullptr)
+#ifdef TESTBUILD
+        , m_hardpointKind(HardpointKind::Invalid)
+#endif
 #ifndef NDEBUG
         , m_initializedNumInputs(false)
         , m_initializedNumOutputs(false)
@@ -354,26 +355,44 @@ public:
     class Edge
     {
     public:
+        // An edge should be considered a property of the owning node, so it's a bad idea to implicitly copy/move an edge
+        //
+        MAKE_NONCOPYABLE(Edge);
+        MAKE_NONMOVABLE(Edge);
+
         constexpr Edge() = default;
 
-        Edge(Value value, UseKind useKind = UseKind_Untyped, bool isStaticallyKnownNoCheckNeeded = false)
+        void ALWAYS_INLINE InitEdge(Value value, bool maybeInvalidBoxedValue)
         {
-            AssertImp(value.m_outputOrd == 0, value.GetOperand()->HasDirectOutput());
-            Assert(value.m_outputOrd <= value.GetOperand()->m_numExtraOutputs);
-            m_operand = value.m_node;
-            m_outputOrd = value.m_outputOrd;
+            SetValue(value);
             uint16_t encodedVal = 0;
-            BFM_useKind::Set(encodedVal, useKind);
-            BFM_isStaticallyProven::Set(encodedVal, isStaticallyKnownNoCheckNeeded);
-            BFM_isProven::Set(encodedVal, false);
+            BFM_useKind::Set(encodedVal, (maybeInvalidBoxedValue ? UseKind_FullTop : UseKind_Untyped));
+            BFM_isStaticallyProven::Set(encodedVal, false);
+            BFM_maybeInvalidBoxedValue::Set(encodedVal, maybeInvalidBoxedValue);
             BFM_isLastUse::Set(encodedVal, false);
             m_encodedVal = encodedVal;
         }
 
-        Node* WARN_UNUSED GetOperand() { return m_operand; }
+        void ALWAYS_INLINE InitEdgeWithKnownUseKind(Value value, UseKind useKind)
+        {
+            TestAssert(useKind == UseKind_KnownUnboxedInt64 || useKind == UseKind_KnownCapturedVar);
+            SetValue(value);
+            uint16_t encodedVal = 0;
+            BFM_useKind::Set(encodedVal, useKind);
+            BFM_isStaticallyProven::Set(encodedVal, true);
+            BFM_maybeInvalidBoxedValue::Set(encodedVal, true);
+            BFM_isLastUse::Set(encodedVal, false);
+            m_encodedVal = encodedVal;
+        }
 
-        void SetOperand(Node* node) { m_operand = node; }
-        void SetOperand(ArenaPtr<Node> node) { m_operand = node; }
+        void ALWAYS_INLINE InitEdgeByCopy(const Edge& other)
+        {
+            static_assert(sizeof(Edge) == 8);
+            uint64_t value = UnalignedLoad<uint64_t>(&other);
+            UnalignedStore<uint64_t>(this, value);
+        }
+
+        Node* WARN_UNUSED GetOperand() { return m_operand; }
 
         // If the operand node has been marked for replacement, replace it.
         // Asserts that the replacement has no further replacement, and that the ordinal is valid for the replacement
@@ -385,7 +404,7 @@ public:
             if (!replacementVal.IsNull())
             {
                 TestAssert(GetOutputOrdinal() == 0);
-                SetOperand(replacementVal.m_node);
+                m_operand = replacementVal.m_node;
                 m_outputOrd = replacementVal.m_outputOrd;
                 TestAssert(GetOperand()->GetReplacementMaybeNonExistent().IsNull());
                 TestAssert(IsOutputOrdValid());
@@ -397,13 +416,22 @@ public:
             return Value(m_operand, m_outputOrd);
         }
 
+        void ALWAYS_INLINE SetValue(Value value)
+        {
+            m_operand = value.m_node;
+            m_outputOrd = value.m_outputOrd;
+            TestAssert(IsOutputOrdValid());
+        }
+
         uint16_t WARN_UNUSED GetOutputOrdinal() { return m_outputOrd; }
         bool WARN_UNUSED IsOutputOrdValid() { return GetOperand()->IsOutputOrdValid(GetOutputOrdinal()); }
 
         bool IsStaticallyKnownNoCheckNeeded() { return BFM_isStaticallyProven::Get(m_encodedVal); }
 
-        bool IsProven() { return BFM_isProven::Get(m_encodedVal); }
-        void SetProven(bool val) { BFM_isProven::Set(m_encodedVal, val); }
+        // If false, any value flowing through this edge is statically known to be a valid boxed value, that is, a subtype of tBytecodeTop
+        //
+        bool MaybeInvalidBoxedValue() { return BFM_maybeInvalidBoxedValue::Get(m_encodedVal); }
+        void SetMaybeInvalidBoxedValue(bool val) { BFM_maybeInvalidBoxedValue::Set(m_encodedVal, val); }
 
         bool IsKill() { return BFM_isLastUse::Get(m_encodedVal); }
         void SetKill(bool val) { BFM_isLastUse::Set(m_encodedVal, val); }
@@ -413,9 +441,8 @@ public:
 
         bool NeedsTypeCheck()
         {
-            if (GetUseKind() == UseKind_Untyped) { return false; }
             if (IsStaticallyKnownNoCheckNeeded()) { return false; }
-            return !IsProven();
+            return UseKindRequiresNonTrivialRuntimeCheck(GetUseKind());
         }
 
     private:
@@ -433,9 +460,10 @@ public:
         //
         using BFM_isStaticallyProven = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 0 /*start*/, 1 /*width*/>;
 
-        // bit 1: whether we proved that no type check is needed due to existing speculation
+        // bit 1: whether we are guaranteed that the value must be a valid boxed value since the bytecode definition says that
+        // Note that this information is really a property of the node that owns this edge.
         //
-        using BFM_isProven = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 1 /*start*/, 1 /*width*/>;
+        using BFM_maybeInvalidBoxedValue = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 1 /*start*/, 1 /*width*/>;
 
         // bit 2: whether this edge is the last use of the operand
         //
@@ -609,6 +637,11 @@ public:
         }
     }
 
+    Edge& ALWAYS_INLINE GetSoleInput()
+    {
+        return GetInputEdgeForNodeWithFixedNumInputs<1>(0);
+    }
+
     // Works for any node, but slower than GetInputEdgeForNodeWithFixedNumInputs
     //
     Edge& ALWAYS_INLINE GetInputEdge(uint32_t inputOrd)
@@ -624,6 +657,8 @@ public:
         }
     }
 
+    // TODO: we should add a "break" functionality to stop iteration
+    //
     template<typename Func>
     void ALWAYS_INLINE ForEachInputEdge(const Func& func)
     {
@@ -661,18 +696,6 @@ private:
     {
         Flags_HasDirectOutput::Set(m_flags, hasDirectOutput);
         m_numExtraOutputs = SafeIntegerCast<uint16_t>(numExtraOutputs);
-
-        size_t numTotalOutputs = numExtraOutputs + (hasDirectOutput ? 0 : 1);
-        if (numTotalOutputs > 0)
-        {
-            OutputInfo* outputInfoArray = DfgAlloc()->AllocateArray<OutputInfo>(numTotalOutputs);
-            m_outputInfoArray = DfgAlloc()->GetArenaPtr(hasDirectOutput ? outputInfoArray : outputInfoArray - 1);
-        }
-        else
-        {
-            m_outputInfoArray.m_value = 0;
-        }
-
         Assert(HasDirectOutput() == hasDirectOutput);
     }
 
@@ -696,13 +719,6 @@ public:
         SetNumOutputsImpl(hasDirectOutput, numExtraOutputs);
     }
 
-    struct OutputInfo
-    {
-        // The type speculation
-        //
-        TypeMaskTy m_speculation;
-    };
-
     bool HasExtraOutput() { Assert(m_initializedNumOutputs); return m_numExtraOutputs > 0; }
     size_t GetNumExtraOutputs() { Assert(m_initializedNumOutputs); return m_numExtraOutputs; }
 
@@ -718,27 +734,6 @@ public:
         return outputOrdLow <= ord && ord <= outputOrdHigh;
     }
 
-    OutputInfo& GetDirectOutputInfo()
-    {
-        Assert(m_initializedNumOutputs);
-        TestAssert(HasDirectOutput());
-        return DfgAlloc()->GetPtr(m_outputInfoArray)[0];
-    }
-
-    OutputInfo& GetExtraOutputInfo(size_t outputOrd)
-    {
-        Assert(m_initializedNumOutputs);
-        TestAssert(1 <= outputOrd && outputOrd <= m_numExtraOutputs);
-        return DfgAlloc()->GetPtr(m_outputInfoArray)[outputOrd];
-    }
-
-    OutputInfo& GetOutputInfo(size_t outputOrd)
-    {
-        Assert(m_initializedNumOutputs);
-        TestAssert((outputOrd == 0 && HasDirectOutput()) || (1 <= outputOrd && outputOrd <= m_numExtraOutputs));
-        return DfgAlloc()->GetPtr(m_outputInfoArray)[outputOrd];
-    }
-
     bool MayOsrExit()
     {
         if (MayOsrExitNotConsideringChecks())
@@ -749,6 +744,10 @@ public:
         bool edgeHasCheck = false;
         ForEachInputEdge([&](Edge& e) ALWAYS_INLINE
         {
+            if (e.GetUseKind() == UseKind_AlwaysOsrExit)
+            {
+                edgeHasCheck = true;
+            }
             if (e.NeedsTypeCheck())
             {
                 edgeHasCheck = true;
@@ -758,9 +757,7 @@ public:
     }
 
 private:
-    // Information about the outputs
-    //
-    ArenaPtr<OutputInfo> m_outputInfoArray;
+    uint32_t m_unused;
 
     // If this node accesses variadic results, the node that produces variadic results
     //
@@ -1060,7 +1057,7 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(isImmutable ? NodeKind_GetUpvalueImmutable : NodeKind_GetUpvalueMutable);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = functionObject;
+        r->GetSoleInput().InitEdgeWithKnownUseKind(functionObject, UseKind_KnownUnboxedInt64);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetBuiltinNodeInlinedNsdRefAs<Nsd_UpvalueInfo>() = { .m_ordinal = upvalueOrd };
         return r;
@@ -1072,8 +1069,8 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_SetUpvalue);
         r->SetNumInputs(2);
-        r->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = functionObject;
-        r->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = valueToSet;
+        r->GetInputEdgeForNodeWithFixedNumInputs<2>(0).InitEdgeWithKnownUseKind(functionObject, UseKind_KnownUnboxedInt64);
+        r->GetInputEdgeForNodeWithFixedNumInputs<2>(1).InitEdge(valueToSet, false /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->SetNodeSpecificDataAsUInt64(upvalueOrd);
         return r;
@@ -1346,10 +1343,12 @@ public:
     bool IsNoopNode() { return m_nodeKind == NodeKind_Nop; }
     bool IsReturnNode() { return m_nodeKind == NodeKind_Return; }
     bool IsGetKthVariadicResNode() { return m_nodeKind == NodeKind_GetKthVariadicRes; }
+    bool IsGetNumVariadicResNode() { return m_nodeKind == NodeKind_GetNumVariadicRes; }
     bool IsPrependVariadicResNode() { return m_nodeKind == NodeKind_PrependVariadicRes; }
     bool IsCreateCapturedVarNode() { return m_nodeKind == NodeKind_CreateCapturedVar; }
     bool IsSetCapturedVarNode() { return m_nodeKind == NodeKind_SetCapturedVar; }
     bool IsGetCapturedVarNode() { return m_nodeKind == NodeKind_GetCapturedVar; }
+    bool IsCreateFunctionObjectNode() { return m_nodeKind == NodeKind_CreateFunctionObject; }
     bool IsPhantomNode() { return m_nodeKind == NodeKind_Phantom; }
 
     static Node* WARN_UNUSED CreateNoopNode()
@@ -1377,7 +1376,10 @@ public:
         callFrame->AssertFrameLocationValid(frameLoc);
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_SetLocal);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(valueToStore);
+        // By default we allow storing anything into a local, including values that are not boxed values,
+        // but prediction propagation will eventually refine the usekind
+        //
+        r->GetSoleInput().InitEdge(valueToStore, true /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetLocalVarAccessInfo() = LocalVarAccessInfo(r, callFrame, frameLoc);
         r->GetBuiltinNodeInlinedNsdRefAs<uint64_t>() = static_cast<uint64_t>(-1);
@@ -1388,7 +1390,7 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_Phantom);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
+        r->GetSoleInput().InitEdge(value, true /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         return r;
     }
@@ -1397,7 +1399,7 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_GetCapturedVar);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(capturedVar);
+        r->GetSoleInput().InitEdgeWithKnownUseKind(capturedVar, UseKind_KnownCapturedVar);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
             .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
@@ -1410,8 +1412,8 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_SetCapturedVar);
         r->SetNumInputs(2);
-        r->GetInputEdgeForNodeWithFixedNumInputs<2>(0) = Edge(capturedVar);
-        r->GetInputEdgeForNodeWithFixedNumInputs<2>(1) = Edge(valueToStore);
+        r->GetInputEdgeForNodeWithFixedNumInputs<2>(0).InitEdgeWithKnownUseKind(capturedVar, UseKind_KnownCapturedVar);
+        r->GetInputEdgeForNodeWithFixedNumInputs<2>(1).InitEdge(valueToStore, false /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
             .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
@@ -1420,18 +1422,40 @@ public:
         return r;
     }
 
-    // TODO FIXME: populate m_capturedVarInfo
-    //
+private:
+    bool& WARN_UNUSED CreateCapturedVarIsMutableSelfReferenceFlag()
+    {
+        // input[1] is repurposed to represent if this CreateCaptureVar is for mutable self-reference of a CreateClosure
+        //
+        TestAssert(IsCreateCapturedVarNode());
+        return *std::launder<bool>(reinterpret_cast<bool*>(m_inlineOperands + 1));
+    }
+
+public:
+    bool WARN_UNUSED IsCreateCapturedVarMutableSelfReference()
+    {
+        TestAssert(IsCreateCapturedVarNode());
+        return CreateCapturedVarIsMutableSelfReferenceFlag();
+    }
+
+    void SetCreateCapturedVarMutableSelfReferenceFlag()
+    {
+        TestAssert(IsCreateCapturedVarNode());
+        TestAssert(GetSoleInput().GetOperand()->IsUndefValueNode());
+        CreateCapturedVarIsMutableSelfReferenceFlag() = 1;
+    }
+
     static Node* WARN_UNUSED CreateCreateCapturedVarNode(Value value)
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_CreateCapturedVar);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
+        r->GetSoleInput().InitEdge(value, true /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->GetBuiltinNodeInlinedNsdRefAs<Nsd_CapturedVarInfo>() = {
             .m_localOrdForOsrExit = static_cast<uint32_t>(-1),
             .m_logicalCV = nullptr
         };
+        r->CreateCapturedVarIsMutableSelfReferenceFlag() = 0;
         return r;
     }
 
@@ -1439,7 +1463,7 @@ public:
     {
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_ShadowStore);
         r->SetNumInputs(1);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = Edge(value);
+        r->GetSoleInput().InitEdge(value, true /*maybeInvalidBoxedValue*/);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
         r->SetNodeSpecificDataAsUInt64(interpreterSlotOrd.Value());
         return r;
@@ -1521,7 +1545,7 @@ public:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_CheckU64InBound);
         r->SetNumInputs(1);
         r->SetNumOutputs(false /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = value;
+        r->GetSoleInput().InitEdgeWithKnownUseKind(value, UseKind_KnownUnboxedInt64);
         r->SetMayOsrExit(true);
         r->SetNodeSpecificDataAsUInt64(bound);
         return r;
@@ -1532,7 +1556,7 @@ public:
         Node* r = DfgAlloc()->AllocateObject<Node>(NodeKind_I64SubSaturateToZero);
         r->SetNumInputs(1);
         r->SetNumOutputs(true /*hasDirectOutput*/, 0 /*numExtraOutputs*/);
-        r->GetInputEdgeForNodeWithFixedNumInputs<1>(0) = value;
+        r->GetSoleInput().InitEdgeWithKnownUseKind(value, UseKind_KnownUnboxedInt64);
         r->GetBuiltinNodeInlinedNsdRefAs<int64_t>() = valueToSub;
         return r;
     }
@@ -1586,8 +1610,17 @@ public:
     void SetOsrExitDest(OsrExitDestination dest) { m_osrExitDest = dest; }
     OsrExitDestination GetOsrExitDest() { return m_osrExitDest; }
 
-    void ClearReplacement() { m_replacement = nullptr; }
-    Value GetReplacementMaybeNonExistent() { return m_replacement; }
+    void ClearReplacement()
+    {
+        SetHardpointKind(HardpointKind::Replacement);
+        m_replacement = nullptr;
+    }
+
+    Value GetReplacementMaybeNonExistent()
+    {
+        TestAssert(m_hardpointKind == HardpointKind::Replacement);
+        return m_replacement;
+    }
 
     // This is a simple utility that allows replacing an SSA value with another SSA value
     // It currently requires that node just has one output (since that's all we need right now),
@@ -1595,12 +1628,12 @@ public:
     //
     void SetReplacement(Value replacementVal)
     {
-        TestAssert(Edge(replacementVal).IsOutputOrdValid());
+        TestAssert(replacementVal.GetOperand()->IsOutputOrdValid(replacementVal.m_outputOrd));
         TestAssert(HasDirectOutput() && !HasExtraOutput());
-        // We forbid setting replacement for a constant-like node for now because it doesn't seem reasonable,
-        // and also the Graph::ClearAllReplacements() currently does not clear replacement for constant-like nodes
+        // We forbid setting replacement for a constant-like node for now because it doesn't seem reasonable.
         //
         TestAssert(!IsConstantLikeNode());
+        SetHardpointKind(HardpointKind::Replacement);
         m_replacement = replacementVal;
     }
 
@@ -1639,7 +1672,7 @@ public:
                 Edge& e = m_inlineOperands[i].m_edge;
                 if (e.NeedsTypeCheck())
                 {
-                    m_inlineOperands[newNumInputs].m_edge = e;
+                    m_inlineOperands[newNumInputs].m_edge.InitEdgeByCopy(e);
                     newNumInputs++;
                 }
             }
@@ -1656,7 +1689,7 @@ public:
                 if (e.NeedsTypeCheck())
                 {
                     TestAssert(newNumInputs < x_maxInlineOperands - 1);
-                    m_inlineOperands[newNumInputs].m_edge = e;
+                    m_inlineOperands[newNumInputs].m_edge.InitEdgeByCopy(e);
                     newNumInputs++;
                 }
             }
@@ -1670,12 +1703,12 @@ public:
                 {
                     if (newNumInputs < x_maxInlineOperands - 1)
                     {
-                        m_inlineOperands[newNumInputs].m_edge = e;
+                        m_inlineOperands[newNumInputs].m_edge.InitEdgeByCopy(e);
                         newNumInputs++;
                     }
                     else
                     {
-                        outlinedInputs[newNumInputs - (x_maxInlineOperands - 1)] = e;
+                        outlinedInputs[newNumInputs - (x_maxInlineOperands - 1)].InitEdgeByCopy(e);
                         newNumInputs++;
                     }
                 }
@@ -1687,7 +1720,7 @@ public:
             }
             else if (newNumInputs == x_maxInlineOperands)
             {
-                m_inlineOperands[x_maxInlineOperands - 1].m_edge = outlinedInputs[0];
+                m_inlineOperands[x_maxInlineOperands - 1].m_edge.InitEdgeByCopy(outlinedInputs[0]);
                 Flags_NumInlinedOperands::Set(m_flags, SafeIntegerCast<uint32_t>(newNumInputs));
             }
             else
@@ -1748,14 +1781,75 @@ public:
         SetFlagsForNopNode();
     }
 
+    // In test build, identify the current active member in the union below
+    //
+    enum class HardpointKind : uint8_t
+    {
+        Invalid,
+        Replacement,
+        Marker,
+        Predictions
+    };
+
+private:
+    // A hardpoint that allows callers to associate a value with this node for their own purpose
+    // Each member must not exceed 8 bytes
+    //
     union {
         Value m_replacement;
         // Used for custom purpose inside a pass
         //
         size_t m_customMarker;
+        // Used by prediction propagation
+        //
+        TypeMaskTy* m_predictions;
     };
 
+    void SetHardpointKind([[maybe_unused]] HardpointKind kind)
+    {
+#ifdef TESTBUILD
+        m_hardpointKind = kind;
+#endif
+    }
+
+public:
+    void SetCustomMarker(size_t value)
+    {
+        SetHardpointKind(HardpointKind::Marker);
+        m_customMarker = value;
+    }
+
+    size_t WARN_UNUSED GetCustomMarker()
+    {
+        TestAssert(m_hardpointKind == HardpointKind::Marker);
+        return m_customMarker;
+    }
+
+    // Note that the valid range of the prediction array is the valid range of the output ordinals
+    //
+    void SetOutputPredictionsArray(TypeMaskTy* predictions)
+    {
+        SetHardpointKind(HardpointKind::Predictions);
+        m_predictions = predictions;
+    }
+
+    TypeMaskTy* GetOutputPredictionsArray()
+    {
+        TestAssert(m_hardpointKind == HardpointKind::Predictions);
+        return m_predictions;
+    }
+
+    TypeMaskTy* GetOutputPredictionAddr(size_t outputOrd)
+    {
+        Assert(m_initializedNumOutputs);
+        TestAssert((outputOrd == 0 && HasDirectOutput()) || (1 <= outputOrd && outputOrd <= m_numExtraOutputs));
+        return GetOutputPredictionsArray() + outputOrd;
+    }
+
 private:
+#ifdef TESTBUILD
+    HardpointKind m_hardpointKind;
+#endif
 #ifndef NDEBUG
     bool m_initializedNumInputs;
     bool m_initializedNumOutputs;
@@ -1858,13 +1952,22 @@ struct Phi
     // It's only used inside ConstructBlockLocalSSA pass to convert a GetLocal where
     // no SetLocal can ever flow into it to UndefValue
     //
-    bool IsTriviallyUndefValue() { return !m_canSeeSetLocal; }
+    bool WARN_UNUSED IsTriviallyUndefValue() { return !m_canSeeSetLocal; }
     void SetNotTriviallyUndefValue() { m_canSeeSetLocal = true; }
+
+    // True if an UndefValue can flow to this Phi
+    // Note that this function only says whether an UndefValue flows to this Phi
+    // So even if this function returns false, it is still possible that a SetLocal
+    // that flows to this Phi sets the LogicalVariable to an UndefValue
+    //
+    bool WARN_UNUSED MaybeUndefValue() { return m_maybeUndefVal; }
+    void SetMaybeUndefValue() { m_maybeUndefVal = true; }
 
 private:
     Phi()
         : m_nodeKindForPhi(NodeKind_Phi)
         , m_canSeeSetLocal(false)
+        , m_maybeUndefVal(false)
         , m_numChildren(0)
         , m_compositeValue(0)
     { }
@@ -1918,6 +2021,7 @@ private:
     //
     NodeKind m_nodeKindForPhi;
     bool m_canSeeSetLocal;
+    bool m_maybeUndefVal;
     uint32_t m_numChildren;
     ArenaPtr<BasicBlock> m_basicBlock;
     uint32_t m_localOrd;
@@ -2483,9 +2587,23 @@ public:
         if (r == nullptr)
         {
             r = Node::CreateConstantNode(value);
+            m_constantList.push_back(r);
         }
         Assert(r != nullptr);
         return Value(r, 0 /*outputOrd*/);
+    }
+
+    template<typename Func>
+    void ALWAYS_INLINE ForEachBoxedConstantNode(const Func& func)
+    {
+        for (Node* node : m_constantList)
+        {
+            TestAssert(node->m_nodeKind == NodeKind_Constant);
+            // Give hint so compiler can optimize if 'func' contains a switch on node type
+            //
+            __builtin_assume(node->m_nodeKind == NodeKind_Constant);
+            func(node);
+        }
     }
 
     Value WARN_UNUSED GetUnboxedConstant(uint64_t value)
@@ -2494,9 +2612,21 @@ public:
         if (r == nullptr)
         {
             r = Node::CreateUnboxedConstantNode(value);
+            m_unboxedConstantList.push_back(r);
         }
         Assert(r != nullptr);
         return Value(r, 0 /*outputOrd*/);
+    }
+
+    template<typename Func>
+    void ALWAYS_INLINE ForEachUnboxedConstantNode(const Func& func)
+    {
+        for (Node* node : m_unboxedConstantList)
+        {
+            TestAssert(node->m_nodeKind == NodeKind_UnboxedConstant);
+            __builtin_assume(node->m_nodeKind == NodeKind_UnboxedConstant);
+            func(node);
+        }
     }
 
     Value WARN_UNUSED GetArgumentNode(size_t argOrd)
@@ -2511,6 +2641,20 @@ public:
             m_argumentCacheMap[argOrd] = Node::CreateArgumentNode(argOrd);
         }
         return Value(m_argumentCacheMap[argOrd], 0 /*outputOrd*/);
+    }
+
+    template<typename Func>
+    void ALWAYS_INLINE ForEachArgumentNode(const Func& func)
+    {
+        for (Node* node : m_argumentCacheMap)
+        {
+            if (node != nullptr)
+            {
+                TestAssert(node->m_nodeKind == NodeKind_Argument);
+                __builtin_assume(node->m_nodeKind == NodeKind_Argument);
+                func(node);
+            }
+        }
     }
 
     Value WARN_UNUSED GetUndefValue()
@@ -2544,6 +2688,57 @@ public:
             m_variadicArgumentCacheMap[varArgOrd] = Node::CreateGetKthVariadicArgNode(varArgOrd);
         }
         return Value(m_variadicArgumentCacheMap[varArgOrd], 0 /*outputOrd*/);
+    }
+
+    template<typename Func>
+    void ALWAYS_INLINE ForEachGetKthVariadicArgumentNode(const Func& func)
+    {
+        for (Node* node : m_variadicArgumentCacheMap)
+        {
+            if (node != nullptr)
+            {
+                TestAssert(node->m_nodeKind == NodeKind_GetKthVariadicArg);
+                __builtin_assume(node->m_nodeKind == NodeKind_GetKthVariadicArg);
+                func(node);
+            }
+        }
+    }
+
+    // Call 'func' for all constant-like nodes in the graph
+    //
+    // Caller should mark 'func' always_inline, since this function uses __builtin_assume
+    // to allow the compiler optimize away the nodeKind switch in the 'func' (if exists) after inlining 'func'
+    //
+    template<typename Func>
+    void ALWAYS_INLINE ForEachConstantLikeNode(const Func& func)
+    {
+        ForEachBoxedConstantNode(func);
+        ForEachUnboxedConstantNode(func);
+        ForEachArgumentNode(func);
+        ForEachGetKthVariadicArgumentNode(func);
+
+        Node* undefVal = m_undefValNode;
+        TestAssert(undefVal->m_nodeKind == NodeKind_UndefValue);
+        __builtin_assume(undefVal->m_nodeKind == NodeKind_UndefValue);
+        func(undefVal);
+
+        Node* funcObj = m_functionObjectNode;
+        TestAssert(funcObj->m_nodeKind == NodeKind_GetFunctionObject);
+        __builtin_assume(funcObj->m_nodeKind == NodeKind_GetFunctionObject);
+        func(funcObj);
+
+        Node* numVarArgs = m_numVarArgsNode;
+        if (numVarArgs->m_nodeKind == NodeKind_GetNumVariadicArgs)
+        {
+            func(numVarArgs);
+        }
+        else
+        {
+            // 'numVarArgs' may be UnboxedConstant(0) if the root function doesn't take var args
+            // We have called 'func' on the UnboxedConstant node earlier, don't call it again
+            //
+            TestAssert(numVarArgs->m_nodeKind == NodeKind_UnboxedConstant);
+        }
     }
 
     void RegisterNewInlinedCallFrame(InlinedCallFrame* callFrame)
@@ -2632,6 +2827,11 @@ public:
         return m_allLogicalVariables;
     }
 
+    const DVector<ArenaPtr<CapturedVarLogicalVariableInfo>>& GetAllCapturedVarLogicalVariables()
+    {
+        return m_allCapturedVarLogicalVariables;
+    }
+
     void ClearAllReplacements()
     {
         for (BasicBlock* bb : m_blocks)
@@ -2641,6 +2841,11 @@ public:
                 node->ClearReplacement();
             }
         }
+        ForEachConstantLikeNode(
+            [&](Node* node) ALWAYS_INLINE
+            {
+                node->ClearReplacement();
+            });
     }
 
     void ClearAllReplacementsAndIsReferencedBit()
@@ -2653,6 +2858,12 @@ public:
                 node->SetNodeReferenced(false);
             }
         }
+        ForEachConstantLikeNode(
+            [&](Node* node) ALWAYS_INLINE
+            {
+                node->ClearReplacement();
+                node->SetNodeReferenced(false);
+            });
     }
 
     // Assert that no node references another node that is marked for replacement
@@ -2806,7 +3017,9 @@ public:
 private:
     CodeBlock* m_rootCodeBlock;
     DUnorderedMap<uint64_t /*tv*/, Node*> m_constantCacheMap;
+    DVector<ArenaPtr<Node>> m_constantList;
     DUnorderedMap<uint64_t /*value*/, Node*> m_unboxedConstantCacheMap;
+    DVector<ArenaPtr<Node>> m_unboxedConstantList;
     DVector<Node*> m_argumentCacheMap;
     DVector<Node*> m_variadicArgumentCacheMap;
     DVector<ArenaPtr<InlinedCallFrame>> m_allInlineCallFrames;

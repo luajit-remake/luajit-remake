@@ -266,13 +266,13 @@ private:
     size_t m_boundaryPtr;
 };
 
-inline Arena* g_arena;
-
-// g_arena is not a constant, but never change after program initialization
-// so we use attribute 'const' (LLVM attribute readnone) to mark that the return value of
-// this function will never change, allowing compiler to do CSE appropriately
+// TODO: This is fine with -fno-pic -fno-pie right now,
+// but if we compile with PIC/PIE, each access will need to go through the GOT which is much slower
+// We should either make it inline or enable LTO
 //
-inline Arena* ALWAYS_INLINE WARN_UNUSED __attribute__((__const__)) DfgAlloc()
+extern Arena* const g_arena;
+
+inline Arena* ALWAYS_INLINE WARN_UNUSED DfgAlloc()
 {
     return g_arena;
 }
@@ -333,5 +333,3 @@ template<typename T>
 using DQueue = std::queue<T, std::deque<T, StlAdaptorForDfgArenaAlloc<T>>>;
 
 }   // namespace dfg
-
-void InitializeDfgAllocationArenaIfNeeded();

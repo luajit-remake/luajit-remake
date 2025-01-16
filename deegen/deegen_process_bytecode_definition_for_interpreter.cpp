@@ -302,8 +302,8 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 ReleaseAssert(def->m_list[k]->GetKind() == BcOperandKind::Constant);
                 BcOpConstant* op = static_cast<BcOpConstant*>(def->m_list[k].get());
                 TypeMaskTy mask = op->m_typeMask;
-                ReleaseAssert(mask <= x_typeMaskFor<tTop>);
-                if (mask != x_typeMaskFor<tTop>)
+                ReleaseAssert(mask <= x_typeMaskFor<tBoxedValueTop>);
+                if (mask != x_typeMaskFor<tBoxedValueTop>)
                 {
                     isNoSpecializationEdgeCase = false;
                 }
@@ -314,7 +314,7 @@ void GenerateVariantSelectorImpl(FILE* fp,
                 if (!mustEmitTopCheck)
                 {
                     // I believe it's impossible to reach here for BytecodeSlotOrConstant: if we have already emitted
-                    // at least one type check, we should never see any tTop specialization in S
+                    // at least one type check, we should never see any tBoxedValueTop specialization in S
                     //
                     ReleaseAssert(opTypes[k] == DeegenBytecodeOperandType::Constant);
 
@@ -902,7 +902,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                 if (operand->GetKind() == BcOperandKind::Constant)
                 {
                     BcOpConstant* bcOpCst = assert_cast<BcOpConstant*>(operand.get());
-                    if (bcOpCst->m_typeMask != x_typeMaskFor<tTop>)
+                    ReleaseAssert(bcOpCst->m_typeMask <= x_typeMaskFor<tBoxedValueTop>);
+                    if (bcOpCst->m_typeMask != x_typeMaskFor<tBoxedValueTop>)
                     {
                         std::string maskName = "";
                         {
@@ -1471,7 +1472,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                                 "[[maybe_unused]] RestrictPtr<uint8_t> nsdPtr)\n");
                     fprintf(fp, "    {\n");
 
-                    fprintf(fp, "        TempArenaAllocator& alloc = state.m_alloc;\n");
+                    fprintf(fp, "        TempArenaAllocator& resultAlloc = state.m_resultAlloc;\n");
+                    fprintf(fp, "        [[maybe_unused]] TempArenaAllocator& tempAlloc = state.m_tempAlloc;\n");
                     fprintf(fp, "        state.m_valueProfileOrds.clear();\n");
 
                     // If we need complex node state
@@ -1623,7 +1625,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         }
 
                         ReleaseAssert(needComplexState);
-                        fprintf(fp, "        uint64_t* inputData = alloc.AllocateArray<uint64_t>(maxRangeLength + %d);\n",
+                        fprintf(fp, "        uint64_t* inputData = tempAlloc.AllocateArray<uint64_t>(maxRangeLength + %d);\n",
                                 static_cast<int>(inputOperandsSSAOrdVec.size()));
                         fprintf(fp, "        state.m_inputOrds = reinterpret_cast<TypeMaskTy**>(inputData);\n");
                         fprintf(fp, "        state.m_inputListLen = maxRangeLength + %d;\n",
@@ -1655,7 +1657,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         }
 
                         fprintf(fp, "        DfgComplexNodePredictionPropagationData* r = "
-                                    "DfgComplexNodePredictionPropagationData::Create(alloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
+                                    "DfgComplexNodePredictionPropagationData::Create(resultAlloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
                                 static_cast<int>(numRangeUpdaters));
                         fprintf(fp, "        r->m_inputMaskAddrs = reinterpret_cast<TypeMaskTy**>(inputData);\n");
                     }
@@ -1663,7 +1665,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                     {
                         if (needComplexState)
                         {
-                            fprintf(fp, "        uint64_t* inputData = alloc.AllocateArray<uint64_t>(%d);\n",
+                            fprintf(fp, "        uint64_t* inputData = tempAlloc.AllocateArray<uint64_t>(%d);\n",
                                     static_cast<int>(inputOperandsSSAOrdVec.size()));
                             fprintf(fp, "        state.m_inputOrds = reinterpret_cast<TypeMaskTy**>(inputData);\n");
                             fprintf(fp, "        state.m_inputListLen = %d;\n", static_cast<int>(inputOperandsSSAOrdVec.size()));
@@ -1673,14 +1675,14 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             }
 
                             fprintf(fp, "        DfgComplexNodePredictionPropagationData* r = "
-                                        "DfgComplexNodePredictionPropagationData::Create(alloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
+                                        "DfgComplexNodePredictionPropagationData::Create(resultAlloc, %d /*numRangeUpdaters*/, numOutputOperands);\n",
                                     static_cast<int>(numRangeUpdaters));
                             fprintf(fp, "        r->m_inputMaskAddrs = reinterpret_cast<TypeMaskTy**>(inputData);\n");
                         }
                         else
                         {
                             fprintf(fp, "        DfgSimpleNodePredictionPropagationData* r = "
-                                        "DfgSimpleNodePredictionPropagationData::Create(alloc, %d /*numInputs*/, numOutputOperands);\n",
+                                        "DfgSimpleNodePredictionPropagationData::Create(resultAlloc, %d /*numInputs*/, numOutputOperands);\n",
                                     static_cast<int>(inputOperandsSSAOrdVec.size()));
                             for (size_t i = 0; i < inputOperandsSSAOrdVec.size(); i++)
                             {
@@ -1705,12 +1707,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         case TypeDeductionKind::ValueProfile:
                         case TypeDeductionKind::ValueProfileWithFunction:
                         {
-                            fprintf(fp, "        state.m_valueProfileOrds.push_back(curOutputOrd);\n");
+                            fprintf(fp, "        state.m_valueProfileOrds.push_back(SafeIntegerCast<uint32_t>(curOutputOrd));\n");
                             break;
                         }
                         case TypeDeductionKind::NeverProfile:
                         {
-                            fprintf(fp, "        r->m_predictions[curOutputOrd] = x_typeMaskFor<tTop>;\n");
+                            fprintf(fp, "        r->m_predictions[curOutputOrd] = x_typeMaskFor<tFullTop>;\n");
                             break;
                         }
                         case TypeDeductionKind::Constant:
@@ -1753,12 +1755,12 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             case TypeDeductionKind::ValueProfile:
                             case TypeDeductionKind::ValueProfileWithFunction:
                             {
-                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { state.m_valueProfileOrds.push_back(curOutputOrd); curOutputOrd++; }\n");
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { state.m_valueProfileOrds.push_back(SafeIntegerCast<uint32_t>(curOutputOrd)); curOutputOrd++; }\n");
                                 break;
                             }
                             case TypeDeductionKind::NeverProfile:
                             {
-                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { r->m_predictions[curOutputOrd] = x_typeMaskFor<tTop>; curOutputOrd++; }\n");
+                                fprintf(fp, "            for (size_t i = 0; i < len; i++) { r->m_predictions[curOutputOrd] = x_typeMaskFor<tFullTop>; curOutputOrd++; }\n");
                                 break;
                             }
                             case TypeDeductionKind::Constant:
@@ -1840,6 +1842,17 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             ReleaseAssert(found);
                         }
 
+                        // If the user has promised that an input operand must be a valid boxed value when control reaches a bytecode,
+                        // we can filter out the non-boxed-value predictions for that input operand
+                        //
+                        auto filterMaskForGuaranteedBoxedValue = [&](Value* originalValue, InsertPosition insPos) WARN_UNUSED -> Value*
+                        {
+                            return BinaryOperator::CreateAnd(
+                                originalValue,
+                                CreateLLVMConstantInt<TypeMaskTy>(ctx, x_typeMaskFor<tBoxedValueTop>), "",
+                                insPos);
+                        };
+
                         BasicBlock* entryBB = BasicBlock::Create(ctx, "", ppFn);
                         AllocaInst* changedAlloca = new AllocaInst(llvm_type_of<uint8_t>(ctx), 0 /*addrSpace*/, "", entryBB);
                         new StoreInst(CreateLLVMConstantInt<uint8_t>(ctx, 0), changedAlloca, entryBB);
@@ -1876,6 +1889,16 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                                         Value* val = CreateCallToDeegenCommonSnippet(
                                             m.get(), "GetInputPredictionMaskForSimpleNode", { ppData, CreateLLVMConstantInt<uint64_t>(ctx, ord) }, entryBB);
                                         ReleaseAssert(llvm_value_has_type<TypeMaskTy>(val));
+                                        // If the value is guaranteed to be a valid boxed value, we can filter out predictions that are not
+                                        //
+                                        bool mayBeInvalidBoxedValue =
+                                            (operand->GetKind() == BcOperandKind::Slot) ?
+                                            (assert_cast<BcOpSlot*>(operand)->MaybeInvalidBoxedValue()) :
+                                            (assert_cast<BcOpConstant*>(operand)->MaybeInvalidBoxedValue());
+                                        if (!mayBeInvalidBoxedValue)
+                                        {
+                                            val = filterMaskForGuaranteedBoxedValue(val, entryBB);
+                                        }
                                         callArgs.push_back(val);
                                     }
                                     else
@@ -1925,6 +1948,69 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                         }
                         else
                         {
+                            auto lowerRangeOperandGetTypeMaskApi = [&](Function* f)
+                            {
+                                std::vector<CallInst*> allUses;
+                                for (BasicBlock& bb : *f)
+                                {
+                                    for (Instruction& inst : bb)
+                                    {
+                                        if (isa<CallInst>(&inst))
+                                        {
+                                            CallInst* ci = dyn_cast<CallInst>(&inst);
+                                            Function* callee = ci->getCalledFunction();
+                                            if (callee != nullptr)
+                                            {
+                                                if (callee->getName() == "DeegenImpl_TypeDeductionRuleInputTypeGetterForRange")
+                                                {
+                                                    allUses.push_back(ci);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                for (CallInst* ci : allUses)
+                                {
+                                    ReleaseAssert(ci->arg_size() == 2);
+                                    Value* base = ci->getArgOperand(0);
+                                    Value* idx = ci->getArgOperand(1);
+                                    ReleaseAssert(llvm_value_has_type<void*>(base));
+                                    ReleaseAssert(llvm_value_has_type<size_t>(idx));
+                                    ReleaseAssert(llvm_value_has_type<TypeMaskTy>(ci));
+
+                                    // The predictions for range operands are currently laid out simply as an array of TypeMaskTy*
+                                    //
+                                    Value* ptrAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<void*>(ctx), base, { idx }, "", ci);
+
+                                    Value* ptr = new LoadInst(llvm_type_of<void*>(ctx), ptrAddr, "", ci);
+                                    Value* mask = new LoadInst(llvm_type_of<TypeMaskTy>(ctx), ptr, "", ci);
+
+                                    // TODO: depending on the value of 'idx', maybeInvalidBoxedValue can be true or false,
+                                    // and we need to or not to normalize 'mask' based on that accordingly.
+                                    // We thus need another bitvector to store this information for each 'idx' if
+                                    // maybeInvalidBoxedValue is true for some of the access ranges.
+                                    //
+                                    // For now, we do not support this for simplicity (it's a very weird use case anyway),
+                                    // and just lockdown if DeclareReads says that some read ranges may contain invalidBoxedValue.
+                                    //
+                                    mask = filterMaskForGuaranteedBoxedValue(mask, ci);
+
+                                    for (RangeRcwInfoItem& item : bytecodeVariantDef->m_rawReadRangeExprs)
+                                    {
+                                        if (item.m_maybeInvalidBoxedValue)
+                                        {
+                                            ReleaseAssert(false && "lockdown: support for DeclareReads with maybeInvalidBoxedValue = true used in type deduction function not yet implemented");
+                                        }
+                                    }
+
+                                    ReleaseAssert(mask->getType() == ci->getType());
+
+                                    ci->replaceAllUsesWith(mask);
+                                    ci->eraseFromParent();
+                                }
+                            };
+
                             std::vector<Value*> commonCallArgs;
                             for (uint32_t i = 0; i < bytecodeVariantDef->m_list.size(); i++)
                             {
@@ -1937,6 +2023,16 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                                         Value* val = CreateCallToDeegenCommonSnippet(
                                             m.get(), "GetInputPredictionMaskForComplexNode", { ppData, CreateLLVMConstantInt<uint64_t>(ctx, ord) }, entryBB);
                                         ReleaseAssert(llvm_value_has_type<TypeMaskTy>(val));
+                                        // If the value is guaranteed to be a valid boxed value, we can filter out predictions that are not
+                                        //
+                                        bool mayBeInvalidBoxedValue =
+                                            (operand->GetKind() == BcOperandKind::Slot) ?
+                                            (assert_cast<BcOpSlot*>(operand)->MaybeInvalidBoxedValue()) :
+                                            (assert_cast<BcOpConstant*>(operand)->MaybeInvalidBoxedValue());
+                                        if (!mayBeInvalidBoxedValue)
+                                        {
+                                            val = filterMaskForGuaranteedBoxedValue(val, entryBB);
+                                        }
                                         commonCallArgs.push_back(val);
                                     }
                                     else
@@ -1968,6 +2064,8 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
                             {
                                 Function* callee = m->getFunction(bytecodeVariantDef->m_outputTypeDeductionInfo.m_typeDeductionFnName);
                                 ReleaseAssert(callee != nullptr);
+                                lowerRangeOperandGetTypeMaskApi(callee);
+
                                 ReleaseAssert(commonCallArgs.size() == callee->arg_size());
                                 for (uint32_t i = 0; i < commonCallArgs.size(); i++)
                                 {
@@ -2037,6 +2135,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
 
                                     Function* callee = m->getFunction(item.m_typeDeductionFnName);
                                     ReleaseAssert(callee != nullptr);
+                                    lowerRangeOperandGetTypeMaskApi(callee);
 
                                     std::vector<Value*> callArgs;
                                     callArgs.push_back(curRangeOffset);

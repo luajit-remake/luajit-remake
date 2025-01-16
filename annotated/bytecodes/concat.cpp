@@ -275,7 +275,7 @@ DEEGEN_DEFINE_BYTECODE(Concat)
             {
                 if (!base->Get(i).SubsetOf(x_typeMaskFor<tString> | x_typeMaskFor<tDouble>))
                 {
-                    return x_typeMaskFor<tTop>;
+                    return x_typeMaskFor<tBoxedValueTop>;
                 }
             }
             return x_typeMaskFor<tString>;

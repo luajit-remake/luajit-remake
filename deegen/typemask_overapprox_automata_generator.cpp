@@ -101,16 +101,18 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
 {
     std::vector<ItemTy> items = MakeClosure();
 
-    // If the items does not have a tTop term, add tTop with failure value (-1) as a catch-all
+    // If the items does not have a tBoxedValueTop term, add tBoxedValueTop with failure value (-1) as a catch-all
     //
-    TypeMaskTy topMask = x_typeMaskFor<tTop>;
+    TypeMaskTy topMask = x_typeMaskFor<tBoxedValueTop>;
     ReleaseAssertImp(items.size() > 0, items.back().first <= topMask);
     if (items.size() == 0 || items.back().first < topMask)
     {
         items.push_back(std::make_pair(topMask, static_cast<uint16_t>(-1)));
     }
 
-    const size_t N = x_numUsefulBitsInTypeMask;
+    const size_t N = x_numUsefulBitsInBytecodeTypeMask;
+    ReleaseAssert(N > 0);
+    ReleaseAssert(topMask == (static_cast<TypeMaskTy>(-1) >> (sizeof(TypeMaskTy) * 8 - N)));
 
     // Sanity check that 'items' are sorted and distinct
     //
@@ -280,7 +282,7 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
         bool IsTerminalNode()
         {
             bool res = (m_testMasks.size() == 0 && m_dests[0] == nullptr);
-            ReleaseAssertIff(res, m_item.first == x_typeMaskFor<tTop>);
+            ReleaseAssertIff(res, m_item.first == x_typeMaskFor<tBoxedValueTop>);
             return res;
         }
 
@@ -298,8 +300,8 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
 
         void Populate(DfgNodeTy* node /*out*/, const std::function<size_t(NodeInfo*)>& nodeInfoToOffsetFn)
         {
-            ReleaseAssert((x_typeMaskFor<tTop> & m_item.first) == m_item.first);
-            node->m_clearMask = x_typeMaskFor<tTop> ^ m_item.first;
+            ReleaseAssert((x_typeMaskFor<tBoxedValueTop> & m_item.first) == m_item.first);
+            node->m_clearMask = x_typeMaskFor<tBoxedValueTop> ^ m_item.first;
             node->m_answer = m_item.second;
             if (IsTerminalNode())
             {
@@ -350,7 +352,7 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
     itemReachable.resize(M, false /*value*/);
 
     std::vector<TypeMask> knownZeroBitsForItem;
-    knownZeroBitsForItem.resize(M, x_typeMaskFor<tTop> /*value*/);
+    knownZeroBitsForItem.resize(M, x_typeMaskFor<tBoxedValueTop> /*value*/);
 
     if (forLeafOpted)
     {
@@ -422,9 +424,9 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
             if (numTests == 0)
             {
                 // It's possible that we are certain that we reached a terminal node due to knownZeroMask
-                // Set the item mask to tTop to make assertions happy and for sanity
+                // Set the item mask to tBoxedValueTop to make assertions happy and for sanity
                 //
-                node->m_item.first = x_typeMaskFor<tTop>;
+                node->m_item.first = x_typeMaskFor<tBoxedValueTop>;
             }
 
             for (size_t i = 0; i < numTests; i++)
@@ -502,7 +504,7 @@ std::vector<uint8_t> WARN_UNUSED TypemaskOverapproxAutomataGenerator::GenerateIm
     //
     for (auto& node : dfaNodes)
     {
-        ReleaseAssert(TypeMask(node->m_item.first).SubsetOf(x_typeMaskFor<tTop>));
+        ReleaseAssert(TypeMask(node->m_item.first).SubsetOf(x_typeMaskFor<tBoxedValueTop>));
         ReleaseAssert((static_cast<uint64_t>(1) << node->m_testMasks.size()) == node->m_dests.size());
         for (size_t idx = 1; idx < node->m_dests.size(); idx++)
         {

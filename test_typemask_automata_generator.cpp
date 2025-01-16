@@ -43,7 +43,7 @@ void TestOneCaseImpl(std::mt19937_64& rdgen, std::vector<TypeMaskTy> items, Type
         gen.AddItem(it.first, it.second);
     }
 
-    rmask &= x_typeMaskFor<tTop>;
+    rmask &= x_typeMaskFor<tBoxedValueTop>;
 
     std::vector<TypeMaskTy> inputs;
     inputs.push_back(0);
@@ -58,9 +58,9 @@ void TestOneCaseImpl(std::mt19937_64& rdgen, std::vector<TypeMaskTy> items, Type
 
     for (size_t i = 0; i < 200; i++)
     {
-        inputs.push_back(static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tTop> + 1)));
+        inputs.push_back(static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tBoxedValueTop> + 1)));
     }
-    inputs.push_back(x_typeMaskFor<tTop>);
+    inputs.push_back(x_typeMaskFor<tBoxedValueTop>);
 
     std::vector<uint8_t> v1 = gen.GenerateAutomata();
     TypeMaskOverapproxAutomata a1(v1.data());
@@ -145,15 +145,15 @@ void TestOneCase(std::mt19937_64& rdgen, std::vector<TypeMaskTy> items, TypeMask
 
 TypeMaskTy GetRandomTopMask(std::mt19937_64& rdgen, uint64_t numBits)
 {
-    if (x_numUsefulBitsInTypeMask < numBits)
+    if (x_numUsefulBitsInBytecodeTypeMask < numBits)
     {
-        numBits = x_numUsefulBitsInTypeMask;
+        numBits = x_numUsefulBitsInBytecodeTypeMask;
     }
 
     std::unordered_set<size_t> vals;
     while (vals.size() < numBits)
     {
-        vals.insert(rdgen() % x_numUsefulBitsInTypeMask);
+        vals.insert(rdgen() % x_numUsefulBitsInBytecodeTypeMask);
     }
 
     TypeMaskTy res = 0;
@@ -166,7 +166,7 @@ TypeMaskTy GetRandomTopMask(std::mt19937_64& rdgen, uint64_t numBits)
 
 TypeMaskTy GetRandomBottomMask(std::mt19937_64& rdgen, TypeMaskTy topMask)
 {
-    TypeMaskTy val = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tTop> + 1));
+    TypeMaskTy val = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tBoxedValueTop> + 1));
     return val & topMask;
 }
 
@@ -180,7 +180,7 @@ void DoTest(std::mt19937_64& rdgen, TypeMaskTy topMask, TypeMaskTy bottomMask, s
     std::unordered_set<TypeMaskTy> vals;
     while (vals.size() < numElements)
     {
-        TypeMaskTy mask = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tTop> + 1));
+        TypeMaskTy mask = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tBoxedValueTop> + 1));
         mask &= andMask;
         mask |= bottomMask;
         vals.insert(mask);
@@ -200,7 +200,7 @@ void DoTest(std::mt19937_64& rdgen, TypeMaskTy topMask, TypeMaskTy bottomMask, s
 
 void DoTest2(std::mt19937_64& rdgen, size_t numElements)
 {
-    size_t maxNumElements = x_typeMaskFor<tTop> + 1;
+    size_t maxNumElements = x_typeMaskFor<tBoxedValueTop> + 1;
     numElements = std::min(numElements, maxNumElements);
 
     std::unordered_set<TypeMaskTy> vals;
@@ -208,7 +208,7 @@ void DoTest2(std::mt19937_64& rdgen, size_t numElements)
     {
         while (vals.size() < numElements)
         {
-            TypeMaskTy mask = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tTop> + 1));
+            TypeMaskTy mask = static_cast<TypeMaskTy>(rdgen() % (x_typeMaskFor<tBoxedValueTop> + 1));
             vals.insert(mask);
         }
     }
@@ -244,9 +244,9 @@ TEST(DfgTypemaskAutomataGen, Sanity)
     TestOneCase(rdgen, { 0 }, 255);
     TestOneCase(rdgen, { 1 }, 255);
     TestOneCase(rdgen, { 0, 1 }, 255);
-    TestOneCase(rdgen, { 0, x_typeMaskFor<tTop> }, 255);
-    TestOneCase(rdgen, { 1, x_typeMaskFor<tTop> }, 255);
-    TestOneCase(rdgen, { x_typeMaskFor<tTop> }, 255);
+    TestOneCase(rdgen, { 0, x_typeMaskFor<tBoxedValueTop> }, 255);
+    TestOneCase(rdgen, { 1, x_typeMaskFor<tBoxedValueTop> }, 255);
+    TestOneCase(rdgen, { x_typeMaskFor<tBoxedValueTop> }, 255);
 
     DoTest(rdgen, 255, 0, 5);
     DoTest(rdgen, 255, 0, 10);
@@ -259,7 +259,7 @@ TEST(DfgTypemaskAutomataGen, Sanity)
 
     for (size_t count = 0; count < 50; count++)
     {
-        size_t maxBits = x_numUsefulBitsInTypeMask;
+        size_t maxBits = x_numUsefulBitsInBytecodeTypeMask;
         if (maxBits > 8) { maxBits = 8; }
         size_t numBits = rdgen() % maxBits + 1;
 
@@ -316,10 +316,10 @@ TEST(DfgTypemaskAutomataGen, UseKindSolver)
         std::vector<TypeMaskTy> testcases;
         for (size_t k = 0; k < 1500; k++)
         {
-            testcases.push_back(rdgen() % (x_typeMaskFor<tTop> + 1));
+            testcases.push_back(rdgen() % (x_typeMaskFor<tBoxedValueTop> + 1));
         }
         testcases.push_back(x_typeMaskFor<tBottom>);
-        testcases.push_back(x_typeMaskFor<tTop>);
+        testcases.push_back(x_typeMaskFor<tBoxedValueTop>);
 
         for (TypeMaskTy mask : testcases)
         {
@@ -333,7 +333,7 @@ TEST(DfgTypemaskAutomataGen, UseKindSolver)
             }
             else if (goldRes.m_opKind == TypeCheckFunctionSelector::QueryResult::TriviallyTrue)
             {
-                if (x_list_of_type_speculation_masks[idx] == x_typeMaskFor<tTop>)
+                if (x_list_of_type_speculation_masks[idx] == x_typeMaskFor<tBoxedValueTop>)
                 {
                     ReleaseAssert(res == dfg::UseKind_Untyped);
                 }

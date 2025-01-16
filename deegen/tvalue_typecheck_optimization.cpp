@@ -14,7 +14,7 @@ static TypeMaskTy WARN_UNUSED ParseTypeMaskFromCppTypeName(std::string tplName)
 {
     bool found = false;
     TypeMaskTy res = 0;
-    constexpr auto defs = detail::get_type_speculation_defs<TypeSpecializationList>::value;
+    const auto& defs = x_list_of_type_speculation_mask_and_name;
     for (size_t i = 0; i < defs.size(); i++)
     {
         if (tplName == defs[i].second)
@@ -331,7 +331,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
     LLVMContext& ctx = m_targetFunction->getContext();
 
-    constexpr size_t numTypes = x_numUsefulBitsInTypeMask;
+    constexpr size_t numTypes = x_numUsefulBitsInBytecodeTypeMask;
     size_t enumMax = 1;
     for (size_t i = 0; i < m_operandList.size(); i++)
     {
@@ -694,7 +694,7 @@ void TValueTypecheckOptimizationPass::DoAnalysis()
 
             ReleaseAssert(listOrd < possibleMasks[bb].size());
             TypeMaskTy possibleMaskForThisInst = possibleMasks[bb][listOrd];
-            ReleaseAssert(0 <= possibleMaskForThisInst && possibleMaskForThisInst <= x_typeMaskFor<tTop>);
+            ReleaseAssert(0 <= possibleMaskForThisInst && possibleMaskForThisInst <= x_typeMaskFor<tBoxedValueTop>);
 
             ReleaseAssertIff(possibleMaskForThisInst == 0, !isBasicBlockReachable[bb]);
 
@@ -1091,7 +1091,7 @@ void TValueTypecheckOptimizationPass::DoOptimization()
 
 static bool ShouldAddConstraintForTop(BytecodeVariantDefinition* bvd)
 {
-    // Even adding a constraint for 'tTop' can be helpful if the user code already contains redundant type checks
+    // Even adding a constraint for 'tBoxedValueTop' can be helpful if the user code already contains redundant type checks
     // But that could further blow up the total combinations, so we only do it if there are few operands
     //
     size_t totalTValueOperands = 0;
@@ -1143,14 +1143,14 @@ static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariant
         else
         {
             ReleaseAssert(operand->GetKind() == BcOperandKind::Slot);
-            baseMask = x_typeMaskFor<tTop>;
+            baseMask = x_typeMaskFor<tBoxedValueTop>;
 
             BcOpSlot* op = assert_cast<BcOpSlot*>(operand.get());
             if (op->HasDfgSpeculation())
             {
                 ReleaseAssert(bvd->m_isDfgVariant);
                 baseMask = op->GetDfgSpecMask();
-                ReleaseAssert(baseMask <= x_typeMaskFor<tTop>);
+                ReleaseAssert(baseMask <= x_typeMaskFor<tBoxedValueTop>);
             }
         }
 
@@ -1177,7 +1177,7 @@ static ConstraintAndOperandList WARN_UNUSED CreateBaseConstraint(BytecodeVariant
         //
         if (!hasQuickeningData)
         {
-            if (addConstraintForTop || baseMask != x_typeMaskFor<tTop>)
+            if (addConstraintForTop || baseMask != x_typeMaskFor<tBoxedValueTop>)
             {
                 constraint->AddClause(std::make_unique<LeafConstraint>(operand->OperandOrdinal(), baseMask /*allowedMask*/));
                 operandList.push_back(static_cast<uint32_t>(operand->OperandOrdinal()));
@@ -1290,15 +1290,15 @@ TypeMaskTy WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* f
 
 static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTypeCheckFn(TypeCheckFunctionSelector& tcfInfo, TypeMask maskToCheck)
 {
-    ReleaseAssert(maskToCheck.SubsetOf(x_typeMaskFor<tTop>));
+    ReleaseAssert(maskToCheck.SubsetOf(x_typeMaskFor<tBoxedValueTop>));
 
-    // Edge case: maskToCheck = tTop. If precond is tBottom, should return UseKind_Unreachable, otherwise UseKind_Untyped
+    // Edge case: maskToCheck = tBoxedValueTop. If precond is tBottom, should return UseKind_Unreachable, otherwise UseKind_Untyped
     //
-    if (maskToCheck == x_typeMaskFor<tTop>)
+    if (maskToCheck == x_typeMaskFor<tBoxedValueTop>)
     {
         TypemaskOverapproxAutomataGenerator gen;
         gen.AddItem(x_typeMaskFor<tBottom>, dfg::UseKind_Unreachable);
-        gen.AddItem(x_typeMaskFor<tTop>, dfg::UseKind_Untyped);
+        gen.AddItem(x_typeMaskFor<tBoxedValueTop>, dfg::UseKind_Untyped);
         return gen;
     }
 
@@ -1308,7 +1308,7 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
     {
         TypemaskOverapproxAutomataGenerator gen;
         gen.AddItem(x_typeMaskFor<tBottom>, dfg::UseKind_Unreachable);
-        gen.AddItem(x_typeMaskFor<tTop>, dfg::UseKind_AlwaysOsrExit);
+        gen.AddItem(x_typeMaskFor<tBoxedValueTop>, dfg::UseKind_AlwaysOsrExit);
         return gen;
     }
 
@@ -1380,7 +1380,7 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
 
     uint16_t triviallyTrueUseKind = static_cast<uint16_t>(-1);
     ReleaseAssert(x_list_of_type_speculation_masks.size() > 2);
-    ReleaseAssert(x_list_of_type_speculation_masks[0] == x_typeMaskFor<tTop>);
+    ReleaseAssert(x_list_of_type_speculation_masks[0] == x_typeMaskFor<tBoxedValueTop>);
     ReleaseAssert(x_list_of_type_speculation_masks.back() == x_typeMaskFor<tBottom>);
     for (size_t idx = 0; idx < x_list_of_type_speculation_masks.size(); idx++)
     {
@@ -1407,7 +1407,7 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
     //
     candidates.push_back({
         .m_identValue = dfg::UseKind_AlwaysOsrExit,
-        .m_mask = x_typeMaskFor<tTop> ^ maskToCheck.m_mask,
+        .m_mask = x_typeMaskFor<tBoxedValueTop> ^ maskToCheck.m_mask,
         .m_cost = 1
     });
 
@@ -1424,7 +1424,7 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
     for (CandidateInfo& c : candidates)
     {
         ReleaseAssert(c.m_identValue <= 32767);
-        ReleaseAssert(c.m_mask.m_mask <= x_typeMaskFor<tTop>);
+        ReleaseAssert(c.m_mask.m_mask <= x_typeMaskFor<tBoxedValueTop>);
     }
 
     // By default the automata will select any minimal over-approximation (there can be multiple if the nodes are not closed under bitwise-and),

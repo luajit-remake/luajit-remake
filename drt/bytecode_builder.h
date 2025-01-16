@@ -969,8 +969,16 @@ inline constexpr std::array<DfgPredictionPropagationImplFuncTy, static_cast<size
 {
     using namespace DeegenBytecodeBuilder;
     std::array<DfgPredictionPropagationImplFuncTy, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
-#define macro(e) res[static_cast<size_t>(BCKind::e)] = DfgPredictionPropagationImplFuncPtr<DeegenGenerated_BytecodeBuilder_ ## e>::value;
+    std::array<bool, static_cast<size_t>(BCKind::X_END_OF_ENUM)> resSet;
+    for (size_t i = 0; i < static_cast<size_t>(BCKind::X_END_OF_ENUM); i++) { resSet[i] = false; }
+
+#define macro(e)                                                                                                                \
+    res[static_cast<size_t>(BCKind::e)] = DfgPredictionPropagationImplFuncPtr<DeegenGenerated_BytecodeBuilder_ ## e>::value;    \
+    resSet[static_cast<size_t>(BCKind::e)] = true;
+
     PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
 #undef macro
+
+    for (size_t i = 0; i < static_cast<size_t>(BCKind::X_END_OF_ENUM); i++) { ReleaseAssert(resSet[i]); }
     return res;
 }();

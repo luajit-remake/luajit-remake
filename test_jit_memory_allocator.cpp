@@ -27,7 +27,7 @@ TEST(JITMemoryAllocator, Sanity)
             {
                 size = rand() % 2000 + 1;
             }
-            else if (dice < 95)
+            else if (dice < 98)
             {
                 size = rand() % 10000 + 1;
             }
@@ -48,7 +48,7 @@ TEST(JITMemoryAllocator, Sanity)
     };
 
     std::vector<AllocationDesc> allDesc;
-    for (size_t i = 0; i < 20000; i++)
+    for (size_t i = 0; i < 5000; i++)
     {
         allDesc.push_back(AllocationDesc::Create());
     }

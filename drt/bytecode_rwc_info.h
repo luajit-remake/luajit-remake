@@ -9,9 +9,12 @@ struct BytecodeRWCDesc
 {
     enum Type : uint8_t
     {
-        Local,
-        Constant,
-        Range,
+        LocalBV,
+        LocalAny,
+        ConstantBV,
+        ConstantAny,
+        RangeBV,
+        RangeAny,
         VArgs,
         VRets
     };
@@ -27,32 +30,37 @@ struct BytecodeRWCDesc
     Type m_type;
     DataTy m_data;
 
-    bool IsLocal() { return m_type == BytecodeRWCDesc::Local; }
-    bool IsConstant() { return m_type == BytecodeRWCDesc::Constant; }
-    bool IsRange() { return m_type == BytecodeRWCDesc::Range; }
+    bool IsLocal() { return m_type == BytecodeRWCDesc::LocalBV || m_type == BytecodeRWCDesc::LocalAny; }
+    bool IsConstant() { return m_type == BytecodeRWCDesc::ConstantBV || m_type == BytecodeRWCDesc::ConstantAny; }
+    bool IsRange() { return m_type == BytecodeRWCDesc::RangeBV || m_type == BytecodeRWCDesc::RangeAny; }
     bool IsVarArgs() { return m_type == BytecodeRWCDesc::VArgs; }
     bool IsVarRets() { return m_type == BytecodeRWCDesc::VRets; }
 
-    static BytecodeRWCDesc ALWAYS_INLINE CreateLocal(size_t ord)
+    bool MaybeInvalidBoxedValue()
+    {
+        return m_type == BytecodeRWCDesc::LocalAny || m_type == BytecodeRWCDesc::ConstantAny || m_type == BytecodeRWCDesc::RangeAny;
+    }
+
+    static BytecodeRWCDesc ALWAYS_INLINE CreateLocal(size_t ord, bool maybeInvalidBoxedValue)
     {
         return {
-            .m_type = BytecodeRWCDesc::Local,
+            .m_type = (maybeInvalidBoxedValue ? BytecodeRWCDesc::LocalAny : BytecodeRWCDesc::LocalBV),
             .m_data = { .m_i1 = SafeIntegerCast<uint32_t>(ord) }
         };
     }
 
-    static BytecodeRWCDesc ALWAYS_INLINE CreateConstant(TValue val)
+    static BytecodeRWCDesc ALWAYS_INLINE CreateConstant(TValue val, bool maybeInvalidBoxedValue)
     {
         return {
-            .m_type = BytecodeRWCDesc::Constant,
+            .m_type = (maybeInvalidBoxedValue ? BytecodeRWCDesc::ConstantAny : BytecodeRWCDesc::ConstantBV),
             .m_data = { .m_tv = val }
         };
     }
 
-    static BytecodeRWCDesc ALWAYS_INLINE CreateRange(size_t start, int64_t len)
+    static BytecodeRWCDesc ALWAYS_INLINE CreateRange(size_t start, int64_t len, bool maybeInvalidBoxedValue)
     {
         return {
-            .m_type = BytecodeRWCDesc::Range,
+            .m_type = (maybeInvalidBoxedValue ? BytecodeRWCDesc::RangeAny : BytecodeRWCDesc::RangeBV),
             .m_data = { .m_i1 = SafeIntegerCast<uint32_t>(start), .m_i2 = SafeIntegerCast<int32_t>(len) }
         };
     }

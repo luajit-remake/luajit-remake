@@ -531,7 +531,7 @@ struct tHeapEntity
     }
 };
 
-// Two special lattice values: the bottom and the top
+// Special lattice value: the bottom
 //
 struct tBottom
 {
@@ -543,7 +543,61 @@ struct tBottom
     }
 };
 
-struct tTop
+// The number of lattice leaves outside the lattice of boxed values
+// We currently have two: tGarbage and tOpaque
+//
+static constexpr size_t x_numLatticeLeavesOutsideBoxedValueLattice = 2;
+
+// Special lattice value: an uninitialized garbage value
+//
+struct tGarbage
+{
+    static constexpr size_t x_estimatedCheckCost = 0;
+
+    static bool NO_RETURN check(TValue /*v*/)
+    {
+        ReleaseAssert(false);
+    }
+};
+
+// Special lattice value: an opaque 8-byte value that is passed around as a TValue but not actually a TValue
+// We do not understand or care what its content means
+//
+struct tOpaque
+{
+    static constexpr size_t x_estimatedCheckCost = 0;
+
+    static bool NO_RETURN check(TValue /*v*/)
+    {
+        ReleaseAssert(false);
+    }
+};
+
+// Special lattice value: the set of all valid boxed values
+//
+struct tBoxedValueTop
+{
+    static constexpr size_t x_estimatedCheckCost = 0;
+
+    static bool check(TValue /*v*/)
+    {
+        return true;
+    }
+
+    static TValue encode(TValue v)
+    {
+        return v;
+    }
+
+    static TValue decode(TValue v)
+    {
+        return v;
+    }
+};
+
+// Special lattice value: the top element of the whole lattice
+//
+struct tFullTop
 {
     static constexpr size_t x_estimatedCheckCost = 0;
 
@@ -575,8 +629,13 @@ using TypeSpecializationList = std::tuple<
     PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)
 #undef macro
   , tHeapEntity
+  // Special lattice values that must exist
+  //
   , tBottom
-  , tTop
+  , tGarbage
+  , tOpaque
+  , tBoxedValueTop
+  , tFullTop
 >;
 
 using TypeMaskTy = uint32_t;
@@ -634,9 +693,13 @@ namespace detail {
 template<typename T>
 static constexpr bool is_type_speculation_leaf_impl()
 {
-    if constexpr(std::is_same_v<T, tTop> || std::is_same_v<T, tBottom>)
+    if constexpr(std::is_same_v<T, tFullTop> || std::is_same_v<T, tBoxedValueTop> || std::is_same_v<T, tBottom>)
     {
         return false;
+    }
+    else if constexpr(std::is_same_v<T, tGarbage> || std::is_same_v<T, tOpaque>)
+    {
+        return true;
     }
     else
     {
@@ -668,7 +731,11 @@ struct num_leaves_in_type_speculation_list<std::tuple<Args...>>
 
 }   // namespace detail
 
-constexpr size_t x_numUsefulBitsInTypeMask = detail::num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
+constexpr size_t x_numUsefulBitsInFullTypeMask = detail::num_leaves_in_type_speculation_list<TypeSpecializationList>::value;
+static_assert(x_numUsefulBitsInFullTypeMask <= sizeof(TypeMaskTy) * 8, "TypeMaskTy does not have enough bits to hold the mask!");
+
+static_assert(x_numUsefulBitsInFullTypeMask > x_numLatticeLeavesOutsideBoxedValueLattice);
+constexpr size_t x_numUsefulBitsInBytecodeTypeMask = x_numUsefulBitsInFullTypeMask - x_numLatticeLeavesOutsideBoxedValueLattice;
 
 namespace detail {
 
@@ -706,12 +773,12 @@ static_assert(std::is_unsigned_v<TypeMaskTy> && std::is_integral_v<TypeMaskTy>);
 
 constexpr TypeMaskTy ComputeTypeMaskForTop()
 {
-    constexpr size_t numLeaves = x_numUsefulBitsInTypeMask;
+    constexpr size_t numLeaves = x_numUsefulBitsInBytecodeTypeMask;
     static_assert(numLeaves <= sizeof(TypeMaskTy) * 8);
     return static_cast<TypeMaskTy>(-1) >> (sizeof(TypeMaskTy) * 8 - numLeaves);
 }
 
-constexpr TypeMaskTy type_speculation_mask_for_top = ComputeTypeMaskForTop();
+constexpr TypeMaskTy type_speculation_mask_for_boxed_value_top = ComputeTypeMaskForTop();
 
 struct compute_type_speculation_mask
 {
@@ -758,35 +825,49 @@ struct compute_type_speculation_mask
         static constexpr TypeMaskTy eval()
         {
             constexpr TypeMaskTy argVal = eval_operator<Arg>::eval();
-            static_assert((argVal & type_speculation_mask_for_top) == argVal);
-            return type_speculation_mask_for_top ^ argVal;
+            static_assert((argVal & type_speculation_mask_for_boxed_value_top) == argVal);
+            return type_speculation_mask_for_boxed_value_top ^ argVal;
         }
     };
 
     template<typename T>
-    static constexpr TypeMaskTy compute()
+    static consteval TypeMaskTy compute()
     {
         static_assert(IsValidTypeSpecialization<T>);
         if constexpr(std::is_same_v<T, tBottom>)
         {
             return 0;
         }
-        else if constexpr(std::is_same_v<T, tTop>)
+        else if constexpr(std::is_same_v<T, tBoxedValueTop>)
         {
-            return type_speculation_mask_for_top;
+            return type_speculation_mask_for_boxed_value_top;
+        }
+        else if constexpr(std::is_same_v<T, tGarbage>)
+        {
+            return static_cast<TypeMaskTy>(1) << x_numUsefulBitsInBytecodeTypeMask;
+        }
+        else if constexpr(std::is_same_v<T, tOpaque>)
+        {
+            return static_cast<TypeMaskTy>(1) << (x_numUsefulBitsInBytecodeTypeMask + 1);
+        }
+        else if constexpr(std::is_same_v<T, tFullTop>)
+        {
+            TypeMaskTy result = compute<tBoxedValueTop>() | compute<tGarbage>() | compute<tOpaque>();
+            ReleaseAssert(result == static_cast<TypeMaskTy>(-1) >> (sizeof(TypeMaskTy) * 8 - x_numUsefulBitsInFullTypeMask));
+            return result;
         }
         else if constexpr(is_type_speculation_leaf<T>)
         {
             static_assert(type_speculation_leaf_ordinal<T> < sizeof(TypeMaskTy) * 8);
             constexpr TypeMaskTy result = static_cast<TypeMaskTy>(1) << type_speculation_leaf_ordinal<T>;
-            static_assert(result <= type_speculation_mask_for_top);
+            static_assert(result <= type_speculation_mask_for_boxed_value_top);
             return result;
         }
         else
         {
             using Def = typename T::TSMDef;
             constexpr TypeMaskTy result = eval_operator<Def>::eval();
-            static_assert(0 < result && result <= type_speculation_mask_for_top);
+            static_assert(0 < result && result <= type_speculation_mask_for_boxed_value_top);
             return result;
         }
     }
@@ -800,16 +881,87 @@ struct compute_type_speculation_mask
 template<typename T>
 constexpr TypeMaskTy x_typeMaskFor = detail::compute_type_speculation_mask::value<T>;
 
+// Same as x_typeMaskFor, but statically asserts that T corresponds to a singleton boxed-value type mask
+//
+template<typename T>
+constexpr TypeMaskTy x_singletonTypeMaskFor = []() {
+    static_assert(detail::is_type_speculation_leaf<T>);
+    constexpr TypeMaskTy mask = x_typeMaskFor<T>;
+    static_assert(mask <= x_typeMaskFor<tBoxedValueTop>);
+    return mask;
+}();
+
+// Map from HeapEntityType to the TypeMask for that type
+//
+inline constexpr auto x_heapEntityTypeMaskMap = []() {
+#define macro(hoi) +1
+    constexpr size_t n = 0 PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST);
+#undef macro
+
+    std::array<TypeMaskTy, n> result;
+    for (size_t i = 0; i < n; i++) { result[i] = 0; }
+
+#define macro(hoi)                                                                          \
+    ReleaseAssert(static_cast<size_t>(HeapEntityType::HOI_ENUM_NAME(hoi)) < n);             \
+    ReleaseAssert(result[static_cast<size_t>(HeapEntityType::HOI_ENUM_NAME(hoi))] == 0);    \
+    result[static_cast<size_t>(HeapEntityType::HOI_ENUM_NAME(hoi))] =                       \
+        x_singletonTypeMaskFor<PP_CAT(t, HOI_ENUM_NAME(hoi))>;
+
+    PP_FOR_EACH(macro, LANGUAGE_EXPOSED_HEAP_OBJECT_INFO_LIST)
+#undef macro
+
+    for (size_t i = 0; i < n; i++) { ReleaseAssert(is_power_of_2(result[i])); }
+    return result;
+}();
+
+// Return the singleton type mask for 'value'
+//
+inline TypeMaskTy WARN_UNUSED GetTypeForBoxedValue(TValue value)
+{
+    if (value.Is<tDouble>())
+    {
+        if (value.Is<tDoubleNotNaN>())
+        {
+            return x_singletonTypeMaskFor<tDoubleNotNaN>;
+        }
+        else
+        {
+            return x_singletonTypeMaskFor<tDoubleNaN>;
+        }
+    }
+    else if (value.Is<tHeapEntity>())
+    {
+        HeapEntityType ty = value.GetHeapEntityType();
+        TestAssert(static_cast<size_t>(ty) < x_heapEntityTypeMaskMap.size());
+        return x_heapEntityTypeMaskMap[static_cast<size_t>(ty)];
+    }
+    else if (value.Is<tMIV>())
+    {
+        if (value.Is<tNil>())
+        {
+            return x_singletonTypeMaskFor<tNil>;
+        }
+        else
+        {
+            TestAssert(value.Is<tBool>());
+            return x_singletonTypeMaskFor<tBool>;
+        }
+    }
+    else
+    {
+        TestAssert(value.Is<tInt32>());
+        return x_singletonTypeMaskFor<tInt32>;
+    }
+}
+
 namespace detail {
 
-template<typename T>
+template<bool boxedValueLatticeOnly, typename T>
 struct get_type_speculation_defs;
 
-template<typename... Args>
-struct get_type_speculation_defs<std::tuple<Args...>>
+template<bool boxedValueLatticeOnly, typename... Args>
+struct get_type_speculation_defs<boxedValueLatticeOnly, std::tuple<Args...>>
 {
-    static constexpr size_t count = sizeof...(Args);
-
     template<typename T>
     static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, 1> get_one()
     {
@@ -819,13 +971,30 @@ struct get_type_speculation_defs<std::tuple<Args...>>
     template<typename First, typename... Remaining>
     static constexpr auto get_impl()
     {
-        if constexpr(sizeof...(Remaining) == 0)
+        constexpr bool isBoxedValueLatticeElement = ((x_typeMaskFor<tBoxedValueTop> & x_typeMaskFor<First>) == x_typeMaskFor<First>);
+        if constexpr(boxedValueLatticeOnly && !isBoxedValueLatticeElement)
         {
-            return get_one<First>();
+            // Skip this term
+            //
+            if constexpr(sizeof...(Remaining) == 0)
+            {
+                return std::array<std::pair<TypeMaskTy, std::string_view>, 0>{ };
+            }
+            else
+            {
+                return get_impl<Remaining...>();
+            }
         }
         else
         {
-            return constexpr_std_array_concat(get_one<First>(), get_impl<Remaining...>());
+            if constexpr(sizeof...(Remaining) == 0)
+            {
+                return get_one<First>();
+            }
+            else
+            {
+                return constexpr_std_array_concat(get_one<First>(), get_impl<Remaining...>());
+            }
         }
     }
 
@@ -834,7 +1003,7 @@ struct get_type_speculation_defs<std::tuple<Args...>>
         return get_impl<Args...>();
     }
 
-    static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, count> value = get();
+    static constexpr auto value = get();
 
     static constexpr auto get_sorted()
     {
@@ -850,12 +1019,14 @@ struct get_type_speculation_defs<std::tuple<Args...>>
         return arr;
     }
 
-    static constexpr std::array<std::pair<TypeMaskTy, std::string_view>, count> sorted_value = get_sorted();
+    static constexpr auto sorted_value = get_sorted();
 };
 
 }   // namespace detail
 
-inline constexpr auto x_list_of_type_speculation_mask_and_name = detail::get_type_speculation_defs<TypeSpecializationList>::sorted_value;
+// This list only contains the boxed value lattice (topped by tBoxedValueTop)
+//
+inline constexpr auto x_list_of_type_speculation_mask_and_name = detail::get_type_speculation_defs<true /*boxedValueLatticeOnly*/, TypeSpecializationList>::sorted_value;
 
 inline constexpr auto x_list_of_type_speculation_masks = []() {
     std::array<TypeMaskTy, x_list_of_type_speculation_mask_and_name.size()> res;
@@ -865,6 +1036,10 @@ inline constexpr auto x_list_of_type_speculation_masks = []() {
     }
     return res;
 }();
+
+// Note that for elements in the boxed value lattice, the ordinal in this list may not be the same as in x_list_of_type_speculation_mask_and_name
+//
+inline constexpr auto x_list_of_full_lattice_mask_and_name = detail::get_type_speculation_defs<false /*boxedValueLatticeOnly*/, TypeSpecializationList>::sorted_value;
 
 // Returns the human readable definitions of each type speculation mask
 //
@@ -946,16 +1121,27 @@ struct get_basic_tvalue_typecheck_impls<std::tuple<Args...>>
     template<typename First, typename... Remaining>
     static constexpr auto get_impl()
     {
-        return constexpr_std_array_concat(
-            get_basic_tvalue_typecheck_impls<std::tuple<Remaining...>>::value,
-            std::array<tvalue_typecheck_strength_reduction_rule, 1> {
-                tvalue_typecheck_strength_reduction_rule {
-                    .m_typeToCheck = x_typeMaskFor<First>,
-                    .m_typePrecondition = x_typeMaskFor<tTop>,
-                    .m_implementation = DeegenImpl_TValueIs<First>,
-                    .m_estimatedCost = First::x_estimatedCheckCost
-                }
-            });
+        if constexpr((x_typeMaskFor<tBoxedValueTop> & x_typeMaskFor<First>) == x_typeMaskFor<First>)
+        {
+            return constexpr_std_array_concat(
+                get_basic_tvalue_typecheck_impls<std::tuple<Remaining...>>::value,
+                std::array<tvalue_typecheck_strength_reduction_rule, 1> {
+                    tvalue_typecheck_strength_reduction_rule {
+                        .m_typeToCheck = x_typeMaskFor<First>,
+                        .m_typePrecondition = x_typeMaskFor<tBoxedValueTop>,
+                        .m_implementation = DeegenImpl_TValueIs<First>,
+                        .m_estimatedCost = First::x_estimatedCheckCost
+                    }
+                });
+        }
+        else if constexpr(sizeof...(Remaining) == 0)
+        {
+            return std::array<tvalue_typecheck_strength_reduction_rule, 0> {};
+        }
+        else
+        {
+            return get_impl<Remaining...>();
+        }
     }
 
     static constexpr auto get()

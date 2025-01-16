@@ -12,6 +12,10 @@ DfgTranslateFunctionResult WARN_UNUSED DfgTranslateFunction(DfgTranslateFunction
     InlinedCallFrame* inlinedCallFrame = tfCtx.m_inlinedCallFrame;
     DfgControlFlowAndUpvalueAnalysisResult cfuvRes = RunControlFlowAndUpvalueAnalysis(tfCtx.m_alloc, inlinedCallFrame->GetCodeBlock());
     tfCtx.m_graph->RegisterBytecodeLivenessInfo(inlinedCallFrame, cfuvRes);
+    // TODO: investigate if we should build the DFG basic blocks in bytecodeIndex order,
+    // or to pass down this information to the DFG basic blocks so we can sort them based on natural order or bytecodeIndex order later
+    // The basic block order have quite some impact on how fast fixpoint algorithms converge
+    //
     DfgBuildBasicBlockContext bbCtx(tfCtx, cfuvRes);
     for (size_t bbOrd = 0; bbOrd < bbCtx.m_numPrimBasicBlocks; bbOrd++)
     {

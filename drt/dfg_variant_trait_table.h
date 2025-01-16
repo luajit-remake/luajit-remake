@@ -89,7 +89,7 @@ inline bool WARN_UNUSED CheckUseKindImplementsTypeCheck(TypeMaskOrd checkedMaskO
     }
     else if (checkMask.SupersetOf(precondMask))
     {
-        if (checkMask == x_typeMaskFor<tTop>)
+        if (checkMask == x_typeMaskFor<tBoxedValueTop>)
         {
             return useKind == UseKind_Untyped;
         }
@@ -121,7 +121,7 @@ inline UseKind WARN_UNUSED GetEdgeUseKindFromCheckAndPrecondition(TypeMaskOrd ch
     size_t ord = static_cast<size_t>(checkedMaskOrd);
     TestAssert(ord < x_list_of_type_speculation_masks.size());
     static_assert(x_list_of_type_speculation_masks.size() == x_dfg_typecheck_select_impl_automata_list.size());
-    TestAssert(preconditionMask.SubsetOf(x_typeMaskFor<tTop>));
+    TestAssert(preconditionMask.SubsetOf(x_typeMaskFor<tBoxedValueTop>));
     TypeMaskOverapproxAutomata automata(x_dfg_typecheck_select_impl_automata_list[ord]);
     uint16_t result = automata.RunAutomata(preconditionMask.m_mask);
     TestAssert(result < UseKind_X_END_OF_ENUM);

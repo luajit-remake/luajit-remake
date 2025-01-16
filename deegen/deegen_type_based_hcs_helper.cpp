@@ -219,10 +219,10 @@ void TypeBasedHCSHelper::GenerateCheckConditionLogic(DeegenBytecodeImplCreatorBa
         size_t operandOrd = it.m_operandOrd;
         ReleaseAssert(operandOrd < bytecodeOperandUsageValueList.size());
         TypeMaskTy mask = it.m_speculatedMask;
-        // For interpreter/baseline JIT, there is no speculation, so the precondition is always tTop
+        // For interpreter/baseline JIT, there is no speculation, so the precondition is always tBoxedValueTop
         // For DFG JIT, the precondition is the speculated type mask if it exists
         //
-        TypeMaskTy preconditionMask = x_typeMaskFor<tTop>;
+        TypeMaskTy preconditionMask = x_typeMaskFor<tBoxedValueTop>;
         if (ifi->IsDfgJIT())
         {
             ReleaseAssert(ifi->GetBytecodeDef()->m_isDfgVariant);

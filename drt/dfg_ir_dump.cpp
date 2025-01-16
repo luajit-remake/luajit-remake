@@ -297,7 +297,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                 for (uint32_t i = 0; i < numInputs; i++)
                 {
                     if (i != 0) { fprintf(file, ", "); }
-                    Edge e = curNode->GetInputEdge(i);
+                    Edge& e = curNode->GetInputEdge(i);
                     Node* inputNode = e.GetOperand();
                     if (inputNode->IsConstantLikeNode())
                     {

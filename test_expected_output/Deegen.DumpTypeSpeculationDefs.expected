@@ -11,9 +11,12 @@ Bit 6: tFunction (0x40)
 Bit 7: tUserdata (0x80)
 Bit 8: tThread (0x100)
 Bit 9: tTable (0x200)
+Bit 10: tGarbage (0x400)
+Bit 11: tOpaque (0x800)
 
 Compound Mask Definitions:
 tMIV (0x3): tNil | tBool
 tDouble (0xc): tDoubleNotNaN | tDoubleNaN
 tHeapEntity (0x3e0): tString | tFunction | tUserdata | tThread | tTable
-tTop (0x3ff): tNil | tBool | tDoubleNotNaN | tDoubleNaN | tInt32 | tString | tFunction | tUserdata | tThread | tTable
+tBoxedValueTop (0x3ff): tNil | tBool | tDoubleNotNaN | tDoubleNaN | tInt32 | tString | tFunction | tUserdata | tThread | tTable
+tFullTop (0xfff): tNil | tBool | tDoubleNotNaN | tDoubleNaN | tInt32 | tString | tFunction | tUserdata | tThread | tTable | tGarbage | tOpaque

@@ -94,12 +94,18 @@ struct DfgSimpleNodePredictionPropagationData
 //
 struct DfgPredictionPropagationSetupInfo
 {
-    DfgPredictionPropagationSetupInfo(TempArenaAllocator& alloc)
-        : m_alloc(alloc)
-        , m_valueProfileOrds(alloc)
+    // The memory holding the prediction propagation results will be valid as long as 'resultAlloc' is live
+    // so 'tempAlloc' can be discarded after prediction propagation finishes
+    //
+    DfgPredictionPropagationSetupInfo(TempArenaAllocator& resultAlloc,
+                                      TempArenaAllocator& tempAlloc)
+        : m_resultAlloc(resultAlloc)
+        , m_tempAlloc(tempAlloc)
+        , m_valueProfileOrds(tempAlloc)
     { }
 
-    TempArenaAllocator& m_alloc;
+    TempArenaAllocator& m_resultAlloc;
+    TempArenaAllocator& m_tempAlloc;
 
     // Either a DfgComplexNodePredictionPropagationData or a DfgSimpleNodePredictionPropagationData
     // Caller only needs to pass this pointer to the prediction propagation function, so it does not care about the actual type

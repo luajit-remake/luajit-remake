@@ -5,8 +5,8 @@
 std::string DumpHumanReadableTypeSpeculationDefinitions()
 {
     using ElementT = std::pair<TypeMaskTy, std::string_view>;
-    constexpr size_t n = detail::get_type_speculation_defs<TypeSpecializationList>::count;
-    std::array<ElementT, n> arr = detail::get_type_speculation_defs<TypeSpecializationList>::value;
+    constexpr size_t n = x_list_of_full_lattice_mask_and_name.size();
+    std::array<ElementT, n> arr = x_list_of_full_lattice_mask_and_name;
 
     std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
         int lhsOnes = std::popcount(lhs.first);
@@ -88,8 +88,10 @@ std::string DumpHumanReadableTypeSpeculationDefinitions()
 
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeMaskTy mask, bool printMaskValue)
 {
-    constexpr auto arr = x_list_of_type_speculation_mask_and_name;
+    constexpr auto& arr = x_list_of_full_lattice_mask_and_name;
     constexpr size_t n = arr.size();
+
+    ReleaseAssert(mask <= x_typeMaskFor<tFullTop>);
 
     std::stringstream ss;
     if (mask == 0)
@@ -134,8 +136,10 @@ std::string WARN_UNUSED DumpHumanReadableTypeSpeculation(TypeMaskTy mask, bool p
 
 std::string WARN_UNUSED DumpHumanReadableTypeSpeculationForUseKind(TypeMaskTy mask)
 {
-    constexpr auto arr = x_list_of_type_speculation_mask_and_name;
+    constexpr auto& arr = x_list_of_type_speculation_mask_and_name;
     constexpr size_t n = arr.size();
+
+    ReleaseAssert(mask <= x_typeMaskFor<tBoxedValueTop>);
 
     std::stringstream ss;
     if (mask == 0)

@@ -111,10 +111,12 @@ std::unique_ptr<BcOperand> WARN_UNUSED BcOperand::LoadFromJSON(json_t& j)
 
 BcOpSlot::BcOpSlot(json_t& j)
     : BcOperand(j)
+    , m_maybeInvalidBoxedValue(false)
     , m_hasSpeculation(false)
     , m_specMask(0)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Slot);
+    JSONCheckedGet(j, "maybe_invalid_boxed_value", m_maybeInvalidBoxedValue /*out*/);
     JSONCheckedGet(j, "has_dfg_speculation", m_hasSpeculation /*out*/);
     JSONCheckedGet(j, "dfg_speculation_mask", m_specMask /*out*/);
 }
@@ -124,7 +126,8 @@ json_t WARN_UNUSED BcOpSlot::SaveToJSON()
     json_t j = SaveBaseToJSON();
     j["has_dfg_speculation"] = m_hasSpeculation;
     j["dfg_speculation_mask"] = m_specMask;
-    ReleaseAssertImp(m_hasSpeculation, m_specMask <= x_typeMaskFor<tTop>);
+    j["maybe_invalid_boxed_value"] = m_maybeInvalidBoxedValue;
+    ReleaseAssertImp(m_hasSpeculation, m_specMask <= x_typeMaskFor<tBoxedValueTop>);
     return j;
 }
 
@@ -146,12 +149,14 @@ BcOpConstant::BcOpConstant(json_t& j)
 {
     ReleaseAssert(GetBcOperandKindFromString(JSONCheckedGet<std::string>(j, "kind")) == BcOperandKind::Constant);
     JSONCheckedGet(j, "typeMask", m_typeMask /*out*/);
+    JSONCheckedGet(j, "maybe_invalid_boxed_value", m_maybeInvalidBoxedValue /*out*/);
 }
 
 json_t WARN_UNUSED BcOpConstant::SaveToJSON()
 {
     json_t j = SaveBaseToJSON();
     j["typeMask"] = m_typeMask;
+    j["maybe_invalid_boxed_value"] = m_maybeInvalidBoxedValue;
     return j;
 }
 
@@ -674,6 +679,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             bool shouldValueProfileRange = rangeDescReader.GetValue<&RangeDesc::m_shouldValueProfileRange>();
             bool shouldExplicitNoProfileRange = rangeDescReader.GetValue<&RangeDesc::m_isExplicitlyNoProfile>();
             bool isFixedOutputTypeMaskRange = rangeDescReader.GetValue<&RangeDesc::m_isFixedOutputTypeMask>();
+            bool maybeInvalidBoxedValue = rangeDescReader.GetValue<&RangeDesc::m_maybeInvalidBoxedValue>();
             TypeMaskTy fixedOutputTypeMask = rangeDescReader.GetValue<&RangeDesc::m_fixedOutputTypeMask>();
             Constant* typeDeductionRuleFnCst = rangeDescReader.Get<&RangeDesc::m_typeDeductionRuleFn>();
             Function* typeDeductionRuleFn = nullptr;
@@ -699,6 +705,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             item.m_lenExpr = stringifyOperandExprBase64(len);
             item.m_fixedMask = 0;
             item.m_typeDeductionFnName = "";
+            item.m_maybeInvalidBoxedValue = maybeInvalidBoxedValue;
             if (shouldValueProfileRange)
             {
                 ReleaseAssert(!shouldExplicitNoProfileRange && !isFixedOutputTypeMaskRange);
@@ -721,7 +728,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             {
                 ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !hasTypeDeductionRuleFn);
                 ReleaseAssert(fixedOutputTypeMask != 0);
-                ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tTop>);
+                ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tFullTop>);
                 item.m_typeDeductionKind = TypeDeductionKind::Constant;
                 item.m_fixedMask = fixedOutputTypeMask;
             }
@@ -744,7 +751,9 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             {
                 preheaderItems.push_back("TestAssert(range_len_" + std::to_string(i) + " >= 0);");
             }
-            ctorItems.push_back("BytecodeRWCDesc::CreateRange(SafeIntegerCast<size_t>(range_start_" + std::to_string(i) + "), range_len_" + std::to_string(i) + ")");
+            ctorItems.push_back("BytecodeRWCDesc::CreateRange(SafeIntegerCast<size_t>(range_start_"
+                                + std::to_string(i) + "), range_len_" + std::to_string(i) + ", "
+                                + std::string(maybeInvalidBoxedValue ? "true" : "false") + " /*maybeInvalidBoxedValue*/)");
         }
 
         return ReadRCWExprResult {
@@ -778,13 +787,16 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
 
         std::vector<std::string> operandNames;
         std::vector<DeegenBytecodeOperandType> operandTypes;
+        std::vector<bool> operandMaybeInvalidBoxedValueArray;
         for (size_t i = 0; i < numOperands; i++)
         {
             LLVMConstantStructReader operandReader(module, operandListReader.Get<Desc::Operand>(i));
             std::string operandName = GetValueFromLLVMConstantCString(operandReader.Get<&Desc::Operand::m_name>());
             DeegenBytecodeOperandType opType = operandReader.GetValue<&Desc::Operand::m_type>();
+            bool maybeInvalidBoxedValue = operandReader.GetValue<&Desc::Operand::m_maybeInvalidBoxedValue>();
             operandNames.push_back(operandName);
             operandTypes.push_back(opType);
+            operandMaybeInvalidBoxedValueArray.push_back(maybeInvalidBoxedValue);
         }
 
         std::string implFuncName;
@@ -851,7 +863,9 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
             def->m_disableRegAllocEnabledAssertEvenIfRegHintGiven = shouldDisableRegAllocEnabledAssertEvenIfRegHintGiven;
             if (hasTValueOutput)
             {
-                def->m_outputOperand = std::make_unique<BcOpSlot>("output");
+                // For output, maybeInvalidBoxedValue is useless (this info is always provided by type deduction rule)
+                //
+                def->m_outputOperand = std::make_unique<BcOpSlot>("output", false /*maybeInvalidBoxedValue*/);
             }
             if (canPerformBranch)
             {
@@ -894,9 +908,9 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                 //
                 auto updateRegPrefBasedOnTypeMask = [&](uint64_t typeMask)
                 {
-                    ReleaseAssert(typeMask <= x_typeMaskFor<tTop>);
+                    ReleaseAssert(typeMask <= x_typeMaskFor<tBoxedValueTop>);
                     ReleaseAssert(opOrd < def->m_operandRegPrefInfo.size());
-                    if (typeMask != x_typeMaskFor<tTop>)
+                    if (typeMask != x_typeMaskFor<tBoxedValueTop>)
                     {
                         def->m_operandRegPrefInfo[opOrd] = OperandRegPreferenceInfo::GetDefaultRegPreferenceFromTypeMask(SafeIntegerCast<TypeMaskTy>(typeMask));
                     }
@@ -911,7 +925,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                     //
                     if (spOp.m_kind == DeegenSpecializationKind::BytecodeSlot || isDfgVariant)
                     {
-                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName, operandMaybeInvalidBoxedValueArray[opOrd]);
                         // If this is a DFG variant, we also need to know the speculations
                         //
                         if (isDfgVariant)
@@ -919,6 +933,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                             ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
                             if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
                             {
+                                ReleaseAssert(spOp.m_value <= x_typeMaskFor<tBoxedValueTop>);
                                 op->SetDfgSpeculation(spOp.m_value);
                                 updateRegPrefBasedOnTypeMask(spOp.m_value);
                             }
@@ -929,18 +944,20 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                     {
                         ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::BytecodeConstantWithType && "unexpected specialization");
                         TypeMaskTy typeMask = SafeIntegerCast<TypeMaskTy>(spOp.m_value);
-                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, typeMask));
+                        ReleaseAssert(typeMask <= x_typeMaskFor<tBoxedValueTop>);
+                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, typeMask, operandMaybeInvalidBoxedValueArray[opOrd]));
                         updateRegPrefBasedOnTypeMask(typeMask);
                     }
                 }
                 else if (opType == DeegenBytecodeOperandType::BytecodeSlot)
                 {
-                    std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                    std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName, operandMaybeInvalidBoxedValueArray[opOrd]);
                     if (isDfgVariant)
                     {
                         ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
                         if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
                         {
+                            ReleaseAssert(spOp.m_value <= x_typeMaskFor<tBoxedValueTop>);
                             op->SetDfgSpeculation(spOp.m_value);
                             updateRegPrefBasedOnTypeMask(spOp.m_value);
                         }
@@ -958,7 +975,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                     if (isDfgVariant)
                     {
                         ReleaseAssert(spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer || spOp.m_kind == DeegenSpecializationKind::NotSpecialized);
-                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName);
+                        std::unique_ptr<BcOpSlot> op = std::make_unique<BcOpSlot>(operandName, operandMaybeInvalidBoxedValueArray[opOrd]);
                         if (spOp.m_kind == DeegenSpecializationKind::SpeculatedTypeForOptimizer)
                         {
                             op->SetDfgSpeculation(spOp.m_value);
@@ -971,7 +988,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                         TypeMaskTy specMask;
                         if (spOp.m_kind == DeegenSpecializationKind::NotSpecialized)
                         {
-                            specMask = x_typeMaskFor<tTop>;
+                            specMask = x_typeMaskFor<tBoxedValueTop>;
                         }
                         else if (spOp.m_kind == DeegenSpecializationKind::BytecodeConstantWithType)
                         {
@@ -981,7 +998,11 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                         {
                             ReleaseAssert(false && "unexpected specialization");
                         }
-                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, specMask));
+                        // TODO: we should support constant that is known to be not a boxed value
+                        // We already have such use cases, but we currently simply claim they are tBoxedValueTop even if they aren't, which is bad.
+                        //
+                        ReleaseAssert(specMask <= x_typeMaskFor<tBoxedValueTop>);
+                        def->m_list.push_back(std::make_unique<BcOpConstant>(operandName, specMask, operandMaybeInvalidBoxedValueArray[opOrd]));
                         updateRegPrefBasedOnTypeMask(specMask);
                     }
                 }
@@ -1110,7 +1131,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                     //
                     if (hasTValueOutput)
                     {
-                        ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops.output.AsRawValue()))");
+                        ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops.output.AsRawValue()), false /*maybeInvalidBoxedValue*/)");
                     }
                 }
                 if (rcwKind == GenerateRCWKind::Read)
@@ -1123,11 +1144,17 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                         BcOperand* operand = def->m_list[i].get();
                         if (operand->GetKind() == BcOperandKind::Slot)
                         {
-                            ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops." + operand->OperandName() + (isSpecialized ? ".AsLocal()" : "") + ".AsRawValue()))");
+                            BcOpSlot* opSlot = assert_cast<BcOpSlot*>(operand);
+                            ctorItems.push_back("BytecodeRWCDesc::CreateLocal(SafeIntegerCast<size_t>(ops."
+                                                + operand->OperandName() + (isSpecialized ? ".AsLocal()" : "") + ".AsRawValue()), "
+                                                + std::string(opSlot->MaybeInvalidBoxedValue() ? "true" : "false") + " /*maybeInvalidBoxedValue*/)");
                         }
                         else if (operand->GetKind() == BcOperandKind::Constant)
                         {
-                            ctorItems.push_back("BytecodeRWCDesc::CreateConstant(ops." + operand->OperandName() + (isSpecialized ? ".AsConstant()" : ".m_value") + ")");
+                            BcOpConstant* opConstant = assert_cast<BcOpConstant*>(operand);
+                            ctorItems.push_back("BytecodeRWCDesc::CreateConstant(ops."
+                                                + operand->OperandName() + (isSpecialized ? ".AsConstant()" : ".m_value")
+                                                + ", " + std::string(opConstant->MaybeInvalidBoxedValue() ? "true" : "false") + " /*maybeInvalidBoxedValue*/)");
                         }
                     }
                 }
@@ -1286,7 +1313,7 @@ std::vector<BytecodeVariantCollection> WARN_UNUSED BytecodeVariantDefinition::Pa
                     {
                         ReleaseAssert(!shouldValueProfileRange && !shouldExplicitNoProfileRange && !hasTypeDeductionRuleFn);
                         ReleaseAssert(fixedOutputTypeMask != 0);
-                        ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tTop>);
+                        ReleaseAssert(fixedOutputTypeMask <= x_typeMaskFor<tFullTop>);
                         def->m_outputTypeDeductionInfo.m_typeDeductionKind = TypeDeductionKind::Constant;
                         def->m_outputTypeDeductionInfo.m_fixedMask = fixedOutputTypeMask;
                     }
@@ -1559,6 +1586,7 @@ BytecodeVariantDefinition::BytecodeVariantDefinition(json_t& j)
             item.m_typeDeductionKind = checkTdkValid(JSONCheckedGet<uint32_t>(jdata, "type_deduction_kind"));
             JSONCheckedGet(jdata, "type_deduction_fixed_mask", item.m_fixedMask);
             JSONCheckedGet(jdata, "type_deduction_fn_name", item.m_typeDeductionFnName);
+            JSONCheckedGet(jdata, "maybe_invalid_boxed_value", item.m_maybeInvalidBoxedValue);
             resList.push_back(item);
         }
         return resList;
@@ -1691,6 +1719,7 @@ json_t WARN_UNUSED BytecodeVariantDefinition::SaveToJSON()
             item["type_deduction_kind"] = static_cast<uint32_t>(it.m_typeDeductionKind);
             item["type_deduction_fixed_mask"] = it.m_fixedMask;
             item["type_deduction_fn_name"] = it.m_typeDeductionFnName;
+            item["maybe_invalid_boxed_value"] = it.m_maybeInvalidBoxedValue;
             r.push_back(std::move(item));
         }
         return r;

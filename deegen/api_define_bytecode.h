@@ -30,6 +30,8 @@ enum class DeegenSpecializationKind : uint8_t
     BytecodeConstantWithType
 };
 
+extern "C" TypeMaskTy DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(void*, size_t);
+
 namespace detail
 {
 
@@ -67,9 +69,23 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     {
         const char* m_name;
         DeegenBytecodeOperandType m_type;
+        bool m_maybeInvalidBoxedValue;
 
-        consteval Operand() : m_name(), m_type(DeegenBytecodeOperandType::INVALID_TYPE) { }
-        consteval Operand(const char* name, DeegenBytecodeOperandType ty) : m_name(name), m_type(ty) { }
+        consteval Operand() : m_name(), m_type(DeegenBytecodeOperandType::INVALID_TYPE), m_maybeInvalidBoxedValue(false) { }
+        consteval Operand(const char* name, DeegenBytecodeOperandType ty) : m_name(name), m_type(ty), m_maybeInvalidBoxedValue(false) { }
+
+        // Specify that the operand may not be a valid boxed value
+        // Note that for ranged operand, this information should be specified in DeclareRead instead of here
+        //
+        consteval Operand WARN_UNUSED MaybeInvalidBoxedValue()
+        {
+            ReleaseAssert(m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant ||
+                          m_type == DeegenBytecodeOperandType::BytecodeSlot ||
+                          m_type == DeegenBytecodeOperandType::Constant);
+            Operand ret = *this;
+            ret.m_maybeInvalidBoxedValue = true;
+            return ret;
+        }
     };
 
     static consteval Operand BytecodeSlotOrConstant(const char* name)
@@ -252,7 +268,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             return { .m_operand = { DeegenSpecializationKind::BytecodeSlot, 0 }, .m_ord = m_ord };
         }
 
-        template<typename T = tTop>
+        template<typename T = tBoxedValueTop>
         consteval SpecializedOperandRef WARN_UNUSED IsConstant()
         {
             static_assert(IsValidTypeSpecialization<T>);
@@ -456,6 +472,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             , m_shouldValueProfileRange(false)
             , m_isExplicitlyNoProfile(false)
             , m_isFixedOutputTypeMask(false)
+            , m_maybeInvalidBoxedValue(false)
             , m_fixedOutputTypeMask(0)
         { }
 
@@ -466,6 +483,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             , m_shouldValueProfileRange(false)
             , m_isExplicitlyNoProfile(false)
             , m_isFixedOutputTypeMask(false)
+            , m_maybeInvalidBoxedValue(false)
             , m_fixedOutputTypeMask(0)
         { }
 
@@ -530,6 +548,16 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
                     OperandExpr::ConstructInfinity())
         { }
 
+        // Specify that the values in the read range may consist of invalid boxed values
+        // Should only be used by ranges passed to DeclareReads
+        //
+        consteval Range WARN_UNUSED MaybeInvalidBoxedValue()
+        {
+            Range res = *this;
+            res.m_maybeInvalidBoxedValue = true;
+            return res;
+        }
+
         // Specify the type deduction rule for the range of values written by the bytecode
         // The function should start with a 'size_t ord' parameter, and returns the type mask for ordinal 'ord' of the range
         //
@@ -545,6 +573,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         bool m_shouldValueProfileRange;
         bool m_isExplicitlyNoProfile;
         bool m_isFixedOutputTypeMask;
+        bool m_maybeInvalidBoxedValue;
         TypeMaskTy m_fixedOutputTypeMask;
     };
 
@@ -895,8 +924,7 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
         //
         TypeMask WARN_UNUSED ALWAYS_INLINE Get(size_t ordInRange)
         {
-            TypeMask* msk = reinterpret_cast<TypeMask**>(this)[ordInRange];
-            return *msk;
+            return TypeMask(DeegenImpl_TypeDeductionRuleInputTypeGetterForRange(this, ordInRange));
         }
     };
 
@@ -1210,6 +1238,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     consteval void DeclareWrites(Args... args)
     {
         m_bcDeclareWritesInfo.Process(this, args...);
+        for (size_t i = 0; i < m_bcDeclareWritesInfo.m_numRanges; i++)
+        {
+            ReleaseAssert(!m_bcDeclareWritesInfo.m_ranges[i].m_maybeInvalidBoxedValue && "MaybeInvalidBoxedValue should only be used by DeclareReads!");
+        }
     }
 
     // Declare that the bytecode execution may clobber certain locations in the range (i.e., these locations
@@ -1224,6 +1256,10 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
     consteval void DeclareClobbers(Args... args)
     {
         m_bcDeclareClobbersInfo.Process(this, args...);
+        for (size_t i = 0; i < m_bcDeclareClobbersInfo.m_numRanges; i++)
+        {
+            ReleaseAssert(!m_bcDeclareClobbersInfo.m_ranges[i].m_maybeInvalidBoxedValue && "MaybeInvalidBoxedValue should only be used by DeclareReads!");
+        }
     }
 
     // Declare that an in-place call may happen at >= startLoc, so everything >= it could be implicitly clobbered by the in-place call

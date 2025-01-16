@@ -8,6 +8,7 @@
 #include "dfg_ir_validator.h"
 #include "dfg_speculative_inliner.h"
 #include "dfg_phantom_insertion.h"
+#include "dfg_prediction_propagation.h"
 
 using namespace dfg;
 
@@ -472,6 +473,9 @@ TEST(DfgFrontend, Parser_Stress_1)
             ReleaseAssert(cb != nullptr);
             arena_unique_ptr<Graph> graph = RunDfgFrontend(cb);
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
+
+            TempArenaAllocator alloc;
+            std::ignore = RunPredictionPropagationWithoutValueProfile(alloc, graph.get());
 
             RunPhantomInsertionPass(graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));

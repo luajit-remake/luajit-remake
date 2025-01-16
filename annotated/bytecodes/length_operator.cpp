@@ -104,7 +104,7 @@ DEEGEN_DEFINE_BYTECODE(LengthOf)
             }
             else
             {
-                return x_typeMaskFor<tTop>;
+                return x_typeMaskFor<tBoxedValueTop>;
             }
         });
     TypeDeductionRule(ValueProfile);
