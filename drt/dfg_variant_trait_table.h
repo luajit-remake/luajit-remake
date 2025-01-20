@@ -129,4 +129,58 @@ inline UseKind WARN_UNUSED GetEdgeUseKindFromCheckAndPrecondition(TypeMaskOrd ch
     return static_cast<UseKind>(result);
 }
 
+// Return i where x_list_of_type_speculation_masks[i] is the minimal speculation that is a superset of predictionMask
+//
+inline TypeMaskOrd WARN_UNUSED GetMinimalSpeculationCoveringPredictionMask(TypeMask predictionMask)
+{
+    uint16_t res = TypeMaskOverapproxAutomata(x_deegen_dfg_find_minimal_speculation_covering_prediction_mask_automata).RunAutomata(predictionMask.m_mask);
+    TestAssert(res < x_list_of_type_speculation_masks.size());
+    TestAssert(predictionMask.SubsetOf(x_list_of_type_speculation_masks[res]));
+#ifdef TESTBUILD
+    for (size_t i = 0; i < x_list_of_type_speculation_masks.size(); i++)
+    {
+        if (predictionMask.SubsetOf(x_list_of_type_speculation_masks[i]))
+        {
+            TestAssert(!TypeMask(x_list_of_type_speculation_masks[i]).StrictSubsetOf(x_list_of_type_speculation_masks[res]));
+        }
+    }
+#endif
+    return static_cast<TypeMaskOrd>(res);
+}
+
+inline UseKind WARN_UNUSED GetCheapestSpecWithinMaskCoveringExistingSpec(TypeMaskOrd curSpec, TypeMask mask)
+{
+    size_t ord = static_cast<size_t>(curSpec);
+    TestAssert(ord < x_list_of_type_speculation_masks.size());
+    TestAssert(mask.SubsetOf(x_typeMaskFor<tBoxedValueTop>));
+    TestAssert(mask.SupersetOf(x_list_of_type_speculation_masks[ord]));
+
+    uint16_t res = TypeMaskOverapproxAutomata(x_deegen_dfg_find_cheapest_spec_within_mask_automatas[ord]).RunAutomata(x_typeMaskFor<tBoxedValueTop> ^ mask.m_mask);
+    TestAssert(res < UseKind_X_END_OF_ENUM);
+
+    UseKind useKind = static_cast<UseKind>(res);
+#ifdef TESTBUILD
+    if (useKind == UseKind_Unreachable)
+    {
+        TestAssert(x_list_of_type_speculation_masks[ord] == x_typeMaskFor<tBottom>);
+    }
+    else if (useKind == UseKind_Untyped)
+    {
+        TestAssert(mask == x_typeMaskFor<tBoxedValueTop>);
+    }
+    else
+    {
+        TestAssert(useKind > UseKind_FirstUnprovenUseKind);
+        size_t diff = static_cast<size_t>(useKind) - static_cast<size_t>(UseKind_FirstUnprovenUseKind);
+        TestAssert(diff % 2 == 0);
+        diff /= 2;
+        TestAssert(diff + 2 < x_list_of_type_speculation_masks.size());
+        TestAssert(TypeMask(x_list_of_type_speculation_masks[ord]).SubsetOf(x_list_of_type_speculation_masks[diff + 1]));
+        TestAssert(mask.SupersetOf(x_list_of_type_speculation_masks[diff + 1]));
+    }
+#endif
+
+    return useKind;
+}
+
 }   // namespace dfg

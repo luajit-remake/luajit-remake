@@ -169,7 +169,13 @@ DEEGEN_DEFINE_BYTECODE_TEMPLATE(EqualityOperation, bool compareForNotEqual, bool
     );
     DfgVariant(
         Op("lhs").RegHint(RegHint::GPR),
-        Op("rhs").HasType((x_typeMaskFor<tMIV> | x_typeMaskFor<tHeapEntity>) ^ x_typeMaskFor<tTable>)
+        Op("rhs").HasType<tMIV>()
+    );
+    // TODO: we need a tHeapEntityNotTable type mask
+    //
+    DfgVariant(
+        Op("lhs").RegHint(RegHint::GPR),
+        Op("rhs").HasType<tHeapEntity>()
     );
     // Comparing two tables may result in calling metamethod
     //

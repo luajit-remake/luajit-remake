@@ -9,6 +9,7 @@
 #include "drt/dfg_builtin_nodes.h"
 #include "tvalue_typecheck_optimization.h"
 #include "deegen_postprocess_module_linker.h"
+#include "deegen_dfg_select_variant_logic_creator.h"
 
 using namespace dast;
 
@@ -352,7 +353,55 @@ void FPS_ProcessDfgBuiltinNodes()
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_Ret0>(ctx));
 
     TypeCheckFunctionSelector tcInfo(typeCheckInfoMod.get());
-    const std::vector<TypecheckStrengthReductionCandidate>& tcInfoList = tcInfo.GetStrengthReductionList();
+    std::vector<TypecheckStrengthReductionCandidate> tcInfoList = tcInfo.GetStrengthReductionList();
+
+    // Assert that the first N rules must be the "normal" (no precondition) typecheck rules and the order must agree with x_list_of_type_speculation_masks
+    //
+    ReleaseAssert(tcInfoList.size() >= x_list_of_type_speculation_masks.size());
+    for (size_t i = 0; i < x_list_of_type_speculation_masks.size(); i++)
+    {
+        if (tcInfoList[i].m_precondMask != x_typeMaskFor<tBoxedValueTop>)
+        {
+            fprintf(stderr, "[ERROR] All normal typecheck rules must show up first in the definition of "
+                            "x_list_of_tvalue_typecheck_strength_reduction_rules!\n");
+            abort();
+        }
+        if (tcInfoList[i].m_checkedMask != x_list_of_type_speculation_masks[i])
+        {
+            fprintf(stderr, "[ERROR] The order of normal typecheck rules in x_list_of_tvalue_typecheck_strength_reduction_rules "
+                            "must agree with x_list_of_type_speculation_masks! Please check if they are sorted in the same way!\n");
+            abort();
+        }
+    }
+
+    // Just for sanity, assert that the checked masks in x_list_of_type_speculation_masks are also pairwise distinct
+    //
+    {
+        std::unordered_set<TypeMaskTy> chkUnique;
+        for (TypeMaskTy mask : x_list_of_type_speculation_masks)
+        {
+            ReleaseAssert(!chkUnique.count(mask));
+            chkUnique.insert(mask);
+        }
+    }
+
+    // Remove the trivial typecheck rule for tTop and tBottom, which we will never use
+    //
+    {
+        size_t bottomRuleIdx = x_list_of_type_speculation_masks.size() - 1;
+        ReleaseAssert(tcInfoList[0].m_precondMask == x_typeMaskFor<tBoxedValueTop> &&
+                      tcInfoList[0].m_checkedMask == x_typeMaskFor<tBoxedValueTop>);
+        ReleaseAssert(tcInfoList[bottomRuleIdx].m_precondMask == x_typeMaskFor<tBoxedValueTop> &&
+                      tcInfoList[bottomRuleIdx].m_checkedMask == x_typeMaskFor<tBottom>);
+
+        std::vector<TypecheckStrengthReductionCandidate> copyList;
+        for (size_t idx = 0; idx < tcInfoList.size(); idx++)
+        {
+            if (idx == 0 || idx == bottomRuleIdx) { continue; }
+            copyList.push_back(tcInfoList[idx]);
+        }
+        tcInfoList = copyList;
+    }
 
     std::vector<std::string> tcVarNameList;
     for (const TypecheckStrengthReductionCandidate& rule : tcInfoList)
@@ -471,7 +520,7 @@ void FPS_ProcessDfgBuiltinNodes()
     std::vector<std::pair<std::string, TypeMask>> tcAutomataNameList;
     for (TypeMask mask : x_list_of_type_speculation_masks)
     {
-        DfgSelectTypeCheckFnAutomataGenerator agen(tcInfo);
+        DfgSelectTypeCheckFnAutomataGenerator agen(tcInfoList);
         size_t automataDepth = static_cast<size_t>(-1);
         std::vector<uint8_t> automata = agen.BuildAutomata(mask /*maskToCheck*/, &automataDepth /*out*/);
         ReleaseAssert(automataDepth != static_cast<size_t>(-1));
@@ -516,18 +565,9 @@ void FPS_ProcessDfgBuiltinNodes()
             TypeMaskTy checkedMask = tcInfoList[idx].m_checkedMask;
             if (precondMask == x_typeMaskFor<tBoxedValueTop> && (checkedMask == x_typeMaskFor<tBoxedValueTop> || checkedMask == x_typeMaskFor<tBottom>))
             {
-                // The type checkers will contain the trivial checks for tBoxedValueTop and tBottom for completeness, but we will never select them at runtime
+                // These checks should have been removed from tcInfoList so should never reach here
                 //
-                if (checkedMask == x_typeMaskFor<tBoxedValueTop>)
-                {
-                    nameList.push_back("InvalidUseKind (TopUseKnowingTop)");
-                    nameList.push_back("InvalidUseKind (NotTopUseKnowingTop)");
-                }
-                else
-                {
-                    nameList.push_back("InvalidUseKind (BottomUseKnowingTop)");
-                    nameList.push_back("InvalidUseKind (NotBottomUseKnowingTop)");
-                }
+                ReleaseAssert(false);
             }
             else
             {
@@ -558,6 +598,9 @@ void FPS_ProcessDfgBuiltinNodes()
         }
         fprintf(hdrFp, "};\n\n");
     }
+
+    GenerateGetSpeculationFromPredictionMaskAutomata(hdrFp, cppFp);
+    GenerateFindCheapestSpecWithinMaskCoveringExistingSpecAutomatas(tcInfoList, hdrFp, cppFp);
 
     {
         DeegenPostProcessModuleLinker modLinker(std::move(typeCheckInfoMod));

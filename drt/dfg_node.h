@@ -108,7 +108,6 @@ private:
 
     Node(NodeKind kind)
         : m_nodeKind(kind)
-        , m_flags(0)
         , m_variadicResultInput(nullptr)
 #ifdef TESTBUILD
         , m_hardpointKind(HardpointKind::Invalid)
@@ -118,7 +117,11 @@ private:
         , m_initializedNumOutputs(false)
         , m_initializedNodeOrigin(false)
 #endif
-    { }
+    {
+        FlagsTy flags = 0;
+        Flags_DfgVariantOrd::Set(flags, x_invalidDfgVariantOrd);
+        m_flags = flags;
+    }
 
 public:
     friend struct Graph;
@@ -307,6 +310,22 @@ public:
     bool IsNodeReferenced() { return Flags_IsReferenced::Get(m_flags); }
     void SetNodeReferenced(bool val) { Flags_IsReferenced::Set(m_flags, val); }
 
+    using Flags_DfgVariantOrd = BitFieldMember<FlagsTy, uint8_t, 20 /*start*/, 7 /*width*/>;
+    static constexpr uint8_t x_invalidDfgVariantOrd = static_cast<uint8_t>((1U << Flags_DfgVariantOrd::BitWidth()) - 1);
+
+    uint8_t WARN_UNUSED DfgVariantOrd()
+    {
+        uint8_t val = Flags_DfgVariantOrd::Get(m_flags);
+        TestAssert(val != x_invalidDfgVariantOrd);
+        return val;
+    }
+
+    void SetDfgVariantOrd(uint8_t val)
+    {
+        TestAssert(val < x_invalidDfgVariantOrd);
+        Flags_DfgVariantOrd::Set(m_flags, val);
+    }
+
     // Get the total number of possible destinations where this node may transfer control to.
     //
     size_t GetNumNodeControlFlowSuccessors()
@@ -369,6 +388,7 @@ public:
             BFM_useKind::Set(encodedVal, (maybeInvalidBoxedValue ? UseKind_FullTop : UseKind_Untyped));
             BFM_isStaticallyProven::Set(encodedVal, false);
             BFM_maybeInvalidBoxedValue::Set(encodedVal, maybeInvalidBoxedValue);
+            BFM_predictionIsDoubleNotNaN::Set(encodedVal, false);
             BFM_isLastUse::Set(encodedVal, false);
             m_encodedVal = encodedVal;
         }
@@ -381,6 +401,7 @@ public:
             BFM_useKind::Set(encodedVal, useKind);
             BFM_isStaticallyProven::Set(encodedVal, true);
             BFM_maybeInvalidBoxedValue::Set(encodedVal, true);
+            BFM_predictionIsDoubleNotNaN::Set(encodedVal, false);
             BFM_isLastUse::Set(encodedVal, false);
             m_encodedVal = encodedVal;
         }
@@ -436,8 +457,24 @@ public:
         bool IsKill() { return BFM_isLastUse::Get(m_encodedVal); }
         void SetKill(bool val) { BFM_isLastUse::Set(m_encodedVal, val); }
 
+        bool IsPredictionMaskDoubleNotNaN() { return BFM_predictionIsDoubleNotNaN::Get(m_encodedVal); }
+        void SetPredictionMaskIsDoubleNotNaNFlag(bool val) { BFM_predictionIsDoubleNotNaN::Set(m_encodedVal, val); }
+
         UseKind GetUseKind() { return BFM_useKind::Get(m_encodedVal); }
-        void SetUseKind(UseKind useKind) { BFM_useKind::Set(m_encodedVal, useKind); }
+
+        void SetUseKind(UseKind useKind)
+        {
+            TestAssert(useKind != UseKind_KnownUnboxedInt64 && useKind != UseKind_KnownCapturedVar);
+            TestAssert(!IsStaticallyKnownNoCheckNeeded());
+            BFM_useKind::Set(m_encodedVal, useKind);
+        }
+
+        void SetStaticallyKnownUseKind(UseKind useKind)
+        {
+            TestAssert(useKind == UseKind_KnownUnboxedInt64 || useKind == UseKind_KnownCapturedVar);
+            BFM_useKind::Set(m_encodedVal, useKind);
+            BFM_isStaticallyProven::Set(m_encodedVal, true);
+        }
 
         bool NeedsTypeCheck()
         {
@@ -465,13 +502,20 @@ public:
         //
         using BFM_maybeInvalidBoxedValue = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 1 /*start*/, 1 /*width*/>;
 
-        // bit 2: whether this edge is the last use of the operand
+        // bit 2: whether the prediction mask is tDoubleNotNaN
+        // If true, and this edge ends up with a non-trivial check that is not being proven (which must be checking a superset of tDoubleNotNaN),
+        // we can check tDoubleNotNaN instead (which is correct since we are making the check stronger),
+        // so the check is cheaper (checking tDoubleNotNaN is cheaper than tDouble) and still covers our desired prediction
         //
-        using BFM_isLastUse = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 2 /*start*/, 1 /*width*/>;
+        using BFM_predictionIsDoubleNotNaN = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 2 /*start*/, 1 /*width*/>;
 
-        // bit 3-15: the UseKind
+        // bit 3: whether this edge is the last use of the operand
         //
-        using BFM_useKind = BitFieldMember<uint16_t /*carrierType*/, UseKind /*type*/, 3 /*start*/, 13 /*width*/>;
+        using BFM_isLastUse = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 3 /*start*/, 1 /*width*/>;
+
+        // bit 4-15: the UseKind
+        //
+        using BFM_useKind = BitFieldMember<uint16_t /*carrierType*/, UseKind /*type*/, 4 /*start*/, 12 /*width*/>;
 
         uint16_t m_encodedVal;
     };
@@ -1371,6 +1415,8 @@ public:
         return r;
     }
 
+    // If 'valueToStore' is a statically-known unboxed value, be sure to correctly set up the edge UseKind afterwards!
+    //
     static Node* WARN_UNUSED CreateSetLocalNode(InlinedCallFrame* callFrame, InterpreterFrameLocation frameLoc, Value valueToStore)
     {
         callFrame->AssertFrameLocationValid(frameLoc);

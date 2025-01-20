@@ -2,6 +2,7 @@
 
 #include "dfg_arena.h"
 #include "dfg_virtual_register.h"
+#include "tvalue.h"
 
 namespace dfg {
 
@@ -17,6 +18,7 @@ struct LogicalVariableInfo
         : m_localOrd(SafeIntegerCast<uint32_t>(vreg.Value()))
         , m_interpreterSlotOrd(SafeIntegerCast<uint32_t>(islot.Value()))
         , m_logicalVariableOrdinal(static_cast<uint32_t>(-1))
+        , m_speculationMask(x_typeMaskFor<tBottom>)
     { }
 
     void SetLogicalVariableOrdinal(uint32_t ord)
@@ -40,6 +42,10 @@ struct LogicalVariableInfo
     // Each LogicalVariableInfo is assigned an unique ordinal
     //
     uint32_t m_logicalVariableOrdinal;
+
+    // Any GetLocal is *proven* to yield a value which type is within this mask
+    //
+    TypeMask m_speculationMask;
 };
 
 struct CapturedVarLogicalVariableInfo

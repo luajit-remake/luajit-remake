@@ -9,6 +9,7 @@
 #include "dfg_speculative_inliner.h"
 #include "dfg_phantom_insertion.h"
 #include "dfg_prediction_propagation.h"
+#include "dfg_speculation_assignment.h"
 
 using namespace dfg;
 
@@ -476,6 +477,8 @@ TEST(DfgFrontend, Parser_Stress_1)
 
             TempArenaAllocator alloc;
             std::ignore = RunPredictionPropagationWithoutValueProfile(alloc, graph.get());
+
+            RunSpeculationAssignmentPass(graph.get());
 
             RunPhantomInsertionPass(graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));

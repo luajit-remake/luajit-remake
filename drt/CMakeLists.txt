@@ -22,6 +22,7 @@ add_library(deegen_rt
 	deegen_internal_dfg_c_wrapper_shared_stub.s
 	jit_inline_cache_utils.cpp
 	dfg_prediction_propagation.cpp
+	dfg_speculation_assignment.cpp
 )
 
 add_dependencies(deegen_rt 

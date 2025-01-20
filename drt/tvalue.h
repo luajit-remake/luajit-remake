@@ -563,6 +563,10 @@ struct tGarbage
 // Special lattice value: an opaque 8-byte value that is passed around as a TValue but not actually a TValue
 // We do not understand or care what its content means
 //
+// Bytecode may produce tOpaque outputs, but this information must be static (that is, each output must be
+// statically known to be either always an opaque value, or always a valid boxed value), and this information
+// must be reflected correctly in the type deduction rule functions.
+//
 struct tOpaque
 {
     static constexpr size_t x_estimatedCheckCost = 0;
@@ -1156,7 +1160,28 @@ struct get_basic_tvalue_typecheck_impls<std::tuple<Args...>>
         }
     }
 
-    static constexpr auto value = get();
+    // Ugly: this must be sorted in the same way as how we sorted x_list_of_type_speculation_mask_and_name.
+    // The backend will assert that the order agrees with x_list_of_type_speculation_mask_and_name.
+    //
+    static constexpr auto get_sorted()
+    {
+        using ElementT = tvalue_typecheck_strength_reduction_rule;
+        auto arr = get();
+        std::sort(arr.begin(), arr.end(), [](const ElementT& lhs, const ElementT& rhs) -> bool {
+            ReleaseAssert(lhs.m_typePrecondition == x_typeMaskFor<tBoxedValueTop>);
+            ReleaseAssert(rhs.m_typePrecondition == x_typeMaskFor<tBoxedValueTop>);
+            if (lhs.m_typeToCheck != rhs.m_typeToCheck)
+            {
+                return lhs.m_typeToCheck > rhs.m_typeToCheck;
+            }
+            ReleaseAssert(lhs.m_implementation == rhs.m_implementation);
+            ReleaseAssert(lhs.m_estimatedCost == rhs.m_estimatedCost);
+            return false;
+        });
+        return arr;
+    }
+
+    static constexpr auto value = get_sorted();
 };
 
 // It's really hard (and STL-implementation-dependent) to parse a constexpr std::array in LLVM bitcode. This is why we introduce this helper
@@ -1221,8 +1246,8 @@ consteval auto std_array_to_llvm_friendly_array(T v)
     __attribute__((__used__)) inline constexpr auto x_list_of_tvalue_typecheck_strength_reduction_rules =   \
         detail::std_array_to_llvm_friendly_array(                                                           \
             constexpr_std_array_concat(                                                                     \
-                tvalue_typecheck_strength_reduction_def_helper<__COUNTER__>::value,                         \
-                detail::get_basic_tvalue_typecheck_impls<TypeSpecializationList>::value));
+                detail::get_basic_tvalue_typecheck_impls<TypeSpecializationList>::value,                    \
+                tvalue_typecheck_strength_reduction_def_helper<__COUNTER__>::value));
 
 
 // If we are included by a bytecode definition source file, emit information of the strength reduction rules
@@ -1290,9 +1315,19 @@ struct TypeMask
         return (m_mask & other.m_mask) == m_mask;
     }
 
+    bool WARN_UNUSED ALWAYS_INLINE StrictSubsetOf(TypeMask other) const
+    {
+        return SubsetOf(other) && m_mask != other.m_mask;
+    }
+
     bool WARN_UNUSED ALWAYS_INLINE SupersetOf(TypeMask other) const
     {
         return (m_mask & other.m_mask) == other.m_mask;
+    }
+
+    bool WARN_UNUSED ALWAYS_INLINE StrictSupersetOf(TypeMask other) const
+    {
+        return SupersetOf(other) && m_mask != other.m_mask;
     }
 
     bool WARN_UNUSED ALWAYS_INLINE DisjointFrom(TypeMask other) const

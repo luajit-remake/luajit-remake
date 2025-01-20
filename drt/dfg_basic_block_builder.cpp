@@ -339,7 +339,9 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
                             //
                             // Must call SetLocalVariableValue before setting m_isLocalCaptured to true
                             //
-                            SetLocalVariableValue(localOrd, Value(createClosureVar, 0 /*outputOrd*/));
+                            Node* setLocal = SetLocalVariableValue(localOrd, Value(createClosureVar, 0 /*outputOrd*/));
+                            TestAssert(setLocal->IsSetLocalNode());
+                            setLocal->GetSoleInput().SetStaticallyKnownUseKind(UseKind_KnownCapturedVar);
                             m_isLocalCaptured[localOrd] = true;
                         }
                     }
@@ -1022,6 +1024,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                     // since bytecode execution is agnostic of which local is captured by an upvalue.
                     //
                     Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
+                    setLocal->GetSoleInput().SetStaticallyKnownUseKind(UseKind_KnownCapturedVar);
                     SetupNodeCommonInfoAndPushBack(setLocal);
                 }
             }
@@ -1127,6 +1130,7 @@ void DfgBuildBasicBlockContext::BuildDfgBasicBlockFromBytecode(size_t bbOrd)
                 // since bytecode execution is agnostic of which local is captured by an upvalue.
                 //
                 Node* setLocal = Node::CreateSetLocalNode(m_inlinedCallFrame, InterpreterFrameLocation::Local(localOrd), Value(createClosureVar, 0 /*outputOrd*/));
+                setLocal->GetSoleInput().SetStaticallyKnownUseKind(UseKind_KnownCapturedVar);
                 SetupNodeCommonInfoAndPushBack(setLocal);
             }
         }

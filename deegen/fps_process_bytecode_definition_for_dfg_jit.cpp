@@ -10,6 +10,7 @@
 #include "deegen_dfg_jit_impl_creator.h"
 #include "base64_util.h"
 #include "deegen_dfg_aot_slowpath_save_reg_stub.h"
+#include "deegen_dfg_select_variant_logic_creator.h"
 
 using namespace dast;
 
@@ -155,12 +156,14 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
         fprintf(hdrFp, "template<> struct NumDfgVariantsForBCKind<BCKind::%s> { static constexpr size_t value = %d; };\n\n",
                 bcName.c_str(), static_cast<int>(numDfgVariantsInThisBC));
 
+        std::vector<std::unique_ptr<BytecodeIrInfo>> allBIIs;
         size_t curDfgVariantOrd = 0;
         for (json_t& dfgVariantJson : bcDfgVariants)
         {
             Auto(curDfgVariantOrd++);
 
-            BytecodeIrInfo bii(ctx, dfgVariantJson);
+            allBIIs.push_back(std::make_unique<BytecodeIrInfo>(ctx, dfgVariantJson));
+            BytecodeIrInfo& bii = *allBIIs.back().get();
 
             std::unique_ptr<DfgJitImplCreator> j(new DfgJitImplCreator(&bii, *bii.m_jitMainComponent.get(), nullptr));
 
@@ -552,6 +555,15 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
             }
         }
         ReleaseAssert(curDfgVariantOrd == bcDfgVariants.size());
+
+        // Generate DFG variant selection logic
+        //
+        std::vector<BytecodeVariantDefinition*> allBVDs;
+        for (auto& it : allBIIs)
+        {
+            allBVDs.push_back(it->m_bytecodeDef);
+        }
+        GenerateSelectDfgVariantAndSetSpeculationLogic(allBVDs, hdrFp, cppFp);
     }
 
     fprintf(hdrFp, "} // namespace dfg\n");

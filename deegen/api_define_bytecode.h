@@ -247,18 +247,14 @@ struct DeegenFrontendBytecodeDefinitionDescriptor
             return { .m_operand = { DeegenSpecializationKind::Literal, spVal64 }, .m_ord = m_ord };
         }
 
-        consteval SpecializedOperandRef WARN_UNUSED HasType(TypeMaskTy typeMask)
-        {
-            ReleaseAssert(m_ord != static_cast<size_t>(-1));
-            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
-            return { .m_operand = { DeegenSpecializationKind::SpeculatedTypeForOptimizer, typeMask }, .m_ord = m_ord };
-        }
-
         template<typename T>
         consteval SpecializedOperandRef WARN_UNUSED HasType()
         {
             static_assert(IsValidTypeSpecialization<T>);
-            return HasType(x_typeMaskFor<T>);
+            TypeMaskTy typeMask = x_typeMaskFor<T>;
+            ReleaseAssert(m_ord != static_cast<size_t>(-1));
+            ReleaseAssert(m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlotOrConstant || m_operand.m_type == DeegenBytecodeOperandType::BytecodeSlot || m_operand.m_type == DeegenBytecodeOperandType::Constant);
+            return { .m_operand = { DeegenSpecializationKind::SpeculatedTypeForOptimizer, typeMask }, .m_ord = m_ord };
         }
 
         consteval SpecializedOperandRef WARN_UNUSED IsBytecodeSlot()

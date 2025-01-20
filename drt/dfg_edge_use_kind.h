@@ -39,6 +39,9 @@ enum UseKind : uint16_t
     // The first use kind that requires non-trivial runtime check
     // Each corresponds to a type checker implementation
     //
+    // UseKind_FirstUnprovenUseKind + 2 * (k - 1) is the check for x_list_of_type_speculation_masks[k]
+    // where 1 <= k <= x_list_of_type_speculation_masks.size() - 2
+    //
     UseKind_FirstUnprovenUseKind = static_cast<uint16_t>(UseKind_FirstProvenUseKind + x_list_of_type_speculation_masks.size() - 2)
 };
 

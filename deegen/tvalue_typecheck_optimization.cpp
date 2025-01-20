@@ -1288,7 +1288,7 @@ TypeMaskTy WARN_UNUSED GetCheckedMaskOfTValueTypecheckFunction(llvm::Function* f
     return res;
 }
 
-static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTypeCheckFn(TypeCheckFunctionSelector& tcfInfo, TypeMask maskToCheck)
+static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTypeCheckFn(const std::vector<TypecheckStrengthReductionCandidate>& list, TypeMask maskToCheck)
 {
     ReleaseAssert(maskToCheck.SubsetOf(x_typeMaskFor<tBoxedValueTop>));
 
@@ -1312,17 +1312,7 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
         return gen;
     }
 
-    const std::vector<TypecheckStrengthReductionCandidate>& list = tcfInfo.GetStrengthReductionList();
-
-    // 'CandidateInfo' may be used if precondMask \subset m_mask. The cost is m_cost
-    //
-    struct CandidateInfo
-    {
-        uint16_t m_identValue;
-        TypeMask m_mask;
-        size_t m_cost;
-    };
-    std::vector<CandidateInfo> candidates;
+    MinCostTypemaskOverapproxAutomataGenerator mcaGen;
 
     uint16_t firstUnprovenUseKind = static_cast<uint16_t>(dfg::UseKind_FirstUnprovenUseKind);
 
@@ -1363,19 +1353,17 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
         // Use same rule to break ties in m_cost as in TypeCheckFunctionSelector::Query,
         // that is, the "rule" version with cost c better than "not rule" version with cost c better than "rule" version with cost c+1
         //
-        TypeMask mask1 = Q.Cap(S).Cup(P.Subtract(Q.Cup(S)));
-        candidates.push_back({
-            .m_identValue = SafeIntegerCast<uint16_t>(firstUnprovenUseKind + ruleIdx * 2),
-            .m_mask = mask1,
-            .m_cost = rule.m_estimatedCost * 2 + 2      // cost 0 and 1 are reserved for trivial results
-        });
+        // We add 2 to all costs, since cost 0 and 1 are reserved for trivial results
+        //
+        mcaGen.AddItem(
+            Q.Cap(S).Cup(P.Subtract(Q.Cup(S))),
+            SafeIntegerCast<uint16_t>(firstUnprovenUseKind + ruleIdx * 2) /*identValue*/,
+            rule.m_estimatedCost * 2 + 2 /*cost*/);
 
-        TypeMask mask2 = S.Cap(P.Subtract(Q)).Cup(Q.Subtract(S));
-        candidates.push_back({
-            .m_identValue = SafeIntegerCast<uint16_t>(firstUnprovenUseKind + ruleIdx * 2 + 1),
-            .m_mask = mask2,
-            .m_cost = rule.m_estimatedCost * 2 + 3
-        });
+        mcaGen.AddItem(
+            S.Cap(P.Subtract(Q)).Cup(Q.Subtract(S)),
+            SafeIntegerCast<uint16_t>(firstUnprovenUseKind + ruleIdx * 2 + 1) /*identValue*/,
+            rule.m_estimatedCost * 2 + 3 /*cost*/);
     }
 
     uint16_t triviallyTrueUseKind = static_cast<uint16_t>(-1);
@@ -1397,135 +1385,31 @@ static TypemaskOverapproxAutomataGenerator WARN_UNUSED BuildAutomataForSelectTyp
 
     // If the precondition is a subset of maskToCheck, result is trivially true
     //
-    candidates.push_back({
-        .m_identValue = triviallyTrueUseKind,
-        .m_mask = maskToCheck,
-        .m_cost = 1
-    });
+    mcaGen.AddItem(
+        maskToCheck,
+        triviallyTrueUseKind /*identValue*/,
+        1 /*cost*/);
 
     // If the precondition is disjoint with maskToCheck, result is trivially false
     //
-    candidates.push_back({
-        .m_identValue = dfg::UseKind_AlwaysOsrExit,
-        .m_mask = x_typeMaskFor<tBoxedValueTop> ^ maskToCheck.m_mask,
-        .m_cost = 1
-    });
+    mcaGen.AddItem(
+        x_typeMaskFor<tBoxedValueTop> ^ maskToCheck.m_mask /*mask*/,
+        dfg::UseKind_AlwaysOsrExit /*identValue*/,
+        1 /*cost*/);
 
     // Special case: if precondition is tBottom, should return UseKind_Unreachable
     //
-    candidates.push_back({
-        .m_identValue = dfg::UseKind_Unreachable,
-        .m_mask = x_typeMaskFor<tBottom>,
-        .m_cost = 0
-    });
+    mcaGen.AddItem(
+        x_typeMaskFor<tBottom> /*mask*/,
+        dfg::UseKind_Unreachable /*identValue*/,
+        0 /*cost*/);
 
-    // Sanity check 'candidates' makes sense
-    //
-    for (CandidateInfo& c : candidates)
-    {
-        ReleaseAssert(c.m_identValue <= 32767);
-        ReleaseAssert(c.m_mask.m_mask <= x_typeMaskFor<tBoxedValueTop>);
-    }
-
-    // By default the automata will select any minimal over-approximation (there can be multiple if the nodes are not closed under bitwise-and),
-    // but in our case, if there are multiple minimal over-approximations, we want to choose the one with minimal cost.
-    // So we have to manually make the bitwise-and-closure and set up the choices for all nodes in the closure.
-    //
-    std::unordered_map<TypeMaskTy, CandidateInfo*> nodeMap;
-    {
-        // Prune strictly worse candidates to reduce the size of the automata
-        //
-        std::vector<CandidateInfo> newCandidates;
-        for (CandidateInfo& c : candidates)
-        {
-            bool shouldPrune = false;
-            for (CandidateInfo& other : candidates)
-            {
-                if (c.m_mask.SubsetOf(other.m_mask) && c.m_cost > other.m_cost)
-                {
-                    // The mask of 'other' is at least as capable as the mask of 'c', but the cost is strictly lower
-                    //
-                    shouldPrune = true;
-                    break;
-                }
-                if (c.m_mask.SubsetOf(other.m_mask) && c.m_mask != other.m_mask && c.m_cost >= other.m_cost)
-                {
-                    // The mask of 'other' is strictly more capable than the mask of 'c', but the cost is at least as low as 'c'
-                    //
-                    shouldPrune = true;
-                    break;
-                }
-            }
-            if (!shouldPrune)
-            {
-                newCandidates.push_back(c);
-            }
-        }
-        candidates = std::move(newCandidates);
-
-        // We still need to dedup mask, since if two candidates have identical mask and cost, we won't eliminate any of them
-        // But this is fine, since this won't affect the size of the automata
-        //
-        std::unordered_set<TypeMaskTy> distinctMasks;
-        for (CandidateInfo& c : candidates)
-        {
-            distinctMasks.insert(c.m_mask.m_mask);
-        }
-
-        TypemaskOverapproxAutomataGenerator gen;
-        for (TypeMaskTy mask : distinctMasks)
-        {
-            // The value does not matter, we just want to use the MakeClosure method
-            //
-            gen.AddItem(mask, 0 /*value*/);
-        }
-
-        std::vector<std::pair<TypeMaskTy, uint16_t>> citems = gen.MakeClosure();
-        for (auto& item : citems)
-        {
-            ReleaseAssert(!nodeMap.count(item.first));
-            nodeMap[item.first] = nullptr;
-        }
-    }
-
-    // Compute the best solution for each node in nodeMap
-    //
-    for (CandidateInfo& c : candidates)
-    {
-        TypeMask mask = c.m_mask;
-        size_t cost = c.m_cost;
-        for (auto& it : nodeMap)
-        {
-            if (mask.SupersetOf(it.first))
-            {
-                if (it.second == nullptr || cost < it.second->m_cost)
-                {
-                    it.second = &c;
-                }
-            }
-        }
-    }
-
-    // Validate that each node should now have a valid solution
-    //
-    for (auto& it : nodeMap)
-    {
-        ReleaseAssert(it.second != nullptr);
-    }
-
-    // Generate the automata
-    //
-    TypemaskOverapproxAutomataGenerator gen;
-    for (auto& it : nodeMap)
-    {
-        gen.AddItem(it.first, it.second->m_identValue);
-    }
-    return gen;
+    return mcaGen.GetAutomata();
 }
 
 std::vector<uint8_t> WARN_UNUSED DfgSelectTypeCheckFnAutomataGenerator::BuildAutomata(TypeMask maskToCheck, size_t* depthOfGeneratedAutomata /*out*/)
 {
-    TypemaskOverapproxAutomataGenerator gen = BuildAutomataForSelectTypeCheckFn(m_info, maskToCheck);
+    TypemaskOverapproxAutomataGenerator gen = BuildAutomataForSelectTypeCheckFn(m_infoList, maskToCheck);
     return gen.GenerateAutomata(depthOfGeneratedAutomata /*out*/);
 }
 

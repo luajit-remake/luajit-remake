@@ -290,8 +290,8 @@ private:
 
 struct DfgSelectTypeCheckFnAutomataGenerator
 {
-    DfgSelectTypeCheckFnAutomataGenerator(TypeCheckFunctionSelector& tcfInfo)
-        : m_info(tcfInfo)
+    DfgSelectTypeCheckFnAutomataGenerator(const std::vector<TypecheckStrengthReductionCandidate>& infoList)
+        : m_infoList(infoList)
     { }
 
     // Build an automata for checking 'maskToCheck'.
@@ -308,7 +308,7 @@ struct DfgSelectTypeCheckFnAutomataGenerator
     std::vector<uint8_t> WARN_UNUSED BuildAutomata(TypeMask maskToCheck, size_t* depthOfGeneratedAutomata = nullptr /*out*/);
 
 private:
-    TypeCheckFunctionSelector& m_info;
+    std::vector<TypecheckStrengthReductionCandidate> m_infoList;
 };
 
 }   // namespace dast

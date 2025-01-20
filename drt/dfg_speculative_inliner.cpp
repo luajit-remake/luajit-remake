@@ -1030,6 +1030,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         Node* storeFnObj = Node::CreateSetLocalNode(newFrame,
                                                     InterpreterFrameLocation::FunctionObjectLoc(),
                                                     calleeFunctionObjectValue);
+        storeFnObj->GetSoleInput().SetStaticallyKnownUseKind(UseKind_KnownUnboxedInt64);
         m_bbContext->SetupNodeCommonInfoAndPushBack(storeFnObj);
     }
 
@@ -1038,6 +1039,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         Node* storeNumVarArgs = Node::CreateSetLocalNode(newFrame,
                                                          InterpreterFrameLocation::NumVarArgsLoc(),
                                                          numVariadicArgumentsValue);
+        storeNumVarArgs->GetSoleInput().SetStaticallyKnownUseKind(UseKind_KnownUnboxedInt64);
         m_bbContext->SetupNodeCommonInfoAndPushBack(storeNumVarArgs);
     }
 

@@ -684,10 +684,10 @@ private:
         TestAssert(node->IsGetKthVariadicResNode());
         TypeMaskTy* prediction = AllocatePredictionForNodeWithOneOutput(node);
 
-        // The variadic result may be anything, including invalid boxed values, but not garbage values
+        // The variadic result may be any boxed values
         // TODO: sometimes we can get more accurate information from argument profile
         //
-        *prediction = x_typeMaskFor<tFullTop> ^ x_typeMaskFor<tGarbage>;
+        *prediction = x_typeMaskFor<tBoxedValueTop>;
     }
 
     void ProcessGetNumVariadicRes(Node* node)
@@ -718,7 +718,7 @@ private:
 
         // TODO: we should have a way to value profile this
         //
-        *prediction = x_typeMaskFor<tFullTop> ^ x_typeMaskFor<tGarbage>;
+        *prediction = x_typeMaskFor<tBoxedValueTop>;
     }
 
     void ProcessGuestLanguageNode(Node* node)

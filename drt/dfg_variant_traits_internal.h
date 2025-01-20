@@ -6,6 +6,7 @@
 #include "dfg_reg_alloc_register_info.h"
 #include "dfg_codegen_protocol.h"
 #include "dfg_builtin_nodes.h"
+#include "dfg_typemask_overapprox_automata.h"
 
 // DEVNOTE:
 // This header file is only supposed to be directly included by the generated headers.
