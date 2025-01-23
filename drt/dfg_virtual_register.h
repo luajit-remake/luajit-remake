@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
+#include "dfg_arena.h"
 #include "temp_arena_allocator.h"
 
 namespace dfg {
@@ -20,6 +21,8 @@ struct VirtualRegister
     explicit VirtualRegister(size_t value) : m_value(value) { }
     size_t Value() const { return m_value; }
 
+    bool ALWAYS_INLINE operator==(const VirtualRegister&) const = default;
+
 private:
     size_t m_value;
 };
@@ -35,9 +38,13 @@ struct InterpreterSlot
     explicit InterpreterSlot(size_t value) : m_value(value) { }
     size_t Value() const { return m_value; }
 
+    bool ALWAYS_INLINE operator==(const InterpreterSlot&) const = default;
+
 private:
     size_t m_value;
 };
+
+struct Node;
 
 // Describes a location in a (root or inlined) interpreter call frame.
 // InlinedCallFrame can translate this to the absolute VirtualRegister and InterpreterSlot ordinal
@@ -113,12 +120,19 @@ struct VirtualRegisterMappingInfo
     }
 
     // This might only be true for stack frame header slots
-    // It means that the interpreter slot is not mapped to any virtual register, so it can only store constant values
+    // It means that the interpreter slot is not mapped to any virtual register, so it can only store statically-known constant values
     //
     bool IsUmmapedToAnyVirtualReg()
     {
         TestAssert(IsLive());
-        return m_value == x_unmapped;
+        return m_value & (1U << 31);
+    }
+
+    Node* GetConstantValue()
+    {
+        TestAssert(IsUmmapedToAnyVirtualReg());
+        uint32_t ptrVal = m_value ^ (1U << 31);
+        return ArenaPtr<Node>(ptrVal);
     }
 
     VirtualRegister GetVirtualRegister()
@@ -134,9 +148,18 @@ struct VirtualRegisterMappingInfo
         return res;
     }
 
-    static VirtualRegisterMappingInfo WARN_UNUSED Unmapped()
+    // This slot is always holding a fixed statically-known constant value
+    //
+    static VirtualRegisterMappingInfo WARN_UNUSED Unmapped(Node* node)
     {
-        return VirtualRegisterMappingInfo(x_unmapped);
+#ifdef TESTBUILD
+        AssertIsConstantOrUnboxedConstantNode(node);
+#endif
+        ArenaPtr<Node> ptrVal(node);
+        TestAssert(ptrVal.m_value < (1U << 31));
+        uint32_t val = ptrVal.m_value | (1U << 31);
+        TestAssert(val != x_dead && val != x_uninitialized);
+        return VirtualRegisterMappingInfo(val);
     }
 
     static VirtualRegisterMappingInfo WARN_UNUSED Dead()
@@ -144,19 +167,29 @@ struct VirtualRegisterMappingInfo
         return VirtualRegisterMappingInfo(x_dead);
     }
 
+#ifdef TESTBUILD
+    // Ugly: due to header file dependency the implementation must be put in a CPP file.. Fortunately this is only an assertion
+    //
+    static void AssertIsConstantOrUnboxedConstantNode(Node* node);
+#endif
+
 private:
-    // The interpreter slot is dead, whatever value (including invalid boxed value bitpatterns) should not affect the interpreter
-    //
-    static constexpr uint32_t x_dead = static_cast<uint32_t>(-1);
-    // The interpreter slot is not mapped to a DFG local. This means that any ShadowStore to this interpreter slot must be a constant.
-    //
-    static constexpr uint32_t x_unmapped = static_cast<uint32_t>(-2);
     // The information has not been initialized properly. For assertion purpose only: It's a bug to see this.
     //
-    static constexpr uint32_t x_uninitialized = static_cast<uint32_t>(-3);
+    static constexpr uint32_t x_uninitialized = static_cast<uint32_t>(-1);
+    // The interpreter slot is dead, whatever value (including invalid boxed value bitpatterns) should not affect the interpreter
+    //
+    static constexpr uint32_t x_dead = static_cast<uint32_t>(-2);
 
     explicit VirtualRegisterMappingInfo(uint32_t value) : m_value(value) { }
 
+    // If the highest bit is 0, it means the slot is live, and m_value is the VirtualRegister ordinal
+    // If the highest bit is 1:
+    //     If m_value is x_dead or x_uninitialized, it just means what these senital values said.
+    //     Otherwise, it means the interpreter slot is always a constant, and the lower 31 bits should be
+    //     interpreted as an ArenaPtr<Node>, which is the constant node (note that the bit pattern of the
+    //     lower 31 bits for x_dead and x_uninitialized is never a valid ArenaPtr<Node>, so there's no confusion).
+    //
     uint32_t m_value;
 };
 

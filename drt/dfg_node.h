@@ -313,6 +313,8 @@ public:
     using Flags_DfgVariantOrd = BitFieldMember<FlagsTy, uint8_t, 20 /*start*/, 7 /*width*/>;
     static constexpr uint8_t x_invalidDfgVariantOrd = static_cast<uint8_t>((1U << Flags_DfgVariantOrd::BitWidth()) - 1);
 
+    bool WARN_UNUSED HasAssignedDfgVariantOrd() { return Flags_DfgVariantOrd::Get(m_flags) != x_invalidDfgVariantOrd; }
+
     uint8_t WARN_UNUSED DfgVariantOrd()
     {
         uint8_t val = Flags_DfgVariantOrd::Get(m_flags);
@@ -2397,6 +2399,7 @@ public:
                     // If the slot is live in both successors, the mappings must agree.
                     //
                     TestAssertIff(info.IsUmmapedToAnyVirtualReg(), newInfo.IsUmmapedToAnyVirtualReg());
+                    TestAssertImp(info.IsUmmapedToAnyVirtualReg(), info.GetConstantValue() == newInfo.GetConstantValue());
                     TestAssertImp(!info.IsUmmapedToAnyVirtualReg(), info.GetVirtualRegister().Value() == newInfo.GetVirtualRegister().Value());
                 }
             }

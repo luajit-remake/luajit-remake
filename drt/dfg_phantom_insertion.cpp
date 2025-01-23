@@ -389,6 +389,7 @@ struct PhantomInsertionPassImpl
                 {
                     TestAssert(vrmi.IsUmmapedToAnyVirtualReg());
                     TestAssert(m_interpSlotVal[slotOrd].GetOperand()->IsConstantLikeNode());
+                    TestAssert(m_interpSlotVal[slotOrd].GetOperand() == vrmi.GetConstantValue());
                 }
             }
         }
@@ -536,13 +537,26 @@ struct PhantomInsertionPassImpl
 
         for (size_t slot = 0; slot < m_interpSlotVal.size(); slot++)
         {
+            VirtualRegisterMappingInfo vrmi = m_currentBasicBlock->GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot(slot));
             if (!m_interpSlotVal[slot].IsNull())
             {
-                VirtualRegisterMappingInfo vrmi = m_currentBasicBlock->GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot(slot));
                 if (vrmi.IsLive())
                 {
                     TestAssert(vrmi.IsUmmapedToAnyVirtualReg());
                     TestAssert(m_interpSlotVal[slot].GetOperand()->IsConstantLikeNode());
+                    TestAssert(m_interpSlotVal[slot].GetOperand() == vrmi.GetConstantValue());
+                }
+            }
+            // For each unmapped interpreter slot that is not unmapped at BB start,
+            // there should be a ShadowStore setting its value inside this BB
+            //
+            if (vrmi.IsLive() && vrmi.IsUmmapedToAnyVirtualReg())
+            {
+                if (m_interpSlotVal[slot].IsNull())
+                {
+                    VirtualRegisterMappingInfo vrmiAtHead = m_currentBasicBlock->GetVirtualRegisterForInterpreterSlotAtHead(InterpreterSlot(slot));
+                    TestAssert(vrmiAtHead.IsLive() && vrmiAtHead.IsUmmapedToAnyVirtualReg());
+                    TestAssert(vrmiAtHead.GetConstantValue() == vrmi.GetConstantValue());
                 }
             }
         }

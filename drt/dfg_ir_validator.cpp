@@ -286,6 +286,12 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 CHECK_REPORT_NODE(shadowStoreVal.IsConstantValue(),
                                   shadowStoreNode,
                                   "A ShadowStore to an interpreter slot not mapped to any VirtualRegister must be a constant value");
+
+                Node* constantOperand = shadowStoreVal.GetOperand();
+                CHECK_REPORT_NODE(constantOperand == vrmi.GetConstantValue(),
+                                  shadowStoreNode,
+                                  "The constant value written by a ShadowStore to an interpreter slot not mapped to any VirtualRegister "
+                                  "must agree with the constant value for that interpreter slot");
                 continue;
             }
 
@@ -301,6 +307,31 @@ bool WARN_UNUSED ValidateDfgIrGraph(Graph* graph, IRValidateOptions validateOpti
                 CHECK_REPORT_NODE(setLocalVal.IsIdenticalAs(shadowStoreVal),
                                   shadowStoreNode,
                                   "ShadowStore disagrees with SetLocal at BB end (ShadowStore value different from SetLocal value");
+            }
+        }
+
+        // For each unmapped interpreter slot at BB end, one of the following should be true:
+        // 1. It is also unmapped at BB start with same value
+        // 2. There is a ShadowStore that sets this slot to the correct value
+        //
+        for (size_t interpSlot = 0; interpSlot < graph->GetTotalNumInterpreterSlots(); interpSlot++)
+        {
+            VirtualRegisterMappingInfo vrmi = bb->GetVirtualRegisterForInterpreterSlotAtTail(InterpreterSlot(interpSlot));
+            if (vrmi.IsLive() && vrmi.IsUmmapedToAnyVirtualReg())
+            {
+                // Note that if 'interpSlot' is found in shadowStoreWrites, the assertion has been done in the earlier loop
+                // So we only need to check the not-found case here
+                //
+                if (!shadowStoreWrites.count(interpSlot))
+                {
+                    VirtualRegisterMappingInfo vrmiAtHead = bb->GetVirtualRegisterForInterpreterSlotAtHead(InterpreterSlot(interpSlot));
+                    CHECK_REPORT_BLOCK(vrmiAtHead.IsLive() && vrmiAtHead.IsUmmapedToAnyVirtualReg(),
+                                       bb,
+                                       "No ShadowStore to a interpreter slot that becomes unmapped during the BB!");
+                    CHECK_REPORT_BLOCK(vrmiAtHead.GetConstantValue() == vrmi.GetConstantValue(),
+                                       bb,
+                                       "No ShadowStore to a interpreter slot that becomes unmapped with a different constant value during the BB!");
+                }
             }
         }
     }

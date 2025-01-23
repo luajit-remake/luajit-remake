@@ -6,6 +6,7 @@ add_library(deegen_rt
 	mmap_utils.cpp
 	dfg_arena.cpp
 	dfg_node.cpp
+	dfg_virtual_register.cpp
 	dfg_control_flow_and_upvalue_analysis.cpp
 	temp_arena_allocator.cpp
 	dfg_basic_block_builder.cpp

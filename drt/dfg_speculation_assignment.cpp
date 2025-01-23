@@ -157,6 +157,7 @@ private:
     {
         TestAssert(!node->IsBuiltinNodeKind());
         TestAssert(node->GetNodeSpecializedForInliningKind() == Node::SISKind::None && "speculative inlining not handled yet");
+        TestAssert(!node->HasAssignedDfgVariantOrd());
 
         BCKind kind = node->GetGuestLanguageBCKind();
         TestAssert(static_cast<size_t>(kind) < x_speculation_assignment_fn_for_guest_language_nodes.size());
@@ -164,6 +165,8 @@ private:
 
         NodeAccessorForSpeculationAssignment accessor(node);
         implFn(accessor);
+
+        TestAssert(node->HasAssignedDfgVariantOrd());
     }
 
     void ProcessBuiltinNode(Node* node)
@@ -350,6 +353,8 @@ private:
         //     but this might not be useful: the goal is to eliminate or strength-reduce checks
         //     that uses the GetLocal values. If the speculation mask of the local cannot help
         //     with the goal, it's better to not pay the cost of speculating on the SetLocals at all.
+        //
+        // TODO: should also special case the tDoubleNotNaN verus tDouble case here
         //
         for (auto& it : m_setLocals)
         {

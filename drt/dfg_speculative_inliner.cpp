@@ -693,7 +693,7 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
     tfCtx.m_graph->UpdateTotalNumLocals(tfCtx.m_vrState.GetVirtualRegisterVectorLength());
     tfCtx.m_graph->UpdateTotalNumInterpreterSlots(newFrame->GetInterpreterSlotForFrameEnd().Value());
 
-    // Compute the interpreterSlot <-> VirtualRegister mapping for everything before the new call frame base
+    // Compute the interpreterSlot <-> VirtualRegister mapping for everything before the new call frame start
     //
     {
         size_t curFrameStartSlot;
@@ -706,56 +706,6 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             curFrameStartSlot = 0;
         }
 
-        // The part before the start of our current call frame should be the same
-        //
-        for (size_t interpSlot = 0; interpSlot < curFrameStartSlot; interpSlot++)
-        {
-            newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                InterpreterSlot(interpSlot),
-                m_inlinedCallFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(InterpreterSlot(interpSlot)));
-        }
-
-        // Helper function to set up the mapping for a frame's stack frame header part
-        //
-        auto setupInfoForStackFrameHeader = [&](InlinedCallFrame* frame) ALWAYS_INLINE
-        {
-            if (frame->IsDirectCall())
-            {
-                newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                    frame->GetInterpreterSlotForStackFrameHeader(0),
-                    VirtualRegisterMappingInfo::Unmapped());
-            }
-            else
-            {
-                newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                    frame->GetInterpreterSlotForStackFrameHeader(0),
-                    VirtualRegisterMappingInfo::VReg(frame->GetClosureCallFunctionObjectRegister()));
-            }
-
-            if (frame->StaticallyKnowsNumVarArgs())
-            {
-                newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                    frame->GetInterpreterSlotForStackFrameHeader(1),
-                    VirtualRegisterMappingInfo::Unmapped());
-            }
-            else
-            {
-                newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                    frame->GetInterpreterSlotForStackFrameHeader(1),
-                    VirtualRegisterMappingInfo::VReg(frame->GetNumVarArgsRegister()));
-            }
-
-            // Slot 2 and 3 in the stack frame header are always constant
-            //
-            newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                frame->GetInterpreterSlotForStackFrameHeader(2),
-                VirtualRegisterMappingInfo::Unmapped());
-
-            newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                frame->GetInterpreterSlotForStackFrameHeader(3),
-                VirtualRegisterMappingInfo::Unmapped());
-        };
-
         // Set up the part that belongs to the current call frame
         //
         if (trait->m_isTailCall)
@@ -763,24 +713,45 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             // The new frame start should exactly be the current frame start, nothing to populate for the current frame
             //
             TestAssert(curFrameStartSlot == newFrame->GetInterpreterSlotForFrameStart().Value());
+
+            // The part before the start of our current call frame should be the same
+            //
+            for (size_t interpSlot = 0; interpSlot < curFrameStartSlot; interpSlot++)
+            {
+                newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+                    InterpreterSlot(interpSlot),
+                    m_inlinedCallFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(InterpreterSlot(interpSlot)));
+            }
         }
         else
         {
+            // Everything before the local variable part of the current frame should be the same
+            //
+            {
+                size_t curFrameLocalStart = m_inlinedCallFrame->GetInterpreterSlotForStackFrameBase().Value();
+                for (size_t interpSlot = 0; interpSlot < curFrameLocalStart; interpSlot++)
+                {
+                    newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+                        InterpreterSlot(interpSlot),
+                        m_inlinedCallFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(InterpreterSlot(interpSlot)));
+                }
+            }
+
+#ifdef TESTBUILD
+            // Just for sanity, assert that information on the current frame's variadic argument part agrees with
+            // what is reported by GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase
+            //
             if (!m_inlinedCallFrame->IsRootFrame())
             {
-                // The current frame's variadic arguments part is always live, copy the mapping for those part
-                //
                 for (size_t varArgOrd = 0; varArgOrd < m_inlinedCallFrame->MaxVarArgsAllowed(); varArgOrd++)
                 {
                     InterpreterSlot interpSlot = m_inlinedCallFrame->GetInterpreterSlotForVariadicArgument(varArgOrd);
                     VirtualRegister vreg = m_inlinedCallFrame->GetRegisterForVarArgOrd(varArgOrd);
-                    newFrame->SetInterpreterSlotBeforeFrameBaseMapping(interpSlot, VirtualRegisterMappingInfo::VReg(vreg));
+                    VirtualRegisterMappingInfo vrmi = newFrame->GetVirtualRegisterInfoForInterpreterSlotBeforeFrameBase(interpSlot);
+                    TestAssert(vrmi.GetVirtualRegister() == vreg);
                 }
-
-                // Set up the mapping for the current frame's stack frame header part
-                //
-                setupInfoForStackFrameHeader(m_inlinedCallFrame);
             }
+#endif
 
             // Set up the mapping for the local variable part of the current frame
             // For in-place call, this means all the locals before the in-place call-frame starts
@@ -830,32 +801,22 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
                 }
             }
         }
-
-        // At this point, we've done setting up everything before the new frame's frame start
-        // Now, set the mapping for the new frame's variadic arguments and stack frame header
-        // The mapping is just the same as the existing info in newFrame.
-        // It is only to make the check simple, so that we can always query VRegMappingBeforeFrameBase
-        // for everything that is not a local in the new frame (and BytecodeLiveness for local in the new frame).
-        //
-        for (size_t varArgOrd = 0; varArgOrd < newFrame->MaxVarArgsAllowed(); varArgOrd++)
-        {
-            newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
-                newFrame->GetInterpreterSlotForVariadicArgument(varArgOrd),
-                VirtualRegisterMappingInfo::VReg(newFrame->GetRegisterForVarArgOrd(varArgOrd)));
-        }
-
-        // Set up mapping info for the new frame's stack frame header part
-        //
-        setupInfoForStackFrameHeader(newFrame);
-
-        // Assert that we have set up everything that we expect to set up
-        //
-        newFrame->AssertVirtualRegisterMappingBeforeThisFrameComplete();
     }
 
-    // Initialize the new call frame. As usual, we need to emit all the ShadowStores first and then SetLocals.
+    // At this point, we've done setting up everything before the new frame's frame start
+    // Now, set the mapping for the new frame's variadic arguments
+    // The mapping is just the same as the existing info in newFrame.
+    // It is only to make the check simple, so that we can always query VRegMappingBeforeFrameBase
+    // for everything that is not a local in the new frame (and BytecodeLiveness for local in the new frame).
     //
-    // Emit ShadowStore for the new stack frame header. Our protocol is:
+    for (size_t varArgOrd = 0; varArgOrd < newFrame->MaxVarArgsAllowed(); varArgOrd++)
+    {
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForVariadicArgument(varArgOrd),
+            VirtualRegisterMappingInfo::VReg(newFrame->GetRegisterForVarArgOrd(varArgOrd)));
+    }
+
+    // Now, setup and initialize the new call frame header. Our protocol is:
     //     hdr[0]: an unboxed HeapPtr<FunctionObject>, the function object of the call
     //     hdr[1]: an unboxed uint64_t, the number of variadic arguments
     //     hdr[2]: an unboxed void* pointer, the return address (points to baseline JIT code)
@@ -868,18 +829,30 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         // Note that the stack frame expects a HeapPtr<FunctionObject>, not FunctionObject*
         //
         calleeFunctionObjectValue = m_graph->GetUnboxedConstant(reinterpret_cast<uint64_t>(TranslateToHeapPtr(fo)));
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(0),
+            VirtualRegisterMappingInfo::Unmapped(calleeFunctionObjectValue.GetOperand()));
     }
     else
     {
         // For closure call, the function object is the direct output of the prologue
         //
         calleeFunctionObjectValue = Value(prologue, 0 /*outputOrd*/);
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(0),
+            VirtualRegisterMappingInfo::VReg(newFrame->GetClosureCallFunctionObjectRegister()));
     }
 
     Value numVariadicArgumentsValue;
     if (newFrame->StaticallyKnowsNumVarArgs())
     {
         numVariadicArgumentsValue = m_graph->GetUnboxedConstant(newFrame->GetNumVarArgs());
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(1),
+            VirtualRegisterMappingInfo::Unmapped(numVariadicArgumentsValue.GetOperand()));
     }
     else
     {
@@ -888,6 +861,10 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         Node* numVarArgsNode = Node::CreateI64SubSaturateToZeroNode(Value(getVRLengthNode, 0 /*outputOrd*/), valToSubtract);
         m_bbContext->SetupNodeCommonInfoAndPushBack(numVarArgsNode);
         numVariadicArgumentsValue = Value(numVarArgsNode, 0 /*outputOrd*/);
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(1),
+            VirtualRegisterMappingInfo::VReg(newFrame->GetNumVarArgsRegister()));
     }
 
     Value sfHdrReturnAddrValue;
@@ -909,7 +886,20 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             //
             sfHdrReturnAddrValue = m_graph->GetUnboxedConstant(0);
         }
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(2),
+            VirtualRegisterMappingInfo::Unmapped(sfHdrReturnAddrValue.GetOperand()));
+
+        newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
+            newFrame->GetInterpreterSlotForStackFrameHeader(3),
+            VirtualRegisterMappingInfo::Unmapped(sfHdrCallerInterpreterBaseSlot.GetOperand()));
     }
+
+    // At this point everything before the newFrame's FrameBase should have been set up
+    // Assert that we have indeed set up everything
+    //
+    newFrame->AssertVirtualRegisterMappingBeforeThisFrameComplete();
 
     // As soon as we start emitting ShadowStores, OSR exit is no longer allowed
     //

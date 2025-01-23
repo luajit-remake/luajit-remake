@@ -2453,7 +2453,7 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             fprintf(fp, "        {\n");
             fprintf(fp, "            uint8_t value = UnalignedLoad<uint8_t>(nsdPtr + %u);\n", static_cast<unsigned int>(curNsdOffset));
             fprintf(fp, "            if (shouldPrefixCommaOnFirstItem) { fprintf(file, \", \"); }\n");
-            fprintf(fp, "            fprintf(file, \"variantOrd=%%d\", static_cast<int>(value));\n");
+            fprintf(fp, "            fprintf(file, \"bcVariantOrd=%%d\", static_cast<int>(value));\n");
             fprintf(fp, "        }\n");
             curNsdOffset += sizeof(uint8_t);
             for (size_t i = 0; i < bytecodeDef.m_variants[0]->m_list.size(); i++)
