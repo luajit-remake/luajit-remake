@@ -82,10 +82,9 @@ struct InterpreterFrameLocation
     bool IsFunctionObjectLoc() { return m_value == x_functionObjectSlot; }
     bool IsNumVarArgsLoc() { return m_value == x_numVarArgsSlot; }
 
-    friend bool operator==(const InterpreterFrameLocation& a, const InterpreterFrameLocation& b)
-    {
-        return a.m_value == b.m_value;
-    }
+    bool ALWAYS_INLINE operator==(const InterpreterFrameLocation&) const = default;
+
+    int32_t GetRawValue() { return m_value; }
 
 private:
     constexpr static int32_t x_functionObjectSlot = -1;

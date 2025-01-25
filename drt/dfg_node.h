@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "tvalue.h"
+#include "dfg_reg_alloc_register_info.h"
 #include "dfg_arena.h"
 #include "dfg_logical_variable_info.h"
 #include "dfg_virtual_register.h"
@@ -1021,10 +1022,29 @@ public:
         return ord < 0;
     }
 
+    int64_t GetOrdInConstantTable()
+    {
+        TestAssert(IsConstantNode() || IsUnboxedConstantNode());
+        TestAssert(IsOrdInConstantTableAssigned());
+        return GetBuiltinNodeInlinedNsdRefAs<int64_t>();
+    }
+
     void AssignConstantNodeOrdInConstantTable(int64_t ord)
     {
         TestAssert(IsConstantNode() || IsUnboxedConstantNode());
         TestAssert(!IsOrdInConstantTableAssigned());
+        TestAssert(ord < 0);
+        GetBuiltinNodeInlinedNsdRefAs<int64_t>() = ord;
+    }
+
+    // Ugly: since we want to collect the boxed values and unboxed values separately,
+    // the ordinal for an unboxed value will depend on how many boxed value constants we have in total,
+    // so we need this fixup function..
+    //
+    void ModifyConstantNodeOrdInConstantTable(int64_t ord)
+    {
+        TestAssert(IsUnboxedConstantNode());
+        TestAssert(IsOrdInConstantTableAssigned());
         TestAssert(ord < 0);
         GetBuiltinNodeInlinedNsdRefAs<int64_t>() = ord;
     }
@@ -2619,6 +2639,8 @@ private:
         //
         m_totalNumLocals = 1;
         m_totalNumInterpreterSlots = 0;
+
+        m_argumentCacheMap.resize(rootCodeBlock->m_numFixedArguments, nullptr /*value*/);
     }
 
 public:
@@ -2680,11 +2702,7 @@ public:
 
     Value WARN_UNUSED GetArgumentNode(size_t argOrd)
     {
-        if (argOrd >= m_argumentCacheMap.size())
-        {
-            m_argumentCacheMap.resize(argOrd + 1, nullptr);
-        }
-        Assert(argOrd < m_argumentCacheMap.size());
+        TestAssert(argOrd < m_argumentCacheMap.size());
         if (m_argumentCacheMap[argOrd] == nullptr)
         {
             m_argumentCacheMap[argOrd] = Node::CreateArgumentNode(argOrd);
@@ -2729,6 +2747,11 @@ public:
     {
         if (varArgOrd >= m_variadicArgumentCacheMap.size())
         {
+            if (varArgOrd + 1 > m_variadicArgumentCacheMap.capacity())
+            {
+                size_t desiredCapacity = std::max(m_variadicArgumentCacheMap.capacity() * 3 / 2, varArgOrd + 1);
+                m_variadicArgumentCacheMap.reserve(desiredCapacity);
+            }
             m_variadicArgumentCacheMap.resize(varArgOrd + 1, nullptr);
         }
         Assert(varArgOrd < m_variadicArgumentCacheMap.size());
@@ -2855,6 +2878,24 @@ public:
     uint32_t GetTotalNumInterpreterSlots()
     {
         return m_totalNumInterpreterSlots;
+    }
+
+    uint32_t GetNumFixedArgsInRootFunction()
+    {
+        return SafeIntegerCast<uint32_t>(m_argumentCacheMap.size());
+    }
+
+    uint32_t GetRegSpillAreaNumSlots()
+    {
+        return x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs;
+    }
+
+    // The DFG stack layout starts with fixedArgs and regSpillArea, then locals
+    // For more info, see DfgCodeBlock on the DFG stack physical layout
+    //
+    uint32_t GetFirstDfgPhysicalSlotForLocal()
+    {
+        return GetNumFixedArgsInRootFunction() + GetRegSpillAreaNumSlots();
     }
 
     void RegisterLogicalVariable(LogicalVariableInfo* info)

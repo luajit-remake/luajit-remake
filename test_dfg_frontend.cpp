@@ -10,6 +10,7 @@
 #include "dfg_phantom_insertion.h"
 #include "dfg_prediction_propagation.h"
 #include "dfg_speculation_assignment.h"
+#include "dfg_stack_layout_planning.h"
 
 using namespace dfg;
 
@@ -481,6 +482,7 @@ TEST(DfgFrontend, Parser_Stress_1)
             RunSpeculationAssignmentPass(graph.get());
 
             RunPhantomInsertionPass(graph.get());
+            std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
         }
     }
@@ -562,6 +564,8 @@ static void TestDfgFrontendWithRealCallIcInfo(std::string fileName, int randomly
             ReleaseAssert(false);
         }
         RunPhantomInsertionPass(graph.get());
+        TempArenaAllocator alloc;
+        std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
         ReleaseAssert(ValidateDfgIrGraph(graph.get()));
     }
 }
@@ -697,6 +701,8 @@ static void TestDfgFrontendWithRandomCallIcInfo(VM* vm, std::vector<std::string>
             ReleaseAssert(false);
         }
         RunPhantomInsertionPass(graph.get());
+        TempArenaAllocator alloc;
+        std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
         ReleaseAssert(ValidateDfgIrGraph(graph.get()));
     }
 }

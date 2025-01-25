@@ -24,6 +24,7 @@ add_library(deegen_rt
 	jit_inline_cache_utils.cpp
 	dfg_prediction_propagation.cpp
 	dfg_speculation_assignment.cpp
+	dfg_stack_layout_planning.cpp
 )
 
 add_dependencies(deegen_rt 
