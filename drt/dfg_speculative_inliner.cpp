@@ -530,6 +530,44 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
         canReuseRangeArgRegs = true;
     }
 
+    // The number of locals in the current frame that survives (i.e., is not touched by) the call
+    // For tail-call, this is 0.
+    // For in-place call, this is all locals before where the call starts.
+    // For other cases, all locals survive.
+    //
+    size_t numSurvivingLocalsInCurrentFrame = 0;
+    BitVectorView parentFrameLocalLiveness(nullptr, 0);
+    if (!trait->m_isTailCall)
+    {
+        if (trait->m_isInPlaceCall)
+        {
+            TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
+            numSurvivingLocalsInCurrentFrame = rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader;
+            TestAssert(numSurvivingLocalsInCurrentFrame <= m_baselineCodeBlock->m_stackFrameNumSlots);
+        }
+        else
+        {
+            numSurvivingLocalsInCurrentFrame = m_baselineCodeBlock->m_stackFrameNumSlots;
+        }
+
+        // Check if each local is live at the call site
+        // If the call has trivial return continuation, we can use AfterUse point since we know
+        // the return continuation will not access any of the inputs. Otherwise, we need to
+        // conservatively use the BeforeUse point.
+        //
+        BytecodeLiveness::CalculationPoint calculationPoint;
+        if (trait->m_rcTrivialness == BytecodeSpeculativeInliningTrait::TrivialRCKind::NotTrivial)
+        {
+            calculationPoint = BytecodeLiveness::BeforeUse;
+        }
+        else
+        {
+            calculationPoint = BytecodeLiveness::AfterUse;
+        }
+        BytecodeLiveness& livenessInfo = m_inlinedCallFrame->BytecodeLivenessInfo();
+        parentFrameLocalLiveness = livenessInfo.GetLiveness(bcIndex, calculationPoint);
+    }
+
     // Free up invalidated virtual registers in the current call frame, to make the total # of virtual registers as small as possible
     //
     if (trait->m_isTailCall)
@@ -574,28 +612,43 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             }
         }
     }
-    else if (trait->m_isInPlaceCall)
+    else
     {
-        // For in-place call, free every virtual register >= where the call starts except those to be reused for the new frame
-        //
-        TestAssert(trait->m_hasRangeArgs && canReuseRangeArgRegs);
-        TestAssert(trait->m_rangeLocationInArgs == 0);
-        TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-        size_t localOrdForCallStart = rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader;
-        for (size_t localOrd = localOrdForCallStart; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
+        if (trait->m_isInPlaceCall)
         {
-            // Similar to above, if the ordinal is indeed one of the range args,
-            // and the ordinal is passed to the callee as argument or vararg without being discarded,
-            // then the virtual register can be reused
+            // For in-place call, free every virtual register >= where the call starts except those to be reused for the new frame
             //
-            if (rangeArgInfo.m_rangeStart <= localOrd &&
-                localOrd < rangeArgInfo.m_rangeStart + rangeArgInfo.m_rangeLen &&
-                trait->m_rangeLocationInArgs + (localOrd - rangeArgInfo.m_rangeStart) < argValueListLength)
+            TestAssert(trait->m_hasRangeArgs && canReuseRangeArgRegs);
+            TestAssert(trait->m_rangeLocationInArgs == 0);
+            TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
+            size_t localOrdForCallStart = rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader;
+            TestAssert(numSurvivingLocalsInCurrentFrame == localOrdForCallStart);
+            for (size_t localOrd = localOrdForCallStart; localOrd < m_baselineCodeBlock->m_stackFrameNumSlots; localOrd++)
             {
-                // This virtual register can be directly passed to callee
+                // Similar to above, if the ordinal is indeed one of the range args,
+                // and the ordinal is passed to the callee as argument or vararg without being discarded,
+                // then the virtual register can be reused
                 //
+                if (rangeArgInfo.m_rangeStart <= localOrd &&
+                    localOrd < rangeArgInfo.m_rangeStart + rangeArgInfo.m_rangeLen &&
+                    trait->m_rangeLocationInArgs + (localOrd - rangeArgInfo.m_rangeStart) < argValueListLength)
+                {
+                    // This virtual register can be directly passed to callee
+                    //
+                }
+                else
+                {
+                    tfCtx.m_vrState.Deallocate(m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd));
+                }
             }
-            else
+        }
+
+        // For each local in the parent frame not touched by the call,
+        // we can also reuse its virtual register if we know it is dead
+        //
+        for (size_t localOrd = 0; localOrd < numSurvivingLocalsInCurrentFrame; localOrd++)
+        {
+            if (!parentFrameLocalLiveness.IsSet(localOrd))
             {
                 tfCtx.m_vrState.Deallocate(m_inlinedCallFrame->GetRegisterForLocalOrd(localOrd));
             }
@@ -753,40 +806,11 @@ bool WARN_UNUSED SpeculativeInliner::TrySpeculativeInliningSlowPath(Node* prolog
             }
 #endif
 
-            // Set up the mapping for the local variable part of the current frame
-            // For in-place call, this means all the locals before the in-place call-frame starts
-            // For normal call, this means all the locals
+            // Set up the mapping for the local variables of the current frame not touched by the call
             //
-            size_t numLocalsToPopulate;
-            if (trait->m_isInPlaceCall)
+            for (size_t localOrd = 0; localOrd < numSurvivingLocalsInCurrentFrame; localOrd++)
             {
-                TestAssert(rangeArgInfo.m_rangeStart >= x_numSlotsForStackFrameHeader);
-                numLocalsToPopulate = rangeArgInfo.m_rangeStart - x_numSlotsForStackFrameHeader;
-                TestAssert(numLocalsToPopulate <= m_baselineCodeBlock->m_stackFrameNumSlots);
-            }
-            else
-            {
-                numLocalsToPopulate = m_baselineCodeBlock->m_stackFrameNumSlots;
-            }
-
-            // Check if each local is live at the call site
-            // If the call has trivial return continuation, we can use AfterUse point since we know
-            // the return continuation will not access any of the inputs. Otherwise, we need to
-            // conservatively use the BeforeUse point.
-            //
-            BytecodeLiveness::CalculationPoint calculationPoint;
-            if (trait->m_rcTrivialness == BytecodeSpeculativeInliningTrait::TrivialRCKind::NotTrivial)
-            {
-                calculationPoint = BytecodeLiveness::BeforeUse;
-            }
-            else
-            {
-                calculationPoint = BytecodeLiveness::AfterUse;
-            }
-            BytecodeLiveness& livenessInfo = m_inlinedCallFrame->BytecodeLivenessInfo();
-            for (size_t localOrd = 0; localOrd < numLocalsToPopulate; localOrd++)
-            {
-                bool isLive = livenessInfo.IsBytecodeLocalLive(bcIndex, calculationPoint, localOrd);
+                bool isLive = parentFrameLocalLiveness.IsSet(localOrd);
                 if (!isLive)
                 {
                     newFrame->SetInterpreterSlotBeforeFrameBaseMapping(
