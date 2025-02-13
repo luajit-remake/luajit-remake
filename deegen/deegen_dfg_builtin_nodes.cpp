@@ -26,7 +26,17 @@ void DfgBuiltinNodeImplConstant::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", bb);
     bv->setAlignment(Align(8));
 
-    impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    ReleaseAssert(!JitGeneratedCodeInterface().IsRegisterUsedInInterface(x_dfg_custom_purpose_temp_reg));
+
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, bv);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplUnboxedConstant::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -48,7 +58,40 @@ void DfgBuiltinNodeImplUnboxedConstant::GenerateImpl(DfgBuiltinNodeImplCreator* 
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", bb);
     bv->setAlignment(Align(8));
 
-    impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, bv);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    }
+}
+
+void DfgBuiltinNodeImplUndefValue::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_llvmCtx;
+
+    ExecutorFunctionContext* funcCtx = impl->CreateFunction(ctx);
+    Function* func = funcCtx->GetFunction();
+    BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+
+    // UndefValue always becomes nil in JIT code
+    //
+    TValue nilVal = TValue::Create<tNil>();
+    Value* outputVal = CreateLLVMConstantInt<uint64_t>(ctx, nilVal.m_value);
+
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, outputVal);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(outputVal /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplArgument::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -72,7 +115,15 @@ void DfgBuiltinNodeImplArgument::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
     LoadInst* bv = new LoadInst(llvm_type_of<uint64_t>(ctx), bvPtr, "", bb);
     bv->setAlignment(Align(8));
 
-    impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, bv);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(bv /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplGetNumVariadicArgs::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -89,7 +140,15 @@ void DfgBuiltinNodeImplGetNumVariadicArgs::GenerateImpl(DfgBuiltinNodeImplCreato
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "GetNumVariadicArgs", { stackBase }, bb);
     ReleaseAssert(llvm_value_has_type<uint64_t>(result));
 
-    impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, result);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplGetKthVariadicArg::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -108,7 +167,17 @@ void DfgBuiltinNodeImplGetKthVariadicArg::GenerateImpl(DfgBuiltinNodeImplCreator
         0 /*valueLb*/, BcOpSlot::x_localOrdinalUpperBound, bb);
 
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "GetKthVariadicArg", { stackBase, argOrd }, bb);
-    impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(result));
+
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, result);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplGetFunctionObject::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -125,7 +194,17 @@ void DfgBuiltinNodeImplGetFunctionObject::GenerateImpl(DfgBuiltinNodeImplCreator
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "GetFunctionObjectHeapPtrFromStackBase", { stackBase }, bb);
     ReleaseAssert(llvm_value_has_type<HeapPtr<void>>(result));
 
-    impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    result = new PtrToIntInst(result, llvm_type_of<uint64_t>(ctx), "", bb);
+
+    if (m_toTempReg)
+    {
+        CallInst* ci = impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+        RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(ci, x_dfg_custom_purpose_temp_reg, result);
+    }
+    else
+    {
+        impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+    }
 }
 
 void DfgBuiltinNodeImplGetLocal::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -272,17 +351,17 @@ void DfgBuiltinNodeImplCreateVariadicRes_StoreInfo::GenerateImpl(DfgBuiltinNodeI
 
     Value* coroCtx = funcCtx->GetValueAtEntry<RPV_CoroContext>();
     Value* stackBase = funcCtx->GetValueAtEntry<RPV_StackBase>();
+    Value* codeBlock = funcCtx->GetValueAtEntry<RPV_CodeBlock>();
 
-    Value* numFixedVR = impl->AddLiteralOperandForCustomInterface<uint64_t>(1 /*valueLb*/, BcOpSlot::x_localOrdinalUpperBound, bb);
-    Value* slotOrd = impl->AddLiteralOperandForCustomInterface<int64_t>(BcOpConstant::x_constantTableOrdLowerBound, BcOpSlot::x_localOrdinalUpperBound, bb);
-
+    Value* numFixedVR = impl->AddLiteralOperandForCustomInterface<uint64_t>(0 /*valueLb*/, BcOpSlot::x_localOrdinalUpperBound, bb);
     Value* numNonFixedVR = impl->EmitGetOperand(llvm_type_of<uint64_t>(ctx), 0 /*opOrd*/, bb);
 
     Value* numVR = CreateUnsignedAddNoOverflow(numFixedVR, numNonFixedVR, bb);
 
-    CreateCallToDeegenCommonSnippet(impl->GetModule(), "SetUpVariadicResultInfo", { coroCtx, stackBase, slotOrd, numVR }, bb);
+    Value* varResStart = CreateCallToDeegenCommonSnippet(impl->GetModule(), "SetUpVariadicResultInfo", { coroCtx, stackBase, codeBlock, numVR }, bb);
+    ReleaseAssert(llvm_value_has_type<void*>(varResStart));
 
-    impl->CreateDispatchToFallthrough(nullptr /*outputVal*/, bb);
+    impl->CreateDispatchToFallthrough(varResStart /*outputVal*/, bb);
 }
 
 void DfgBuiltinNodeImplPrependVariadicRes_MoveAndStoreInfo::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -398,6 +477,27 @@ void DfgBuiltinNodeImplCreateFunctionObject_BoxFunctionObject::GenerateImpl(DfgB
 
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "BoxFunctionObjectRawPointerToTValue", { funcObjPtr }, bb);
     ReleaseAssert(llvm_value_has_type<uint64_t>(result));
+
+    impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
+}
+
+void DfgBuiltinNodeImplCreateFunctionObject_BoxFnObjAndWriteSelfRefUv::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
+{
+    using namespace llvm;
+    LLVMContext& ctx = m_llvmCtx;
+
+    ExecutorFunctionContext* funcCtx = impl->CreateFunction(ctx);
+    Function* func = funcCtx->GetFunction();
+    BasicBlock* bb = BasicBlock::Create(ctx, "", func);
+
+    Value* funcObjPtr = impl->EmitGetOperand(llvm_type_of<void*>(ctx), 0 /*opOrd*/, bb);
+    Value* byteOffset = impl->AddLiteralOperandForCustomInterface<uint64_t>(0 /*valueLb*/, FunctionObject::GetUpvalueAddrByteOffsetFromThisPointer(FunctionObject::x_maxNumUpvalues), bb);
+
+    Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "BoxFunctionObjectRawPointerToTValue", { funcObjPtr }, bb);
+    ReleaseAssert(llvm_value_has_type<uint64_t>(result));
+
+    Value* uvAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), funcObjPtr, { byteOffset }, "", bb);
+    new StoreInst(result, uvAddr, bb);
 
     impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
 }

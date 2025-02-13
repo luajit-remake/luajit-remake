@@ -183,4 +183,62 @@ inline UseKind WARN_UNUSED GetCheapestSpecWithinMaskCoveringExistingSpec(TypeMas
     return useKind;
 }
 
+inline const DfgVariantTraits* GetTypeCheckCodegenInfoForUseKind(UseKind useKind)
+{
+    TestAssert(useKind >= UseKind_FirstUnprovenUseKind);
+    TestAssert(useKind < UseKind_X_END_OF_ENUM);
+    static_assert(x_dfg_typecheck_impl_codegen_handler.size() == static_cast<size_t>(UseKind_X_END_OF_ENUM) - static_cast<size_t>(UseKind_FirstUnprovenUseKind));
+    size_t idx = static_cast<size_t>(useKind) - static_cast<size_t>(UseKind_FirstUnprovenUseKind);
+    return x_dfg_typecheck_impl_codegen_handler[idx];
+}
+
+// 'useKind' should require a check. Return whether the operand should sit in GPR or FPR.
+//
+inline bool ShouldTypeCheckOperandUseGPR(UseKind useKind)
+{
+    TestAssert(UseKindRequiresNonTrivialRuntimeCheck(useKind));
+    const DfgVariantTraits* info = GetTypeCheckCodegenInfoForUseKind(useKind);
+    TestAssert(info->IsRegAllocEnabled());
+    TestAssert(info->NumOperandsForRA() == 1);
+    DfgNodeOperandRegBankPref pref = info->Operand(0);
+    TestAssert(pref.Valid());
+    TestAssert(pref.GprAllowed() || pref.FprAllowed());
+    // Each type check should always specify either GPR or FPR, not both
+    //
+    TestAssert(!pref.HasChoices());
+    bool mustUseGpr = pref.GprAllowed();
+    return mustUseGpr;
+}
+
+// May return nullptr if the builtin node kind requires complex handling
+//
+inline const DfgVariantTraits* GetCodegenInfoForBuiltinNodeKind(NodeKind nodeKind)
+{
+    TestAssert(nodeKind < NodeKind_FirstAvailableGuestLanguageNodeKind);
+    static_assert(x_dfg_builtin_node_standard_codegen_handler.size() == static_cast<size_t>(NodeKind_FirstAvailableGuestLanguageNodeKind));
+    return x_dfg_builtin_node_standard_codegen_handler[static_cast<size_t>(nodeKind)];
+}
+
+inline DfgCodegenFuncOrd GetCodegenFnForMaterializingConstant(NodeKind nodeKind, ConstantLikeNodeMaterializeLocation destLoc)
+{
+    static_assert(x_dfg_codegen_info_for_constant_like_nodes.size() == x_numTotalDfgConstantLikeNodeKinds);
+    static_assert(x_dfg_codegen_info_for_constant_like_nodes[0].size() == static_cast<size_t>(ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM));
+    TestAssert(IsDfgNodeKindConstantLikeNodeKind(nodeKind) && destLoc < ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM);
+
+    size_t nodeKindIdx = static_cast<size_t>(nodeKind);
+    size_t destLocIdx = static_cast<size_t>(destLoc);
+    TestAssert(nodeKindIdx < x_dfg_codegen_info_for_constant_like_nodes.size());
+    TestAssert(destLocIdx < x_dfg_codegen_info_for_constant_like_nodes[nodeKindIdx].size());
+    DfgCodegenFuncOrd res = x_dfg_codegen_info_for_constant_like_nodes[nodeKindIdx][destLocIdx];
+    TestAssert(static_cast<size_t>(res) < x_dfgOpcodeJitCodeSizeInfoTable.size());
+    return res;
+}
+
+inline const DfgVariantTraits* GetCodegenInfoForCustomBuiltinNodeLogicFragment(DfgBuiltinNodeCustomCgFn kind)
+{
+    static_assert(x_dfg_builtin_node_custom_codegen_handler.size() == static_cast<size_t>(DfgBuiltinNodeCustomCgFn::X_END_OF_ENUM));
+    TestAssert(kind < DfgBuiltinNodeCustomCgFn::X_END_OF_ENUM);
+    return x_dfg_builtin_node_custom_codegen_handler[static_cast<size_t>(kind)];
+}
+
 }   // namespace dfg

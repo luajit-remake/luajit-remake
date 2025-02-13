@@ -198,14 +198,15 @@ struct StackLayoutPlanningPass
         r.m_inlineFrameOsrInfoOffsets = pass.m_inlineFrameOsrInfoOffsets;
         r.m_inlineFrameOsrInfoDataBlock = pass.m_inlineFrameOsrInfoData;
         r.m_m_inlineFrameOsrInfoDataBlockSize = pass.m_inlineFrameOsrInfoDataSize;
-        r.m_numTotalPhysicalSlots = pass.m_numTotalPhysicalSlots;
         r.m_numTotalBoxedConstants = pass.m_numBoxedConstants;
 
         TestAssert(r.m_inlineFrameOsrInfoOffsets != nullptr);
         TestAssert(r.m_inlineFrameOsrInfoDataBlock != nullptr);
         TestAssert(r.m_m_inlineFrameOsrInfoDataBlockSize != static_cast<uint32_t>(-1));
-        TestAssert(r.m_numTotalPhysicalSlots != static_cast<uint32_t>(-1));
         TestAssert(r.m_numTotalBoxedConstants != static_cast<uint32_t>(-1));
+
+        TestAssert(pass.m_numTotalPhysicalSlots != static_cast<uint32_t>(-1));
+        graph->SetFirstPhysicalSlotForTemps(pass.m_numTotalPhysicalSlots);
 
         return r;
     }
@@ -254,15 +255,16 @@ private:
     {
         TestAssert(m_numBoxedConstants == static_cast<uint32_t>(-1));
         m_numBoxedConstants = SafeIntegerCast<uint32_t>(m_finalConstantTable.size());
+        size_t numUnboxedConstants = m_constantTableForUnboxedConstants.size();
         m_finalConstantTable.insert(m_finalConstantTable.end(),
                                     m_constantTableForUnboxedConstants.begin(),
                                     m_constantTableForUnboxedConstants.end());
 
-        if (m_finalConstantTable.size() >= 32768)
+        if (m_finalConstantTable.size() >= 32400)
         {
             // TODO: handle this gracefully
             //
-            fprintf(stderr, "[TODO][DFG] Too many constants (>=32768) in the constant table when compiling a function! "
+            fprintf(stderr, "[TODO][DFG] Too many constants (>=32400) in the constant table when compiling a function! "
                             "Need to handle this gracefully, but it's not done yet so abort now.\n");
             abort();
         }
@@ -278,6 +280,8 @@ private:
 
         m_constantTableForUnboxedConstants.clear();
         m_unboxedConstantsToFix.clear();
+
+        m_graph->FinalizeConstantTableAndRemoveUnusedConstants(m_numBoxedConstants, numUnboxedConstants);
     }
 
     void ALWAYS_INLINE RunPassImpl()
@@ -648,11 +652,11 @@ private:
 
         TestAssert(m_numTotalPhysicalSlots >= m_graph->GetFirstDfgPhysicalSlotForLocal());
 
-        if (m_numTotalPhysicalSlots >= 32768)
+        if (m_numTotalPhysicalSlots >= 32400)
         {
             // TODO: handle this gracefully
             //
-            fprintf(stderr, "[TODO][DFG] Too many physical slots (>=32768) needed when compiling a function! "
+            fprintf(stderr, "[TODO][DFG] Too many physical slots (>=32400) needed when compiling a function! "
                             "Need to handle this gracefully, but it's not done yet so abort now.\n");
             abort();
         }
@@ -736,10 +740,16 @@ private:
             }
             uint64_t* fakeConstantTableEnd = fakeConstantTable + m_finalConstantTable.size();
 
+            // Check that the # of interpreter frame slots recorded in Graph agrees with our record
+            //
+            size_t maxTotalInterpreterFrameNumSlots = 0;
+
             for (size_t inlinedCallFrameOrd = 0; inlinedCallFrameOrd < m_graph->GetNumInlinedCallFrames(); inlinedCallFrameOrd++)
             {
                 DfgInlinedCallFrameOsrInfo* info = std::launder(
                     reinterpret_cast<DfgInlinedCallFrameOsrInfo*>(m_inlineFrameOsrInfoData + m_inlineFrameOsrInfoOffsets[inlinedCallFrameOrd]));
+
+                maxTotalInterpreterFrameNumSlots = std::max(maxTotalInterpreterFrameNumSlots, info->GetInterpreterFramesTotalNumSlots());
 
                 for (size_t i = 0; i < info->m_frameFullLength; i++)
                 {
@@ -839,6 +849,41 @@ private:
                 for (size_t value = m_graph->GetFirstDfgPhysicalSlotForLocal(); value < frameInfo->m_totalPhysicalSlots; value++)
                 {
                     TestAssert(checkPhySlotUnique.count(value));
+                }
+            }
+
+            TestAssert(m_graph->GetTotalNumInterpreterSlots() == maxTotalInterpreterFrameNumSlots);
+            // TODO: we have tons of slightly different (a bit smaller than 32767, but differ by exactly how much smaller)
+            // assumptions about maximum number of slots across the codebase..
+            // We should figure out the exact number and has a single check somewhere that checks that number and reports error
+            //
+            TestAssert(m_graph->GetTotalNumInterpreterSlots() <= 32765);
+
+            // All constants should have been assigned an unique ordinal
+            //
+            {
+                TempUnorderedSet<int64_t> usedConstantTableOrds(m_tempAlloc);
+                m_graph->ForEachBoxedConstantNode(
+                    [&](Node* node) ALWAYS_INLINE
+                    {
+                        TestAssert(node->IsOrdInConstantTableAssigned());
+                        int64_t ord = node->GetOrdInConstantTable();
+                        TestAssert(!usedConstantTableOrds.count(ord));
+                        usedConstantTableOrds.insert(ord);
+                    });
+                m_graph->ForEachUnboxedConstantNode(
+                    [&](Node* node) ALWAYS_INLINE
+                    {
+                        TestAssert(node->IsOrdInConstantTableAssigned());
+                        int64_t ord = node->GetOrdInConstantTable();
+                        TestAssert(!usedConstantTableOrds.count(ord));
+                        usedConstantTableOrds.insert(ord);
+                    });
+
+                TestAssert(usedConstantTableOrds.size() == m_finalConstantTable.size());
+                for (int64_t val = -static_cast<int64_t>(m_finalConstantTable.size()); val < 0; val++)
+                {
+                    TestAssert(usedConstantTableOrds.count(val));
                 }
             }
         }

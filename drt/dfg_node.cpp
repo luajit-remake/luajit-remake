@@ -36,9 +36,11 @@ void NodeRangeOperandInfoDecoder::Query(Node* node)
         size_t requiredBufferSize = node->GetNumInputs();
         if (unlikely(requiredBufferSize > m_inputResultBuffer.size()))
         {
-            m_inputResultBuffer.resize(requiredBufferSize);
+            GrowVectorToAtLeast(m_inputResultBuffer, requiredBufferSize, 0U /*value*/);
             m_inputOffsets = m_inputResultBuffer.data();
         }
+        // The passed-in 'm_numInputs' is the size of the buffer for assertion purpose
+        //
         m_numInputs = m_inputResultBuffer.size();
     }
 
@@ -46,9 +48,11 @@ void NodeRangeOperandInfoDecoder::Query(Node* node)
         size_t requiredBufferSize = node->GetNumExtraOutputs();
         if (unlikely(requiredBufferSize > m_outputResultBuffer.size()))
         {
-            m_outputResultBuffer.resize(requiredBufferSize);
+            GrowVectorToAtLeast(m_outputResultBuffer, requiredBufferSize, 0U /*value*/);
             m_outputOffsets = m_outputResultBuffer.data();
         }
+        // The passed-in 'm_numOutputs' is the size of the buffer for assertion purpose
+        //
         m_numOutputs = m_outputResultBuffer.size();
     }
 

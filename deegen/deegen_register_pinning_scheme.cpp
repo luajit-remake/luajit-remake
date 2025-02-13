@@ -499,6 +499,14 @@ void RegisterPinningScheme::SetExtraDispatchArgument(llvm::CallInst* callInst, X
     SetExtraDispatchArgument(callInst, argOrd, newVal);
 }
 
+void RegisterPinningScheme::SetExtraDispatchArgumentWithCastFromI64(llvm::CallInst* callInst, X64Reg reg, llvm::Value* newVal)
+{
+    ReleaseAssert(llvm_value_has_type<uint64_t>(newVal));
+    uint32_t argOrd = GetArgumentOrdinalForRegister(reg);
+    newVal = EmitCastI64ToArgumentType(newVal, argOrd, callInst /*insertBefore*/);
+    SetExtraDispatchArgument(callInst, argOrd, newVal);
+}
+
 llvm::CallInst* RegisterPinningScheme::CreateDispatchWithAllUndefArgs(llvm::Value* target, llvm::Instruction* insertBefore)
 {
     using namespace llvm;

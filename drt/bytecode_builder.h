@@ -754,6 +754,14 @@ private:
         return res;
     }();
 
+    static constexpr std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_numFixedSSAOperandsForEachBcKind = []() {
+        std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
+#define macro(e) res[static_cast<size_t>(BCKind::e)] = DeegenGenerated_BytecodeBuilder_ ##e <BytecodeAccessor<isDecodingMode>>::x_numFixedSSAOperands;
+        PP_FOR_EACH(macro, GENERATED_ALL_BYTECODE_BUILDER_BYTECODE_NAMES)
+#undef macro
+        return res;
+    }();
+
     static constexpr std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> x_bcKindDfgNsdLengthArray = []() {
         std::array<uint8_t, static_cast<size_t>(BCKind::X_END_OF_ENUM)> res;
 #define macro(e)                                                                                                                        \
@@ -889,6 +897,15 @@ public:
         Assert(isDecodingMode);
         TestAssert(bcKind < BCKind::X_END_OF_ENUM);
         return x_dfgRangeOpRWInfoGetterArrays[static_cast<size_t>(bcKind)] != nullptr;
+    }
+
+    // The number of SSA operands not considering the range operands
+    //
+    static uint8_t ALWAYS_INLINE BytecodeNumFixedSSAOperands(BCKind bcKind)
+    {
+        Assert(isDecodingMode);
+        TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+        return x_numFixedSSAOperandsForEachBcKind[static_cast<size_t>(bcKind)];
     }
 };
 

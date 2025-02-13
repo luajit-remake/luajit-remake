@@ -1,7 +1,7 @@
 #include "define_deegen_common_snippet.h"
-#include "dfg_reg_alloc_node_info.h"
+#include "dfg_reg_alloc_state.h"
 
-static size_t DeegenSnippet_GetDfgNodePhysicalSlotForOutput(dfg::NodeRegAllocInfo* node)
+static size_t DeegenSnippet_GetDfgNodePhysicalSlotForOutput(dfg::NodeOperandConfigData* node)
 {
     return node->GetOutputPhysicalSlot();
 }

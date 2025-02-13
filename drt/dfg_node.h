@@ -99,13 +99,16 @@ private:
     void* m_ptr;
 };
 
+struct RegBankAvailabilityInfo;
+struct ValueRegAllocInfo;
+
 struct Node
 {
     MAKE_NONCOPYABLE(Node);
     MAKE_NONMOVABLE(Node);
 
 private:
-    friend class Arena;                 // this class should only be alloc'ed in DFG arena
+    friend Arena;                 // this class should only be alloc'ed in DFG arena
 
     Node(NodeKind kind)
         : m_nodeKind(kind)
@@ -125,7 +128,7 @@ private:
     }
 
 public:
-    friend struct Graph;
+    friend Graph;
 
     // The bit field that carries the varies flags
     //
@@ -329,6 +332,30 @@ public:
         Flags_DfgVariantOrd::Set(m_flags, val);
     }
 
+    // If this node is eligible for reg alloc, has an output, and the output may be put into either GPR or FPR,
+    // this flag records our decision on if it should be put into GPR or FPR
+    //
+    // Note that this flag does not make sense for constant-like node: this flag only matters since we need
+    // to know the decision when we codegen this node, but constant-like nodes cannot show up in the basic block,
+    // so they are only materialized when they are actually used, at which point the use edge will tell us
+    // the register bank decision
+    //
+    using Flags_OutputUseGPR = BitFieldMember<FlagsTy, bool, 27 /*start*/, 1 /*width*/>;
+
+    void SetOutputRegisterBankDecision(bool shouldUseGPR)
+    {
+        TestAssert(HasDirectOutput());
+        TestAssert(!IsConstantLikeNode());
+        Flags_OutputUseGPR::Set(m_flags, shouldUseGPR);
+    }
+
+    bool ShouldOutputRegisterBankUseGPR()
+    {
+        TestAssert(HasDirectOutput());
+        TestAssert(!IsConstantLikeNode());
+        return Flags_OutputUseGPR::Get(m_flags);
+    }
+
     // Get the total number of possible destinations where this node may transfer control to.
     //
     size_t GetNumNodeControlFlowSuccessors()
@@ -393,6 +420,7 @@ public:
             BFM_maybeInvalidBoxedValue::Set(encodedVal, maybeInvalidBoxedValue);
             BFM_predictionIsDoubleNotNaN::Set(encodedVal, false);
             BFM_isLastUse::Set(encodedVal, false);
+            BFM_shouldUseGpr::Set(encodedVal, true);
             m_encodedVal = encodedVal;
         }
 
@@ -406,6 +434,7 @@ public:
             BFM_maybeInvalidBoxedValue::Set(encodedVal, true);
             BFM_predictionIsDoubleNotNaN::Set(encodedVal, false);
             BFM_isLastUse::Set(encodedVal, false);
+            BFM_shouldUseGpr::Set(encodedVal, true);
             m_encodedVal = encodedVal;
         }
 
@@ -485,6 +514,13 @@ public:
             return UseKindRequiresNonTrivialRuntimeCheck(GetUseKind());
         }
 
+        // Note that this returns whether the operand should be in GPR to execute the *node*
+        // To determine whether the operand should be in GPR to execute the *typecheck*,
+        // use ShouldTypeCheckOperandUseGPR(GetUseKind()) instead
+        //
+        void SetShouldUseGPR(bool shouldUseGPR) { BFM_shouldUseGpr::Set(m_encodedVal, shouldUseGPR); }
+        bool ShouldUseGPR() { return BFM_shouldUseGpr::Get(m_encodedVal); }
+
     private:
         // The Node target of this edge
         //
@@ -516,9 +552,14 @@ public:
         //
         using BFM_isLastUse = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 3 /*start*/, 1 /*width*/>;
 
-        // bit 4-15: the UseKind
+        // bit 4: only matters if the operand participates in register allocation and the node is fine with this operand in either GPR or FPR
+        // Denotes our decision to put this operand in GPR or FPR when codegen this node
         //
-        using BFM_useKind = BitFieldMember<uint16_t /*carrierType*/, UseKind /*type*/, 4 /*start*/, 12 /*width*/>;
+        using BFM_shouldUseGpr = BitFieldMember<uint16_t /*carrierType*/, bool /*type*/, 4 /*start*/, 1 /*width*/>;
+
+        // bit 5-15: the UseKind
+        //
+        using BFM_useKind = BitFieldMember<uint16_t /*carrierType*/, UseKind /*type*/, 5 /*start*/, 11 /*width*/>;
 
         uint16_t m_encodedVal;
     };
@@ -547,10 +588,7 @@ public:
     //
     bool IsConstantLikeNode()
     {
-#define macro(e) +1
-        constexpr uint16_t x_numConstantLikeNodeKinds =  PP_FOR_EACH(macro, DFG_CONSTANT_LIKE_NODE_KIND_LIST);
-#undef macro
-        return static_cast<uint16_t>(GetNodeKind()) < x_numConstantLikeNodeKinds;
+        return IsDfgNodeKindConstantLikeNodeKind(GetNodeKind());
     }
 
     // The NodeKind, must be first member!
@@ -920,6 +958,15 @@ public:
         {
             return GetNodeSpecificDataMustInlined();
         }
+    }
+
+    uint8_t* GetNodeSpecificDataOrNullptr()
+    {
+        if (!MayAccessGenericNodeSpecificData())
+        {
+            return nullptr;
+        }
+        return GetNodeSpecificData();
     }
 
     uint8_t* GetNodeSpecificDataMustInlined()
@@ -1411,6 +1458,7 @@ public:
     bool IsGetKthVariadicResNode() { return m_nodeKind == NodeKind_GetKthVariadicRes; }
     bool IsGetNumVariadicResNode() { return m_nodeKind == NodeKind_GetNumVariadicRes; }
     bool IsPrependVariadicResNode() { return m_nodeKind == NodeKind_PrependVariadicRes; }
+    bool IsCreateVariadicResNode() { return m_nodeKind == NodeKind_CreateVariadicRes; }
     bool IsCreateCapturedVarNode() { return m_nodeKind == NodeKind_CreateCapturedVar; }
     bool IsSetCapturedVarNode() { return m_nodeKind == NodeKind_SetCapturedVar; }
     bool IsGetCapturedVarNode() { return m_nodeKind == NodeKind_GetCapturedVar; }
@@ -1856,7 +1904,9 @@ public:
         Invalid,
         Replacement,
         Marker,
-        Predictions
+        Predictions,
+        RegBankInfo,
+        RegAllocInfo
     };
 
 private:
@@ -1871,6 +1921,12 @@ private:
         // Used by prediction propagation
         //
         TypeMaskTy* m_predictions;
+        // Used by register bank assignment pass
+        //
+        RegBankAvailabilityInfo* m_regBankInfo;
+        // Used by register allocation, info about each output of this node
+        //
+        ValueRegAllocInfo* m_regAllocValueUseInfo;
     };
 
     void SetHardpointKind([[maybe_unused]] HardpointKind kind)
@@ -1912,6 +1968,30 @@ public:
         Assert(m_initializedNumOutputs);
         TestAssert((outputOrd == 0 && HasDirectOutput()) || (1 <= outputOrd && outputOrd <= m_numExtraOutputs));
         return GetOutputPredictionsArray() + outputOrd;
+    }
+
+    void SetRegBankAvailabilityInfoArray(RegBankAvailabilityInfo* info)
+    {
+        SetHardpointKind(HardpointKind::RegBankInfo);
+        m_regBankInfo = info;
+    }
+
+    RegBankAvailabilityInfo* GetRegBankAvailabilityInfoArray()
+    {
+        TestAssert(m_hardpointKind == HardpointKind::RegBankInfo);
+        return m_regBankInfo;
+    }
+
+    void SetValueRegAllocInfo(ValueRegAllocInfo* info)
+    {
+        SetHardpointKind(HardpointKind::RegAllocInfo);
+        m_regAllocValueUseInfo = info;
+    }
+
+    ValueRegAllocInfo* GetValueRegAllocInfo()
+    {
+        TestAssert(m_hardpointKind == HardpointKind::RegAllocInfo);
+        return m_regAllocValueUseInfo;
     }
 
 private:
@@ -2040,8 +2120,8 @@ private:
         , m_compositeValue(0)
     { }
 
-    friend class ::TempArenaAllocator;
-    friend struct Graph;
+    friend TempArenaAllocator;
+    friend Graph;
 
     static Phi* Create(TempArenaAllocator& alloc, size_t numChildren, BasicBlock* bb, size_t localOrd, Node* node)
     {
@@ -2111,7 +2191,7 @@ struct BasicBlock
     MAKE_NONMOVABLE(BasicBlock);
 
 private:
-    friend class Arena;                 // this class should only be alloc'ed in DFG arena
+    friend Arena;                 // this class should only be alloc'ed in DFG arena
 
     BasicBlock()
         : m_localInfoAtHead(nullptr)
@@ -2481,6 +2561,7 @@ public:
             newCount++;
         }
 
+        TestAssert(newCount <= m_nodes.size());
         m_nodes.resize(newCount);
 
         if (GetNumSuccessors() != 1)
@@ -2498,7 +2579,7 @@ public:
         TestAssert(GetNumSuccessors() == 1 && GetSuccessor(0) == bb);
         TestAssert(bb->m_predecessors.size() == 1 && bb->m_predecessors[0] == this);
 
-        m_nodes.reserve(m_nodes.size() + bb->m_nodes.size());
+        ReserveCapacityForVectorWithExponentialGrowth(m_nodes, m_nodes.size() + bb->m_nodes.size());
 
         {
             // This is really ugly: we must special-case the PrependVariadicResNode that represents inheritance of the variadic
@@ -2618,11 +2699,17 @@ struct Graph
     }
 
 private:
-    friend class Arena;                 // this class should only be alloc'ed in DFG arena
+    friend Arena;                 // this class should only be alloc'ed in DFG arena
 
     Graph(CodeBlock* rootCodeBlock)
+        : m_rootCodeBlock(rootCodeBlock)
+        , m_totalNumLocals(1)       // Avoid corner case where we don't have any locals
+        , m_totalNumInterpreterSlots(0)
+        , m_firstPhysicalSlotForTemps(static_cast<uint32_t>(-1))
+        , m_graphForm(Form::PreUnification)
+        , m_isCfgAvailable(false)
+        , m_isConstantTableFinalized(false)
     {
-        m_rootCodeBlock = rootCodeBlock;
         m_undefValNode = Node::CreateUndefValueNode();
         m_functionObjectNode = Node::CreateGetFunctionObjectNode();
         if (rootCodeBlock->m_hasVariadicArguments)
@@ -2633,12 +2720,6 @@ private:
         {
             m_numVarArgsNode = GetUnboxedConstant(0).m_node;
         }
-        m_graphForm = Form::PreUnification;
-        m_isCfgAvailable = false;
-        // Avoid corner case where we don't have any locals
-        //
-        m_totalNumLocals = 1;
-        m_totalNumInterpreterSlots = 0;
 
         m_argumentCacheMap.resize(rootCodeBlock->m_numFixedArguments, nullptr /*value*/);
     }
@@ -2654,12 +2735,16 @@ public:
 
     Value WARN_UNUSED GetConstant(TValue value)
     {
+        // If the constant table has been finalized, it is not allowed to create new constants
+        //
+        TestAssert(!m_isConstantTableFinalized);
         Node*& r = m_constantCacheMap[value.m_value];
         if (r == nullptr)
         {
             r = Node::CreateConstantNode(value);
             m_constantList.push_back(r);
         }
+        Assert(m_constantList.size() == m_constantCacheMap.size());
         Assert(r != nullptr);
         return Value(r, 0 /*outputOrd*/);
     }
@@ -2679,6 +2764,9 @@ public:
 
     Value WARN_UNUSED GetUnboxedConstant(uint64_t value)
     {
+        // If the constant table has been finalized, it is not allowed to create new constants
+        //
+        TestAssert(!m_isConstantTableFinalized);
         Node*& r = m_unboxedConstantCacheMap[value];
         if (r == nullptr)
         {
@@ -2686,6 +2774,7 @@ public:
             m_unboxedConstantList.push_back(r);
         }
         Assert(r != nullptr);
+        Assert(m_unboxedConstantList.size() == m_unboxedConstantCacheMap.size());
         return Value(r, 0 /*outputOrd*/);
     }
 
@@ -2745,15 +2834,7 @@ public:
 
     Value WARN_UNUSED GetRootFunctionVariadicArg(size_t varArgOrd)
     {
-        if (varArgOrd >= m_variadicArgumentCacheMap.size())
-        {
-            if (varArgOrd + 1 > m_variadicArgumentCacheMap.capacity())
-            {
-                size_t desiredCapacity = std::max(m_variadicArgumentCacheMap.capacity() * 3 / 2, varArgOrd + 1);
-                m_variadicArgumentCacheMap.reserve(desiredCapacity);
-            }
-            m_variadicArgumentCacheMap.resize(varArgOrd + 1, nullptr);
-        }
+        GrowVectorToAtLeast(m_variadicArgumentCacheMap, varArgOrd + 1 /*desiredSize*/, nullptr /*initValue*/);
         Assert(varArgOrd < m_variadicArgumentCacheMap.size());
         if (m_variadicArgumentCacheMap[varArgOrd] == nullptr)
         {
@@ -2810,6 +2891,56 @@ public:
             // We have called 'func' on the UnboxedConstant node earlier, don't call it again
             //
             TestAssert(numVarArgs->m_nodeKind == NodeKind_UnboxedConstant);
+        }
+    }
+
+    // Prevent creation of new Constant/UnboxedConstant nodes.
+    // Remove all Constant/UnboxedConstant nodes that haven't been assigned an ordinal from the constant list.
+    // ForEachConstantLikeNode will no longer see these constants.
+    //
+    void FinalizeConstantTableAndRemoveUnusedConstants([[maybe_unused]] size_t expectedNumBoxedConstants, [[maybe_unused]] size_t expectedNumUnboxedConstants)
+    {
+        TestAssert(!m_isConstantTableFinalized);
+        m_isConstantTableFinalized = true;
+        TestAssert(m_constantList.size() == m_constantCacheMap.size());
+        TestAssert(m_unboxedConstantList.size() == m_unboxedConstantCacheMap.size());
+        {
+            ArenaPtr<Node>* data = m_constantList.data();
+            size_t newSize = 0;
+            size_t oldSize = m_constantList.size();
+            for (size_t i = 0; i < oldSize; i++)
+            {
+                ArenaPtr<Node> value = data[i];
+                Node* node = value;
+                TestAssert(node->IsConstantNode());
+                if (node->IsOrdInConstantTableAssigned())
+                {
+                    data[newSize] = value;
+                    newSize++;
+                }
+            }
+            TestAssert(newSize <= oldSize);
+            m_constantList.resize(newSize);
+            TestAssert(newSize == expectedNumBoxedConstants);
+        }
+        {
+            ArenaPtr<Node>* data = m_unboxedConstantList.data();
+            size_t newSize = 0;
+            size_t oldSize = m_unboxedConstantList.size();
+            for (size_t i = 0; i < oldSize; i++)
+            {
+                ArenaPtr<Node> value = data[i];
+                Node* node = value;
+                TestAssert(node->IsUnboxedConstantNode());
+                if (node->IsOrdInConstantTableAssigned())
+                {
+                    data[newSize] = value;
+                    newSize++;
+                }
+            }
+            TestAssert(newSize <= oldSize);
+            m_unboxedConstantList.resize(newSize);
+            TestAssert(newSize == expectedNumUnboxedConstants);
         }
     }
 
@@ -2896,6 +3027,30 @@ public:
     uint32_t GetFirstDfgPhysicalSlotForLocal()
     {
         return GetNumFixedArgsInRootFunction() + GetRegSpillAreaNumSlots();
+    }
+
+    // [GetFirstDfgPhysicalSlotForLocal(), GetFirstPhysicalSlotForTemps()) are the physical slots for DFG locals
+    //
+    uint32_t GetFirstPhysicalSlotForTemps()
+    {
+        TestAssert(m_firstPhysicalSlotForTemps != static_cast<uint32_t>(-1));
+        return m_firstPhysicalSlotForTemps;
+    }
+
+    uint32_t GetNumPhysicalSlotsForLocals()
+    {
+        uint32_t start = GetFirstDfgPhysicalSlotForLocal();
+        uint32_t end = GetFirstPhysicalSlotForTemps();
+        TestAssert(end >= start);
+        return end - start;
+    }
+
+    void SetFirstPhysicalSlotForTemps(uint32_t value)
+    {
+        TestAssert(m_firstPhysicalSlotForTemps == static_cast<uint32_t>(-1));
+        TestAssert(value != static_cast<uint32_t>(-1));
+        TestAssert(value >= GetFirstDfgPhysicalSlotForLocal());
+        m_firstPhysicalSlotForTemps = value;
     }
 
     void RegisterLogicalVariable(LogicalVariableInfo* info)
@@ -3093,6 +3248,7 @@ public:
                 numSurvivedBlocks++;
             }
         }
+        TestAssert(numSurvivedBlocks <= m_blocks.size());
         m_blocks.resize(numSurvivedBlocks);
     }
 
@@ -3122,8 +3278,10 @@ private:
     DVector<ArenaPtr<CapturedVarLogicalVariableInfo>> m_allCapturedVarLogicalVariables;
     uint32_t m_totalNumLocals;
     uint32_t m_totalNumInterpreterSlots;
+    uint32_t m_firstPhysicalSlotForTemps;
     Form m_graphForm;
     bool m_isCfgAvailable;
+    bool m_isConstantTableFinalized;
 };
 
 inline void Node::RegisterLogicalVariable(Graph* graph, LogicalVariableInfo* info)
@@ -3204,7 +3362,7 @@ private:
     {
         DVector<ArenaPtr<Node>>& nodes = m_basicBlock->m_nodes;
         size_t oldSize = nodes.size();
-        nodes.resize(oldSize + m_allInsertions.size());
+        ResizeVectorTo(nodes, oldSize + m_allInsertions.size(), nullptr /*value*/);
         size_t curIndex = nodes.size();
         // The last uninserted value in the old vector is oldVectorIndex - 1
         //
@@ -3245,15 +3403,9 @@ private:
     {
         DVector<ArenaPtr<Node>>& nodes = m_basicBlock->m_nodes;
         size_t oldSize = nodes.size();
-        if (m_radixSortArray.size() < oldSize + 1)
-        {
-            m_radixSortArray.resize(oldSize + 1);
-        }
 
-        for (size_t i = 0; i <= oldSize; i++)
-        {
-            m_radixSortArray[i] = static_cast<uint32_t>(-1);
-        }
+        m_radixSortArray.clear();
+        ResizeVectorTo(m_radixSortArray, oldSize + 1, static_cast<uint32_t>(-1) /*value*/);
 
         for (size_t idx = 0, numInsertions = m_allInsertions.size(); idx < numInsertions; idx++)
         {
@@ -3272,7 +3424,7 @@ private:
             linkedListTail = SafeIntegerCast<uint32_t>(idx);
         }
 
-        nodes.resize(oldSize + m_allInsertions.size());
+        ResizeVectorTo(nodes, oldSize + m_allInsertions.size(), nullptr /*value*/);
 
         size_t curIndex = nodes.size();
 

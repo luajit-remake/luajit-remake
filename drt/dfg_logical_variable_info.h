@@ -33,6 +33,9 @@ struct LogicalVariableInfo
         return m_logicalVariableOrdinal;
     }
 
+    InterpreterSlot GetInterpreterSlot() { return InterpreterSlot(m_interpreterSlotOrd); }
+    VirtualRegister GetVirtualRegister() { return VirtualRegister(m_localOrd); }
+
     // The DFG slot ordinal
     //
     uint32_t m_localOrd;

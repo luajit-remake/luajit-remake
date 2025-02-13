@@ -9,6 +9,7 @@
 namespace dfg {
 
 struct InlinedCallFrame;
+struct OsrExitDestination;
 
 // Describes a bytecode location inside a (possibly nested inlined) function
 //
@@ -51,7 +52,7 @@ struct CodeOrigin
     }
 
 private:
-    friend struct OsrExitDestination;
+    friend OsrExitDestination;
 
     ArenaPtr<InlinedCallFrame> m_func;
     uint32_t m_bytecodeIndex;
@@ -132,7 +133,7 @@ struct InlinedCallFrame
     MAKE_NONMOVABLE(InlinedCallFrame);
 
 private:
-    friend class Arena;          // can only be alloc'ed in DFG arena
+    friend Arena;          // can only be alloc'ed in DFG arena
     InlinedCallFrame() = default;
 
 public:

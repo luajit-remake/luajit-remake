@@ -861,9 +861,9 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
     Value* slowPathAddr = cg->GetJitSlowPathPtr();
 
     // This is a BuiltinNodeOperandsInfoBase pointer if m_shouldUseCustomInterface is true,
-    // or a NodeRegAllocInfo pointer if m_shouldUseCustomInterface is false
+    // or a NodeOperandConfigData pointer if m_shouldUseCustomInterface is false
     //
-    Value* ssaOperandInfo = cg->GetNodeRegAllocInfoPtr();
+    Value* ssaOperandInfo = cg->GetNodeOperandConfigDataPtr();
 
     // The list of placeholder values, in the order expected by the codegen function
     //
@@ -1303,6 +1303,8 @@ void DfgBuiltinNodeCodegenProcessorBase::ProcessWithRegAllocEnabled(std::unique_
     ReleaseAssert(!m_processed);
     m_processed = true;
 
+    bool isConstantLikeNode = dfg::IsDfgNodeKindConstantLikeNodeKind(AssociatedNodeKind());
+
     m_isRegAllocEnabled = true;
     m_rootInfo = std::move(rootInfo);
     if (m_rootInfo->m_variants.size() == 0)
@@ -1326,6 +1328,34 @@ void DfgBuiltinNodeCodegenProcessorBase::ProcessWithRegAllocEnabled(std::unique_
             variant /*inout*/,
             [&](DfgBuiltinNodeImplCreator* impl) { GenerateImpl(impl); },
             &regAllocAuditLog /*out*/);
+
+        // Constant-like node must be able to complete the work without spilling any register (which makes sense,
+        // since if the operation is complex enough to the point that register spilling is needed to materialize
+        // a constant, it's better make it a non-constant node anyway). This allows us to significantly simply
+        // the register allocator logic since we can materialize constants while keeping the existing regs valid.
+        //
+        if (isConstantLikeNode)
+        {
+            // If the constant is being materialized into a non-reg-alloc register, 'hasOutput' will be false
+            //
+            bool hasOutput = m_rootInfo->m_hasOutput;
+            ReleaseAssert(!m_rootInfo->m_hasBrDecision && m_rootInfo->m_operandInfo.empty());
+            size_t gprUsage = variant->GetMaxGprPassthrus();
+            size_t fprUsage = variant->GetMaxFprPassthrus();
+            if (hasOutput)
+            {
+                if (variant->IsOutputGPR())
+                {
+                    gprUsage++;
+                }
+                else
+                {
+                    fprUsage++;
+                }
+            }
+            ReleaseAssert(gprUsage == x_dfg_reg_alloc_num_gprs && "Materializing a constant-like node must not result in register spill!");
+            ReleaseAssert(fprUsage == x_dfg_reg_alloc_num_fprs && "Materializing a constant-like node must not result in register spill!");
+        }
 
         m_regAllocAuditLog += regAllocAuditLog + "\n";
 

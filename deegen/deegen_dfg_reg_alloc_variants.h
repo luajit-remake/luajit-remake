@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common_utils.h"
+#include "dfg_reg_alloc_register_info.h"
 
 namespace dast {
 
@@ -155,6 +156,54 @@ struct DfgNodeRegAllocVariant
         m_maxFprPassthrus = value;
     }
 
+    size_t GetNumGprScratchRegistersNeeded()
+    {
+        size_t numGprUsedByInputsAndOutputs = 0;
+        for (size_t opIdx = 0; opIdx < NumRaOperands(); opIdx++)
+        {
+            if (IsInputOperandGPR(opIdx))
+            {
+                numGprUsedByInputsAndOutputs++;
+            }
+        }
+        if (m_owner->m_hasOutput)
+        {
+            if (IsOutputGPR())
+            {
+                numGprUsedByInputsAndOutputs++;
+            }
+        }
+        if (m_owner->m_hasBrDecision)
+        {
+            numGprUsedByInputsAndOutputs++;
+        }
+        // Note that making output reuse an input reg always increases #passthrough by one, making the sum unchanged
+        //
+        ReleaseAssert(numGprUsedByInputsAndOutputs + GetMaxGprPassthrus() <= x_dfg_reg_alloc_num_gprs);
+        return x_dfg_reg_alloc_num_gprs - (numGprUsedByInputsAndOutputs + GetMaxGprPassthrus());
+    }
+
+    size_t GetNumFprScratchRegistersNeeded()
+    {
+        size_t numFprUsedByInputsAndOutputs = 0;
+        for (size_t opIdx = 0; opIdx < NumRaOperands(); opIdx++)
+        {
+            if (!IsInputOperandGPR(opIdx))
+            {
+                numFprUsedByInputsAndOutputs++;
+            }
+        }
+        if (m_owner->m_hasOutput)
+        {
+            if (!IsOutputGPR())
+            {
+                numFprUsedByInputsAndOutputs++;
+            }
+        }
+        ReleaseAssert(numFprUsedByInputsAndOutputs + GetMaxFprPassthrus() <= x_dfg_reg_alloc_num_fprs);
+        return x_dfg_reg_alloc_num_fprs - (numFprUsedByInputsAndOutputs + GetMaxFprPassthrus());
+    }
+
     void SetWhetherOutputWorthReuseRegister(bool value)
     {
         ReleaseAssert(m_owner->m_hasOutput);
@@ -213,7 +262,8 @@ struct DfgNodeRegAllocVariant
     //   brDecision operand: similar to Output operand
     //   numGroup1GprPassthrus: in increasing order
     //
-    // Note that the exact ordering of the subvariants above must agree with what the DFG runtime expects
+    // Note that the exact ordering of the subvariants above must agree with what the DFG runtime expects,
+    // see dfg_variant_traits_internal.h -- DfgRegBankSubVariantTraits
     //
     std::vector<std::unique_ptr<DfgNodeRegAllocSubVariant>> WARN_UNUSED GenerateSubVariants();
 
@@ -360,7 +410,7 @@ struct DfgNodeRegAllocSubVariant
     size_t NumRaOperands() { return m_isOperandGroup1.size(); }
 
 private:
-    friend struct DfgNodeRegAllocVariant;
+    friend DfgNodeRegAllocVariant;
 
     DfgNodeRegAllocVariant* m_owner;
 

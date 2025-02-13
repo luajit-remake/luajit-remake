@@ -166,6 +166,8 @@ struct DfgTrivialCfgCleanupPass
             size_t newCount = 0;
             for (BasicBlock* bb : m_graph->m_blocks)
             {
+                // We use m_replacement == null to mark that this block has been merged away and needs to be deleted
+                //
                 if (bb->m_replacement.IsNull())
                 {
                     continue;
@@ -173,6 +175,7 @@ struct DfgTrivialCfgCleanupPass
                 m_graph->m_blocks[newCount] = bb;
                 newCount++;
             }
+            TestAssert(newCount <= m_graph->m_blocks.size());
             m_graph->m_blocks.resize(newCount);
         }
 

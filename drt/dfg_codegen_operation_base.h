@@ -6,22 +6,53 @@
 
 namespace dfg {
 
-#define DFG_CODEGEN_OPERATION_LIST              \
-    /* Move between regs */                     \
-    CodegenRegMove                              \
-    /* Load a spilled value to reg */           \
-  , CodegenRegLoad                              \
-    /* Spill a register to stack */             \
-  , CodegenRegSpill                             \
-    /* Check if a boxed value in a reg has */   \
-    /* a given typemask, OSR exit if not   */   \
-  , CodegenTypeCheck                            \
-    /* Materialize a constant-like node */      \
-  , CodegenMaterializeConstant                  \
-    /* Emit code for a DFG built-in node */     \
-  , CodegenBuiltinNode                          \
-    /* Emit code for a guest language node */   \
-  , CodegenUserDefinedNode                      \
+struct JITCodeSizeInfo
+{
+    JITCodeSizeInfo()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        m_fastPathLength = 0;
+        m_slowPathLength = 0;
+        m_dataSecLength = 0;
+    }
+
+    void Update(const CodegenFnJitCodeSizeInfo& info)
+    {
+        m_fastPathLength += info.m_fastPathCodeLen;
+        m_slowPathLength += info.m_slowPathCodeLen;
+        m_dataSecLength = RoundUpToPowerOfTwoMultipleOf(m_dataSecLength, static_cast<uint32_t>(info.m_dataSecAlignment));
+        m_dataSecLength += info.m_dataSecLen;
+    }
+
+    uint32_t m_fastPathLength;
+    uint32_t m_slowPathLength;
+    uint32_t m_dataSecLength;
+};
+
+#define DFG_CODEGEN_OPERATION_LIST                  \
+    /* Move between regs */                         \
+    CodegenRegMove                                  \
+    /* Load a spilled value to reg */               \
+  , CodegenRegLoad                                  \
+    /* Spill a register to stack */                 \
+  , CodegenRegSpill                                 \
+    /* Codegen a CodegenImplFn operation */         \
+    /* that supports reg alloc */                   \
+  , CodegenOpRegAllocEnabled                        \
+    /* Codegen a CodegenImplFn operation */         \
+    /* that does not support reg alloc */           \
+  , CodegenOpRegAllocDisabled                       \
+    /* Codegen a CustomBuiltinNodeCodegenImplFn */  \
+    /* operation that supports reg alloc */         \
+  , CodegenCustomOpRegAllocEnabled                  \
+    /* Codegen a CustomBuiltinNodeCodegenImplFn */  \
+    /* operation that does not support reg alloc */ \
+  , CodegenCustomOpRegAllocDisabled                 \
+
 
 // Forward declare all structs
 //

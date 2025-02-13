@@ -2396,6 +2396,18 @@ ProcessBytecodeDefinitionForInterpreterResult WARN_UNUSED ProcessBytecodeDefinit
             fprintf(fp, "    using BytecodeIntrinsicDefTy = void;\n");
         }
 
+        {
+            size_t numFixedSSAOperands = 0;
+            for (auto& operand : bytecodeDef.m_variants[0]->m_list)
+            {
+                if (operand->GetKind() == BcOperandKind::Constant || operand->GetKind() == BcOperandKind::Slot)
+                {
+                    numFixedSSAOperands++;
+                }
+            }
+            fprintf(fp, "    static constexpr uint8_t x_numFixedSSAOperands = %d;\n", static_cast<int>(numFixedSSAOperands));
+        }
+
         ReleaseAssert(bytecodeDfgNsdLength != static_cast<size_t>(-1));
         fprintf(fp, "    static constexpr size_t x_dfgNodeSpecificDataLength = %u;\n", static_cast<unsigned int>(bytecodeDfgNsdLength));
         fprintf(fp, "    using DfgNsdInfoWriterFn = void(%s<CRTP>::*)(uint8_t*, size_t);\n", generatedClassName.c_str());

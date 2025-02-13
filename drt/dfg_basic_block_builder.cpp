@@ -540,6 +540,7 @@ size_t DfgBuildBasicBlockContext::ParseAndProcessBytecode(size_t curBytecodeOffs
             node->m_nodeKind = NodeKind_Return;
             TestAssert(numNodeInputs == 0);
             TestAssert(m_decoder.GetDataFlowWriteInfo(curBytecodeOffset).GetNumItems() == 0);
+            TestAssert(!node->IsNodeAccessesVR());
             node->SetNumInputs(0);
             TestAssert(node->GetNumNodeControlFlowSuccessors() == 0 && !node->IsNodeMakesTailCallNotConsideringTransform());
             skipStandardInputGenerationStep = true;

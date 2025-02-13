@@ -18,8 +18,6 @@ namespace dfg {
 
 using BCKind = DeegenBytecodeBuilder::BCKind;
 
-enum class DfgCodegenFuncOrd : uint16_t;
-
 // Specialized by generated header files, which should contain the following fields:
 //   size_t value
 //     The total number of DfgVariants for this bytecode
@@ -36,10 +34,12 @@ struct NumDfgVariantsForBCKind;
 template<BCKind bcKind, size_t dvOrd>
 struct DfgVariantTraitFor;
 
+// TODO FIXME
 struct NodeRegAllocInfo;
 struct DfgRegAllocState;
 
 // For assertion purpose only, return false if it detects any incompatibility
+// TODO FIXME
 //
 using DfgVariantValidityCheckerFn = bool(*)(NodeRegAllocInfo*, DfgRegAllocState*);
 
@@ -177,7 +177,12 @@ struct DfgVariantTraits
         return RoundUpToMultipleOf<alignof(void*)>(sizeof(DfgVariantTraits));
     }
 
-    const DfgRegBankSubVariantTraits* GetRegBankSubVariant(size_t subVariantOrd)
+    // The table for all the RegBankSubVariant
+    // The ordinal is computed from the reg bank selection:
+    //   For each operand that can be chosen between GPR and FPR, GPR means 0, FPR means 1.
+    //   The weight is given from high to low in this order: all the operands, the output.
+    //
+    const DfgRegBankSubVariantTraits* GetRegBankSubVariant(size_t subVariantOrd) const
     {
         TestAssert(IsRegAllocEnabled());
         TestAssert(subVariantOrd < GetTotalNumRegBankSubVariants());
@@ -227,11 +232,6 @@ struct DfgVariantTraitsHolder final : public DfgVariantTraits
         }
     }
 
-    // The table for all the RegBankSubVariant
-    // The ordinal is computed from the reg bank selection:
-    //   For each operand that can be chosen between GPR and FPR, GPR means 0, FPR means 1.
-    //   The weight is given from high to low in this order: all the operands, the output.
-    //
     std::array<const DfgRegBankSubVariantTraits*, N> m_regBankSubVariants;
 };
 
@@ -244,23 +244,28 @@ struct DfgRegBankSubVariantTraits
                                          bool brDecisionWorthReuseInputReg,
                                          bool hasRangedOperand,
                                          uint8_t numRAOperands,
-                                         uint8_t operandIsGprMask)
+                                         uint8_t operandIsGprMask,
+                                         uint8_t numGprScratchNeeded,
+                                         uint8_t numFprScratchNeeded)
         : m_hasOutput(hasOutput)
         , m_outputWorthReuseInputReg(outputWorthReuseInputReg)
+        , m_outputPrefersReuseInputReg(outputWorthReuseInputReg)        // TODO FIXME
         , m_isOutputGpr(isOutputGpr)
         , m_hasBrDecision(hasBrDecision)
         , m_brDecisionWorthReuseInputReg(brDecisionWorthReuseInputReg)
+        , m_brDecisionPrefersReuseInputReg(brDecisionWorthReuseInputReg)    // TODO FIXME
         , m_hasRangedOperand(hasRangedOperand)
-        , m_numOutputChoices(0)
-        , m_numBrDecisionChoices(0)
+        , m_shouldRelocateAllGroup1Gprs(false)      // TODO FIXME
         , m_numRAOperands(numRAOperands)
+        , m_numBrDecisionChoices(0)
+        , m_numOutputChoices(0)
+        , m_numGprScratchNeeded(numGprScratchNeeded)
+        , m_numFprScratchNeeded(numFprScratchNeeded)
         , m_operandIsGprMask(operandIsGprMask)
-        , m_operandIsFprMask(0)
         , m_tableLength(0)
     {
-        ReleaseAssert(m_numRAOperands <= 8);
+        ReleaseAssert(numRAOperands <= 8);
         ReleaseAssert(m_operandIsGprMask < (1U << m_numRAOperands));
-        m_operandIsFprMask = static_cast<uint8_t>((1U << m_numRAOperands) - 1) ^ m_operandIsGprMask;
 
         if (m_hasOutput)
         {
@@ -282,7 +287,7 @@ struct DfgRegBankSubVariantTraits
                 {
                     for (size_t i = 0; i < m_numRAOperands; i++)
                     {
-                        if (m_operandIsFprMask & static_cast<uint8_t>(1 << i)) { m_numOutputChoices++; }
+                        if ((m_operandIsGprMask & static_cast<uint8_t>(1 << i)) == 0) { m_numOutputChoices++; }
                     }
                 }
             }
@@ -332,7 +337,54 @@ struct DfgRegBankSubVariantTraits
         return RoundUpToMultipleOf<alignof(uint16_t)>(sizeof(DfgRegBankSubVariantTraits));
     }
 
-    uint16_t GetTrailingArrayElement(size_t idx) const
+    bool WARN_UNUSED HasOutput() const { return m_hasOutput; }
+    bool WARN_UNUSED IsOutputGPR() const { TestAssert(HasOutput()); return m_isOutputGpr; }
+    bool WARN_UNUSED OutputMayReuseInputReg() const { TestAssert(HasOutput()); return m_outputWorthReuseInputReg; }
+    bool WARN_UNUSED OutputPrefersReuseInputReg() const
+    {
+        TestAssertImp(!OutputMayReuseInputReg(), !m_outputPrefersReuseInputReg);
+        return m_outputPrefersReuseInputReg;
+    }
+
+    bool WARN_UNUSED HasBrDecision() const { return m_hasBrDecision; }
+    bool WARN_UNUSED BrDecisionMayReuseInputReg() const { TestAssert(HasBrDecision()); return m_brDecisionWorthReuseInputReg; }
+    bool WARN_UNUSED BrDecisionPrefersReuseInputReg() const
+    {
+        TestAssertImp(!BrDecisionMayReuseInputReg(), !m_brDecisionPrefersReuseInputReg);
+        return m_brDecisionPrefersReuseInputReg;
+    }
+
+    bool WARN_UNUSED HasRangedOperand() const { return m_hasRangedOperand; }
+
+    bool WARN_UNUSED ShouldRelocateAllGroup1Gprs() const { return m_shouldRelocateAllGroup1Gprs; }
+
+    uint8_t WARN_UNUSED NumOutputChoices() const { return m_numOutputChoices; }
+    uint8_t WARN_UNUSED NumBrDecisionChoices() const { return m_numBrDecisionChoices; }
+
+    uint8_t WARN_UNUSED NumRAOperands() const { return m_numRAOperands; }
+
+    uint8_t WARN_UNUSED NumGprScratchNeeded() const { return m_numGprScratchNeeded; }
+    uint8_t WARN_UNUSED NumFprScratchNeeded() const { return m_numFprScratchNeeded; }
+
+    bool WARN_UNUSED OperandIsGPR(size_t raOperandOrd) const
+    {
+        TestAssert(raOperandOrd < m_numRAOperands);
+        return m_operandIsGprMask & (1U << raOperandOrd);
+    }
+
+    uint16_t WARN_UNUSED GetTableLength() const { return m_tableLength; }
+
+    // Ordering in each dimension:
+    //
+    //   GPR operand: Group1 comes first
+    //   Output operand: own register (GPR/FPR) comes first, reuses operand register comes next in the same order as operands
+    //   brDecision operand: similar to Output operand
+    //   numGroup1GprPassthrus: in increasing order
+    //
+    // This must be kept in sync with how Deegen generates the variants, see:
+    //   deegen_dfg_reg_alloc_variants.h -- DfgNodeRegAllocVariant::GenerateSubVariants
+    //
+    DfgCodegenFuncOrd WARN_UNUSED GetTrailingArrayElement(size_t idx) const
     {
         TestAssert(idx < m_tableLength);
 
@@ -343,27 +395,30 @@ struct DfgRegBankSubVariantTraits
         TestAssert(trailingArrayPtr % alignof(uint16_t) == 0);
 
         const uint16_t* trailingArray = reinterpret_cast<const uint16_t*>(trailingArrayPtr);
-        return trailingArray[idx];
+        uint16_t res = trailingArray[idx];
+        TestAssert(res != static_cast<uint16_t>(-1));
+        return static_cast<DfgCodegenFuncOrd>(res);
     }
-
-    // Returns the final codegen function ordinal based on the register allocation decision
-    //
-    DfgCodegenFuncOrd WARN_UNUSED GetCodegenFuncOrd(NodeRegAllocInfo* raInfo, DfgRegAllocState* raState) const;
 
 protected:
     bool m_hasOutput : 1;
     bool m_outputWorthReuseInputReg : 1;
+    bool m_outputPrefersReuseInputReg : 1;
     bool m_isOutputGpr : 1;
     bool m_hasBrDecision : 1;
     bool m_brDecisionWorthReuseInputReg : 1;
+    bool m_brDecisionPrefersReuseInputReg : 1;
     bool m_hasRangedOperand : 1;
+    bool m_shouldRelocateAllGroup1Gprs : 1;
+    uint8_t m_numRAOperands : 3;
+    uint8_t m_numBrDecisionChoices: 4;
     uint8_t m_numOutputChoices;
-    uint8_t m_numBrDecisionChoices;
-    uint8_t m_numRAOperands;
+    uint8_t m_numGprScratchNeeded;
+    uint8_t m_numFprScratchNeeded;
     uint8_t m_operandIsGprMask;
-    uint8_t m_operandIsFprMask;
     uint16_t m_tableLength;
 };
+static_assert(sizeof(DfgRegBankSubVariantTraits) == 8);
 
 template<size_t N>
 struct DfgRegBankSubVariantTraitsHolder final : public DfgRegBankSubVariantTraits

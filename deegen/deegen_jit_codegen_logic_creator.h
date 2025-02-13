@@ -232,7 +232,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
                 /* 2 */ llvm_type_of<void*>(ctx),       // jitSlowPathAddr
                 /* 3 */ llvm_type_of<void*>(ctx),       // jitDataSecAddr
                 /* 4 */ llvm_type_of<void*>(ctx),       // slowPathData Ptr
-                /* 5 */ llvm_type_of<void*>(ctx),       // NodeRegAllocInfo Ptr
+                /* 5 */ llvm_type_of<void*>(ctx),       // NodeOperandConfigData Ptr
                 /* 6 */ llvm_type_of<void*>(ctx),       // NodeSpecificData (nsd) Ptr
                 /* 7 */ llvm_type_of<void*>(ctx),       // RegAllocStateForCodegen Ptr
                 /* 8 */ llvm_type_of<uint64_t>(ctx),    // SlowPathDataOffset
@@ -262,7 +262,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
         r->GetJitCodeBlock32()->setName("baselineCodeBlock32");
 
         r->GetPrimaryCodegenStatePtr()->setName("primaryCodegenState");
-        r->GetNodeRegAllocInfoPtr()->setName("nodeRegAllocInfo");
+        r->GetNodeOperandConfigDataPtr()->setName("nodeOperandConfigData");
         r->GetNodeSpecificDataPtr()->setName("nsd");
         r->GetRegAllocStateForCodegenPtr()->setName("regAllocStateForCodegen");
         r->GetCompactedRegConfPtr()->setName("compactedRegConfPtr");
@@ -275,7 +275,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
         fn->addParamAttr(x_jitSlowPathPtr, Attribute::NoAlias);
         fn->addParamAttr(x_jitUnalignedDataSecPtr, Attribute::NoAlias);
         fn->addParamAttr(x_slowPathDataPtr, Attribute::NoAlias);
-        fn->addParamAttr(x_nodeRegAllocInfoPtr, Attribute::NoAlias);
+        fn->addParamAttr(x_nodeOperandConfigDataPtr, Attribute::NoAlias);
         fn->addParamAttr(x_nodeSpecificDataPtr, Attribute::NoAlias);
         fn->addParamAttr(x_regAllocStateForCodegenPtr, Attribute::NoAlias);
         fn->addParamAttr(x_compactedRegConfAddr, Attribute::NoAlias);
@@ -296,7 +296,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
             llvm_type_of<void>(ctx) /*result*/,
             {
                 llvm_type_of<void*>(ctx),       // PrimaryCodegenState Ptr
-                llvm_type_of<void*>(ctx),       // NodeRegAllocInfo ptr
+                llvm_type_of<void*>(ctx),       // NodeOperandConfigData ptr
                 llvm_type_of<void*>(ctx),       // NodeSpecificData ptr
                 llvm_type_of<void*>(ctx)        // RegAllocStateForCodegen ptr
             } /*params*/,
@@ -314,12 +314,12 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
         fn->setDSOLocal(true);
 
         Value* pcs = fn->getArg(0);
-        Value* nodeRegAllocInfo = fn->getArg(1);
+        Value* nodeOperandConfigData = fn->getArg(1);
         Value* nsd = fn->getArg(2);
         Value* regAllocStateForCodegen = fn->getArg(3);
 
         pcs->setName("primaryCodegenState");
-        nodeRegAllocInfo->setName("nodeRegAllocInfo");
+        nodeOperandConfigData->setName("nodeOperandConfigData");
         nsd->setName("nsd");
         regAllocStateForCodegen->setName("regAllocStateForCodegen");
 
@@ -370,7 +370,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
         insertArg(x_jitSlowPathPtr, slowPathAddr);
         insertArg(x_jitUnalignedDataSecPtr, dataSecAddr);
         insertArg(x_slowPathDataPtr, slowPathDataAddr);
-        insertArg(x_nodeRegAllocInfoPtr, nodeRegAllocInfo);
+        insertArg(x_nodeOperandConfigDataPtr, nodeOperandConfigData);
         insertArg(x_nodeSpecificDataPtr, nsd);
         insertArg(x_regAllocStateForCodegenPtr, regAllocStateForCodegen);
         insertArg(x_slowPathDataOffset, slowPathDataOffset);
@@ -394,10 +394,10 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
 
     llvm::Value* GetPrimaryCodegenStatePtr() { return m_func->getArg(x_primaryCodegenStatePtr); }
 
-    // Note that for DFG guest language node, this is the NodeRegAllocInfo* that holds the reg alloc info for the node.
+    // Note that for DFG guest language node, this is the NodeOperandConfigData* that holds the reg alloc info for the node.
     // For DFG built-in node, this is a BuiltinNodeOperandsInfoBase* that holds the physical slot for each SSA operand and output
     //
-    llvm::Value* GetNodeRegAllocInfoPtr() { return m_func->getArg(x_nodeRegAllocInfoPtr); }
+    llvm::Value* GetNodeOperandConfigDataPtr() { return m_func->getArg(x_nodeOperandConfigDataPtr); }
 
     // For DFG guest language node, this is the NodeSpecificData pointer for the node
     // For DFG built-in node, this is an uint64_t array that holds the value of each literal operand
@@ -417,7 +417,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
     static constexpr uint32_t x_jitSlowPathPtr = 2;
     static constexpr uint32_t x_jitUnalignedDataSecPtr = 3;
     static constexpr uint32_t x_slowPathDataPtr = 4;
-    static constexpr uint32_t x_nodeRegAllocInfoPtr = 5;
+    static constexpr uint32_t x_nodeOperandConfigDataPtr = 5;
     static constexpr uint32_t x_nodeSpecificDataPtr = 6;
     static constexpr uint32_t x_regAllocStateForCodegenPtr = 7;
     static constexpr uint32_t x_slowPathDataOffset = 8;

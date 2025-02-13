@@ -173,7 +173,7 @@ TypeMaskTy GetRandomBottomMask(std::mt19937_64& rdgen, TypeMaskTy topMask)
 void DoTest(std::mt19937_64& rdgen, TypeMaskTy topMask, TypeMaskTy bottomMask, size_t numElements)
 {
     ReleaseAssert((topMask & bottomMask) == bottomMask);
-    size_t maxNumElements = static_cast<uint64_t>(1) << (static_cast<size_t>(__builtin_popcountll(topMask ^ bottomMask)));
+    size_t maxNumElements = static_cast<uint64_t>(1) << CountNumberOfOnes(topMask ^ bottomMask);
     numElements = std::min(numElements, maxNumElements);
 
     TypeMaskTy andMask = topMask ^ bottomMask;
@@ -267,7 +267,7 @@ TEST(DfgTypemaskAutomataGen, Sanity)
         TypeMaskTy bottomMask = GetRandomBottomMask(rdgen, topMask);
 
         {
-            size_t maxNumElements = static_cast<uint64_t>(1) << (static_cast<size_t>(__builtin_popcountll(topMask ^ bottomMask)));
+            size_t maxNumElements = static_cast<uint64_t>(1) << CountNumberOfOnes(topMask ^ bottomMask);
             size_t numElements;
             if (rdgen() % 2 == 0)
             {

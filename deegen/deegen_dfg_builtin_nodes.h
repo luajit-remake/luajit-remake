@@ -5,142 +5,156 @@
 
 namespace dast {
 
-struct DfgBuiltinNodeImplConstant final : DfgBuiltinNodeCodegenProcessorBase
+// Common abstraction for processing constant-like node
+// Constant-like node always has no input operands, and produces an output operand.
+// There is one special requirement: DFG backend may want us to materialize the constant into a non-reg-alloc temp register
+// while preserving all reg-alloc registers. 'm_toTempReg' indicates if we are generating this special variant.
+//
+struct DfgConstantLikeNodeCodegenProcessorBase : DfgBuiltinNodeCodegenProcessorBase
+{
+    virtual std::string NodeName() override final
+    {
+        dfg::NodeKind nodeKind = AssociatedNodeKind();
+        ReleaseAssert(dfg::IsDfgNodeKindConstantLikeNodeKind(nodeKind));
+        std::string name = dfg::GetDfgBuiltinNodeKindName(nodeKind);
+        if (m_toTempReg) { name += "_to_temp_reg"; }
+        return name;
+    }
+
+    virtual size_t NumOperands() override final { return 0; }
+
+    DfgConstantLikeNodeCodegenProcessorBase(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgBuiltinNodeCodegenProcessorBase()
+        , m_toTempReg(toTempReg)
+        , m_llvmCtx(ctx)
+    { }
+
+    // Unfortunately we cannot run this in the constructor, since the derived class isn't constructed yet so we cannot call their virtual method
+    // So this needs to be called from the constructor of the derived class
+    //
+    void ProcessNode()
+    {
+        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
+        if (m_toTempReg)
+        {
+            // The output is stored hackily into a specific non-reg-alloc reg, so no output on paper
+            // Note that reg alloc is still enabled, since we must preserve all registers!
+            //
+            info->m_hasOutput = false;
+        }
+        else
+        {
+            info->m_hasOutput = true;
+            // All constant-like nodes must be materializable in both GPR and FPR
+            //
+            info->m_outputInfo.m_allowGPR = true;
+            info->m_outputInfo.m_allowFPR = true;
+            info->m_outputInfo.m_preferGPR = true;
+        }
+
+        // This function will assert that all registers (except the output, of course) can be preserved for
+        // constant-like nodes, which is expected by DFG backend
+        //
+        ProcessWithRegAllocEnabled(std::move(info));
+    }
+
+    // All constant-like nodes have a special variant that materializes the constant into a specific temp reg that does not
+    // participate in reg alloc (currently RDX) while preserving all reg alloc registers, which is needed by our
+    // codegen backend sometimes.
+    //
+    bool m_toTempReg;
+    llvm::LLVMContext& m_llvmCtx;
+};
+
+struct DfgBuiltinNodeImplConstant final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_Constant; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplConstant(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplConstant(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = true;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = false;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
-struct DfgBuiltinNodeImplUnboxedConstant final : DfgBuiltinNodeCodegenProcessorBase
+struct DfgBuiltinNodeImplUnboxedConstant final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_UnboxedConstant; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplUnboxedConstant(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplUnboxedConstant(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = false;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = true;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
-struct DfgBuiltinNodeImplArgument final : DfgBuiltinNodeCodegenProcessorBase
+struct DfgBuiltinNodeImplUndefValue final : DfgConstantLikeNodeCodegenProcessorBase
+{
+    virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_UndefValue; }
+
+    virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
+
+    DfgBuiltinNodeImplUndefValue(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
+    {
+        ProcessNode();
+    }
+};
+
+struct DfgBuiltinNodeImplArgument final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_Argument; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplArgument(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplArgument(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = true;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = false;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
-struct DfgBuiltinNodeImplGetNumVariadicArgs final : DfgBuiltinNodeCodegenProcessorBase
+struct DfgBuiltinNodeImplGetNumVariadicArgs final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_GetNumVariadicArgs; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplGetNumVariadicArgs(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplGetNumVariadicArgs(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = false;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = true;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
-struct DfgBuiltinNodeImplGetKthVariadicArg final : DfgBuiltinNodeCodegenProcessorBase
+struct DfgBuiltinNodeImplGetKthVariadicArg final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_GetKthVariadicArg; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplGetKthVariadicArg(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplGetKthVariadicArg(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = true;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = false;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
-struct DfgBuiltinNodeImplGetFunctionObject final : DfgBuiltinNodeCodegenProcessorBase
+struct DfgBuiltinNodeImplGetFunctionObject final : DfgConstantLikeNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_GetFunctionObject; }
-    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
-    DfgBuiltinNodeImplGetFunctionObject(llvm::LLVMContext& ctx)
-        : DfgBuiltinNodeCodegenProcessorBase()
-        , m_llvmCtx(ctx)
+    DfgBuiltinNodeImplGetFunctionObject(bool toTempReg, llvm::LLVMContext& ctx)
+        : DfgConstantLikeNodeCodegenProcessorBase(toTempReg, ctx)
     {
-        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = true;
-        info->m_outputInfo.m_allowFPR = false;
-        info->m_outputInfo.m_allowGPR = true;
-        info->m_outputInfo.m_preferGPR = true;
-
-        ProcessWithRegAllocEnabled(std::move(info));
+        ProcessNode();
     }
-
-    llvm::LLVMContext& m_llvmCtx;
 };
 
 struct DfgBuiltinNodeImplGetLocal final : DfgBuiltinNodeCodegenProcessorBase
@@ -338,7 +352,8 @@ struct DfgBuiltinNodeImplGetNumVariadicRes final : DfgBuiltinNodeCodegenProcesso
 
 // Store the info about the start address and number of variadic results for CreateVariadicRes
 // One SSA operand: #NonFixedVR (must reg-alloc), an unboxed uint64_t
-// Two literal operands: #FixedVR, startAddrSlotOrd
+// One literal operands: #FixedVR
+// Return the start address of the variadic results
 //
 struct DfgBuiltinNodeImplCreateVariadicRes_StoreInfo final : DfgBuiltinNodeCodegenProcessorBase
 {
@@ -353,7 +368,10 @@ struct DfgBuiltinNodeImplCreateVariadicRes_StoreInfo final : DfgBuiltinNodeCodeg
         , m_llvmCtx(ctx)
     {
         std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
-        info->m_hasOutput = false;
+        info->m_hasOutput = true;
+        info->m_outputInfo.m_allowFPR = false;
+        info->m_outputInfo.m_allowGPR = true;
+        info->m_outputInfo.m_preferGPR = true;
 
         DfgNodeRegAllocRootInfo::OpInfo opInfo;
         opInfo.m_opOrd = 0;
@@ -517,6 +535,45 @@ struct DfgBuiltinNodeImplCreateFunctionObject_BoxFunctionObject final : DfgBuilt
     llvm::LLVMContext& m_llvmCtx;
 };
 
+// Box the raw function object pointer to a TValue, and write the self reference into the corresponding upvalue location
+// One SSA operand: the function object (raw pointer)
+// One literal operand: the *byte* offset of the address of the upvalue from the function object pointer
+// One return value: the boxed TValue
+//
+// This logic fragment is used to simplify some temporary value liveness management issue in the backend
+// (without this, the backend will need to keep the raw function object pointer live after boxing to write the self-reference upvalue)
+//
+struct DfgBuiltinNodeImplCreateFunctionObject_BoxFnObjAndWriteSelfRefUv final : DfgBuiltinNodeCodegenProcessorBase
+{
+    virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_CreateFunctionObject; }
+    virtual std::string NodeName() override { return "CreateFunctionObject_BoxFnObjAndWriteSelfRefUv"; }
+    virtual size_t NumOperands() override { return 1; }
+
+    virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
+
+    DfgBuiltinNodeImplCreateFunctionObject_BoxFnObjAndWriteSelfRefUv(llvm::LLVMContext& ctx)
+        : DfgBuiltinNodeCodegenProcessorBase()
+        , m_llvmCtx(ctx)
+    {
+        std::unique_ptr<DfgNodeRegAllocRootInfo> info(new DfgNodeRegAllocRootInfo());
+        info->m_hasOutput = true;
+        info->m_outputInfo.m_allowFPR = false;
+        info->m_outputInfo.m_allowGPR = true;
+        info->m_outputInfo.m_preferGPR = true;
+
+        DfgNodeRegAllocRootInfo::OpInfo opInfo;
+        opInfo.m_opOrd = 0;
+        opInfo.m_allowFPR = false;
+        opInfo.m_allowGPR = true;
+        opInfo.m_preferGPR = true;
+        info->m_operandInfo.push_back(opInfo);
+
+        ProcessWithRegAllocEnabled(std::move(info));
+    }
+
+    llvm::LLVMContext& m_llvmCtx;
+};
+
 struct DfgBuiltinNodeImplGetImmutableUpvalue final : DfgBuiltinNodeCodegenProcessorBase
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_GetUpvalueImmutable; }
@@ -653,7 +710,7 @@ struct DfgBuiltinNodeImplReturn_RetWithVariadicRes final : DfgBuiltinNodeCodegen
 {
     virtual dfg::NodeKind AssociatedNodeKind() override { return dfg::NodeKind_Return; }
     virtual std::string NodeName() override { return "Return_RetWithVariadicRes"; }
-    virtual size_t NumOperands() override { return 1; }
+    virtual size_t NumOperands() override { return 0; }
 
     virtual void GenerateImpl(DfgBuiltinNodeImplCreator* impl) override;
 
@@ -710,6 +767,7 @@ struct DfgBuiltinNodeImplReturn_RetNoVariadicRes final : DfgBuiltinNodeCodegenPr
 };
 
 // A specialized common case: return one return value
+// No SSA operand, one literal operands: the slotOrd for return value
 //
 struct DfgBuiltinNodeImplReturn_Ret1 final : DfgBuiltinNodeCodegenProcessorBase
 {
@@ -730,6 +788,7 @@ struct DfgBuiltinNodeImplReturn_Ret1 final : DfgBuiltinNodeCodegenProcessorBase
 };
 
 // A specialized common case: return no return value
+// No SSA operand, no literal operand
 //
 struct DfgBuiltinNodeImplReturn_Ret0 final : DfgBuiltinNodeCodegenProcessorBase
 {

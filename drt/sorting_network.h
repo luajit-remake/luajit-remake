@@ -10,6 +10,7 @@ struct SortingNetwork
     static void SortAscend(T* a /*inout*/)
     {
         static_assert((std::is_integral_v<T> && !std::is_same_v<T, bool>) || std::is_floating_point_v<T>);
+        static_assert(N <= x_maxLength);
         SortImpl<true /*forAscend*/, N>(a);
     }
 
@@ -17,6 +18,7 @@ struct SortingNetwork
     static void SortDescend(T* a /*inout*/)
     {
         static_assert((std::is_integral_v<T> && !std::is_same_v<T, bool>) || std::is_floating_point_v<T>);
+        static_assert(N <= x_maxLength);
         SortImpl<false /*forAscend*/, N>(a);
     }
 
@@ -239,4 +241,7 @@ private:
             6,7,8,9
         })
     );
+
+public:
+    static constexpr size_t x_maxLength = std::tuple_size_v<decltype(x_data)> + 1;
 };

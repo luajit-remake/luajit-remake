@@ -605,7 +605,7 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
 
     if (IsDfgVariant())
     {
-        // Load operand info from NodeRegAllocInfo and NodeSpecificData
+        // Load operand info from NodeOperandConfigData and NodeSpecificData
         //
         BytecodeVariantDefinition::DfgNsdLayout nsdLayout = bytecodeDef->ComputeDfgNsdLayout();
         size_t numLocalOperands = 0;
@@ -622,14 +622,14 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
                 {
                 case BcOperandKind::Slot:
                 {
-                    // This is a SSA value, load slot from NodeRegAllocInfo
+                    // This is a SSA value, load slot from NodeOperandConfigData
                     // Note that all the Slot operands always show up first in the SSA inputs,
                     // so the input ordinal is simply numLocalOperands we have seen
                     //
                     Value* val = CreateCallToDeegenCommonSnippet(
                         module.get(),
                         "GetDfgPhysicalSlotForSSAInput",
-                        { cg->AsDfgJIT()->GetNodeRegAllocInfoPtr(), CreateLLVMConstantInt<uint64_t>(ctx, numLocalOperands) },
+                        { cg->AsDfgJIT()->GetNodeOperandConfigDataPtr(), CreateLLVMConstantInt<uint64_t>(ctx, numLocalOperands) },
                         entryBB);
 
                     ReleaseAssert(llvm_value_has_type<size_t>(val));
@@ -661,7 +661,7 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
                 {
                     // This is a ranged operand
                     // Currently DFG only supports one ranged operand in the bytecode for simplicity.
-                    // Its value is directly given in the NodeRegAllocInfo
+                    // Its value is directly given in the NodeOperandConfigData
                     //
                     ReleaseAssert(!hasSeenRangeOperand);
                     hasSeenRangeOperand = true;
@@ -669,7 +669,7 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
                     Value* val = CreateCallToDeegenCommonSnippet(
                         module.get(),
                         "GetDfgNodePhysicalSlotStartForRangeOperand",
-                        { cg->AsDfgJIT()->GetNodeRegAllocInfoPtr() },
+                        { cg->AsDfgJIT()->GetNodeOperandConfigDataPtr() },
                         entryBB);
 
                     ReleaseAssert(llvm_value_has_type<size_t>(val));
@@ -711,7 +711,7 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
             outputSlot = CreateCallToDeegenCommonSnippet(
                 module.get(),
                 "GetDfgNodePhysicalSlotForOutput",
-                { cg->AsDfgJIT()->GetNodeRegAllocInfoPtr() },
+                { cg->AsDfgJIT()->GetNodeOperandConfigDataPtr() },
                 entryBB);
         }
         else
@@ -785,7 +785,7 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
             dfgCondBrDecisionSlot = CreateCallToDeegenCommonSnippet(
                 module.get(),
                 "GetDfgNodePhysicalSlotForBrDecision",
-                { cg->AsDfgJIT()->GetNodeRegAllocInfoPtr() },
+                { cg->AsDfgJIT()->GetNodeOperandConfigDataPtr() },
                 entryBB);
             ReleaseAssert(llvm_value_has_type<uint64_t>(dfgCondBrDecisionSlot));
             bytecodeValList.push_back(dfgCondBrDecisionSlot);
@@ -1024,12 +1024,12 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
             Value* opcodeVal;
             if (IsDfgVariant())
             {
-                // For DFG JIT, the opcode is the global ordinal assigned to this codegen function, which can be read from NodeRegAllocInfo
+                // For DFG JIT, the opcode is the global ordinal assigned to this codegen function, which can be read from NodeOperandConfigData
                 //
                 opcodeVal = CreateCallToDeegenCommonSnippet(
                     module.get(),
-                    "GetDfgNodeRegAllocInfoCodegenFuncOrd",
-                    { cg->AsDfgJIT()->GetNodeRegAllocInfoPtr() },
+                    "GetDfgNodeOperandConfigDataCodegenFuncOrd",
+                    { cg->AsDfgJIT()->GetNodeOperandConfigDataPtr() },
                     entryBB);
             }
             else

@@ -27,6 +27,12 @@ struct DfgBuiltinNodeProcessorState
             {
                 m_standardNodeMainEntryTable[i] = "nullptr";
             }
+            m_constantNodeCodegenInfo.resize(dfg::x_numTotalDfgConstantLikeNodeKinds);
+            for (size_t i = 0; i < m_constantNodeCodegenInfo.size(); i++)
+            {
+                size_t numElements = static_cast<size_t>(dfg::ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM);
+                m_constantNodeCodegenInfo[i].resize(numElements, static_cast<size_t>(-1));
+            }
         }
     }
 
@@ -45,6 +51,7 @@ struct DfgBuiltinNodeProcessorState
     std::vector<std::pair<std::string /*fileName*/, std::string /*content*/>> m_auditFiles;
     std::vector<std::pair<std::string /*fileName*/, std::string /*content*/>> m_extraAuditFiles;
 
+    std::vector<std::vector<size_t /*cgFnOrd*/>> m_constantNodeCodegenInfo;
     std::vector<std::string> m_standardNodeMainEntryTable;
     std::string m_customNodeMainEntryLambda;
 
@@ -53,7 +60,7 @@ struct DfgBuiltinNodeProcessorState
         return m_cgFnInfo.size();
     }
 
-    void ProcessCgInfo(std::string nodeImplName, DfgBuiltinNodeVariantCodegenInfo& info)
+    size_t ProcessCgInfo(std::string nodeImplName, DfgBuiltinNodeVariantCodegenInfo& info)
     {
         using namespace llvm;
         {
@@ -86,6 +93,7 @@ struct DfgBuiltinNodeProcessorState
         ReleaseAssert(info.m_dataSecLength <= 65535);
         ReleaseAssert(info.m_dataSecAlignment <= x_jitMaxPossibleDataSectionAlignment);
 
+        size_t cgInfoOrd = m_cgFnInfo.size();
         m_cgFnInfo.push_back({
             .m_jitCodeSizeInfo = {
                 .m_fastPathCodeLen = SafeIntegerCast<uint16_t>(info.m_fastPathLength),
@@ -95,6 +103,7 @@ struct DfgBuiltinNodeProcessorState
             },
             .m_cgFnName = info.m_cgFnName
         });
+        return cgInfoOrd;
     }
 
     void PrintCodegenFnArray(FILE* fp)
@@ -141,6 +150,44 @@ struct DfgBuiltinNodeProcessorState
         }
     }
 
+    void SetConstantLikeNodeCodegenInfo(size_t nodeKind, dfg::ConstantLikeNodeMaterializeLocation targetKind, size_t cgFnOrd)
+    {
+        ReleaseAssert(cgFnOrd != static_cast<size_t>(-1));
+        ReleaseAssert(nodeKind < m_constantNodeCodegenInfo.size());
+        ReleaseAssert(targetKind != dfg::ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM);
+        size_t idx = static_cast<size_t>(targetKind);
+        ReleaseAssert(idx < m_constantNodeCodegenInfo[nodeKind].size());
+        ReleaseAssert(m_constantNodeCodegenInfo[nodeKind][idx] == static_cast<size_t>(-1));
+        m_constantNodeCodegenInfo[nodeKind][idx] = cgFnOrd;
+    }
+
+    void PrintConstantLikeNodeCodegenInfoTable(FILE* hdrFp)
+    {
+        ReleaseAssert(m_constantNodeCodegenInfo.size() == dfg::x_numTotalDfgConstantLikeNodeKinds);
+        fprintf(hdrFp, "inline constexpr std::array<std::array<DfgCodegenFuncOrd, static_cast<size_t>(ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM)>, x_numTotalDfgConstantLikeNodeKinds> x_dfg_codegen_info_for_constant_like_nodes = {\n");
+        for (size_t nodeKind = 0; nodeKind < m_constantNodeCodegenInfo.size(); nodeKind++)
+        {
+            if (nodeKind > 0) { fprintf(hdrFp, ",\n"); }
+            ReleaseAssert(m_constantNodeCodegenInfo[nodeKind].size() == static_cast<size_t>(dfg::ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM));
+            fprintf(hdrFp, "    std::array<DfgCodegenFuncOrd, static_cast<size_t>(ConstantLikeNodeMaterializeLocation::X_END_OF_ENUM)> {\n        ");
+            for (size_t i = 0; i < m_constantNodeCodegenInfo[nodeKind].size(); i++)
+            {
+                if (i > 0) { fprintf(hdrFp, ", "); }
+                if (m_constantNodeCodegenInfo[nodeKind][i] == static_cast<size_t>(-1))
+                {
+                    fprintf(stderr, "ConstantLikeNodeCodegenInfo for nodeKind %s materializationLocKind %d is not populated!\n",
+                            dfg::GetDfgBuiltinNodeKindName(static_cast<dfg::NodeKind>(nodeKind)),
+                            static_cast<int>(i));
+                    abort();
+                }
+                fprintf(hdrFp, "static_cast<DfgCodegenFuncOrd>(x_totalNumDfgUserNodeCodegenFuncs + %d)",
+                        SafeIntegerCast<int>(m_constantNodeCodegenInfo[nodeKind][i]));
+            }
+            fprintf(hdrFp, "\n    }");
+        }
+        fprintf(hdrFp, "\n};\n\n");
+    }
+
 private:
     void SetStandardNodeMainEntry(DfgBuiltinNodeCodegenProcessorBase& impl)
     {
@@ -148,11 +195,16 @@ private:
         ReleaseAssert(impl.AssociatedNodeKind() <= dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
         if (impl.AssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind)
         {
-            ReleaseAssert(!dfg::DfgBuiltinNodeUseCustomCodegenImpl(impl.AssociatedNodeKind()));
-            size_t nodeKind = static_cast<size_t>(impl.AssociatedNodeKind());
-            ReleaseAssert(nodeKind < m_standardNodeMainEntryTable.size());
-            ReleaseAssert(m_standardNodeMainEntryTable[nodeKind] == "nullptr");
-            m_standardNodeMainEntryTable[nodeKind] = "&x_deegen_dfg_variant__dfg_builtin_" + impl.NodeName();
+            // Constant-like node should not be populated into the main table, we deal with them specially
+            //
+            if (!dfg::IsDfgNodeKindConstantLikeNodeKind(impl.AssociatedNodeKind()))
+            {
+                ReleaseAssert(!dfg::DfgBuiltinNodeUseCustomCodegenImpl(impl.AssociatedNodeKind()));
+                size_t nodeKind = static_cast<size_t>(impl.AssociatedNodeKind());
+                ReleaseAssert(nodeKind < m_standardNodeMainEntryTable.size());
+                ReleaseAssert(m_standardNodeMainEntryTable[nodeKind] == "nullptr");
+                m_standardNodeMainEntryTable[nodeKind] = "&x_deegen_dfg_variant__dfg_builtin_" + impl.NodeName();
+            }
         }
     }
 
@@ -180,6 +232,10 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
 
     size_t startCgFnOrd = state.GetNumCgFns();
 
+    bool isConstantLikeNode = dfg::IsDfgNodeKindConstantLikeNodeKind(impl.AssociatedNodeKind());
+    ReleaseAssertImp(isConstantLikeNode, impl.m_isRegAllocEnabled);
+    ReleaseAssertImp(isConstantLikeNode, !state.m_isCustomCgFnProtocol);
+
     if (impl.m_isRegAllocEnabled)
     {
         size_t curSvOrd = 0;
@@ -201,7 +257,39 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
                     DfgBuiltinNodeVariantCodegenInfo& cgInfo = impl.m_cgInfoMap[sv.get()];
 
                     ReleaseAssert(cgInfo.m_variantOrd == curSvOrd);
-                    state.ProcessCgInfo(impl.NodeName(), cgInfo);
+                    size_t cgFnOrd = state.ProcessCgInfo(impl.NodeName(), cgInfo);
+                    ReleaseAssert(cgFnOrd == startCgFnOrd + curSvOrd);
+
+                    if (isConstantLikeNode)
+                    {
+                        size_t nodeKind = static_cast<size_t>(impl.AssociatedNodeKind());
+                        ReleaseAssert(impl.m_rootInfo->m_operandInfo.empty());
+                        ReleaseAssert(!impl.m_rootInfo->m_hasBrDecision);
+                        if (impl.m_rootInfo->m_hasOutput)
+                        {
+                            ReleaseAssert(impl.m_rootInfo->m_outputInfo.IsBothGprAndFprAllowed());
+                            ReleaseAssert(!variant->OutputWorthReuseRegister());
+                            if (variant->IsOutputGPR())
+                            {
+                                if (sv->IsOutputGroup1Reg())
+                                {
+                                    state.SetConstantLikeNodeCodegenInfo(nodeKind, dfg::ConstantLikeNodeMaterializeLocation::GprGroup1, cgFnOrd);
+                                }
+                                else
+                                {
+                                    state.SetConstantLikeNodeCodegenInfo(nodeKind, dfg::ConstantLikeNodeMaterializeLocation::GprGroup2, cgFnOrd);
+                                }
+                            }
+                            else
+                            {
+                                state.SetConstantLikeNodeCodegenInfo(nodeKind, dfg::ConstantLikeNodeMaterializeLocation::Fpr, cgFnOrd);
+                            }
+                        }
+                        else
+                        {
+                            state.SetConstantLikeNodeCodegenInfo(nodeKind, dfg::ConstantLikeNodeMaterializeLocation::TempReg, cgFnOrd);
+                        }
+                    }
 
                     if (state.m_isCustomCgFnProtocol)
                     {
@@ -210,25 +298,29 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
                     }
                     else
                     {
-                        fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeRegAllocInfo*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
+                        fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
                                 cgInfo.m_cgFnName.c_str());
                     }
                 }
             }
 
-            // Print the C++ definition for this reg alloc variant
-            //
-            std::string cppNameIdent = "_dfg_builtin_" + impl.NodeName() + "_" + std::to_string(variantIdx);
-            std::string baseOrdExpr = std::to_string(variantStartCgFnOrd);
-            if (!state.m_isCustomCgFnProtocol)
+            if (!isConstantLikeNode)
             {
-                baseOrdExpr = "x_totalNumDfgUserNodeCodegenFuncs + " + baseOrdExpr;
-            }
+                // For non-constant-like node, print the C++ definition for this reg alloc variant
+                //
+                std::string cppNameIdent = "_dfg_builtin_" + impl.NodeName() + "_" + std::to_string(variantIdx);
+                std::string baseOrdExpr = std::to_string(variantStartCgFnOrd);
+                if (!state.m_isCustomCgFnProtocol)
+                {
+                    baseOrdExpr = "x_totalNumDfgUserNodeCodegenFuncs + " + baseOrdExpr;
+                }
 
-            variantCppIdents.push_back(cppNameIdent);
-            variant->PrintCppDefinitions(r, hdrFp, cppFp, cppNameIdent, baseOrdExpr, false /*hasRangeOperand*/);
+                variantCppIdents.push_back(cppNameIdent);
+                variant->PrintCppDefinitions(r, hdrFp, cppFp, cppNameIdent, baseOrdExpr, false /*hasRangeOperand*/);
+            }
         }
 
+        if (!isConstantLikeNode)
         {
             std::string cppNameIdent = "_dfg_builtin_" + impl.NodeName();
             std::string baseOrdExpr = std::to_string(startCgFnOrd);
@@ -263,7 +355,7 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
         }
         else
         {
-            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeRegAllocInfo*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
+            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
                     cgInfo.m_cgFnName.c_str());
         }
 
@@ -309,7 +401,7 @@ void FPS_ProcessDfgBuiltinNodes()
     FILE* hdrFp = hdrOutFile.fp();
     FILE* cppFp = cppOutFile.fp();
 
-    fprintf(hdrFp, "#include \"drt/dfg_variant_traits_internal.h\"\n");
+    fprintf(hdrFp, "#include \"drt/dfg_variant_traits.h\"\n");
     fprintf(hdrFp, "#include \"drt/dfg_edge_use_kind.h\"\n");
 
     fprintf(cppFp, "#define DEEGEN_POST_FUTAMURA_PROJECTION\n\n");
@@ -322,12 +414,21 @@ void FPS_ProcessDfgBuiltinNodes()
     DfgBuiltinNodeProcessorState standardState(false /*isCustomCgFnProtocol*/, hdrFp, cppFp);
     DfgBuiltinNodeProcessorState customState(true /*isCustomCgFnProtocol*/, hdrFp, cppFp);
 
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplConstant>(ctx));
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplUnboxedConstant>(ctx));
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplArgument>(ctx));
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetNumVariadicArgs>(ctx));
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetKthVariadicArg>(ctx));
-    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetFunctionObject>(ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplConstant>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplConstant>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplUnboxedConstant>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplUnboxedConstant>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplUndefValue>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplUndefValue>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplArgument>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplArgument>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetNumVariadicArgs>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetNumVariadicArgs>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetKthVariadicArg>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetKthVariadicArg>(true /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetFunctionObject>(false /*toTempReg*/, ctx));
+    ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetFunctionObject>(true /*toTempReg*/, ctx));
+
     ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplGetLocal>(ctx));
     ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplSetLocal>(ctx));
     ProcessDfgBuiltinNode(standardState, std::make_unique<DfgBuiltinNodeImplCreateCapturedVar>(ctx));
@@ -345,6 +446,7 @@ void FPS_ProcessDfgBuiltinNodes()
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplPrependVariadicRes_MoveAndStoreInfo>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplCreateFunctionObject_AllocAndSetup>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplCreateFunctionObject_BoxFunctionObject>(ctx));
+    ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplCreateFunctionObject_BoxFnObjAndWriteSelfRefUv>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_MoveVariadicRes>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_RetWithVariadicRes>(ctx));
     ProcessDfgBuiltinNode(customState, std::make_unique<DfgBuiltinNodeImplReturn_WriteNil>(ctx));
@@ -411,6 +513,7 @@ void FPS_ProcessDfgBuiltinNodes()
         for (bool shouldFlipResult : { false, true })
         {
             // Passing argument in FPR is only beneficial for checking tDoubleNotNaN, other cases always use GPR
+            // TODO: this should probably be passed in by user specification instead
             //
             bool shouldUseFpr = (rule.m_checkedMask == x_typeMaskFor<tDoubleNotNaN>);
             std::unique_ptr<DfgBuiltinNodeImplTypeCheck> tcImpl(
@@ -433,7 +536,16 @@ void FPS_ProcessDfgBuiltinNodes()
     for (size_t idx = 0; idx < standardState.m_standardNodeMainEntryTable.size(); idx++)
     {
         dfg::NodeKind nodeKind = static_cast<dfg::NodeKind>(idx);
-        if (dfg::DfgBuiltinNodeUseCustomCodegenImpl(nodeKind))
+        if (dfg::IsDfgNodeKindConstantLikeNodeKind(nodeKind))
+        {
+            if (standardState.m_standardNodeMainEntryTable[idx] != "nullptr")
+            {
+                fprintf(stderr, "Dfg builtin node main codegen table entry should not be populated for constant-like node %s!\n",
+                        dfg::GetDfgBuiltinNodeKindName(nodeKind));
+                abort();
+            }
+        }
+        else if (dfg::DfgBuiltinNodeUseCustomCodegenImpl(nodeKind))
         {
             if (standardState.m_standardNodeMainEntryTable[idx] != "nullptr")
             {
@@ -452,6 +564,8 @@ void FPS_ProcessDfgBuiltinNodes()
             }
         }
     }
+
+    standardState.PrintConstantLikeNodeCodegenInfoTable(hdrFp);
 
     fprintf(hdrFp, "inline constexpr std::array<const DfgVariantTraits*, x_numTotalDfgBuiltinNodeKinds> x_dfg_builtin_node_standard_codegen_handler = {\n");
     for (size_t idx = 0; idx < dfg::x_numTotalDfgBuiltinNodeKinds; idx++)

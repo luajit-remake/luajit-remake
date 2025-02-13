@@ -122,15 +122,8 @@ struct PhantomInsertionPassImpl
         }
         m_totalSSAValuesInBB = numSSAValues;
 
-        if (numSSAValues > m_lastUseExitOrd.size())
-        {
-            m_lastUseExitOrd.resize(numSSAValues);
-        }
-
-        for (size_t i = 0; i < numSSAValues; i++)
-        {
-            m_lastUseExitOrd[i] = 0;
-        }
+        m_lastUseExitOrd.clear();
+        ResizeVectorTo(m_lastUseExitOrd, numSSAValues, 0U /*value*/);
 
         auto handleOsrExitDest = [&](OsrExitDestination newDest) ALWAYS_INLINE
         {
@@ -421,6 +414,7 @@ struct PhantomInsertionPassImpl
     void AssertConsistency()
     {
 #ifdef TESTBUILD
+        TestAssert(m_lastUseExitOrd.size() == m_totalSSAValuesInBB);
         for (size_t i = 0; i < m_totalSSAValuesInBB; i++)
         {
             m_lastUseExitOrd[i] = static_cast<uint32_t>(-1);

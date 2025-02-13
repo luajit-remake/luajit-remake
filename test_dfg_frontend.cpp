@@ -11,6 +11,8 @@
 #include "dfg_prediction_propagation.h"
 #include "dfg_speculation_assignment.h"
 #include "dfg_stack_layout_planning.h"
+#include "dfg_register_bank_assignment.h"
+#include "dfg_backend.h"
 
 using namespace dfg;
 
@@ -483,6 +485,9 @@ TEST(DfgFrontend, Parser_Stress_1)
 
             RunPhantomInsertionPass(graph.get());
             std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
+            RunRegisterBankAssignmentPass(graph.get());
+            ReleaseAssert(ValidateDfgIrGraph(graph.get()));
+            std::ignore = RunDfgBackend(graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
         }
     }

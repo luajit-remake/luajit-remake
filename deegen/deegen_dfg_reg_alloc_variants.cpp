@@ -488,7 +488,9 @@ void DfgNodeRegAllocVariant::PrintCppDefinitions(std::vector<std::unique_ptr<Dfg
         }
     }
     ReleaseAssert(isGprMask <= 255);
-    fprintf(cppFile, "        /*operandIsGprMask*/ %d\n", static_cast<int>(isGprMask));
+    fprintf(cppFile, "        /*operandIsGprMask*/ %d,\n", static_cast<int>(isGprMask));
+    fprintf(cppFile, "        /*numGprScratchNeeded*/ %d,\n", static_cast<int>(GetNumGprScratchRegistersNeeded()));
+    fprintf(cppFile, "        /*numFprScratchNeeded*/ %d,\n", static_cast<int>(GetNumFprScratchRegistersNeeded()));
     fprintf(cppFile, "    },\n");
 
     fprintf(cppFile, "    []() {\n");

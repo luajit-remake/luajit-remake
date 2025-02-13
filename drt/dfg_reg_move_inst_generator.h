@@ -354,6 +354,7 @@ inline void EmitRegisterSpillToStackInst(uint8_t*& addr /*inout*/, X64Reg reg, u
 inline size_t WARN_UNUSED GetRegisterStoreToMemBaseOffsetInstLength(X64Reg reg, X64Reg baseReg, uint32_t offsetBytes)
 {
     TestAssert(baseReg != X64Reg::RSP && baseReg != X64Reg::R12);
+    TestAssert(baseReg.IsGPR());
     size_t extraLength = (offsetBytes < 128) ? 0 : 3;
     if (reg.IsGPR())
     {
@@ -370,6 +371,7 @@ inline size_t WARN_UNUSED GetRegisterStoreToMemBaseOffsetInstLength(X64Reg reg, 
 inline void EmitRegisterStoreToMemBaseOffsetInstruction(uint8_t*& addr /*inout*/, X64Reg reg, X64Reg baseReg, uint32_t offsetBytes)
 {
     TestAssert(baseReg != X64Reg::RSP && baseReg != X64Reg::R12);
+    TestAssert(baseReg.IsGPR());
     size_t instLen;
     if (reg.IsGPR())
     {
@@ -573,6 +575,7 @@ inline void EmitRegisterLoadFromStackInst(uint8_t*& addr /*inout*/, X64Reg reg, 
 inline size_t WARN_UNUSED GetRegisterLoadFromMemBaseOffsetInstLength(X64Reg reg, X64Reg baseReg, uint32_t offsetBytes)
 {
     TestAssert(baseReg != X64Reg::RSP && baseReg != X64Reg::R12);
+    TestAssert(baseReg.IsGPR());
     size_t extraLength = (offsetBytes < 128) ? 0 : 3;
     if (reg.IsGPR())
     {
@@ -589,6 +592,7 @@ inline size_t WARN_UNUSED GetRegisterLoadFromMemBaseOffsetInstLength(X64Reg reg,
 inline void EmitRegisterLoadFromMemBaseOffsetInstruction(uint8_t*& addr /*inout*/, X64Reg reg, X64Reg baseReg, uint32_t offsetBytes)
 {
     TestAssert(baseReg != X64Reg::RSP && baseReg != X64Reg::R12);
+    TestAssert(baseReg.IsGPR());
     size_t instLen;
     if (reg.IsGPR())
     {

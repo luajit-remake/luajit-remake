@@ -25,6 +25,8 @@ add_library(deegen_rt
 	dfg_prediction_propagation.cpp
 	dfg_speculation_assignment.cpp
 	dfg_stack_layout_planning.cpp
+	dfg_register_bank_assignment.cpp
+	dfg_backend.cpp
 )
 
 add_dependencies(deegen_rt 

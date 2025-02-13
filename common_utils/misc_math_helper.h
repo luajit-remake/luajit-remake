@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "constexpr_power_helper.h"
 
 // Perform a sign-extended right-shift, even if T is an unsigned type
 //
@@ -85,9 +86,9 @@ constexpr Dst WARN_UNUSED ALWAYS_INLINE SafeIntegerCast(Src src)
 }
 
 template<size_t mult, typename T>
-constexpr T RoundUpToMultipleOf(T val)
+constexpr T WARN_UNUSED ALWAYS_INLINE RoundUpToMultipleOf(T val)
 {
-    static_assert(std::is_integral_v<T>);
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
     static_assert(mult < std::numeric_limits<T>::max());
     if constexpr(std::is_signed_v<T>)
     {
@@ -95,6 +96,16 @@ constexpr T RoundUpToMultipleOf(T val)
     }
     Assert(val <= std::numeric_limits<T>::max() - static_cast<T>(mult));
     return (val + static_cast<T>(mult) - 1) / static_cast<T>(mult) * static_cast<T>(mult);
+}
+
+template<typename T>
+constexpr T WARN_UNUSED ALWAYS_INLINE RoundUpToPowerOfTwoMultipleOf(T value, T multMustBePowerOf2)
+{
+    static_assert(std::is_integral_v<T> && !std::is_signed_v<T> && !std::is_same_v<T, bool>);
+    TestAssert(is_power_of_2(multMustBePowerOf2));
+    value += multMustBePowerOf2 - 1;
+    T mask = ~(multMustBePowerOf2 - 1);
+    return value & mask;
 }
 
 // *c = a + b (wrapping), return true if overflowed
@@ -251,7 +262,7 @@ bool WARN_UNUSED ALWAYS_INLINE IsNaN(T a)
 }
 
 template<typename T>
-uint32_t WARN_UNUSED ALWAYS_INLINE CountTrailingZeros(T value)
+constexpr uint32_t WARN_UNUSED ALWAYS_INLINE CountTrailingZeros(T value)
 {
     static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
     static_assert(std::is_unsigned_v<T>, "CountTrailingZeros does not make sense for signed types!");
@@ -265,6 +276,44 @@ uint32_t WARN_UNUSED ALWAYS_INLINE CountTrailingZeros(T value)
     {
         static_assert(sizeof(T) == 8);
         return static_cast<uint32_t>(__builtin_ctzll(value));
+    }
+}
+
+template<typename T>
+constexpr uint32_t WARN_UNUSED ALWAYS_INLINE CountNumberOfOnes(T value)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+    static_assert(std::is_unsigned_v<T>, "CountNumberOfOnes does not make sense for signed types!");
+    if constexpr(sizeof(T) <= 4)
+    {
+        static_assert(sizeof(unsigned int) == 4);
+        return static_cast<uint32_t>(__builtin_popcount(value));
+    }
+    else
+    {
+        static_assert(sizeof(T) == 8);
+        return static_cast<uint32_t>(__builtin_popcountll(value));
+    }
+}
+
+// Return the ordinal (lowest bit = 0) of the highest one bit
+//
+template<typename T>
+constexpr uint32_t WARN_UNUSED ALWAYS_INLINE FindHighestOneBit(T value)
+{
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>);
+    static_assert(std::is_unsigned_v<T>, "FindHighestOneBit does not make sense for signed types!");
+    TestAssert(value != 0);
+    if constexpr(sizeof(T) <= 4)
+    {
+        static_assert(sizeof(unsigned int) == 4);
+        return static_cast<uint32_t>(31 - __builtin_clz(value));
+    }
+    else
+    {
+        static_assert(sizeof(T) == 8);
+        static_assert(sizeof(unsigned long long) == 8);
+        return static_cast<uint32_t>(63 - __builtin_clzll(value));
     }
 }
 
@@ -380,4 +429,56 @@ constexpr T WARN_UNUSED SingletonBitmask(size_t bitOrd)
     static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool> && std::is_unsigned_v<T>);
     Assert(bitOrd < sizeof(T) * 8);
     return static_cast<T>(static_cast<T>(1) << bitOrd);
+}
+
+namespace internal {
+
+inline constexpr std::array<uint64_t, 5> x_nibbleLookupMaskForFirstKOneBits = []() {
+    std::array<uint64_t, 5> r;
+    for (size_t k = 0; k < 5; k++)
+    {
+        uint64_t res = 0;
+        for (uint64_t x = 0; x < 16; x++)
+        {
+            uint64_t v = 0, cnt = 0;
+            for (size_t i = 0; i < 4; i++)
+            {
+                if (cnt < k && (x & (1U << i)) > 0)
+                {
+                    cnt++;
+                    v |= (1U << i);
+                }
+            }
+            res |= v << (x * 4);
+        }
+        r[k] = res;
+    }
+    return r;
+}();
+
+}   // namespace internal
+
+// Given 'val', return the value consisting of the first k 1-bits in 'val'
+// k must be <= # of 1-bits in 'val'
+//
+constexpr uint8_t ALWAYS_INLINE WARN_UNUSED GetFirstKOnesInUint8Val(uint8_t val, size_t k)
+{
+    TestAssert(k <= CountNumberOfOnes(val));
+    uint8_t lowNibble = val & 15;
+    uint32_t onesInLowNibble = CountNumberOfOnes(lowNibble);
+    if (k > onesInLowNibble)
+    {
+        size_t desiredOnesInHighNibble = k - onesInLowNibble;
+        TestAssert(desiredOnesInHighNibble <= 4);
+        uint64_t lookupMask = internal::x_nibbleLookupMaskForFirstKOneBits[desiredOnesInHighNibble];
+        size_t highNibble = val >> 4;
+        uint8_t resultHigh = static_cast<uint8_t>((lookupMask >> (highNibble * 4)) & 15);
+        return static_cast<uint8_t>((resultHigh << 4) + lowNibble);
+    }
+    else
+    {
+        uint64_t lookupMask = internal::x_nibbleLookupMaskForFirstKOneBits[k];
+        uint8_t result = static_cast<uint8_t>((lookupMask >> (lowNibble * 4)) & 15);
+        return result;
+    }
 }

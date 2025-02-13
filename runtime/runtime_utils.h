@@ -1037,6 +1037,17 @@ public:
         return offsetof_member_v<&FunctionObject::m_upvalues>;
     }
 
+    // Return the byte offset of the address for upvalue ordinal 'uvOrd' from the base address of this object
+    //
+    static constexpr size_t GetUpvalueAddrByteOffsetFromThisPointer(size_t uvOrd)
+    {
+        return GetTrailingArrayOffset() + sizeof(TValue) * uvOrd;
+    }
+
+    // Right now we are storing m_numUpvalues in a uint8_t
+    //
+    static constexpr size_t x_maxNumUpvalues = 255;
+
     // Object header
     //
     // Note that a CodeBlock defines both UnlinkedCodeBlock and GlobalObject,

@@ -158,7 +158,7 @@ public:
 
     class Mark
     {
-        friend class TempArenaAllocator;
+        friend TempArenaAllocator;
         uintptr_t m_markListHead;
         uintptr_t m_markCustomSizeListHead;
         uintptr_t m_markCurrentAddress;
@@ -226,6 +226,25 @@ public:
     }
 
     // This assumes that the constructor will never throw
+    // Behaves like 'new T[num]'. Note that this is *not* a value initialization,
+    // so e.g., the array is not zeroed out if the array element is a primitive type (same as how 'new int[10]' behaves)
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArray(size_t num)
+    {
+        T* ptr = AllocateArrayUninitialized<T>(num);
+        for (size_t i = 0; i < num; i++)
+        {
+            // Not T(), which would do value-initialization (e.g., zeroes out primitive types)
+            //
+            new (static_cast<void*>(ptr + i)) T;
+        }
+        return ptr;
+    }
+
+    // This assumes that the constructor will never throw
+    // Note that if 'args' is empty, the AllocateArray() specialization will be chosen, which does not do value-initialization.
+    // To do explicit value initialization (i.e., 'new T[num]()'), use 'AllocateArrayWithValueInitialization' instead
     //
     template<typename T, typename... Args>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArray(size_t num, Args&&... args)
@@ -238,11 +257,35 @@ public:
         return ptr;
     }
 
+    // This assumes that the constructor will never throw
+    // Behaves like 'new T[num]()', that is, it does a value-initialization so it zeroes out primitive-typed array etc.
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArrayWithValueInitialization(size_t num)
+    {
+        T* ptr = AllocateArrayUninitialized<T>(num);
+        for (size_t i = 0; i < num; i++)
+        {
+            new (static_cast<void*>(ptr + i)) T();
+        }
+        return ptr;
+    }
+
     template<typename T>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObjectUninitialized()
     {
         static_assert(is_power_of_2(alignof(T)) && sizeof(T) % alignof(T) == 0);
         return AllocateArrayUninitialized<T>(1 /*num*/);
+    }
+
+    // Behaves like 'new T', that is, it does not zero-initialize if T is a primitive type or a class with default constructor
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObject()
+    {
+        T* ptr = AllocateObjectUninitialized<T>();
+        new (static_cast<void*>(ptr)) T;
+        return ptr;
     }
 
     template<typename T, typename... Args>
@@ -253,6 +296,21 @@ public:
         return ptr;
     }
 
+    // Behaves like 'new T()'
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObjectWithValueInitialization()
+    {
+        T* ptr = AllocateObjectUninitialized<T>();
+        new (static_cast<void*>(ptr)) T();
+        return ptr;
+    }
+
+    // Note that if the trailing array is not at the end of the object due to alignment padding, e.g.,
+    //     struct S { int32_t x; int16_t y; int16_t z[0]; }
+    // We will allocate more memory than needed. But this is safe anyway, and if the caller cares about this
+    // it can do allocation by AllocateUninitialized directly.
+    //
     template<typename T>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObjectUninitializedWithTrailingBuffer(size_t trailingBufferSize)
     {
@@ -475,3 +533,72 @@ struct ArenaAllocatorDeleterForObjectWithNonTrivialDestructor
 //
 template<typename T>
 using arena_unique_ptr = std::unique_ptr<T, ArenaAllocatorDeleterForObjectWithNonTrivialDestructor<T>>;
+
+// We sometimes use a TempVector<T> as a resizable buffer
+// This function increases the capacity of the buffer 'desiredCapacity', but still uses exponential growth,
+// so multiple calls to this function still always results in linear total allocation
+//
+// Note that this function does not change the size of the buffer, only the capacity
+//
+template<typename T, typename TAlloc>
+void ALWAYS_INLINE ReserveCapacityForVectorWithExponentialGrowth(std::vector<T, TAlloc>& buffer, size_t desiredCapacity)
+{
+    size_t oldCapacity = buffer.capacity();
+    if (desiredCapacity > oldCapacity)
+    {
+        // Allocate more memory with exponential growth
+        //
+        size_t newCapacity = std::max(oldCapacity * 3 / 2, desiredCapacity);
+        buffer.reserve(newCapacity);
+    }
+    Assert(buffer.capacity() >= desiredCapacity);
+}
+
+// Make the size of the dynamic buffer to at least 'desiredSize', while using exponential growth to grow the capacity of the buffer
+//
+// if 'desiredSize' is smaller than the current size, nothing happens
+//
+// Note that this is required, since the clear() + resize() pattern for std::vector will by default result in always allocating
+// the exact size requested by 'resize', resulting in O(n^2) total allocation instead of O(n).
+//
+// As an example, the following program:
+//
+//     std::vector<int> a;
+//     for (size_t i = 0; i < 1000; i++)
+//     {
+//         a.resize(i);
+//         printf("size = %llu, capacity = %llu\n", a.size(), a.capacity());
+//         a.clear();
+//         printf("size = %llu, capacity = %llu\n", a.size(), a.capacity());
+//     }
+//
+// will output:
+//     ....
+//     size = 600, capacity = 600
+//     size = 0, capacity = 600
+//     size = 601, capacity = 601
+//     size = 0, capacity = 601
+//     size = 602, capacity = 602
+//     size = 0, capacity = 602
+//     ....
+//
+template<typename T, typename TAlloc, typename U>
+void ALWAYS_INLINE GrowVectorToAtLeast(std::vector<T, TAlloc>& buffer, size_t desiredSize, U&& initValue)
+{
+    if (desiredSize > buffer.size())
+    {
+        ReserveCapacityForVectorWithExponentialGrowth(buffer, desiredSize);
+        buffer.resize(desiredSize, std::forward<U>(initValue));
+    }
+    Assert(buffer.size() >= desiredSize);
+}
+
+// Resizes the buffer to the given size, using exponential growth to grow the capacity of the buffer
+//
+template<typename T, typename TAlloc, typename U>
+void ALWAYS_INLINE ResizeVectorTo(std::vector<T, TAlloc>& buffer, size_t desiredSize, U&& initValue)
+{
+    ReserveCapacityForVectorWithExponentialGrowth(buffer, desiredSize);
+    buffer.resize(desiredSize, std::forward<U>(initValue));
+    Assert(buffer.size() == desiredSize);
+}

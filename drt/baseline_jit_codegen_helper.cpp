@@ -14,14 +14,6 @@ extern "C" const BaselineJitFunctionEntryLogicTraits deegen_baseline_jit_functio
 //
 extern "C" void deegen_baseline_jit_do_codegen_impl(DeegenBaselineJitCodegenControlStruct*);
 
-static size_t WARN_UNUSED ALWAYS_INLINE RoundUpToPowerOfTwoAlignment(size_t value, size_t alignmentMustBePowerOf2)
-{
-    Assert(is_power_of_2(alignmentMustBePowerOf2));
-    value += alignmentMustBePowerOf2 - 1;
-    size_t mask = ~(alignmentMustBePowerOf2 - 1);
-    return value & mask;
-}
-
 static BaselineJitFunctionEntryLogicTraits WARN_UNUSED ALWAYS_INLINE GetBaselineJitFunctionEntryLogicTrait(bool takesVarArg, size_t numFixedArgs)
 {
     if (!takesVarArg)
@@ -88,7 +80,7 @@ BaselineCodeBlock* NO_INLINE deegen_baseline_jit_do_codegen(CodeBlock* cb)
             BytecodeBaselineJitTraits trait = deegen_baseline_jit_bytecode_trait_table[opcode];
             fastPathCodeLen += trait.m_fastPathCodeLen;
             slowPathCodeLen += trait.m_slowPathCodeLen;
-            dataSectionCodeLen = RoundUpToPowerOfTwoAlignment(dataSectionCodeLen, trait.m_dataSectionAlignment);
+            dataSectionCodeLen = RoundUpToPowerOfTwoMultipleOf(dataSectionCodeLen, static_cast<size_t>(trait.m_dataSectionAlignment));
             dataSectionCodeLen += trait.m_dataSectionCodeLen;
             numLateCondBrPatches += trait.m_numCondBrLatePatches;
             slowPathDataStreamLen += trait.m_slowPathDataLen;

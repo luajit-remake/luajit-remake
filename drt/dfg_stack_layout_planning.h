@@ -13,9 +13,6 @@ struct StackLayoutPlanningResult
         : m_constantTable(resultAlloc)
     { }
 
-    // This value is the first slot that is available for use for temporaries
-    //
-    uint32_t m_numTotalPhysicalSlots;
     uint32_t m_m_inlineFrameOsrInfoDataBlockSize;
     uint32_t m_numTotalBoxedConstants;
     // Note that this constant table is in forward order, not the reversed order expected in DfgCodeBlock

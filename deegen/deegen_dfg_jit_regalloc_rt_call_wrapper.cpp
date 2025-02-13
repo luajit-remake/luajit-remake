@@ -443,7 +443,7 @@ void DfgRegAllocCCallWrapperRequest::PrintAssemblyImpl(FILE* file)
     }
 
     uint64_t extraFprSaveMask = GetExtraFprMaskToSave();
-    size_t numExtraFprRegsToSave = static_cast<size_t>(__builtin_popcountll(extraFprSaveMask));
+    size_t numExtraFprRegsToSave = CountNumberOfOnes(extraFprSaveMask);
 
     constexpr size_t x_sharedStubUsedBufferSize = x_dfg_reg_alloc_num_fprs * 16 + 8;
 

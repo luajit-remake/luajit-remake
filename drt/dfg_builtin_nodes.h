@@ -197,8 +197,8 @@ namespace dfg {
 //     Get a varadic result consists of input [1, k + #0], #0 must be an unboxed uint64_t value that represents a valid index.
 //     This node will only show up due to speculatively inlining calls that passes variadic results as arguments or
 //     returns variadic results. Due to how this node is used, it is guaranteed that all the input nodes in range
-//     [k + 1, end) are GetKthVariadicRes nodes and #0 is the actual number of return values, so [k + #0 + 1, end) must
-//     all be nil values.
+//     [k + 1, end) are accessing a variadic argument of the root function or an inlined function,
+//     and #0 is the actual number of variadic arguments to that function, so [k + #0 + 1, end) must all be nil values.
 //
 // PrependVariadicRes:
 //     Input: >=0 values, VariadicResults
@@ -280,7 +280,7 @@ namespace dfg {
 #define DFG_CONSTANT_LIKE_NODE_KIND_LIST                                                            \
       (Constant                   , int64_t                   , true            , false)            \
     , (UnboxedConstant            , int64_t                   , true            , false)            \
-    , (UndefValue                 , void                      , true            , true)             \
+    , (UndefValue                 , void                      , true            , false)            \
     , (Argument                   , uint64_t                  , true            , false)            \
     , (GetNumVariadicArgs         , void                      , true            , false)            \
     , (GetKthVariadicArg          , uint64_t                  , true            , false)            \
@@ -425,6 +425,15 @@ constexpr size_t x_numTotalDfgBuiltinNodeKinds = NodeKind_FirstAvailableGuestLan
 //
 static_assert(x_numTotalDfgBuiltinNodeKinds <= 64);
 
+#define macro(e) +1
+constexpr size_t x_numTotalDfgConstantLikeNodeKinds = 0 PP_FOR_EACH(macro, DFG_CONSTANT_LIKE_NODE_KIND_LIST);
+#undef macro
+
+constexpr bool WARN_UNUSED IsDfgNodeKindConstantLikeNodeKind(NodeKind nodeKind)
+{
+    return static_cast<uint16_t>(nodeKind) < x_numTotalDfgConstantLikeNodeKinds;
+}
+
 namespace detail {
 
 template<NodeKind nodeKind> struct BuiltinNodeNsdTyHelper;
@@ -561,6 +570,7 @@ enum class DfgBuiltinNodeCustomCgFn
     PrependVariadicRes_MoveAndStoreInfo,
     CreateFunctionObject_AllocAndSetup,
     CreateFunctionObject_BoxFunctionObject,
+    CreateFunctionObject_BoxFnObjAndWriteSelfRefUv,
     Return_MoveVariadicRes,
     Return_RetWithVariadicRes,
     Return_WriteNil,

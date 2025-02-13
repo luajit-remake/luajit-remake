@@ -1,9 +1,9 @@
 #include "define_deegen_common_snippet.h"
-#include "dfg_reg_alloc_node_info.h"
+#include "dfg_reg_alloc_state.h"
 
-static uint16_t DeegenSnippet_GetDfgNodeRegAllocInfoCodegenFuncOrd(dfg::NodeRegAllocInfo* node)
+static uint16_t DeegenSnippet_GetDfgNodeOperandConfigDataCodegenFuncOrd(dfg::NodeOperandConfigData* node)
 {
-    return static_cast<uint16_t>(node->m_codegenFuncOrd);
+    return static_cast<uint16_t>(node->GetCodegenFuncOrd());
 }
 
-DEFINE_DEEGEN_COMMON_SNIPPET("GetDfgNodeRegAllocInfoCodegenFuncOrd", DeegenSnippet_GetDfgNodeRegAllocInfoCodegenFuncOrd)
+DEFINE_DEEGEN_COMMON_SNIPPET("GetDfgNodeOperandConfigDataCodegenFuncOrd", DeegenSnippet_GetDfgNodeOperandConfigDataCodegenFuncOrd)

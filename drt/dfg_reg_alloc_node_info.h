@@ -2,250 +2,635 @@
 
 #include "common_utils.h"
 #include "dfg_reg_alloc_register_info.h"
+#include "heap_ptr_utils.h"
 #include "temp_arena_allocator.h"
+#include "dfg_osr_exit_map_builder.h"
 
 namespace dfg {
 
+struct ValueNextUseInfo
+{
+    constexpr ValueNextUseInfo() = default;
+    constexpr ValueNextUseInfo(uint32_t value) : m_value(value) { }
+
+    constexpr ALWAYS_INLINE ValueNextUseInfo(bool isGhostUseOnly, uint32_t nextUseIndex)
+    {
+        m_value = 0;
+        Data_GhostUseOnly::Set(m_value, isGhostUseOnly);
+        Data_NextUseIndex::Set(m_value, nextUseIndex);
+    }
+
+    static constexpr ValueNextUseInfo WARN_UNUSED NoMoreUse()
+    {
+        return ValueNextUseInfo(true /*isGhostUseOnly*/, x_noNextUse);
+    }
+
+    bool WARN_UNUSED IsAllFutureUseGhostUse() { return Data_GhostUseOnly::Get(m_value); }
+    uint32_t WARN_UNUSED GetNextUseIndex() { return Data_NextUseIndex::Get(m_value); }
+    uint16_t WARN_UNUSED GetCustomDataAsU16() { return Data_CustomDataAsU16::Get(m_value); }
+    uint8_t WARN_UNUSED GetCustomDataAsU8() { return Data_CustomDataAsU8::Get(m_value); }
+
+    uint32_t WARN_UNUSED GetCompositeValueWithLowerBitsCleared()
+    {
+        return ValueNextUseInfo(IsAllFutureUseGhostUse(), GetNextUseIndex()).m_value;
+    }
+
+    bool HasNextUse()
+    {
+        TestAssertImp(GetNextUseIndex() == x_noNextUse, IsAllFutureUseGhostUse());
+        bool result = (m_value < NoMoreUse().m_value);
+        TestAssertIff(result, GetNextUseIndex() != x_noNextUse);
+        return result;
+    }
+
+    // Note that the bit-field offsets matter: we sort DataTy as an integer directly!
+    // A larger value means the value is a better candidate for eviction.
+    //
+    using DataTy = uint32_t;
+
+    // If true, it means all remaining uses of this SSA value are by ShadowStore or Phantom
+    // In this case, we still need to keep the value alive, but it no longer makes sense to
+    // keep the value in register. Thus, this is the highest bit.
+    //
+    using Data_GhostUseOnly = BitFieldMember<DataTy, bool, 31 /*start*/, 1 /*width*/>;
+
+    // The main weight value that decides which register to evict.
+    //
+    // We use the next nodeIndex that uses this value as criteria, which is optimal if one
+    // treats all eviction to have the same cost.
+    //
+    // However, eviction may have different cost actually: for non-constant nodes, only at the
+    // first time we evict it, we need to spill it, incurring a one-time cost. But for
+    // constant-like nodes and nodes that have already been spilled once, there is no spill cost.
+    // I thought a bit about if we can patch the algorithm to deal with this, but with no avail.
+    // One might think the algorithm can be patched by using NextNextUse as eviction weight for nodes
+    // that does not have a spill cost, but this is wrong (consider access pattern ABCABCABC...
+    // where we only have two regs. The optimal solution is to always evict based on NextUse,
+    // resulting in 1/2 hit rate long term. But if one uses the above NextNextUse patch, the algorithm
+    // will tend to avoid spilling or prefer spilling a specific node to avoid the one-time spill cost,
+    // but this results in only 1/3 hit rate long term).
+    //
+    // So for now, we will not attempt to leverage the fact that some nodes does not need to be spilled
+    // or already have been spilled, and just always use NextUse as criterion for eviction.
+    //
+    using Data_NextUseIndex = BitFieldMember<DataTy, uint32_t, 12 /*start*/, 19 /*width*/>;
+
+    static constexpr uint32_t x_noNextUse = static_cast<uint32_t>((1U << Data_NextUseIndex::BitWidth()) - 1);
+
+    // This field is repurposed in a number of ways depending on the caller logic.
+    //
+    using Data_CustomDataAsU16 = BitFieldMember<DataTy, uint16_t, 0 /*start*/, 12 /*width*/>;
+    using Data_CustomDataAsU8 = BitFieldMember<DataTy, uint8_t, 0 /*start*/, 8 /*width*/>;
+
+    DataTy m_value;
+};
+
+struct Node;
+
 // This class records:
-// 1. Where a SSA value is available: it could be in GPR and/or in FPR and/or on the stack.
-// 2. Where is the next use of this SSA value
+// 1. Where a SSA value is available right now: it could be in GPR and/or in FPR and/or on the stack.
+// 2. When is the next GPR/FPR use of this SSA value
+// 3. All locations on the shadow stack which current value is this SSA value (only available if this value isn't constant-like)
 //
 struct alignas(8) ValueRegAllocInfo
 {
-    ValueRegAllocInfo()
-        : m_compositeVal(0)
-        , m_nextUseInputOrd(static_cast<uint16_t>(-1))
-        , m_physicalSpillLoc(static_cast<uint16_t>(-1))
+private:
+    // This class must be allocated in DFG arena
+    //
+    friend Arena;
+
+    // Initialize for a non-constant-like node
+    //
+    ALWAYS_INLINE ValueRegAllocInfo()
+        : m_associatedShadowStackLocs()
     {
-        InvalidateGPR();
-        Assert(!IsAvailableInGPR() && !IsAvailableInFPR() && !IsSpilled() && !HasNextUse());
+        m_compositeValue = 0;
+        SetGprNextUseInfo(ValueNextUseInfo::NoMoreUse());
+        SetFprNextUseInfo(ValueNextUseInfo::NoMoreUse());
+        Data_GprIndex::Set(m_compositeValue, x_invalidReg);
+        Data_FprIndex::Set(m_compositeValue, x_invalidReg);
+        Data_PhysicalSpillLoc::Set(m_compositeValue, x_notSpilled);
+        TestAssert(!IsConstantLikeNode());
     }
 
-    // RSP is never a valid reg for reg alloc, so use it to indicate invalid
+    // Initialize for a constant-like node
     //
-    static constexpr uint8_t x_invalidGprOrd = X64Reg::RSP.MachineOrd();
+    ALWAYS_INLINE ValueRegAllocInfo(Node* node, uint16_t ident)
+    {
+        TestAssert(node != nullptr);
+        m_compositeValue = 0;
+        SetGprNextUseInfo(ValueNextUseInfo::NoMoreUse());
+        SetFprNextUseInfo(ValueNextUseInfo::NoMoreUse());
+        Data_GprIndex::Set(m_compositeValue, x_invalidReg);
+        Data_FprIndex::Set(m_compositeValue, x_invalidReg);
+        Data_PhysicalSpillLoc::Set(m_compositeValue, ident);
+        TestAssert(reinterpret_cast<uintptr_t>(node) % 2 == 0);
+        m_cstNodeTaggedPtr = reinterpret_cast<uintptr_t>(node) | 1;
+        TestAssert(IsConstantLikeNode());
+    }
 
+public:
     bool WARN_UNUSED IsAvailableInGPR()
     {
-        return BFM_GprLoc::Get(m_compositeVal) != x_invalidGprOrd;
+        return Data_GprIndex::Get(m_compositeValue) != x_invalidReg;
     }
 
     void InvalidateGPR()
     {
         TestAssert(IsAvailableInGPR());
-        BFM_GprLoc::Set(m_compositeVal, x_invalidGprOrd);
+        Data_GprIndex::Set(m_compositeValue, x_invalidReg);
     }
 
-    void SetGPR(X64Reg reg)
+    // The actual GPR is x_dfg_reg_alloc_gprs[gprOrdInList]
+    //
+    void SetGPR(uint8_t gprOrdInList)
     {
-        TestAssert(!IsAvailableInGPR());
-        TestAssert(reg.IsGPR() && reg.MachineOrd() < 16 && reg.MachineOrd() != x_invalidGprOrd);
-        BFM_GprLoc::Set(m_compositeVal, reg.MachineOrd());
+        TestAssert(gprOrdInList < x_dfg_reg_alloc_num_gprs);
+        Data_GprIndex::Set(m_compositeValue, gprOrdInList);
+    }
+
+    uint8_t WARN_UNUSED GetGprOrdInList()
+    {
+        TestAssert(IsAvailableInGPR());
+        TestAssert(Data_GprIndex::Get(m_compositeValue) < x_dfg_reg_alloc_num_gprs);
+        return Data_GprIndex::Get(m_compositeValue);
+    }
+
+    X64Reg WARN_UNUSED GetGprRegister()
+    {
+        return x_dfg_reg_alloc_gprs[GetGprOrdInList()];
     }
 
     bool WARN_UNUSED IsAvailableInFPR()
     {
-        return BFM_InFpr::Get(m_compositeVal);
+        return Data_FprIndex::Get(m_compositeValue) != x_invalidReg;
     }
 
     void InvalidateFPR()
     {
         TestAssert(IsAvailableInFPR());
-        BFM_InFpr::Set(m_compositeVal, false);
+        Data_FprIndex::Set(m_compositeValue, x_invalidReg);
     }
 
-    void SetFPR(X64Reg reg)
+    // The actual FPR is x_dfg_reg_alloc_fprs[fprOrdInList]
+    //
+    void SetFPR(uint8_t fprOrdInList)
     {
-        TestAssert(!IsAvailableInFPR());
-        TestAssert(!reg.IsGPR() && reg.MachineOrd() < 32);
-        BFM_InFpr::Set(m_compositeVal, true);
-        BFM_FprLoc::Set(m_compositeVal, reg.MachineOrd());
+        TestAssert(fprOrdInList < x_dfg_reg_alloc_num_fprs);
+        Data_FprIndex::Set(m_compositeValue, fprOrdInList);
     }
 
-    bool WARN_UNUSED IsSpilled() { return m_physicalSpillLoc != static_cast<uint16_t>(-1); }
+    uint8_t WARN_UNUSED GetFprOrdInList()
+    {
+        TestAssert(IsAvailableInFPR());
+        TestAssert(Data_FprIndex::Get(m_compositeValue) < x_dfg_reg_alloc_num_fprs);
+        return Data_FprIndex::Get(m_compositeValue);
+    }
 
-    uint16_t WARN_UNUSED GetPhysicalSpillSlot() { TestAssert(IsSpilled()); return m_physicalSpillLoc; }
+    X64Reg WARN_UNUSED GetFprRegister()
+    {
+        return x_dfg_reg_alloc_fprs[GetFprOrdInList()];
+    }
+
+    template<bool forGprState>
+    bool WARN_UNUSED ALWAYS_INLINE IsAvailableInRegBank()
+    {
+        if constexpr(forGprState)
+        {
+            return IsAvailableInGPR();
+        }
+        else
+        {
+            return IsAvailableInFPR();
+        }
+    }
+
+    template<bool forGprState>
+    uint8_t WARN_UNUSED ALWAYS_INLINE GetRegBankRegOrdInList()
+    {
+        if constexpr(forGprState)
+        {
+            return GetGprOrdInList();
+        }
+        else
+        {
+            return GetFprOrdInList();
+        }
+    }
+
+    template<bool forGprState>
+    X64Reg WARN_UNUSED ALWAYS_INLINE GetRegBankRegister()
+    {
+        if constexpr(forGprState)
+        {
+            return GetGprRegister();
+        }
+        else
+        {
+            return GetFprRegister();
+        }
+    }
+
+    template<bool forGprState>
+    ValueNextUseInfo WARN_UNUSED ALWAYS_INLINE GetNextUseInfoInRegBank()
+    {
+        if constexpr(forGprState)
+        {
+            return GetGprNextUseInfo();
+        }
+        else
+        {
+            return GetFprNextUseInfo();
+        }
+    }
+
+    template<bool forGprState>
+    void ALWAYS_INLINE SetNextUseInfoInRegBank(ValueNextUseInfo info)
+    {
+        if constexpr(forGprState)
+        {
+            SetGprNextUseInfo(info);
+        }
+        else
+        {
+            SetFprNextUseInfo(info);
+        }
+    }
+
+    template<bool forGprState>
+    void ALWAYS_INLINE SetRegBankRegOrdInList(size_t regOrdInList)
+    {
+        if constexpr(forGprState)
+        {
+            SetGPR(SafeIntegerCast<uint8_t>(regOrdInList));
+        }
+        else
+        {
+            SetFPR(SafeIntegerCast<uint8_t>(regOrdInList));
+        }
+    }
+
+    template<bool forGprState>
+    void ALWAYS_INLINE InvalidateRegBankRegister()
+    {
+        if constexpr(forGprState)
+        {
+            InvalidateGPR();
+        }
+        else
+        {
+            InvalidateFPR();
+        }
+    }
+
+    // Same as IsConstantNode() || IsSpilled(), but faster
+    //
+    bool ALWAYS_INLINE WARN_UNUSED IsConstantLikeNodeOrIsSpilled()
+    {
+        // x_noSpill (0x7fff) is not a valid constant ident (and not a valid spill location either, of course)
+        // So all constant-like nodes must have m_physicalSlot != x_noSpill.
+        //
+        TestAssertImp(IsConstantLikeNode(), Data_PhysicalSpillLoc::Get(m_compositeValue) != x_notSpilled);
+        return Data_PhysicalSpillLoc::Get(m_compositeValue) != x_notSpilled;
+    }
+
+    bool ALWAYS_INLINE WARN_UNUSED IsNonConstantAndNotSpilled()
+    {
+        return !IsConstantLikeNodeOrIsSpilled();
+    }
+
+    bool ALWAYS_INLINE WARN_UNUSED IsConstantLikeNode()
+    {
+        // For sanity, avoid breaking strict aliasing
+        //
+        return UnalignedLoad<uint64_t>(&m_cstNodeTaggedPtr) & 1;
+    }
+
+    Node* WARN_UNUSED GetConstantLikeNode()
+    {
+        TestAssert(IsConstantLikeNode());
+        return reinterpret_cast<Node*>(m_cstNodeTaggedPtr ^ 1);
+    }
+
+    uint16_t WARN_UNUSED GetConstantIdentifier()
+    {
+        TestAssert(IsConstantLikeNode());
+        return Data_PhysicalSpillLoc::Get(m_compositeValue);
+    }
+
+    bool WARN_UNUSED IsSpilled()
+    {
+        TestAssert(!IsConstantLikeNode());
+        return Data_PhysicalSpillLoc::Get(m_compositeValue) != x_notSpilled;
+    }
+
+    uint16_t WARN_UNUSED GetPhysicalSpillSlot()
+    {
+        TestAssert(!IsConstantLikeNode() && IsSpilled());
+        return Data_PhysicalSpillLoc::Get(m_compositeValue);
+    }
 
     void SetPhysicalSpillSlot(uint16_t value)
     {
-        TestAssert(!IsSpilled() && value != static_cast<uint16_t>(-1));
-        m_physicalSpillLoc = value;
+        TestAssert(!IsConstantLikeNode() && !IsSpilled() && value < x_notSpilled);
+        Data_PhysicalSpillLoc::Set(m_compositeValue, value);
     }
 
-    bool WARN_UNUSED HasNextUse() { return m_nextUseInputOrd != static_cast<uint16_t>(-1); }
-
-    // <NodeIdx, InputOrd> identifies the next use of this value
-    //
-    uint32_t WARN_UNUSED GetNextUseNodeIdx() { TestAssert(HasNextUse()); return BFM_NextUseNodeIdx::Get(m_compositeVal); }
-    uint16_t WARN_UNUSED GetNextUseInputOrd() { TestAssert(HasNextUse()); return m_nextUseInputOrd; }
-
-    void SetNoNextUse() { m_nextUseInputOrd = static_cast<uint16_t>(-1); }
-
-    void SetNextUse(uint32_t nodeIdx, uint16_t inputOrd)
+    ValueNextUseInfo GetGprNextUseInfo()
     {
-        TestAssert(inputOrd != static_cast<uint16_t>(-1));
-        BFM_NextUseNodeIdx::Set(m_compositeVal, nodeIdx);
-        m_nextUseInputOrd = inputOrd;
+        return ValueNextUseInfo(
+            Data_GprGhostUseOnly::Get(m_compositeValue),
+            Data_GprNextUseIndex::Get(m_compositeValue));
+    }
+
+    ValueNextUseInfo GetFprNextUseInfo()
+    {
+        return ValueNextUseInfo(
+            Data_FprGhostUseOnly::Get(m_compositeValue),
+            Data_FprNextUseIndex::Get(m_compositeValue));
+    }
+
+    void ALWAYS_INLINE SetGprNextUseInfo(ValueNextUseInfo info)
+    {
+        TestAssertImp(info.GetNextUseIndex() == ValueNextUseInfo::x_noNextUse, info.IsAllFutureUseGhostUse());
+        Data_GprGhostUseOnly::Set(m_compositeValue, info.IsAllFutureUseGhostUse());
+        Data_GprNextUseIndex::Set(m_compositeValue, info.GetNextUseIndex());
+    }
+
+    void ALWAYS_INLINE SetFprNextUseInfo(ValueNextUseInfo info)
+    {
+        TestAssertImp(info.GetNextUseIndex() == ValueNextUseInfo::x_noNextUse, info.IsAllFutureUseGhostUse());
+        Data_FprGhostUseOnly::Set(m_compositeValue, info.IsAllFutureUseGhostUse());
+        Data_FprNextUseIndex::Set(m_compositeValue, info.GetNextUseIndex());
+    }
+
+    bool ALWAYS_INLINE HasNoMoreUseInBothGprAndFpr()
+    {
+        return Data_GprNextUseIndex::Get(m_compositeValue) == ValueNextUseInfo::x_noNextUse &&
+            Data_FprNextUseIndex::Get(m_compositeValue) == ValueNextUseInfo::x_noNextUse;
+    }
+
+    DfgOsrExitMapBuilder::DoublyLinkedListNode* GetAssociatedShadowStackLocs()
+    {
+        TestAssert(!IsConstantLikeNode());
+        return &m_associatedShadowStackLocs;
     }
 
 private:
-    using CarrierTy = uint32_t;
+    static constexpr uint8_t x_invalidReg = 15;
+    static_assert(x_dfg_reg_alloc_num_gprs <= x_invalidReg && x_dfg_reg_alloc_num_fprs <= x_invalidReg);
 
-    using BFM_GprLoc = BitFieldMember<CarrierTy, uint8_t, 0 /*start*/, 4 /*width*/>;
-    using BFM_InFpr = BitFieldMember<CarrierTy, bool, 4 /*start*/, 1 /*width*/>;
-    using BFM_FprLoc = BitFieldMember<CarrierTy, uint8_t, 5 /*start*/, 4 /*width*/>;
-    using BFM_NextUseNodeIdx = BitFieldMember<CarrierTy, uint32_t, 9 /*start*/, 23 /*width*/>;
-
-    CarrierTy m_compositeVal;
-    uint16_t m_nextUseInputOrd;
-    // The physical slot ordinal into the DFG frame where this value is spilled, -1 if not spilled
-    // Note that this never points to the register spill area
+    // Where the next GPR use of this SSA value is
     //
-    uint16_t m_physicalSpillLoc;
-};
-static_assert(sizeof(ValueRegAllocInfo) == 8);
+    using Data_GprGhostUseOnly = BitFieldMember<uint64_t, bool, 63 /*start*/, 1 /*width*/>;
+    using Data_GprNextUseIndex = BitFieldMember<uint64_t, uint32_t, 44 /*start*/, 19 /*width*/>;
 
-// Records the reg alloc info of a single use of an SSA value
+    // x_invalidReg means not available in GPR, otherwise available in x_dfg_reg_alloc_gprs[m_gprIndex]
+    //
+    using Data_GprIndex = BitFieldMember<uint64_t, uint8_t, 40 /*start*/, 4 /*width*/>;
+
+    // Where the next FPR use of this SSA value is
+    //
+    using Data_FprGhostUseOnly = BitFieldMember<uint64_t, bool, 39 /*start*/, 1 /*width*/>;
+    using Data_FprNextUseIndex = BitFieldMember<uint64_t, uint32_t, 20 /*start*/, 19 /*width*/>;
+
+    // x_invalidReg means not available in FPR, otherwise available in x_dfg_reg_alloc_fprs[m_fprIndex]
+    //
+    using Data_FprIndex = BitFieldMember<uint64_t, uint8_t, 16 /*start*/, 4 /*width*/>;
+
+    static_assert(Data_GprNextUseIndex::BitWidth() == ValueNextUseInfo::Data_NextUseIndex::BitWidth());
+    static_assert(Data_FprNextUseIndex::BitWidth() == ValueNextUseInfo::Data_NextUseIndex::BitWidth());
+
+    // If this value is not a constant, this stores the physical slot ordinal into the DFG frame where this value is spilled.
+    // Note that this never points to the register spill area. x_notSpilled means the value is not yet spilled.
+    //
+    // If this value is a constant, this stores the identifier for this constant in the OSR exit log.
+    //
+    using Data_PhysicalSpillLoc = BitFieldMember<uint64_t, uint16_t, 0 /*start*/, 16 /*width*/>;
+
+    static constexpr uint16_t x_notSpilled = 0x7fff;
+
+    uint64_t m_compositeValue;
+
+    union {
+        // The doubly-linked list head that contains all shadow stack locations that currently has this SSA value
+        //
+        DfgOsrExitMapBuilder::DoublyLinkedListNode m_associatedShadowStackLocs;
+        // For constants, we don't need to track which shadow stack locations stores this value,
+        // since constants will never need to be relocated. But we need to track the constant-like node so we can codegen the materialization logic
+        //
+        // We use the lowest bit == 1 to tag this union (so we can tell if it is a constant-like node or not), which is unfortunately very hacky
+        // (correctness is due to pointer alignment and the representation of DoublyLinkedListNode)..
+        //
+        uint64_t m_cstNodeTaggedPtr;
+    };
+    static_assert(alignof(DfgOsrExitMapBuilder::DoublyLinkedListNode) > 1, "required for pointer tagging");
+};
+static_assert(sizeof(ValueRegAllocInfo) == 16);
+
+// Records a single use of an SSA value
 //
 struct alignas(8) ValueUseRAInfo
 {
     ValueUseRAInfo()
-        : m_nextUseNodeIdx(static_cast<uint32_t>(-1))
-        , m_nextUseInputOrd(static_cast<uint16_t>(-1))
-        , m_physicalSlot(static_cast<uint16_t>(-1))
+        : m_node(nullptr)
+        , m_nextUseInfo(0)
     { }
 
-    bool HasNextUse() { return m_nextUseInputOrd != static_cast<uint16_t>(-1); }
+    bool IsInitialized() { return !m_node.IsNull(); }
 
-    bool ALWAYS_INLINE HasAssignedValidPhysicalSlot()
+    // Initialize info for this use, and update the use list in 'ssaValue'
+    //
+    void ALWAYS_INLINE Initialize(ValueRegAllocInfo* ssaValue, uint32_t useIndex, bool isGprUse, bool isGhostLikeUse, bool doNotProduceDuplicateEdge)
     {
-        return m_physicalSlot != static_cast<uint16_t>(-1);
+        TestAssert(!IsInitialized());
+        SetSSAValue(ssaValue);
+
+        ValueNextUseInfo nextUseInfo;
+        if (isGprUse)
+        {
+            nextUseInfo = ssaValue->GetGprNextUseInfo();
+        }
+        else
+        {
+            nextUseInfo = ssaValue->GetFprNextUseInfo();
+        }
+
+        // If this is a ghost-like use, it should be the last use in the GPR/FPR list.
+        // since in other cases, we know the value is alive somewhere so we don't need to mark this as a use
+        //
+        bool isLastUse = !ssaValue->GetGprNextUseInfo().HasNextUse() && !ssaValue->GetFprNextUseInfo().HasNextUse();
+        TestAssertImp(isGhostLikeUse, isLastUse);
+
+        TestAssert(nextUseInfo.GetNextUseIndex() >= useIndex);
+        if (nextUseInfo.GetNextUseIndex() == useIndex && !doNotProduceDuplicateEdge)
+        {
+            // This is a duplicate edge
+            // We should not record this use in the use list
+            //
+            // This should not happen for GhostLikeUse since ShadowStore and Phantom only take on operand
+            // For same reason, nextUseInfo should not be the last GhostLikeUse either. So nothing to update.
+            //
+            TestAssert(!isGhostLikeUse);
+            TestAssert(!nextUseInfo.IsAllFutureUseGhostUse());
+            SetDuplicateEdge(isGprUse);
+        }
+        else
+        {
+            SetNextUseInfo(isGprUse, isLastUse, nextUseInfo);
+            if (isGprUse)
+            {
+                ssaValue->SetGprNextUseInfo(ValueNextUseInfo(isGhostLikeUse, useIndex));
+            }
+            else
+            {
+                ssaValue->SetFprNextUseInfo(ValueNextUseInfo(isGhostLikeUse, useIndex));
+            }
+        }
     }
 
-    size_t ALWAYS_INLINE GetPhysicalSlot()
+    ValueRegAllocInfo* GetSSAValue()
     {
-        TestAssert(HasAssignedValidPhysicalSlot());
-        return m_physicalSlot;
+        TestAssert(m_node.m_value < (1U << 31));
+        TestAssert(!m_node.IsNull());
+        return m_node;
     }
 
-    // Where the next use of this SSA value is
-    //
-    uint32_t m_nextUseNodeIdx;
-    uint16_t m_nextUseInputOrd;
+    void SetSSAValue(ValueRegAllocInfo* value)
+    {
+        TestAssert(value != nullptr);
+        m_node = value;
+    }
 
-    // The physical slot ordinal into the DFG frame where this value sits in
-    // If the ordinal points to the reg spill area, it means this value is reg allocated (in the corresponding reg)
+    bool IsGPRUse() { return m_nextUseInfo & 1; }
+
+    bool IsLastUse()
+    {
+        bool isLastUse = ((m_nextUseInfo & 2) > 0);
+        TestAssertImp(IsDuplicateEdge(), !isLastUse);
+        return isLastUse;
+    }
+
+    // A duplicate edge means that reg alloc must dedicate a reg for this value,
+    // but the reg is not associated with an SSA value: it only holds a clone of the value of another reg (that is
+    // associated with an SSA value), and after the node is executed, this reg automatically becomes scratch.
     //
-    uint16_t m_physicalSlot;
+    // A duplicate edge is also not considered a use (there must be a non-duplicate edge that uses that SSA value in the
+    // same useIndex epoch), so GetNextUseInfo() is invalid.
+    //
+    bool IsDuplicateEdge() { return m_nextUseInfo & 4; }
+
+    ValueNextUseInfo GetNextUseInfo()
+    {
+        TestAssert(!IsDuplicateEdge());
+        return m_nextUseInfo & (~static_cast<uint32_t>(3));
+    }
+
+    void SetNextUseInfo(bool isGprUse, bool isLastUse, ValueNextUseInfo info)
+    {
+        TestAssertImp(isLastUse, !info.HasNextUse());
+        TestAssert(info.GetCustomDataAsU16() == 0);
+        m_nextUseInfo = info.m_value | (isGprUse ? 1U : 0U) | (isLastUse ? 2U : 0U);
+    }
+
+    void SetDuplicateEdge(bool isGprUse)
+    {
+        m_nextUseInfo = (isGprUse ? 1U : 0U) | 4U;
+    }
+
+private:
+    ArenaPtr<ValueRegAllocInfo> m_node;
+    // Bit 0 of this value is repurposed to represent if this is a GPR use or a FPR use (1 = GPR, 0 = FPR)
+    // Bit 1 of this value is repurposed to represent if this is the last use (considering both GPR and FPR) of this SSA value
+    // Bit 2 of this value is repurposed to represent if this is a duplicate edge. If so, the remaining bits are invalid.
+    //
+    uint32_t m_nextUseInfo;
 };
 static_assert(sizeof(ValueUseRAInfo) == 8);
 
 enum class DfgCodegenFuncOrd : uint16_t;
 
-// [ ValueRegAllocInfo * #outputs ] [ NodeRegAllocInfo ] [ ValueUseRAInfo * #inputs ]
+// [ NodeRegAllocInfo ] [ m_numFixedSSAInputs ] [ m_numRangeSSAInputs ] [ m_numChecks ]
+//
+// Conceptually the uses happen in 3 steps:
+// 1. We use all SSA inputs corresponding to the range operand (to store them to the correct stack location)
+// 2. We use all the inputs that need a check (to check them)
+// 3. We use all SSA inputs corresponding to the fixed operands (to execute the main logic)
 //
 struct alignas(8) NodeRegAllocInfo
 {
+private:
+    friend TempArenaAllocator;
+
     NodeRegAllocInfo()
-        : m_codegenFuncOrd(static_cast<DfgCodegenFuncOrd>(-1))
-        , m_rangeOperandPhysicalSlot(static_cast<uint16_t>(-1))
-        , m_outputPhysicalSlot(static_cast<uint16_t>(-1))
-        , m_brDecisionPhysicalSlot(static_cast<uint16_t>(-1))
-#ifdef TESTBUILD
-        , m_numInputs(0)
-        , m_numOutputs(0)
-#endif
+        : m_numRangeSSAInputs(static_cast<uint16_t>(-1))
+        , m_numChecks(static_cast<uint16_t>(-1))
+        , m_numFixedSSAInputs(static_cast<uint16_t>(-1))
+        , m_isGhostLikeNode(false)
+        , m_isShadowStoreNode(false)
     { }
 
-    // Note that currently we do all reg alloc first, and then do codegen.
-    //
-    // Unlike ValueUseRAInfo (from GetInputRAInfo), which is immutable once reg alloc assigns the physical slot for it,
-    // the stuffs in ValueRegAllocInfo gets updated as the reg alloc process proceeds.
-    //
-    // So at codegen time, this function should not be used,
-    // as the returned ValueRegAllocInfo does not contain the information for the current node being generated,
-    // but only the end state at the end of reg alloc!
-    //
-    ValueRegAllocInfo* GetOutputRAInfo(size_t outputOrd)
+public:
+    std::span<ValueUseRAInfo> WARN_UNUSED GetRangedOperands()
     {
-        TestAssert(outputOrd < m_numOutputs);
-        return reinterpret_cast<ValueRegAllocInfo*>(this) - (outputOrd + 1);
+        TestAssert(m_numFixedSSAInputs != static_cast<uint16_t>(-1) && m_numRangeSSAInputs != static_cast<uint16_t>(-1));
+        return { m_operands + m_numFixedSSAInputs, m_numRangeSSAInputs };
+    }
+
+    std::span<ValueUseRAInfo> WARN_UNUSED GetFixedOperands()
+    {
+        TestAssert(m_numFixedSSAInputs != static_cast<uint16_t>(-1));
+        return { m_operands, m_numFixedSSAInputs };
     }
 
     ValueUseRAInfo* ALWAYS_INLINE GetInputRAInfo(size_t inputOrd)
     {
-        TestAssert(inputOrd < m_numInputs);
-        return m_operandInfo + inputOrd;
+        TestAssert(inputOrd < m_numFixedSSAInputs);
+        return m_operands + inputOrd;
     }
 
-    size_t ALWAYS_INLINE GetOutputPhysicalSlot()
+    std::span<ValueUseRAInfo> WARN_UNUSED GetCheckOperands()
     {
-        TestAssert(m_outputPhysicalSlot != static_cast<uint16_t>(-1));
-        return m_outputPhysicalSlot;
+        TestAssert(m_numFixedSSAInputs != static_cast<uint16_t>(-1) && m_numRangeSSAInputs != static_cast<uint16_t>(-1) && m_numChecks != static_cast<uint16_t>(-1));
+        return { m_operands + m_numFixedSSAInputs + m_numRangeSSAInputs, m_numChecks };
     }
 
-    size_t ALWAYS_INLINE GetBrDecisionPhysicalSlot()
-    {
-        TestAssert(m_brDecisionPhysicalSlot != static_cast<uint16_t>(-1));
-        return m_brDecisionPhysicalSlot;
-    }
-
-    size_t ALWAYS_INLINE GetRangeOperandPhysicalSlotStart()
-    {
-        TestAssert(m_rangeOperandPhysicalSlot != static_cast<uint16_t>(-1));
-        return m_rangeOperandPhysicalSlot;
-    }
-
-    static NodeRegAllocInfo* WARN_UNUSED Create(TempArenaAllocator& alloc, size_t numInputs, size_t numOutputs)
-    {
-        // Satisfying alignment requirement for both arrays is tricky in general.. but here alignmment of 8 will do
-        //
-        static_assert(sizeof(ValueRegAllocInfo) == 8);
-        static_assert(alignof(NodeRegAllocInfo) <= 8);
-        void* p = alloc.AllocateWithAlignment(8, sizeof(ValueRegAllocInfo) * numOutputs + offsetof_member_v<&NodeRegAllocInfo::m_operandInfo> + sizeof(ValueUseRAInfo) * numInputs);
-
-        Assert(reinterpret_cast<uintptr_t>(p) % alignof(ValueRegAllocInfo) == 0);
-        ValueRegAllocInfo* rai = reinterpret_cast<ValueRegAllocInfo*>(p);
-
-        NodeRegAllocInfo* ui = reinterpret_cast<NodeRegAllocInfo*>(rai + numOutputs);
-        Assert(reinterpret_cast<uintptr_t>(ui) % alignof(NodeRegAllocInfo) == 0);
-        ConstructInPlace(ui);
-
-#ifdef TESTBUILD
-        ui->m_numInputs = SafeIntegerCast<uint32_t>(numInputs);
-        ui->m_numOutputs = SafeIntegerCast<uint32_t>(numOutputs);
-#endif
-
-        for (size_t i = 0; i < numOutputs; i++)
-        {
-            ConstructInPlace(rai + i);
-        }
-
-        for (size_t i = 0; i < numInputs; i++)
-        {
-            ConstructInPlace(ui->GetInputRAInfo(i));
-        }
-
-        return reinterpret_cast<NodeRegAllocInfo*>(ui);
-    }
-
-    // The codegen function ordinal that should be called to codegen this node
+    // The list containing everything (fixed + range + checks), should only be used to process death events
     //
-    DfgCodegenFuncOrd m_codegenFuncOrd;
-    // The physical DFG frame location where the range operand starts, if exists
-    //
-    uint16_t m_rangeOperandPhysicalSlot;
-    // The physical DFG frame location for the output and brDecision, if exists
-    //
-    uint16_t m_outputPhysicalSlot;
-    uint16_t m_brDecisionPhysicalSlot;
+    std::span<ValueUseRAInfo> WARN_UNUSED GetAllOperands()
+    {
+        TestAssert(m_numFixedSSAInputs != static_cast<uint16_t>(-1) && m_numRangeSSAInputs != static_cast<uint16_t>(-1) && m_numChecks != static_cast<uint16_t>(-1));
+        return { m_operands, static_cast<size_t>(m_numFixedSSAInputs + m_numRangeSSAInputs + m_numChecks) };
+    }
 
-#ifdef TESTBUILD
-    uint32_t m_numInputs;
-    uint32_t m_numOutputs;
-#endif
+    static constexpr size_t TrailingArrayOffset()
+    {
+        return offsetof_member_v<&NodeRegAllocInfo::m_operands>;
+    }
 
-    ValueUseRAInfo m_operandInfo[0];
+    // Note that the trailing array is not constructed
+    //
+    static NodeRegAllocInfo* WARN_UNUSED Create(TempArenaAllocator& alloc, uint16_t numFixedOperands, uint16_t numRangedOperands, uint16_t numChecks)
+    {
+        size_t trailingArrayNumElements = numFixedOperands + numRangedOperands + numChecks;
+        NodeRegAllocInfo* r = alloc.AllocateObjectWithTrailingBuffer<NodeRegAllocInfo>(sizeof(ValueUseRAInfo) * trailingArrayNumElements);
+        r->m_numRangeSSAInputs = numRangedOperands;
+        r->m_numFixedSSAInputs = numFixedOperands;
+        r->m_numChecks = numChecks;
+        return r;
+    }
+
+    uint16_t m_numRangeSSAInputs;
+    uint16_t m_numChecks;
+    uint16_t m_numFixedSSAInputs;
+
+    // True if this is a ShadowStore, ShadowStoreUndefToRange, or Phantom
+    //
+    bool m_isGhostLikeNode;
+    bool m_isShadowStoreNode;
+
+    ValueUseRAInfo m_operands[0];
 };
+static_assert(sizeof(NodeRegAllocInfo) == 8);
 
 }   // namespace dfg

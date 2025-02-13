@@ -375,7 +375,7 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
 
                             dumpAuditLog(*cgi, fnSuffix);
 
-                            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeRegAllocInfo*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
+                            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
                                     cgi->m_resultFuncName.c_str());
 
                             fprintf(hdrFp, "template<> struct DfgCodegenFuncInfoFor<BCKind::%s, %d, %d> {\n",
@@ -446,7 +446,7 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
 
                 dumpAuditLog(cgi, "" /*fnSuffix*/);
 
-                fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeRegAllocInfo*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
+                fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t*, RegAllocStateForCodeGen*);\n\n",
                         cgi.m_resultFuncName.c_str());
 
                 fprintf(hdrFp, "template<> struct DfgCodegenFuncInfoFor<BCKind::%s, %d, 0> {\n",

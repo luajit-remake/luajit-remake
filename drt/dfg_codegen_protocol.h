@@ -6,21 +6,14 @@
 //
 namespace dfg {
 
+enum class DfgCodegenFuncOrd : uint16_t;
+
 struct CodegenFnJitCodeSizeInfo
 {
     uint16_t m_fastPathCodeLen;
     uint16_t m_slowPathCodeLen;
     uint16_t m_dataSecLen;
     uint16_t m_dataSecAlignment;
-};
-
-// TODO: move this elsewhere
-//
-struct JITCodeSizeInfo
-{
-    uint32_t m_fastPathLength;
-    uint32_t m_slowPathLength;
-    uint32_t m_dataSecLength;
 };
 
 struct PrimaryCodegenState
@@ -42,10 +35,10 @@ struct PrimaryCodegenState
     uint64_t m_dfgCodeBlockLower32Bits;
 };
 
-struct NodeRegAllocInfo;
+struct NodeOperandConfigData;
 struct RegAllocStateForCodeGen;
 
-using CodegenImplFn = void(*)(PrimaryCodegenState*, NodeRegAllocInfo*, uint8_t* /*nsd*/, RegAllocStateForCodeGen*);
+using CodegenImplFn = void(*)(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t* /*nsd*/, RegAllocStateForCodeGen*);
 
 struct BuiltinNodeOperandsInfoBase
 {
@@ -75,5 +68,16 @@ struct BuiltinNodeOperandsInfo
 };
 
 using CustomBuiltinNodeCodegenImplFn = void(*)(PrimaryCodegenState*, BuiltinNodeOperandsInfoBase*, uint64_t* /*literalOperands*/, RegAllocStateForCodeGen*);
+
+// Where to materialize a constant-like node
+//
+enum class ConstantLikeNodeMaterializeLocation
+{
+    GprGroup1,
+    GprGroup2,
+    Fpr,
+    TempReg,
+    X_END_OF_ENUM
+};
 
 }   // namespace dfg

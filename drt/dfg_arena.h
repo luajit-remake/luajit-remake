@@ -90,6 +90,25 @@ public:
     }
 
     // This assumes that the constructor will never throw
+    // Behaves like 'new T[num]'. Note that this is *not* a value initialization,
+    // so e.g., the array is not zeroed out if the array element is a primitive type (same as how 'new int[10]' behaves)
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArray(size_t num)
+    {
+        T* ptr = AllocateArrayUninitialized<T>(num);
+        for (size_t i = 0; i < num; i++)
+        {
+            // Not T(), which would do value-initialization (e.g., zeroes out primitive types)
+            //
+            new (static_cast<void*>(ptr + i)) T;
+        }
+        return ptr;
+    }
+
+    // This assumes that the constructor will never throw
+    // Note that if 'args' is empty, the AllocateArray() specialization will be chosen, which does not do value-initialization.
+    // To do explicit value initialization (i.e., 'new T[num]()'), use 'AllocateArrayWithValueInitialization' instead
     //
     template<typename T, typename... Args>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArray(size_t num, Args&&... args)
@@ -102,6 +121,17 @@ public:
         return ptr;
     }
 
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateArrayWithValueInitialization(size_t num)
+    {
+        T* ptr = AllocateArrayUninitialized<T>(num);
+        for (size_t i = 0; i < num; i++)
+        {
+            new (static_cast<void*>(ptr + i)) T();
+        }
+        return ptr;
+    }
+
     template<typename T>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObjectUninitialized()
     {
@@ -109,11 +139,31 @@ public:
         return AllocateArrayUninitialized<T>(1 /*num*/);
     }
 
+    // Behaves like 'new T', that is, it does not zero-initialize if T is a primitive type or a class with default constructor
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObject()
+    {
+        T* ptr = AllocateObjectUninitialized<T>();
+        new (static_cast<void*>(ptr)) T;
+        return ptr;
+    }
+
     template<typename T, typename... Args>
     __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObject(Args&&... args)
     {
         T* ptr = AllocateObjectUninitialized<T>();
         new (static_cast<void*>(ptr)) T(std::forward<Args>(args)...);
+        return ptr;
+    }
+
+    // Behaves like 'new T()'
+    //
+    template<typename T, typename... Args>
+    __attribute__((__malloc__)) T* WARN_UNUSED ALWAYS_INLINE AllocateObjectWithValueInitialization()
+    {
+        T* ptr = AllocateObjectUninitialized<T>();
+        new (static_cast<void*>(ptr)) T();
         return ptr;
     }
 

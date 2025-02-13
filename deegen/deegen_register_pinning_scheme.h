@@ -47,6 +47,11 @@ public:
     //
     static void SetExtraDispatchArgument(llvm::CallInst* callInst, uint32_t argOrd, llvm::Value* newVal);
     static void SetExtraDispatchArgument(llvm::CallInst* callInst, X64Reg reg, llvm::Value* newVal);
+
+    // 'newVal' should be an i64, and casts are emitted appropriately to cast the value to the argument type expected by the interface
+    // The cast instructions are inserted before 'callInst'
+    //
+    static void SetExtraDispatchArgumentWithCastFromI64(llvm::CallInst* callInst, X64Reg reg, llvm::Value* newVal);
 };
 
 struct RegisterPinnedValueBase;
@@ -88,6 +93,11 @@ private:
 //
 struct RegisterPinnedValueBase : virtual detail::RegisterPinnedValueVirtBase
 {
+    // In the constructor we add our 'this' pointer to the VirtBase's list, so it cannot be trivially copied or moved
+    //
+    MAKE_NONCOPYABLE(RegisterPinnedValueBase);
+    MAKE_NONMOVABLE(RegisterPinnedValueBase);
+
     virtual X64Reg GetRegisterName() = 0;
 
     uint32_t GetFnCtxArgOrd()
@@ -230,8 +240,8 @@ struct RPV_IsMustTailCall : RegisterPinnedValue<X64Reg::RDI> { };
 template<typename CRTP>
 struct ExecutorCtxInfoBase : virtual detail::RegisterPinnedValueVirtBase
 {
-    MAKE_DEFAULT_COPYABLE(ExecutorCtxInfoBase);
-    MAKE_DEFAULT_MOVABLE(ExecutorCtxInfoBase);
+    MAKE_NONCOPYABLE(ExecutorCtxInfoBase);
+    MAKE_NONMOVABLE(ExecutorCtxInfoBase);
 
     std::map<uint32_t /*argOrd*/, llvm::Value*> GetProvidedArgumentMap() const
     {
@@ -245,6 +255,20 @@ struct ExecutorCtxInfoBase : virtual detail::RegisterPinnedValueVirtBase
             r[argOrd] = val;
         }
         return r;
+    }
+
+    // Note that the interface does not contain the reg alloc registers, so this will return false for such registers
+    //
+    bool WARN_UNUSED IsRegisterUsedInInterface(X64Reg reg) const
+    {
+        for (RegisterPinnedValueBase* e : GetValues())
+        {
+            if (e->GetRegisterName() == reg)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     template<typename RPVName>

@@ -4,6 +4,8 @@
 #include "x64_register_info.h"
 
 // The general-purpose registers that participate in DFG register allocation
+// Group 1 (the first eight) registers should come after Group 2 (r8-15) registers
+// The register allocator will prefer using registers showing up earlier in this list
 //
 inline constexpr X64Reg x_dfg_reg_alloc_gprs[] = {
     X64Reg::R10,
@@ -25,6 +27,13 @@ inline constexpr X64Reg x_dfg_reg_alloc_fprs[] = {
     X64Reg::XMM5,
     X64Reg::XMM6
 };
+
+// This register is not used for reg alloc (so generating anything except hardcoded assembly may garbage it),
+// but it is used as a temp reg that serves custom purposes.
+// Specifically, constants can be materialized into this reg (which can then be spilled without impacting reg alloc state),
+// hardcoded assembly (spills and loads) may use this reg, and this reg is expected by the OSR exit handler to indicate the point of OSR exit
+//
+constexpr X64Reg x_dfg_custom_purpose_temp_reg = X64Reg::RDX;
 
 constexpr size_t x_dfg_reg_alloc_num_gprs = std::extent_v<decltype(x_dfg_reg_alloc_gprs)>;
 constexpr size_t x_dfg_reg_alloc_num_fprs = std::extent_v<decltype(x_dfg_reg_alloc_fprs)>;
@@ -91,6 +100,8 @@ constexpr bool IsRegisterUsedForDfgRegAllocation(X64Reg reg)
         return internal::x_fpr_to_seq_ord_map[reg.MachineOrd()] != static_cast<uint8_t>(-1);
     }
 }
+
+static_assert(!IsRegisterUsedForDfgRegAllocation(x_dfg_custom_purpose_temp_reg));
 
 // Return the ordinal of a register in the sequence of all registers participating in regalloc (GPR come first, then FPR)
 // This sequence ordinal is also the index into the register spill area used by this register

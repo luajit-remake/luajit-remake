@@ -428,7 +428,7 @@ public:
         m_totalValidFields++;
     }
 
-    friend struct JitSlowPathDataLayoutBuilder;
+    friend JitSlowPathDataLayoutBuilder;
 
     // The fast path entry address of the associated JIT code, always at offset x_opcodeSizeBytes (a lot of places expects this)
     //

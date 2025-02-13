@@ -154,7 +154,7 @@ public:
         }
     }
 
-    constexpr uint8_t GetCompositeValueForStdHash() const { return m_compositeVal; }
+    constexpr uint8_t GetCompositeValue() const { return m_compositeVal; }
 
     constexpr bool WARN_UNUSED operator==(const X64Reg& rhs) const
     {
@@ -217,7 +217,7 @@ struct ::std::hash<X64Reg>
 {
     std::size_t operator()(const X64Reg& reg) const noexcept
     {
-        return std::hash<uint8_t>{}(reg.GetCompositeValueForStdHash());
+        return std::hash<uint8_t>{}(reg.GetCompositeValue());
     }
 };
 
