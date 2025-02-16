@@ -6,6 +6,9 @@
 #include "dfg_reg_alloc_value_manager.h"
 #include "dfg_reg_alloc_decision_maker.h"
 #include "dfg_variant_trait_table.h"
+#include "dfg_test_branch_inst_generator.h"
+#include "x64_multi_byte_nop_instruction.h"
+#include "jit_function_entry_codegen_helper.h"
 
 namespace dfg {
 
@@ -145,8 +148,8 @@ struct ValueUseListBuilder
         uint32_t useIndex = static_cast<uint32_t>(nodes.size() * 3);
         TestAssert(useIndex + 1 < ValueNextUseInfo::x_noNextUse);
 
-        TestAssert(bb->m_numSuccessors <= 2);
-        if (bb->m_numSuccessors > 1)
+        TestAssert(bb->GetNumSuccessors() <= 2);
+        if (bb->GetNumSuccessors() > 1)
         {
             // Initialize the brDecision SSA value and its use (one single GPR use at end of block, so with highest useIndex)
             //
@@ -414,18 +417,337 @@ private:
     TempVector<Edge*> m_operandsNeedTypeCheck;
 };
 
+struct BasicBlockCodegenInfo;
+
+struct BasicBlockTerminatorCodegenInfo
+{
+    enum class Kind : uint8_t
+    {
+        // A conditional branch
+        //
+        CondBr,
+        // An unconditional branch
+        //
+        UncondBr,
+        // No successor, should append ud2 at end
+        //
+        NoSuccessor,
+        X_END_OF_ENUM
+    };
+
+    BasicBlockTerminatorCodegenInfo()
+        : m_kind(Kind::X_END_OF_ENUM)
+        , m_isTestValueInRegInitialized(false)
+        , m_isTestValueInReg(false)
+        , m_isTestForNonZero(false)
+        , m_isDefaultTargetFallthrough(false)
+        , m_testReg(X64Reg::RSP)
+        , m_testPhysicalSlot(static_cast<uint16_t>(-1))
+        , m_defaultTargetOrd(static_cast<uint32_t>(-1))
+        , m_branchTargetOrd(static_cast<uint32_t>(-1))
+    { }
+
+    void InitUnconditionalBranch(uint32_t selfOrd, uint32_t destOrd)
+    {
+        TestAssert(m_kind == Kind::X_END_OF_ENUM);
+        m_kind = Kind::UncondBr;
+        m_isDefaultTargetFallthrough = (selfOrd + 1 == destOrd);
+        m_defaultTargetOrd = destOrd;
+    }
+
+    void SetConditionValueAsReg(X64Reg testReg)
+    {
+        // It's possible that m_kind is UncondBr if it was a conditional branch but both targets are equal, so it gets converted to UncondBr.
+        // In which case the condition value has no use, so doesn't matter. Same for SetConditionValueAsStackSlot
+        //
+        TestAssert(m_kind == Kind::CondBr || m_kind == Kind::UncondBr);
+        TestAssert(testReg.IsGPR());
+        TestAssert(!m_isTestValueInRegInitialized);
+        m_isTestValueInRegInitialized = true;
+        m_isTestValueInReg = true;
+        m_testReg = testReg;
+    }
+
+    void SetConditionValueAsStackSlot(uint16_t physicalSlotOrd)
+    {
+        TestAssert(m_kind == Kind::CondBr || m_kind == Kind::UncondBr);
+        TestAssert(!m_isTestValueInRegInitialized);
+        m_isTestValueInRegInitialized = true;
+        m_isTestValueInReg = false;
+        m_testPhysicalSlot = physicalSlotOrd;
+    }
+
+    // Branch to 'branchDestOrd' if 'testReg' is non-zero
+    //
+    void InitCondBranch(uint32_t selfOrd, uint32_t defaultDestOrd, uint32_t branchDestOrd)
+    {
+        TestAssert(m_kind == Kind::X_END_OF_ENUM);
+        if (defaultDestOrd == branchDestOrd)
+        {
+            // This branch is in fact unconditional
+            //
+            InitUnconditionalBranch(selfOrd, defaultDestOrd);
+            return;
+        }
+        m_kind = Kind::CondBr;
+        if (branchDestOrd == selfOrd + 1)
+        {
+            // Test for zero instead, and flip defaultDestOrd and branchDestOrd, so now the default dest is fallthrough
+            //
+            m_isTestForNonZero = false;
+            m_isDefaultTargetFallthrough = true;
+            m_defaultTargetOrd = branchDestOrd;
+            m_branchTargetOrd = defaultDestOrd;
+        }
+        else
+        {
+            m_isTestForNonZero = true;
+            m_isDefaultTargetFallthrough = (defaultDestOrd == selfOrd + 1);
+            m_defaultTargetOrd = defaultDestOrd;
+            m_branchTargetOrd = branchDestOrd;
+        }
+    }
+
+    void InitNoSuccessor()
+    {
+        TestAssert(m_kind == Kind::X_END_OF_ENUM);
+        m_kind = Kind::NoSuccessor;
+    }
+
+    uint32_t WARN_UNUSED GetJITCodeLength()
+    {
+        TestAssert(m_kind != Kind::X_END_OF_ENUM);
+        if (m_kind == Kind::NoSuccessor)
+        {
+            // 'ud2' instruction: 2 bytes
+            //
+            return 2;
+        }
+        else if (m_kind == Kind::UncondBr)
+        {
+            if (m_isDefaultTargetFallthrough)
+            {
+                // A fallthrough, no code needed
+                //
+                return 0;
+            }
+            else
+            {
+                // A jmp instruction, 5 bytes
+                //
+                return 5;
+            }
+        }
+        else
+        {
+            TestAssert(m_kind == Kind::CondBr);
+            TestAssert(m_isTestValueInRegInitialized);
+            // If test value in reg, 'testq %r64, %r64' is 3 bytes.
+            // Otherwise, 'cmpq $0, imm32(%r64)' is 8 bytes
+            //
+            uint32_t instLen = (m_isTestValueInReg ? 3U : 8U);
+            // We always need a conditional branch (jne or je) to m_branchTarget, 6 bytes
+            //
+            instLen += 6;
+            // If m_defaultTarget is not fallthrough, another 5 bytes for the jmp instruction
+            //
+            if (!m_isDefaultTargetFallthrough)
+            {
+                instLen += 5;
+            }
+            return instLen;
+        }
+    }
+
+    void AssertConsistency()
+    {
+#ifdef TESTBUILD
+        TestAssert(m_kind != Kind::X_END_OF_ENUM);
+        TestAssertImp(m_kind == Kind::UncondBr, m_defaultTargetOrd != static_cast<uint32_t>(-1));
+        if (m_kind == Kind::CondBr)
+        {
+            TestAssert(m_isTestValueInRegInitialized &&
+                       m_defaultTargetOrd != static_cast<uint32_t>(-1) &&
+                       m_branchTargetOrd != static_cast<uint32_t>(-1));
+            TestAssertImp(m_isTestValueInReg, m_testReg.IsGPR());
+            TestAssertImp(!m_isTestValueInReg, m_testPhysicalSlot != static_cast<uint16_t>(-1));
+        }
+#endif
+    }
+
+    // Implementation later in this file since it needs access to BasicBlockCodegenInfo
+    //
+    void EmitJITCode(uint8_t*& addr /*inout*/, uint8_t* jitFastPathBaseAddr, TempVector<BasicBlockCodegenInfo>& bbOrder);
+
+    Kind m_kind;
+    // Indicates whether m_isTestValueInReg has been initialized properly (since we initialize this field later than the other fields)
+    //
+    bool m_isTestValueInRegInitialized;
+    // If this is a conditional branch, whether the value to test is in a register
+    // If so, it must be a GPR register
+    // Only makes sense for CondBr
+    //
+    bool m_isTestValueInReg;
+    // If true, it means the conditional branch should be taken (i.e., branches to branchTarget) if the test value is nonzero
+    // If false, the branch should be taken if test value is zero
+    // Only makes sense for CondBr
+    //
+    bool m_isTestForNonZero;
+    // Whether the defaultTarget is the fallthrough basic block
+    // Only makes sense for CondBr and UncondBr.
+    // Note that the branchTarget is never a fallthrough: we can always workaround this by flipping the condition and target.
+    //
+    bool m_isDefaultTargetFallthrough;
+    // If CondBr and test value is in reg, the GPR register that holds the test value
+    //
+    X64Reg m_testReg;
+    // If CondBr and test value is on stack, the physical slot ordinal
+    //
+    uint16_t m_testPhysicalSlot;
+    // The ordinal into the BasicBlockTerminatorCodegenInfo list for the default target, only makes sense for CondBr and UncondBr
+    //
+    uint32_t m_defaultTargetOrd;
+    // The ordinal into the BasicBlockTerminatorCodegenInfo list for the branch target, only makes sense for CondBr
+    //
+    uint32_t m_branchTargetOrd;
+};
+
+struct BasicBlockCodegenInfo
+{
+    BasicBlockCodegenInfo()
+        : m_bb(nullptr)
+        , m_codegenLog()
+        , m_slowPathDataRegConfStream()
+        , m_terminatorInfo()
+        , m_fastPathStartOffset(static_cast<uint32_t>(-1))
+        , m_slowPathStartOffset(static_cast<uint32_t>(-1))
+        , m_dataSecStartOffset(static_cast<uint32_t>(-1))
+        , m_slowPathDataStartOffset(static_cast<uint32_t>(-1))
+        , m_isOnDfsStack(false)
+        , m_isReachedByBackEdge(false)
+        , m_shouldPadFastPathTo16ByteAlignmentAtEnd(false)
+        , m_addNopBytesAtEnd(static_cast<uint8_t>(-1))
+    { }
+
+    BasicBlock* m_bb;
+
+    // The codegen log to generate code for this basic block (excluding terminator)
+    //
+    std::span<uint8_t> m_codegenLog;
+
+    // The SlowPathDataRegConfig stream to be used during the code generation
+    //
+    std::span<uint8_t> m_slowPathDataRegConfStream;
+
+    // The terminator logic for this basic block
+    //
+    BasicBlockTerminatorCodegenInfo m_terminatorInfo;
+
+    // The start offset of each JIT code section
+    //
+    uint32_t m_fastPathStartOffset;
+    uint32_t m_slowPathStartOffset;
+    uint32_t m_dataSecStartOffset;
+
+    // For assertion purposes
+    //
+    uint32_t m_expectedFastPathOffsetAfterLogReplay;
+    uint32_t m_expectedSlowPathOffsetAfterLogReplay;
+    uint32_t m_expectedDataSecOffsetAfterLogReplay;
+    uint32_t m_expectedSlowPathDataOffsetAfterLogReplay;
+
+    // The start offset in the SlowPathData stream
+    //
+    uint32_t m_slowPathDataStartOffset;
+
+    // Only used to decide m_isReachedByBackEdge
+    //
+    bool m_isOnDfsStack;
+
+    // True if a back edge points to this basic block
+    //
+    bool m_isReachedByBackEdge;
+
+    // If true, it means we should add NOPs after the fast path to make the next basic block start at a 16-byte boundary
+    //
+    bool m_shouldPadFastPathTo16ByteAlignmentAtEnd;
+
+    // If m_shouldPadFastPathTo16ByteAlignmentAtEnd is true, how many bytes of NOP we should add, for assertion purpose.
+    // As such, this value is always <=15 and as long as code is generated correctly,
+    // the fastPathOffset will always be a multiple of 16 after padding this many bytes of NOPs
+    //
+    uint8_t m_addNopBytesAtEnd;
+};
+
+void BasicBlockTerminatorCodegenInfo::EmitJITCode(uint8_t*& addr /*inout*/, uint8_t* jitFastPathBaseAddr, TempVector<BasicBlockCodegenInfo>& bbOrder)
+{
+    auto getDestAddr = [&](uint32_t bbOrd) ALWAYS_INLINE WARN_UNUSED -> uint8_t*
+    {
+        TestAssert(bbOrd < bbOrder.size());
+        TestAssert(bbOrder[bbOrd].m_fastPathStartOffset != static_cast<uint32_t>(-1));
+        return jitFastPathBaseAddr + bbOrder[bbOrd].m_fastPathStartOffset;
+    };
+
+    [[maybe_unused]] uint8_t* oldAddr = addr;
+    if (m_kind == Kind::NoSuccessor)
+    {
+        EmitUd2Instruction(addr /*inout*/);
+    }
+    else if (m_kind == Kind::UncondBr)
+    {
+        if (!m_isDefaultTargetFallthrough)
+        {
+            EmitJmpInstruction(addr /*inout*/, getDestAddr(m_defaultTargetOrd));
+        }
+    }
+    else
+    {
+        TestAssert(m_kind == Kind::CondBr);
+        TestAssert(m_isTestValueInRegInitialized);
+        if (m_isTestValueInReg)
+        {
+            EmitTestRegRegInstruction(addr /*inout*/, m_testReg);
+        }
+        else
+        {
+            uint32_t byteOffset = static_cast<uint32_t>(sizeof(TValue) * m_testPhysicalSlot);
+            EmitI64CmpBaseImm32OffsetZeroInstruction(addr /*inout*/, x_dfg_stack_base_register, byteOffset);
+        }
+
+        uint8_t* branchTargetAddr = getDestAddr(m_branchTargetOrd);
+        if (m_isTestForNonZero)
+        {
+            EmitJneInstruction(addr /*inout*/, branchTargetAddr);
+        }
+        else
+        {
+            EmitJeInstruction(addr /*inout*/, branchTargetAddr);
+        }
+
+        if (!m_isDefaultTargetFallthrough)
+        {
+            EmitJmpInstruction(addr /*inout*/, getDestAddr(m_defaultTargetOrd));
+        }
+    }
+    TestAssert(addr == oldAddr + GetJITCodeLength());
+}
+
 struct DfgBackend
 {
-    static void Run(Graph* graph)
+    static DfgBackendResult Run(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
     {
-        DfgBackend impl(graph);
+        DfgBackend impl(graph, stackLayoutPlanningResult);
         impl.RunImpl();
+        return DfgBackendResult {
+            .m_dfgCodeBlock = impl.m_resultDcb
+        };
     }
 
 private:
-    DfgBackend(Graph* graph)
+    DfgBackend(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
         : m_passAlloc()
         , m_bbAlloc()
+        , m_stackLayoutPlanningResult(stackLayoutPlanningResult)
         , m_valueUseListBuilder(m_passAlloc, m_bbAlloc, graph)
         , m_manager(m_passAlloc,
                     SafeIntegerCast<uint16_t>(graph->GetTotalNumInterpreterSlots()) /*numShadowStackSlots*/,
@@ -434,14 +756,25 @@ private:
         , m_gprAlloc(m_passAlloc, m_manager)
         , m_fprAlloc(m_passAlloc, m_manager)
         , m_nodeOutputtingBranchDecision(nullptr)
+        , m_currentUseIndex(0)
         , m_firstRegSpillSlot(SafeIntegerCast<uint16_t>(graph->GetNumFixedArgsInRootFunction()))
+        , m_totalJitFastPathSectionLen(static_cast<uint32_t>(-1))
+        , m_totalJitSlowPathSectionLen(static_cast<uint32_t>(-1))
+        , m_totalJitDataSectionLen(static_cast<uint32_t>(-1))
+        , m_slowPathDataStartOffset(0)
+        , m_slowPathDataEndOffset(0)
+        , m_functionEntryTrait()
         , m_rangeOpInfoDecoder(m_passAlloc)
         , m_isRangeOpSlotHoldingOutput(m_passAlloc)
         , m_createFnObjUvIndexList(m_passAlloc)
         , m_literalFieldToBeAddedByTotalFrameSlots(m_passAlloc)
-    { }
+        , m_bbOrder(m_passAlloc)
+        , m_resultDcb(nullptr)
+    {
+        m_functionEntryTrait.m_emitterFn = nullptr;
+    }
 
-    void Initialize()
+    void InitializeUseListBuilder()
     {
         m_valueUseListBuilder.SetupUseInfoForAllConstants();
     }
@@ -663,6 +996,151 @@ private:
             }
 
             regInfo.AssertConsistency();
+
+#ifdef TESTBUILD
+            // As an extra sanity check, validate that the 'regInfo' can be populated into a valid codegen state
+            // and that the state is in consistency with what is reported by GetRegPurposeInfo()
+            //
+            {
+                RegAllocStateForCodeGen cgState;
+                regInfo.PopulateCodegenState(cgState /*out*/);
+                RegAllocAllRegPurposeInfo regPurposeInfo = GetRegPurposeInfo();
+                using RegClass = RegAllocAllRegPurposeInfo::RegClass;
+                for (size_t i = 0; i < x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs; i++)
+                {
+                    RegClass regClass = regPurposeInfo.m_data[i].m_regClass;
+                    uint8_t ordInClass = regPurposeInfo.m_data[i].m_ordInClass;
+                    TestAssert(regClass < RegClass::X_END_OF_ENUM);
+                    TestAssert(ordInClass < 8);
+                    TestAssert(cgState.Get(regClass, ordInClass) == (GetDfgRegFromRegAllocSequenceOrd(i).MachineOrd() & 7));
+                    cgState.Unset(regClass, ordInClass);
+                }
+                for (size_t i = 0; i < cgState.x_stateLength; i++)
+                {
+                    TestAssert(cgState.m_data[i] == cgState.x_invalidValue);
+                }
+            }
+#endif
+        }
+
+        // Unfortunately this largely replicates the logic in SetupCodegenConfigInfo
+        // For now, we sanity check the logic is in sync by letting SetupCodegenConfigInfo check consistency when it is called
+        //
+        RegAllocAllRegPurposeInfo WARN_UNUSED GetRegPurposeInfo()
+        {
+            using RegClass = RegAllocAllRegPurposeInfo::RegClass;
+            RegAllocAllRegPurposeInfo r;
+            static_assert(RegAllocAllRegPurposeInfo::x_length >= x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs);
+#ifdef TESTBUILD
+            for (size_t i = 0; i < r.x_length; i++)
+            {
+                r.m_data[i] = { .m_regClass = RegClass::X_END_OF_ENUM, .m_ordInClass = 0 };
+            }
+#endif
+            const DfgRegBankSubVariantTraits* svTrait = m_svTrait;
+            size_t numOperands = svTrait->NumRAOperands();
+            size_t curGprOpOrd = 0, curFprOpOrd = 0;
+            for (size_t opIdx = 0; opIdx < numOperands; opIdx++)
+            {
+                if (svTrait->OperandIsGPR(opIdx))
+                {
+                    uint8_t regIdx = m_gprInfo.GetInputRegIdx(curGprOpOrd);
+                    TestAssert(regIdx < x_dfg_reg_alloc_num_gprs);
+                    curGprOpOrd++;
+                    TestAssert(r.m_data[regIdx].m_regClass == RegClass::X_END_OF_ENUM);
+                    r.m_data[regIdx] = { .m_regClass = RegClass::Operand, .m_ordInClass = static_cast<uint8_t>(opIdx) };
+                }
+                else
+                {
+                    uint8_t regIdx = m_fprInfo.GetInputRegIdx(curFprOpOrd);
+                    TestAssert(regIdx < x_dfg_reg_alloc_num_fprs);
+                    curFprOpOrd++;
+                    TestAssert(r.m_data[x_dfg_reg_alloc_num_gprs + regIdx].m_regClass == RegClass::X_END_OF_ENUM);
+                    r.m_data[x_dfg_reg_alloc_num_gprs + regIdx] = { .m_regClass = RegClass::Operand, .m_ordInClass = static_cast<uint8_t>(opIdx) };
+                }
+            }
+            TestAssert(curGprOpOrd == m_gprInfo.m_numInputRegsInThisBank && curFprOpOrd == m_fprInfo.m_numInputRegsInThisBank);
+
+            size_t curRaOpIdx = numOperands;
+            if (svTrait->HasOutput())
+            {
+                if (svTrait->IsOutputGPR())
+                {
+                    TestAssert(m_gprInfo.m_outputRegIdx < x_dfg_reg_alloc_num_gprs);
+                    if (!m_gprInfo.m_outputReusedInputRegister)
+                    {
+                        TestAssert(r.m_data[m_gprInfo.m_outputRegIdx].m_regClass == RegClass::X_END_OF_ENUM);
+                        r.m_data[m_gprInfo.m_outputRegIdx] = {
+                            .m_regClass = RegClass::Operand,
+                            .m_ordInClass = static_cast<uint8_t>(curRaOpIdx)
+                        };
+                    }
+                }
+                else
+                {
+                    TestAssert(m_fprInfo.m_outputRegIdx < x_dfg_reg_alloc_num_fprs);
+                    if (!m_fprInfo.m_outputReusedInputRegister)
+                    {
+                        TestAssert(r.m_data[x_dfg_reg_alloc_num_gprs + m_fprInfo.m_outputRegIdx].m_regClass == RegClass::X_END_OF_ENUM);
+                        r.m_data[x_dfg_reg_alloc_num_gprs + m_fprInfo.m_outputRegIdx] = {
+                            .m_regClass = RegClass::Operand,
+                            .m_ordInClass = static_cast<uint8_t>(curRaOpIdx)
+                        };
+                    }
+                }
+                curRaOpIdx++;
+            }
+
+            if (svTrait->HasBrDecision())
+            {
+                TestAssert(m_gprInfo.m_brDecisionRegIdx < x_dfg_reg_alloc_num_gprs);
+                if (!m_gprInfo.m_brDecisionReusedInputRegister)
+                {
+                    TestAssert(r.m_data[m_gprInfo.m_brDecisionRegIdx].m_regClass == RegClass::X_END_OF_ENUM);
+                    r.m_data[m_gprInfo.m_brDecisionRegIdx] = {
+                        .m_regClass = RegClass::Operand,
+                        .m_ordInClass = static_cast<uint8_t>(curRaOpIdx)
+                    };
+                }
+                curRaOpIdx++;
+            }
+
+            auto processNonOperandRegs = [&](RegClass regClass, size_t seqOrdBase, uint8_t mask) ALWAYS_INLINE
+            {
+                uint8_t opIdx = 0;
+                while (mask != 0)
+                {
+                    size_t regIdxInClass = CountTrailingZeros(mask);
+                    mask ^= static_cast<uint8_t>(1U << regIdxInClass);
+                    size_t seqOrd = seqOrdBase + regIdxInClass;
+                    TestAssert(seqOrd < x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs);
+                    TestAssert(r.m_data[seqOrd].m_regClass == RegClass::X_END_OF_ENUM);
+                    r.m_data[seqOrd] = { .m_regClass = regClass, .m_ordInClass = opIdx };
+                    opIdx++;
+                }
+            };
+
+            processNonOperandRegs(RegClass::ScExtG, 0 /*seqOrdBase*/, m_gprInfo.m_nonOperandRegInfo.m_group2ScratchIdxMask);
+            processNonOperandRegs(RegClass::PtExtG, 0 /*seqOrdBase*/, m_gprInfo.m_nonOperandRegInfo.m_group2PassthruIdxMask);
+            size_t group1GprStartSeqOrd = x_dfg_reg_alloc_num_gprs - x_dfg_reg_alloc_num_group1_gprs;
+            processNonOperandRegs(RegClass::ScNonExtG, group1GprStartSeqOrd, m_gprInfo.m_nonOperandRegInfo.m_group1ScratchIdxMask);
+            processNonOperandRegs(RegClass::PtNonExtG, group1GprStartSeqOrd, m_gprInfo.m_nonOperandRegInfo.m_group1PassthruIdxMask);
+            processNonOperandRegs(RegClass::ScF, x_dfg_reg_alloc_num_gprs /*seqOrdBase*/, m_fprInfo.m_nonOperandRegInfo.m_group1ScratchIdxMask);
+            processNonOperandRegs(RegClass::PtF, x_dfg_reg_alloc_num_gprs /*seqOrdBase*/, m_fprInfo.m_nonOperandRegInfo.m_group1PassthruIdxMask);
+
+#ifdef TESTBUILD
+            for (size_t i = 0; i < r.x_length; i++)
+            {
+                TestAssertIff(i < x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs, r.m_data[i].m_regClass != RegClass::X_END_OF_ENUM);
+            }
+#endif
+            // Caller logic expects us to fill the dummy entries at the end with <RegClass::X_END_OF_ENUM, 0>
+            //
+            for (size_t i = x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs; i < r.x_length; i++)
+            {
+                r.m_data[i] = { .m_regClass = RegClass::X_END_OF_ENUM, .m_ordInClass = 0 };
+            }
+            return r;
         }
 
         void UpdateStateAfterCodegen(RegAllocValueManager& manager,
@@ -995,7 +1473,11 @@ private:
     // This assumes that the range operand has been property set up (as given in rangeOperandPhysicalSlot, -1 if doesn't exist)
     // It does not deal with outputs in the range either: caller is responsible for dealing with that
     //
-    void EmitMainLogicWithRegAlloc(Node* node, NodeRegAllocInfo* nodeInfo, uint16_t rangeOperandPhysicalSlot, const DfgVariantTraits* trait)
+    void EmitMainLogicWithRegAlloc(Node* node,
+                                   NodeRegAllocInfo* nodeInfo,
+                                   uint16_t rangeOperandPhysicalSlot,
+                                   const DfgVariantTraits* trait,
+                                   bool shouldEmitRegConfigInSlowPathData)
     {
         m_gprAlloc.AssertMinimumUseIndex(m_currentUseIndex);
         m_fprAlloc.AssertMinimumUseIndex(m_currentUseIndex);
@@ -1024,6 +1506,12 @@ private:
                 brDecisionVal = m_valueUseListBuilder.m_brDecision;
             }
             rcInfo = ConfigureRegistersForCodegen(trait, operands, outputVal, isOutputGpr, brDecisionVal);
+        }
+
+        if (shouldEmitRegConfigInSlowPathData)
+        {
+            uint8_t* entry = CodegenLog().AllocateNewSlowPathDataRegConfigEntry();
+            EncodeDfgRegAllocStateToSlowPathData(rcInfo.GetRegPurposeInfo(), entry /*out*/);
         }
 
         CodegenLog().EmitCodegenOpWithRegAlloc(
@@ -2342,7 +2830,7 @@ private:
             //
             TestAssert(trait != nullptr);
             TestAssert(trait->IsRegAllocEnabled());
-            EmitMainLogicWithRegAlloc(node, nodeInfo, static_cast<uint16_t>(-1) /*rangeOperandPhysicalSlot*/, trait);
+            EmitMainLogicWithRegAlloc(node, nodeInfo, static_cast<uint16_t>(-1) /*rangeOperandPhysicalSlot*/, trait, false /*shouldEmitRegConfigInSlowPathData*/);
         }
         AdvanceCurrentUseIndex();
 
@@ -2357,8 +2845,8 @@ private:
 
             size_t localPhysicalSlot = node->GetNodeSpecificDataAsUInt64();
             TestAssert(localPhysicalSlot != static_cast<size_t>(-1));
-            TestAssert(m_valueUseListBuilder.m_graph->GetFirstDfgPhysicalSlotForLocal() <= localPhysicalSlot &&
-                       localPhysicalSlot < m_valueUseListBuilder.m_graph->GetFirstPhysicalSlotForTemps());
+            TestAssert(GetGraph()->GetFirstDfgPhysicalSlotForLocal() <= localPhysicalSlot &&
+                       localPhysicalSlot < GetGraph()->GetFirstPhysicalSlotForTemps());
 
             m_manager.ProcessSetLocal(ssaVal,
                                       node->GetLogicalVariable()->GetInterpreterSlot(),
@@ -2379,8 +2867,14 @@ private:
         TestAssert(nodeInfo->m_numRangeSSAInputs == m_rangeOpInfoDecoder.m_numInputs);
         TestAssertImp(nodeInfo->m_numRangeSSAInputs > 0, m_rangeOpInfoDecoder.m_nodeHasRangeOperand);
 
-        const DfgVariantTraits* trait = GetCodegenInfoForDfgVariant(node->GetGuestLanguageBCKind(), node->DfgVariantOrd());
+        BCKind bcKind = node->GetGuestLanguageBCKind();
+        uint8_t dfgVariantOrd = node->DfgVariantOrd();
+        const DfgVariantTraits* trait = GetCodegenInfoForDfgVariant(bcKind, dfgVariantOrd);
         bool supportsRegAlloc = trait->IsRegAllocEnabled();
+        bool shouldEmitRegConfigInSlowPathData = DfgVariantNeedsRegConfigInSlowPathData(bcKind, dfgVariantOrd);
+        TestAssertImp(!supportsRegAlloc, !shouldEmitRegConfigInSlowPathData);
+
+        m_slowPathDataEndOffset += GetDfgVariantSlowPathDataLength(bcKind, dfgVariantOrd);
 
         // If the node has a range operand, we must reserve enough spill slots to hold everything that might be spilled
         // to the stack before executing this node.
@@ -2463,7 +2957,7 @@ private:
         //
         if (supportsRegAlloc)
         {
-            EmitMainLogicWithRegAlloc(node, nodeInfo, rangeStartPhysicalSlot, trait);
+            EmitMainLogicWithRegAlloc(node, nodeInfo, rangeStartPhysicalSlot, trait, shouldEmitRegConfigInSlowPathData);
         }
         else
         {
@@ -2528,8 +3022,20 @@ private:
         m_manager.ProcessDeath(ssaVal);
     }
 
-    void ProcessBasicBlock(BasicBlock* bb)
+    void ProcessBasicBlock(BasicBlockCodegenInfo* cbb)
     {
+        BasicBlock* bb = cbb->m_bb;
+
+        {
+            JITCodeSizeInfo jitCodeSizeInfoAtBBStart = CodegenLog().GetJitCodeSizeInfo();
+            cbb->m_fastPathStartOffset = jitCodeSizeInfoAtBBStart.m_fastPathLength;
+            cbb->m_slowPathStartOffset = jitCodeSizeInfoAtBBStart.m_slowPathLength;
+            cbb->m_dataSecStartOffset = jitCodeSizeInfoAtBBStart.m_dataSecLength;
+            TestAssertImp(cbb->m_isReachedByBackEdge, cbb->m_fastPathStartOffset % 16 == 0);
+        }
+
+        cbb->m_slowPathDataStartOffset = m_slowPathDataEndOffset;
+
         m_manager.ResetForNewBasicBlock();
         m_gprAlloc.Reset();
         m_fprAlloc.Reset();
@@ -2537,8 +3043,8 @@ private:
         m_bbAlloc.Reset();
         m_valueUseListBuilder.ProcessBasicBlock(bb);
 
-        TestAssertIff(bb->m_numSuccessors == 2, m_valueUseListBuilder.m_brDecision != nullptr);
-        if (bb->m_numSuccessors == 2)
+        TestAssertIff(bb->GetNumSuccessors() == 2, m_valueUseListBuilder.m_brDecision != nullptr);
+        if (bb->GetNumSuccessors() == 2)
         {
             m_nodeOutputtingBranchDecision = bb->GetTerminator();
             TestAssert(m_nodeOutputtingBranchDecision->GetNumNodeControlFlowSuccessors() == 2);
@@ -2616,9 +3122,16 @@ private:
         if (m_valueUseListBuilder.m_brDecision != nullptr)
         {
             ValueRegAllocInfo* brDecision = m_valueUseListBuilder.m_brDecision;
-            // TODO: generate branch logic
-            //
-
+            TestAssert(!brDecision->HasNoMoreUseInBothGprAndFpr());
+            if (brDecision->IsAvailableInGPR())
+            {
+                cbb->m_terminatorInfo.SetConditionValueAsReg(brDecision->GetGprRegister());
+            }
+            else
+            {
+                TestAssert(brDecision->IsSpilled());
+                cbb->m_terminatorInfo.SetConditionValueAsStackSlot(brDecision->GetPhysicalSpillSlot());
+            }
             // For consistency, update NextUse and process the death event as well
             //
             TestAssert(m_valueUseListBuilder.m_brDecisionUse != nullptr);
@@ -2633,11 +3146,398 @@ private:
             ProcessDeathEvent(brDecision);
         }
 
+        // Assert consistency of all state trackers at the end of the basic block
+        //
         m_gprAlloc.AssertConsistency();
         m_gprAlloc.AssertAllRegistersScratched();
         m_fprAlloc.AssertConsistency();
         m_fprAlloc.AssertAllRegistersScratched();
         m_manager.AssertConsistencyAtBasicBlockEnd();
+        m_valueUseListBuilder.AssertValueRegAllocInfoForAllConstantLikeNodeInResettedState();
+
+        // Set up the expectations after replaying the codegen log
+        //
+        {
+            JITCodeSizeInfo csi = CodegenLog().GetJitCodeSizeInfo();
+            cbb->m_expectedFastPathOffsetAfterLogReplay = csi.m_fastPathLength;
+            cbb->m_expectedSlowPathOffsetAfterLogReplay = csi.m_slowPathLength;
+            cbb->m_expectedDataSecOffsetAfterLogReplay = csi.m_dataSecLength;
+            cbb->m_expectedSlowPathDataOffsetAfterLogReplay = m_slowPathDataEndOffset;
+        }
+
+        // At this moment the terminatorInfo should be fully set up
+        //
+        cbb->m_terminatorInfo.AssertConsistency();
+
+        // Set up various codegen information, and update JIT code size info
+        //
+        cbb->m_codegenLog = CodegenLog().CloneAndGetCodegenLog(m_passAlloc);
+        cbb->m_slowPathDataRegConfStream = CodegenLog().CloneAndGetSlowPathDataRegConfigStream(m_passAlloc);
+
+        // The fast path needs to be added the code length for the terminator
+        //
+        CodegenLog().AppendOpaqueFastPathJitCode(cbb->m_terminatorInfo.GetJITCodeLength());
+
+        if (cbb->m_shouldPadFastPathTo16ByteAlignmentAtEnd)
+        {
+            uint32_t oldTotalFastPathLen = CodegenLog().GetJitCodeSizeInfo().m_fastPathLength;
+            uint32_t newTotalFastPathLen = RoundUpToMultipleOf<16>(oldTotalFastPathLen);
+            TestAssert(newTotalFastPathLen - oldTotalFastPathLen < 16);
+            cbb->m_addNopBytesAtEnd = static_cast<uint8_t>(newTotalFastPathLen - oldTotalFastPathLen);
+            CodegenLog().AppendOpaqueFastPathJitCode(cbb->m_addNopBytesAtEnd);
+            TestAssert(CodegenLog().GetJitCodeSizeInfo().m_fastPathLength % 16 == 0);
+        }
+        else
+        {
+            cbb->m_addNopBytesAtEnd = 0;
+        }
+    }
+
+    // Set up the constant table
+    //
+    static void SetupConstantTableForDfgCodeBlock(RestrictPtr<uint64_t> dcb, RestrictPtr<uint64_t> cstTableData, size_t numElements)
+    {
+        uint64_t* end = cstTableData + numElements;
+        while (cstTableData < end)
+        {
+            dcb--;
+            *dcb = *cstTableData;
+            cstTableData++;
+        }
+    }
+
+    struct CodegenControlState
+    {
+        PrimaryCodegenState m_pcs;
+        // Helper fields for assertion purposes
+        //
+        uint8_t* m_fastPathBaseAddr;
+        uint8_t* m_slowPathBaseAddr;
+        uint8_t* m_dataSecBaseAddr;
+        DfgCodeBlock* m_dcb;
+    };
+
+    void CodegenBasicBlock(BasicBlockCodegenInfo* cbb, CodegenControlState& ccs /*inout*/)
+    {
+        TestAssert(ccs.m_pcs.m_fastPathAddr == ccs.m_fastPathBaseAddr + cbb->m_fastPathStartOffset);
+        TestAssert(ccs.m_pcs.m_slowPathAddr == ccs.m_slowPathBaseAddr + cbb->m_slowPathStartOffset);
+        TestAssert(ccs.m_pcs.m_dataSecAddr == ccs.m_dataSecBaseAddr + cbb->m_dataSecStartOffset);
+        TestAssert(ccs.m_pcs.m_slowPathDataAddr == reinterpret_cast<uint8_t*>(ccs.m_dcb) + cbb->m_slowPathDataStartOffset);
+        TestAssert(ccs.m_pcs.m_slowPathDataOffset == cbb->m_slowPathDataStartOffset);
+
+        TestAssertImp(cbb->m_isReachedByBackEdge, reinterpret_cast<uint64_t>(ccs.m_pcs.m_fastPathAddr) % 16 == 0);
+
+        ccs.m_pcs.m_compactedRegConfAddr = cbb->m_slowPathDataRegConfStream.data();
+
+        [[maybe_unused]] uint8_t* expectedSlowPathRegConfigStreamEnd = cbb->m_slowPathDataRegConfStream.data() + cbb->m_slowPathDataRegConfStream.size();
+        [[maybe_unused]] uint8_t* expectedFastPathPtrAfterLogReplay = ccs.m_fastPathBaseAddr + cbb->m_expectedFastPathOffsetAfterLogReplay;
+        [[maybe_unused]] uint8_t* expectedSlowPathPtrAfterLogReplay = ccs.m_slowPathBaseAddr + cbb->m_expectedSlowPathOffsetAfterLogReplay;
+        [[maybe_unused]] uint8_t* expectedDataSecPtrAfterLogReplay = ccs.m_dataSecBaseAddr + cbb->m_expectedDataSecOffsetAfterLogReplay;
+        [[maybe_unused]] uint8_t* expectedSlowPathDataPtrAfterLogReplay = reinterpret_cast<uint8_t*>(ccs.m_dcb) + cbb->m_expectedSlowPathDataOffsetAfterLogReplay;
+
+        void* codegenLogCurPtr = cbb->m_codegenLog.data();
+        uint8_t* codegenLogEnd = cbb->m_codegenLog.data() + cbb->m_codegenLog.size();
+
+        while (codegenLogCurPtr < codegenLogEnd)
+        {
+            CodegenOpBase* cgAction = std::launder(reinterpret_cast<CodegenOpBase*>(codegenLogCurPtr));
+            void* nextCgOp = cgAction->Dispatch(
+                [&]<typename CodegenOp>(CodegenOp* op) ALWAYS_INLINE -> void* /*nextCodegenOpAddr*/
+                {
+                    static_assert(std::is_base_of_v<CodegenOpBase, CodegenOp>);
+                    op->DoCodegen(ccs.m_pcs /*inout*/);
+                    return op->GetStructEnd();
+                });
+
+            // Assert that no pointers have overflowed so we can catch these bugs ASAP before more stuffs gets corrupted
+            //
+            TestAssert(ccs.m_pcs.m_fastPathAddr <= expectedFastPathPtrAfterLogReplay);
+            TestAssert(ccs.m_pcs.m_slowPathAddr <= expectedSlowPathPtrAfterLogReplay);
+            TestAssert(ccs.m_pcs.m_dataSecAddr <= expectedDataSecPtrAfterLogReplay);
+            TestAssert(ccs.m_pcs.m_slowPathDataAddr <= expectedSlowPathDataPtrAfterLogReplay);
+            TestAssert(ccs.m_pcs.m_compactedRegConfAddr <= expectedSlowPathRegConfigStreamEnd);
+            TestAssert(ccs.m_pcs.m_slowPathDataAddr == reinterpret_cast<uint8_t*>(ccs.m_dcb) + ccs.m_pcs.m_slowPathDataOffset);
+            TestAssert(ccs.m_pcs.m_dfgCodeBlockLower32Bits == static_cast<uint32_t>(reinterpret_cast<uint64_t>(ccs.m_dcb)));
+
+            TestAssert(nextCgOp > codegenLogCurPtr);
+            TestAssert(nextCgOp <= codegenLogEnd);
+            codegenLogCurPtr = nextCgOp;
+        }
+
+        // Assert various pointers are as expected
+        //
+        TestAssert(codegenLogCurPtr == codegenLogEnd);
+        TestAssert(ccs.m_pcs.m_fastPathAddr == expectedFastPathPtrAfterLogReplay);
+        TestAssert(ccs.m_pcs.m_slowPathAddr == expectedSlowPathPtrAfterLogReplay);
+        TestAssert(ccs.m_pcs.m_dataSecAddr == expectedDataSecPtrAfterLogReplay);
+        TestAssert(ccs.m_pcs.m_slowPathDataAddr == expectedSlowPathDataPtrAfterLogReplay);
+        TestAssert(ccs.m_pcs.m_compactedRegConfAddr == expectedSlowPathRegConfigStreamEnd);
+        TestAssert(ccs.m_pcs.m_slowPathDataAddr == reinterpret_cast<uint8_t*>(ccs.m_dcb) + ccs.m_pcs.m_slowPathDataOffset);
+        TestAssert(ccs.m_pcs.m_dfgCodeBlockLower32Bits == static_cast<uint32_t>(reinterpret_cast<uint64_t>(ccs.m_dcb)));
+
+        // Generate the logic at the end of basic block
+        //
+        cbb->m_terminatorInfo.AssertConsistency();
+        TestAssertImp(cbb->m_terminatorInfo.m_isDefaultTargetFallthrough, m_bbOrder.data() + cbb->m_terminatorInfo.m_defaultTargetOrd == cbb + 1);
+        cbb->m_terminatorInfo.EmitJITCode(ccs.m_pcs.m_fastPathAddr /*inout*/,
+                                          ccs.m_fastPathBaseAddr,
+                                          m_bbOrder);
+
+        if (cbb->m_addNopBytesAtEnd > 0)
+        {
+            TestAssert(cbb->m_addNopBytesAtEnd <= 15);
+            // The longest x64 NOP is 15 bytes, which happens to also be our maximum padding since we are aligning to 16 bytes,
+            // so it can always be represented by one NOP
+            //
+            const uint8_t* nopInst = GetX64MultiByteNOPInst(cbb->m_addNopBytesAtEnd);
+            memcpy(ccs.m_pcs.m_fastPathAddr, nopInst, cbb->m_addNopBytesAtEnd);
+            ccs.m_pcs.m_fastPathAddr += cbb->m_addNopBytesAtEnd;
+        }
+
+        TestAssertImp(cbb->m_shouldPadFastPathTo16ByteAlignmentAtEnd, reinterpret_cast<uint64_t>(ccs.m_pcs.m_fastPathAddr) % 16 == 0);
+    }
+
+    // Generate everything
+    //
+    void DoCodegen()
+    {
+        VM* vm = VM::GetActiveVMForCurrentThread();
+
+        // Record final JIT code size info
+        //
+        {
+            JITCodeSizeInfo jitCodeSizeInfo = CodegenLog().GetJitCodeSizeInfo();
+            m_totalJitFastPathSectionLen = jitCodeSizeInfo.m_fastPathLength;
+            m_totalJitSlowPathSectionLen = jitCodeSizeInfo.m_slowPathLength;
+            m_totalJitDataSectionLen = jitCodeSizeInfo.m_dataSecLength;
+        }
+
+        // Now we have the full codegen plan and know how many total stack slots we have
+        // Patch the constants where we are supposed to add #TotalSlots
+        //
+        uint32_t totalNumStackSlots = m_manager.GetMaxTotalNumberOfPhysicalSlots();
+        for (uint64_t* addr : m_literalFieldToBeAddedByTotalFrameSlots)
+        {
+            *addr += totalNumStackSlots;
+        }
+
+        // Compute the size of DfgCodeBlock and allocate it
+        //
+        DfgCodeBlock* dcb;
+        {
+            // Oops, AllocFromSystemHeap always returns 8-byte-aligned memory..
+            //
+            static_assert(sizeof(TValue) == 8 && alignof(DfgCodeBlock) == 8);
+            size_t constantTableLength = sizeof(TValue) * m_stackLayoutPlanningResult.m_constantTable.size();
+            TestAssert(m_slowPathDataEndOffset >= sizeof(DfgCodeBlock));
+            size_t dfgCodeBlockAllocSize = constantTableLength + m_slowPathDataEndOffset;
+            dfgCodeBlockAllocSize = RoundUpToMultipleOf<8>(dfgCodeBlockAllocSize);
+            uint8_t* addressBegin = TranslateToRawPointer(vm, vm->AllocFromSystemHeap(static_cast<uint32_t>(dfgCodeBlockAllocSize)).AsNoAssert<uint8_t>());
+            dcb = reinterpret_cast<DfgCodeBlock*>(addressBegin + constantTableLength);
+            TestAssert(reinterpret_cast<uint64_t>(dcb) % alignof(DfgCodeBlock) == 0);
+        }
+
+        ConstructInPlace(dcb);
+
+        SetupConstantTableForDfgCodeBlock(reinterpret_cast<uint64_t*>(dcb),
+                                          m_stackLayoutPlanningResult.m_constantTable.data(),
+                                          m_stackLayoutPlanningResult.m_constantTable.size());
+
+        CodeBlock* cb = GetGraph()->GetRootCodeBlock();
+        dcb->m_globalObject = cb->m_globalObject;
+        dcb->m_stackFrameNumSlots = totalNumStackSlots;
+        dcb->m_stackRegSpillRegionPhysicalSlot = m_firstRegSpillSlot;
+        dcb->m_owner = cb;
+        TestAssert(m_slowPathDataEndOffset >= m_slowPathDataStartOffset);
+        dcb->m_slowPathDataStreamLength = m_slowPathDataEndOffset - m_slowPathDataStartOffset;
+
+        // Allocate the JIT region
+        //     [ data section ] [ JIT fast path ] [ JIT slow path ]
+        // Note that however, the codegen may overwrite at most 7 more bytes after each section, so allocation must account for that.
+        //
+        constexpr size_t x_maxBytesCodegenFnMayOverwrite = 7;
+
+        size_t fastPathBaseOffset = m_totalJitDataSectionLen;
+        if (fastPathBaseOffset > 0)
+        {
+            // Only add the padding if the data section is not empty (it is often empty),
+            // since if the data section is empty, the codegen won't write anything at all so the padding is not needed.
+            // This way we don't waste 16 bytes if the data section is empty.
+            //
+            fastPathBaseOffset += x_maxBytesCodegenFnMayOverwrite;
+        }
+
+        // Make the function entry address 16-byte aligned, which is also required to fulfill our loop header alignment
+        //
+        fastPathBaseOffset = RoundUpToMultipleOf<16>(fastPathBaseOffset);
+
+        size_t fastPathSectionEnd = fastPathBaseOffset + m_totalJitFastPathSectionLen;
+
+        size_t slowPathBaseOffset = fastPathSectionEnd + x_maxBytesCodegenFnMayOverwrite;
+        size_t slowPathSectionEnd = slowPathBaseOffset + m_totalJitSlowPathSectionLen;
+
+        size_t totalJitRegionSize = slowPathSectionEnd + x_maxBytesCodegenFnMayOverwrite;
+
+        // Allocate the JIT memory
+        //
+        JitMemoryAllocator* jitAlloc = vm->GetJITMemoryAlloc();
+        dcb->m_jitRegionStart = jitAlloc->AllocateGivenSize(totalJitRegionSize);
+        dcb->m_jitRegionSize = SafeIntegerCast<uint32_t>(totalJitRegionSize);
+
+        TestAssert(reinterpret_cast<uint64_t>(dcb->m_jitRegionStart) % x_jitMaxPossibleDataSectionAlignment == 0);
+        TestAssert(reinterpret_cast<uint64_t>(dcb->m_jitRegionStart) % 16 == 0);
+
+        uint8_t* jitRegionStart = reinterpret_cast<uint8_t*>(dcb->m_jitRegionStart);
+        uint8_t* dataSecBasePtr = jitRegionStart;
+        uint8_t* fastPathBasePtr = jitRegionStart + fastPathBaseOffset;
+        uint8_t* slowPathBasePtr = jitRegionStart + slowPathBaseOffset;
+
+        dcb->m_jitCodeEntry = fastPathBasePtr;
+        TestAssert(reinterpret_cast<uint64_t>(dcb->m_jitCodeEntry) % 16 == 0);
+
+        CodegenControlState ccs;
+        ccs.m_pcs.m_fastPathAddr = fastPathBasePtr;
+        ccs.m_pcs.m_slowPathAddr = slowPathBasePtr;
+        ccs.m_pcs.m_dataSecAddr = dataSecBasePtr;
+        TestAssert(m_slowPathDataStartOffset > 0);
+        ccs.m_pcs.m_slowPathDataAddr = reinterpret_cast<uint8_t*>(dcb) + m_slowPathDataStartOffset;
+        ccs.m_pcs.m_slowPathDataOffset = m_slowPathDataStartOffset;
+        // This field is set up by each BB
+        //
+        ccs.m_pcs.m_compactedRegConfAddr = nullptr;
+        ccs.m_pcs.m_dfgCodeBlockLower32Bits = static_cast<uint32_t>(reinterpret_cast<uint64_t>(dcb));
+        ccs.m_fastPathBaseAddr = fastPathBasePtr;
+        ccs.m_slowPathBaseAddr = slowPathBasePtr;
+        ccs.m_dataSecBaseAddr = dataSecBasePtr;
+        ccs.m_dcb = dcb;
+
+        // Generate the function entry logic
+        //
+        {
+            TestAssert(m_functionEntryTrait.m_emitterFn != nullptr);
+            m_functionEntryTrait.m_emitterFn(ccs.m_pcs.m_fastPathAddr, ccs.m_pcs.m_slowPathAddr, ccs.m_pcs.m_dataSecAddr);
+            ccs.m_pcs.m_fastPathAddr += m_functionEntryTrait.m_fastPathCodeLen;
+            ccs.m_pcs.m_slowPathAddr += m_functionEntryTrait.m_slowPathCodeLen;
+            ccs.m_pcs.m_dataSecAddr += m_functionEntryTrait.m_dataSecCodeLen;
+        }
+
+        TestAssert(m_bbOrder.size() > 0);
+        for (BasicBlockCodegenInfo& cbb : m_bbOrder)
+        {
+            CodegenBasicBlock(&cbb, ccs /*inout*/);
+        }
+
+        TestAssert(ccs.m_pcs.m_fastPathAddr == jitRegionStart + fastPathSectionEnd);
+        TestAssert(ccs.m_pcs.m_slowPathAddr == jitRegionStart + slowPathSectionEnd);
+        TestAssert(ccs.m_pcs.m_dataSecAddr == jitRegionStart + m_totalJitDataSectionLen);
+        TestAssert(ccs.m_pcs.m_slowPathDataAddr == reinterpret_cast<uint8_t*>(dcb) + m_slowPathDataEndOffset);
+        TestAssert(ccs.m_pcs.m_slowPathDataOffset == m_slowPathDataEndOffset);
+
+        // Populate the trailing space after the fast path and slow path JIT code
+        //
+        TestAssert(ccs.m_pcs.m_fastPathAddr + x_maxBytesCodegenFnMayOverwrite == slowPathBasePtr);
+        TestAssert(ccs.m_pcs.m_slowPathAddr + x_maxBytesCodegenFnMayOverwrite == jitRegionStart + totalJitRegionSize);
+
+        auto populateCodeGap = [&](uint8_t* addr) ALWAYS_INLINE
+        {
+            [[maybe_unused]] uint8_t* oldAddr = addr;
+
+            TestAssert(x_maxBytesCodegenFnMayOverwrite >= 2);
+            EmitUd2Instruction(addr /*inout*/);
+            TestAssert(addr == oldAddr + 2);
+
+            size_t numNopBytes = x_maxBytesCodegenFnMayOverwrite - 2;
+            TestAssert(numNopBytes <= 15);
+            const uint8_t* nopInst = GetX64MultiByteNOPInst(numNopBytes);
+            memcpy(addr, nopInst, numNopBytes);
+            TestAssert(addr + numNopBytes == oldAddr + x_maxBytesCodegenFnMayOverwrite);
+        };
+        populateCodeGap(ccs.m_pcs.m_fastPathAddr);
+        populateCodeGap(ccs.m_pcs.m_slowPathAddr);
+
+        m_resultDcb = dcb;
+    }
+
+    // Return the index of the block in m_bbOrder
+    //
+    uint32_t DfsBasicBlock(BasicBlock* bb)
+    {
+        if (bb->m_ordInCodegenOrder != static_cast<uint32_t>(-1))
+        {
+            TestAssert(bb->m_ordInCodegenOrder < m_bbOrder.size());
+            TestAssert(m_bbOrder[bb->m_ordInCodegenOrder].m_bb == bb);
+            if (m_bbOrder[bb->m_ordInCodegenOrder].m_isOnDfsStack)
+            {
+                m_bbOrder[bb->m_ordInCodegenOrder].m_isReachedByBackEdge = true;
+            }
+            return bb->m_ordInCodegenOrder;
+        }
+
+        TestAssert(m_bbOrder.size() < GetGraph()->m_blocks.size());
+        TestAssert(m_bbOrder.size() < m_bbOrder.capacity());
+        bb->m_ordInCodegenOrder = static_cast<uint32_t>(m_bbOrder.size());
+
+        // This reference will remain valid because we have reserved enough capacity
+        //
+        BasicBlockCodegenInfo& info = m_bbOrder.emplace_back();
+        info.m_isOnDfsStack = true;
+        info.m_bb = bb;
+        if (bb->GetNumSuccessors() == 0)
+        {
+            info.m_terminatorInfo.InitNoSuccessor();
+        }
+        else if (bb->GetNumSuccessors() == 1)
+        {
+            uint32_t destOrd = DfsBasicBlock(bb->GetSuccessor(0));
+            info.m_terminatorInfo.InitUnconditionalBranch(bb->m_ordInCodegenOrder, destOrd);
+        }
+        else
+        {
+            TestAssert(bb->GetNumSuccessors() == 2);
+            uint32_t defaultDestOrd = DfsBasicBlock(bb->GetSuccessor(0));
+            uint32_t branchDestOrd = DfsBasicBlock(bb->GetSuccessor(1));
+            info.m_terminatorInfo.InitCondBranch(bb->m_ordInCodegenOrder, defaultDestOrd, branchDestOrd);
+        }
+        info.m_isOnDfsStack = false;
+        return bb->m_ordInCodegenOrder;
+    }
+
+    // Figure out the order of the basic blocks in the JIT code
+    //
+    void PlanBasicBlockOrder()
+    {
+        for (BasicBlock* bb : GetGraph()->m_blocks)
+        {
+            bb->m_ordInCodegenOrder = static_cast<uint32_t>(-1);
+        }
+
+        // Must reserve enough capacity to avoid iterator invalidation!
+        //
+        m_bbOrder.clear();
+        m_bbOrder.reserve(GetGraph()->m_blocks.size());
+
+        TestAssert(GetGraph()->m_blocks.size() > 0);
+        DfsBasicBlock(GetGraph()->m_blocks[0]);
+
+        TestAssert(m_bbOrder.size() > 0);
+        TestAssert(m_bbOrder.size() <= GetGraph()->m_blocks.size());
+
+#ifdef TESTBUILD
+        for (size_t idx = 0; idx < m_bbOrder.size(); idx++)
+        {
+            TestAssert(m_bbOrder[idx].m_bb->m_ordInCodegenOrder == idx);
+            TestAssert(!m_bbOrder[idx].m_isOnDfsStack);
+        }
+        TestAssert(!m_bbOrder[0].m_isReachedByBackEdge);
+#endif
+
+        for (size_t idx = 0; idx + 1 < m_bbOrder.size(); idx++)
+        {
+            if (m_bbOrder[idx + 1].m_isReachedByBackEdge)
+            {
+                m_bbOrder[idx].m_shouldPadFastPathTo16ByteAlignmentAtEnd = true;
+            }
+        }
     }
 
     CodegenOperationLog& WARN_UNUSED CodegenLog()
@@ -2645,19 +3545,41 @@ private:
         return m_manager.GetCodegenLog();
     }
 
-    Graph* Graph() { return m_valueUseListBuilder.m_graph; }
+    Graph* GetGraph() { return m_valueUseListBuilder.m_graph; }
+
+    void SetupFunctionEntryLogic()
+    {
+        CodeBlock* rootCodeBlock = GetGraph()->GetRootCodeBlock();
+        TestAssert(m_functionEntryTrait.m_emitterFn == nullptr);
+        m_functionEntryTrait = GetDfgJitFunctionEntryLogicTrait(rootCodeBlock->m_hasVariadicArguments, rootCodeBlock->m_numFixedArguments);
+        TestAssert(m_functionEntryTrait.m_emitterFn != nullptr);
+        TestAssert(CodegenLog().GetJitCodeSizeInfo().m_fastPathLength == 0 &&
+                   CodegenLog().GetJitCodeSizeInfo().m_slowPathLength == 0 &&
+                   CodegenLog().GetJitCodeSizeInfo().m_dataSecLength == 0);
+        JITCodeSizeInfo fnEntryInfo;
+        fnEntryInfo.m_fastPathLength = m_functionEntryTrait.m_fastPathCodeLen;
+        fnEntryInfo.m_slowPathLength = m_functionEntryTrait.m_slowPathCodeLen;
+        fnEntryInfo.m_dataSecLength = m_functionEntryTrait.m_dataSecCodeLen;
+        CodegenLog().SetJITCodeSizeInfo(fnEntryInfo);
+    }
 
     void RunImpl()
     {
-        Initialize();
-        for (BasicBlock* bb : Graph()->m_blocks)
+        m_slowPathDataStartOffset = static_cast<uint32_t>(DfgCodeBlock::GetSlowPathDataStartOffset());
+        m_slowPathDataEndOffset = m_slowPathDataStartOffset;
+        SetupFunctionEntryLogic();
+        PlanBasicBlockOrder();
+        InitializeUseListBuilder();
+        for (BasicBlockCodegenInfo& cbb : m_bbOrder)
         {
-            ProcessBasicBlock(bb);
+            ProcessBasicBlock(&cbb);
         }
+        DoCodegen();
     }
 
     TempArenaAllocator m_passAlloc;
     TempArenaAllocator m_bbAlloc;
+    StackLayoutPlanningResult& m_stackLayoutPlanningResult;
     ValueUseListBuilder m_valueUseListBuilder;
     RegAllocValueManager m_manager;
     RegAllocDecisionMaker<true /*forGprState*/, RegAllocValueManager> m_gprAlloc;
@@ -2666,18 +3588,28 @@ private:
     uint32_t* m_nextSpillEverythingUseIndex;
     uint32_t m_currentUseIndex;
     uint16_t m_firstRegSpillSlot;
+    uint32_t m_totalJitFastPathSectionLen;
+    uint32_t m_totalJitSlowPathSectionLen;
+    uint32_t m_totalJitDataSectionLen;
+    // This is the start/end byte offset of SlowPathData from the address of the DfgCodeBlock
+    // (since the JIT code always expects a direct offset from DfgCodeBlock)
+    //
+    uint32_t m_slowPathDataStartOffset;
+    uint32_t m_slowPathDataEndOffset;
+    JitFunctionEntryLogicTraits m_functionEntryTrait;
     NodeRangeOperandInfoDecoder m_rangeOpInfoDecoder;
     TempVector<uint8_t> m_isRangeOpSlotHoldingOutput;
     TempVector<uint32_t> m_createFnObjUvIndexList;
     TempVector<uint64_t*> m_literalFieldToBeAddedByTotalFrameSlots;
+    TempVector<BasicBlockCodegenInfo> m_bbOrder;
+    DfgCodeBlock* m_resultDcb;
 };
 
 }   // anonymous namespace
 
-DfgBackendResult WARN_UNUSED RunDfgBackend(Graph* graph)
+DfgBackendResult WARN_UNUSED RunDfgBackend(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
 {
-    DfgBackend::Run(graph);
-    return DfgBackendResult { };
+    return DfgBackend::Run(graph, stackLayoutPlanningResult);
 }
 
 }   // namespace dfg

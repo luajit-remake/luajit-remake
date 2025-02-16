@@ -20,6 +20,7 @@ enum FpsCommand
     FpsCommand_GenerateDfgJitBytecodeInfoApiHeader,
     FpsCommand_ProcessDfgJitBuiltinNodes,
     FpsCommand_GenerateDfgJitCCallWrapperStubs,
+    FpsCommand_GenerateDfgJitFunctionEntryLogic,
     FpsCommand_PostProcessLinkImplementations
 };
 
@@ -64,6 +65,9 @@ inline cl::opt<FpsCommand> cl_mainCommand(
       , clEnumValN(FpsCommand_GenerateDfgJitCCallWrapperStubs,
                    "generate-dfg-jit-c-call-wrapper-stubs",
                    "Generate the assembly file for all the DFG JIT C call wrapper stubs.")
+      , clEnumValN(FpsCommand_GenerateDfgJitFunctionEntryLogic,
+                   "generate-dfg-jit-function-entry-logic",
+                   "Generate the function entry logic emitter for DFG JIT.")
       , clEnumValN(FpsCommand_PostProcessLinkImplementations,
                    "post-process-link-implementations",
                    "Link all the generated logic back into the original bytecode definition file to produce the final implementation.")
@@ -127,9 +131,9 @@ void FPS_ProcessBytecodeDefinitionForBaselineJit();
 //
 void FPS_GenerateDispatchTableAndBytecodeTraitTableForBaselineJit();
 
-// Generate the baseline JIT function entry logic
+// Generate the JIT function entry logic
 //
-void FPS_GenerateBaselineJitFunctionEntryLogic();
+void FPS_GenerateJitFunctionEntryLogic(bool forBaselineJIT);
 
 // Generate the bytecode opcode trait table
 //

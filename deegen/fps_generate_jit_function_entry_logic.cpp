@@ -8,20 +8,24 @@
 
 namespace {
 
+using namespace dast;
+
 struct GenerateFnEntryLogicArrayResult
 {
     std::unique_ptr<llvm::Module> m_module;
     std::vector<std::string> m_fnNameList;
-    std::vector<BaselineJitFunctionEntryLogicTraits> m_infoList;
+    std::vector<JitFunctionEntryLogicTraits> m_infoList;
     std::string m_auditFileContents;
 };
 
 // Note that the specialization range is [0, specializationThreshold] inclusive!
 //
-GenerateFnEntryLogicArrayResult WARN_UNUSED GenerateBaselineJitFnEntryLogicArray(llvm::LLVMContext& ctx, bool takesVarArgs, size_t specializationThreshold)
+GenerateFnEntryLogicArrayResult WARN_UNUSED GenerateJitFnEntryLogicArray(llvm::LLVMContext& ctx, DeegenEngineTier tier, bool takesVarArgs, size_t specializationThreshold)
 {
     using namespace llvm;
-    using namespace dast;
+
+    ReleaseAssert(tier == DeegenEngineTier::BaselineJIT || tier == DeegenEngineTier::DfgJIT);
+
     AnonymousFile auditFile;
     FILE* fp = auditFile.GetFStream("w");
 
@@ -36,8 +40,8 @@ GenerateFnEntryLogicArrayResult WARN_UNUSED GenerateBaselineJitFnEntryLogicArray
             numFixedArgs = static_cast<size_t>(-1);
         }
 
-        DeegenFunctionEntryLogicCreator gen(ctx, DeegenEngineTier::BaselineJIT, takesVarArgs, numFixedArgs);
-        auto res = gen.GetBaselineJitResult();
+        DeegenFunctionEntryLogicCreator gen(ctx, tier, takesVarArgs, numFixedArgs);
+        auto res = gen.GetJitCodegenResult();
 
         fprintf(fp, "# ====== numFixedArgs = %lld, takesVarArgs = %s ======\n\n", static_cast<long long>(numFixedArgs), (takesVarArgs ? "true" : "false"));
         fprintf(fp, "%s\n\n", res.m_asmSourceForAudit.c_str());
@@ -77,16 +81,18 @@ GenerateFnEntryLogicArrayResult WARN_UNUSED GenerateBaselineJitFnEntryLogicArray
 
 }   // anonymous namespace
 
-void FPS_GenerateBaselineJitFunctionEntryLogic()
+void FPS_GenerateJitFunctionEntryLogic(bool forBaselineJIT)
 {
     using namespace llvm;
-    using namespace dast;
 
     std::unique_ptr<LLVMContext> llvmCtxHolder = std::make_unique<LLVMContext>();
     LLVMContext& ctx = *llvmCtxHolder.get();
 
-    GenerateFnEntryLogicArrayResult novaRes = GenerateBaselineJitFnEntryLogicArray(ctx, false /*takesVarArgs*/, x_baselineJitFunctionEntrySpecializeThresholdForNonVarargsFunction);
-    GenerateFnEntryLogicArrayResult vaRes = GenerateBaselineJitFnEntryLogicArray(ctx, true /*takesVarArgs*/, x_baselineJitFunctionEntrySpecializeThresholdForVarargsFunction);
+    DeegenEngineTier tier = (forBaselineJIT ? DeegenEngineTier::BaselineJIT : DeegenEngineTier::DfgJIT);
+    std::string tierName = (forBaselineJIT ? "baseline_jit" : "dfg_jit");
+
+    GenerateFnEntryLogicArrayResult novaRes = GenerateJitFnEntryLogicArray(ctx, tier, false /*takesVarArgs*/, x_jitFunctionEntrySpecializeThresholdForNonVarargsFunction);
+    GenerateFnEntryLogicArrayResult vaRes = GenerateJitFnEntryLogicArray(ctx, tier, true /*takesVarArgs*/, x_jitFunctionEntrySpecializeThresholdForVarargsFunction);
 
     {
         std::unordered_set<std::string> chkUnique;
@@ -113,7 +119,7 @@ void FPS_GenerateBaselineJitFunctionEntryLogic()
     ReleaseAssert(cl_cppOutputFilename != "");
     TransactionalOutputFile cppOutputFile(cl_cppOutputFilename);
     FILE* cppFp = cppOutputFile.fp();
-    fprintf(cppFp, "#include \"drt/baseline_jit_codegen_helper.h\"\n\n");
+    fprintf(cppFp, "#include \"drt/jit_function_entry_codegen_helper.h\"\n\n");
 
     auto printCppFile = [&](const std::string& varName, GenerateFnEntryLogicArrayResult& r)
     {
@@ -123,11 +129,10 @@ void FPS_GenerateBaselineJitFunctionEntryLogic()
         {
             fprintf(cppFp, "extern \"C\" void %s(void*, void*, void*);\n", s.c_str());
         }
-        fprintf(cppFp, "extern \"C\" const BaselineJitFunctionEntryLogicTraits %s[%llu];\n", varName.c_str(), static_cast<unsigned long long>(len));
-        fprintf(cppFp, "constexpr BaselineJitFunctionEntryLogicTraits %s[%llu] = {\n", varName.c_str(), static_cast<unsigned long long>(len));
+        fprintf(cppFp, "constexpr JitFunctionEntryLogicTraits %s[%llu] = {\n", varName.c_str(), static_cast<unsigned long long>(len));
         for (size_t i = 0; i < len; i++)
         {
-            fprintf(cppFp, "    BaselineJitFunctionEntryLogicTraits {\n");
+            fprintf(cppFp, "    JitFunctionEntryLogicTraits {\n");
             fprintf(cppFp, "        .m_fastPathCodeLen = %llu,\n", static_cast<unsigned long long>(r.m_infoList[i].m_fastPathCodeLen));
             fprintf(cppFp, "        .m_slowPathCodeLen = %llu,\n", static_cast<unsigned long long>(r.m_infoList[i].m_slowPathCodeLen));
             fprintf(cppFp, "        .m_dataSecCodeLen = %llu,\n", static_cast<unsigned long long>(r.m_infoList[i].m_dataSecCodeLen));
@@ -142,11 +147,11 @@ void FPS_GenerateBaselineJitFunctionEntryLogic()
         fprintf(cppFp, "};\n\n");
     };
 
-    ReleaseAssert(novaRes.m_fnNameList.size() == x_baselineJitFunctionEntrySpecializeThresholdForNonVarargsFunction + 2);
-    printCppFile("deegen_baseline_jit_function_entry_logic_trait_table_nova", novaRes);
+    ReleaseAssert(novaRes.m_fnNameList.size() == x_jitFunctionEntrySpecializeThresholdForNonVarargsFunction + 2);
+    printCppFile("deegen_" + tierName + "_function_entry_logic_trait_table_nova", novaRes);
 
-    ReleaseAssert(vaRes.m_fnNameList.size() == x_baselineJitFunctionEntrySpecializeThresholdForVarargsFunction + 2);
-    printCppFile("deegen_baseline_jit_function_entry_logic_trait_table_va", vaRes);
+    ReleaseAssert(vaRes.m_fnNameList.size() == x_jitFunctionEntrySpecializeThresholdForVarargsFunction + 2);
+    printCppFile("deegen_" + tierName + "_function_entry_logic_trait_table_va", vaRes);
 
     ReleaseAssert(cl_assemblyOutputFilename != "");
     TransactionalOutputFile asmOutputFile(cl_assemblyOutputFilename);
@@ -154,7 +159,7 @@ void FPS_GenerateBaselineJitFunctionEntryLogic()
     std::string asmFileContents = CompileLLVMModuleToAssemblyFile(module.get(), Reloc::Static, CodeModel::Small);
     asmOutputFile.write(asmFileContents);
 
-    std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName("baseline_jit", "deegen_fn_entry_logic.s");
+    std::string auditFilePath = FPS_GetAuditFilePathWithTwoPartName(tierName, "deegen_fn_entry_logic.s");
     TransactionalOutputFile auditFile(auditFilePath);
     auditFile.write(novaRes.m_auditFileContents + vaRes.m_auditFileContents);
 

@@ -52,7 +52,7 @@ int main(int argc, char** argv)
     }
     case FpsCommand_GenerateBaselineJitFunctionEntryLogic:
     {
-        FPS_GenerateBaselineJitFunctionEntryLogic();
+        FPS_GenerateJitFunctionEntryLogic(true /*forBaselineJIT*/);
         break;
     }
     case FpsCommand_GenerateBytecodeOpcodeTraitTable:
@@ -78,6 +78,11 @@ int main(int argc, char** argv)
     case FpsCommand_GenerateDfgJitCCallWrapperStubs:
     {
         Fps_GenerateDfgJitCCallWrapperStubs();
+        break;
+    }
+    case FpsCommand_GenerateDfgJitFunctionEntryLogic:
+    {
+        FPS_GenerateJitFunctionEntryLogic(false /*forBaselineJIT*/);
         break;
     }
     case FpsCommand_PostProcessLinkImplementations:

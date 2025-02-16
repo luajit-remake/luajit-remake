@@ -141,6 +141,8 @@ struct DfgCodegenFuncOrdBaseForDfgVariantConstructor : DfgConstEvalForEachOpcode
             size_t variantOrd = x_dfgVariantIdBaseForBCKind[static_cast<size_t>(bcKind)] + dvOrd;
             m_numCodegenFuncsInVariant[variantOrd]++;
             m_codegenInfoForVariant[variantOrd] = DfgVariantTraitFor<bcKind, dvOrd>::trait;
+            m_slowPathDataNeedsRegConfig[variantOrd] = DfgVariantTraitFor<bcKind, dvOrd>::needRegConfigInSlowPathData;
+            m_slowPathDataLength[variantOrd] = DfgVariantTraitFor<bcKind, dvOrd>::slowPathDataLen;
         }
     }
 
@@ -151,6 +153,8 @@ struct DfgCodegenFuncOrdBaseForDfgVariantConstructor : DfgConstEvalForEachOpcode
             m_numCodegenFuncsInVariant[i] = 0;
             m_codegenFuncOrdBaseForVariant[i] = 0;
             m_codegenInfoForVariant[i] = nullptr;
+            m_slowPathDataNeedsRegConfig[i] = false;
+            m_slowPathDataLength[i] = 0;
         }
         RunActionForEachDfgOpcode();
         for (size_t i = 0; i < x_numVariants; i++)
@@ -165,6 +169,8 @@ struct DfgCodegenFuncOrdBaseForDfgVariantConstructor : DfgConstEvalForEachOpcode
     std::array<size_t, x_numVariants + 1> m_numCodegenFuncsInVariant;
     std::array<size_t, x_numVariants + 1> m_codegenFuncOrdBaseForVariant;
     std::array<const DfgVariantTraits*, x_numVariants + 1> m_codegenInfoForVariant;
+    std::array<bool, x_numVariants + 1> m_slowPathDataNeedsRegConfig;
+    std::array<uint32_t, x_numVariants + 1> m_slowPathDataLength;
 };
 
 inline constexpr DfgCodegenFuncOrdBaseForDfgVariantConstructor x_dfg_cgfnOrdBaseInfo = DfgCodegenFuncOrdBaseForDfgVariantConstructor();
@@ -187,6 +193,8 @@ template<BCKind bcKind, size_t dvOrd>
 constexpr size_t x_codegenFuncOrdBaseForDfgVariant = detail::CodegenFuncOrdBaseForDfgVariantImpl<bcKind, dvOrd>::codegenFnOrdBase;
 
 inline constexpr auto x_dfgCodegenInfoForVariantId = detail::x_dfg_cgfnOrdBaseInfo.m_codegenInfoForVariant;
+inline constexpr auto x_dfgVariantNeedsRegConfigInSlowPathData = detail::x_dfg_cgfnOrdBaseInfo.m_slowPathDataNeedsRegConfig;
+inline constexpr auto x_dfgVariantSlowPathDataLen = detail::x_dfg_cgfnOrdBaseInfo.m_slowPathDataLength;
 
 inline const DfgVariantTraits* GetCodegenInfoForDfgVariant(BCKind bcKind, size_t variantOrd)
 {
@@ -195,6 +203,24 @@ inline const DfgVariantTraits* GetCodegenInfoForDfgVariant(BCKind bcKind, size_t
     size_t dfgVariantId = x_dfgVariantIdBaseForBCKind[static_cast<size_t>(bcKind)] + variantOrd;
     TestAssert(dfgVariantId < x_dfgCodegenInfoForVariantId.size());
     return x_dfgCodegenInfoForVariantId[dfgVariantId];
+}
+
+inline bool DfgVariantNeedsRegConfigInSlowPathData(BCKind bcKind, size_t variantOrd)
+{
+    TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+    TestAssert(variantOrd < x_numDfgVariantsForBCKind[static_cast<size_t>(bcKind)]);
+    size_t dfgVariantId = x_dfgVariantIdBaseForBCKind[static_cast<size_t>(bcKind)] + variantOrd;
+    TestAssert(dfgVariantId < x_dfgVariantNeedsRegConfigInSlowPathData.size());
+    return x_dfgVariantNeedsRegConfigInSlowPathData[dfgVariantId];
+}
+
+inline uint32_t GetDfgVariantSlowPathDataLength(BCKind bcKind, size_t variantOrd)
+{
+    TestAssert(bcKind < BCKind::X_END_OF_ENUM);
+    TestAssert(variantOrd < x_numDfgVariantsForBCKind[static_cast<size_t>(bcKind)]);
+    size_t dfgVariantId = x_dfgVariantIdBaseForBCKind[static_cast<size_t>(bcKind)] + variantOrd;
+    TestAssert(dfgVariantId < x_dfgVariantSlowPathDataLen.size());
+    return x_dfgVariantSlowPathDataLen[dfgVariantId];
 }
 
 }   // namespace dfg

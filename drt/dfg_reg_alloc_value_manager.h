@@ -3,7 +3,7 @@
 #include "common_utils.h"
 #include "dfg_reg_alloc_node_info.h"
 #include "dfg_osr_exit_map_builder.h"
-#include "dfg_reg_alloc_state.h"
+#include "dfg_reg_alloc_codegen_state.h"
 #include "dfg_virtual_register.h"
 #include "dfg_logical_variable_info.h"
 #include "dfg_codegen_operation_log.h"
@@ -47,7 +47,7 @@ struct RegAllocValueManager
     void ResetForNewBasicBlock()
     {
         m_osrExitMap.Reset();
-        m_codegenLog.Reset();
+        m_codegenLog.ResetLog();
         m_totalNumPhysicalSlots = m_firstStackSpillPhysicalSlot;
         m_spillSlotFreeList.clear();
 #ifdef TESTBUILD

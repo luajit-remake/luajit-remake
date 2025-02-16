@@ -20,10 +20,14 @@ std::string DeegenFunctionEntryLogicCreator::GetFunctionName()
     {
         tierName = "interpreter";
     }
+    else if (m_tier == DeegenEngineTier::BaselineJIT)
+    {
+        tierName = "baseline_jit";
+    }
     else
     {
-        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
-        tierName = "baseline_jit";
+        ReleaseAssert(m_tier == DeegenEngineTier::DfgJIT);
+        tierName = "dfg_jit";
     }
     std::string name = "deegen_" + tierName + "_enter_guest_language_function_";
     if (IsNumFixedParamSpecialized())
@@ -149,11 +153,11 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     std::unique_ptr<Module> module = RegisterPinningScheme::CreateModule("generated_function_entry_logic", ctx);
 
     std::string funcName = GetFunctionName();
-    if (m_tier == DeegenEngineTier::BaselineJIT)
+    if (m_tier == DeegenEngineTier::BaselineJIT || m_tier == DeegenEngineTier::DfgJIT)
     {
-        // For baseline JIT, use a temp function name since it's not our final result
+        // For JIT, use a temp function name since it's not our final result
         //
-        funcName = "baseline_jit_fn_entry_logic_tmp";
+        funcName = "jit_fn_entry_logic_tmp";
     }
 
     std::unique_ptr<ExecutorFunctionContext> funcCtx = ExecutorFunctionContext::CreateForFunctionEntry(m_tier);
@@ -218,7 +222,10 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     }
     else
     {
-        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+        // TODO: Baseline JIT also needs to check for tier up, but DFG JIT is not fully ready yet,
+        // so currently the baseline JIT logic has no tier up check now
+        //
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT || m_tier == DeegenEngineTier::DfgJIT);
         normalBB = entryBB;
     }
 
@@ -315,7 +322,7 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
     }
     else
     {
-        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT || m_tier == DeegenEngineTier::DfgJIT);
         ReleaseAssert(bytecodePtr == nullptr);
 
         UnreachableInst* dummyInst = new UnreachableInst(ctx, normalBB);
@@ -326,11 +333,20 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
                                                                                        dummyInst /*insertBefore*/);
         ReleaseAssert(llvm_value_has_type<void*>(target));
 
-        Value* baselineCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
+        Value* jitCodeBlock = nullptr;
+        if (m_tier == DeegenEngineTier::BaselineJIT)
+        {
+            jitCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetBaselineJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
+        }
+        else
+        {
+            ReleaseAssert(m_tier == DeegenEngineTier::DfgJIT);
+            jitCodeBlock = CreateCallToDeegenCommonSnippet(module.get(), "GetDfgJitCodeBlockFromCodeBlockHeapPtr", { calleeCodeBlockHeapPtr }, dummyInst);
+        }
 
         funcCtx->PrepareDispatch<JitGeneratedCodeInterface>()
             .Set<RPV_StackBase>(stackBaseAfterFixUp)
-            .Set<RPV_CodeBlock>(baselineCodeBlock)
+            .Set<RPV_CodeBlock>(jitCodeBlock)
             .Dispatch(target, dummyInst /*insertBefore*/);
 
         dummyInst->eraseFromParent();
@@ -363,17 +379,17 @@ void DeegenFunctionEntryLogicCreator::Run(llvm::LLVMContext& ctx)
         return;
     }
 
-    GenerateBaselineJitStencil(std::move(module));
+    GenerateJitStencil(std::move(module));
 }
 
-void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr<llvm::Module> srcModule)
+void DeegenFunctionEntryLogicCreator::GenerateJitStencil(std::unique_ptr<llvm::Module> srcModule)
 {
     using namespace llvm;
     LLVMContext& ctx = srcModule->getContext();
 
-    ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+    ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT || m_tier == DeegenEngineTier::DfgJIT);
 
-    Function* func = srcModule->getFunction("baseline_jit_fn_entry_logic_tmp");
+    Function* func = srcModule->getFunction("jit_fn_entry_logic_tmp");
     ReleaseAssert(func != nullptr);
 
     // The logic below basically duplicates the logic in baseline JIT lowering, which is a bit unfortunate..
@@ -403,17 +419,17 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
     // Save contents for audit
     //
     {
-        m_baselineJitSourceAsmForAudit = asmFile;
+        m_jitSourceAsmForAudit = asmFile;
 
         // Do some simple heuristic to try to pick out the function asm for better readability
         //
-        size_t startPos = asmFile.find("baseline_jit_fn_entry_logic_tmp:");
+        size_t startPos = asmFile.find("jit_fn_entry_logic_tmp:");
         if (startPos != std::string::npos)
         {
             size_t endPos = asmFile.find(".Lfunc_end0:");
             if (endPos != std::string::npos && endPos > startPos)
             {
-                m_baselineJitSourceAsmForAudit = asmFile.substr(startPos, endPos - startPos);
+                m_jitSourceAsmForAudit = asmFile.substr(startPos, endPos - startPos);
             }
         }
     }
@@ -532,9 +548,9 @@ void DeegenFunctionEntryLogicCreator::GenerateBaselineJitStencil(std::unique_ptr
 
     ReleaseAssert(cgMod->getFunction(GetFunctionName()) != nullptr);
     m_module = std::move(cgMod);
-    m_baselineJitFastPathLen = cgRes.m_fastPathPreFixupCode.size();
-    m_baselineJitSlowPathLen = cgRes.m_slowPathPreFixupCode.size();
-    m_baselineJitDataSecLen = cgRes.m_dataSecPreFixupCode.size();
+    m_jitFastPathLen = cgRes.m_fastPathPreFixupCode.size();
+    m_jitSlowPathLen = cgRes.m_slowPathPreFixupCode.size();
+    m_jitDataSecLen = cgRes.m_dataSecPreFixupCode.size();
 }
 
 }   // namespace dast

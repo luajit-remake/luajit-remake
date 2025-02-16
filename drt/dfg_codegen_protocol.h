@@ -40,34 +40,7 @@ struct RegAllocStateForCodeGen;
 
 using CodegenImplFn = void(*)(PrimaryCodegenState*, NodeOperandConfigData*, uint8_t* /*nsd*/, RegAllocStateForCodeGen*);
 
-struct BuiltinNodeOperandsInfoBase
-{
-    uint64_t GetOutputPhysicalSlot()
-    {
-        return m_outputPhysicalSlot;
-    }
-
-    uint64_t GetInputPhysicalSlot(size_t inputOrd)
-    {
-        uint16_t* inputs = reinterpret_cast<uint16_t*>(reinterpret_cast<uintptr_t>(this) + sizeof(BuiltinNodeOperandsInfoBase));
-        return inputs[inputOrd];
-    }
-
-    uint16_t m_outputPhysicalSlot;
-};
-
-template<size_t numInputs>
-struct BuiltinNodeOperandsInfo
-{
-    BuiltinNodeOperandsInfo()
-    {
-        static_assert(offsetof_member_v<&BuiltinNodeOperandsInfo::m_inputPhysicalSlot> == sizeof(BuiltinNodeOperandsInfoBase));
-    }
-
-    uint16_t m_inputPhysicalSlot[numInputs];
-};
-
-using CustomBuiltinNodeCodegenImplFn = void(*)(PrimaryCodegenState*, BuiltinNodeOperandsInfoBase*, uint64_t* /*literalOperands*/, RegAllocStateForCodeGen*);
+using CustomBuiltinNodeCodegenImplFn = void(*)(PrimaryCodegenState*, NodeOperandConfigData*, uint64_t* /*literalOperands*/, RegAllocStateForCodeGen*);
 
 // Where to materialize a constant-like node
 //

@@ -250,6 +250,21 @@ add_custom_command(
     DEPENDS fps ${dfg_jit_c_wrapper_lists_json_file_list} 
 )
 
+# generate the DFG JIT entry logic
+#
+set(dfg_jit_function_entry_decl_cpp "${GENERATED_FILES_DIR}/build_dfg_jit_function_entry_logic_trait_table.cpp")
+set_source_files_properties(${dfg_jit_function_entry_decl_cpp} PROPERTIES GENERATED true)
+
+set(dfg_jit_function_entry_emitter_asm "${GENERATED_FILES_DIR}/dfg_jit_function_entry_logic_emitter.s")
+set_source_files_properties(${dfg_jit_function_entry_emitter_asm} PROPERTIES GENERATED true)
+
+add_custom_command(
+  OUTPUT ${dfg_jit_function_entry_decl_cpp}
+  OUTPUT ${dfg_jit_function_entry_emitter_asm}
+  COMMAND ${fps_exec} --generate-dfg-jit-function-entry-logic --cpp-output=${dfg_jit_function_entry_decl_cpp} --asm-output=${dfg_jit_function_entry_emitter_asm} --audit-dir=${GENERATED_FILES_DIR}/../audit 
+  DEPENDS fps 
+)
+
 add_custom_target(deegen_dfg_jit_all_generated_header_target DEPENDS ${dfg_jit_info_api_header} ${dfg_jit_specialization_info_hdr_file_list} ${dfg_jit_builtin_node_codegen_info_hdr})
  
 # Link all the generated logic back into the original bytecode definition file to get the final implementation
@@ -281,6 +296,8 @@ add_library(deegen_generated_interpreter_impl OBJECT
   ${baseline_jit_misc_helper_logic_asm}
   ${baseline_jit_function_entry_decl_cpp}
   ${baseline_jit_function_entry_emitter_asm}
+  ${dfg_jit_function_entry_decl_cpp}
+  ${dfg_jit_function_entry_emitter_asm}
   ${dfg_jit_specialization_info_cpp_file_list}
   ${dfg_jit_all_c_wrapper_stubs_asm}
   ${dfg_jit_builtin_node_code_generator_asm}

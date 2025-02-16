@@ -34,14 +34,10 @@ struct NumDfgVariantsForBCKind;
 template<BCKind bcKind, size_t dvOrd>
 struct DfgVariantTraitFor;
 
-// TODO FIXME
-struct NodeRegAllocInfo;
-struct DfgRegAllocState;
-
 // For assertion purpose only, return false if it detects any incompatibility
 // TODO FIXME
 //
-using DfgVariantValidityCheckerFn = bool(*)(NodeRegAllocInfo*, DfgRegAllocState*);
+using DfgVariantValidityCheckerFn = bool(*)(void*, void*);
 
 // Specialized by generated header files, which should contain the following fields:
 //   DfgVariantValidityCheckerFn checkValidFn;

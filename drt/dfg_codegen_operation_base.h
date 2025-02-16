@@ -77,15 +77,20 @@ public:
     // where 'op' will be the actual CodegenOp type of 'opBase'
     //
     template<typename Lambda>
-    std::invoke_result_t<decltype(Lambda::template operator()<PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))>), Lambda, PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))*>
+    std::invoke_result_t<Lambda, PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))*>
         ALWAYS_INLINE Dispatch(const Lambda& lambda)
     {
         // Check that all specializations have the same return type
         //
-        using RetTy = std::invoke_result_t<decltype(Lambda::template operator()<PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))>), Lambda, PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))*>;
-#define macro(cgOp) static_assert(std::is_same_v<RetTy, std::invoke_result_t<decltype(Lambda::template operator()<cgOp>), Lambda, cgOp*>>);
+        using RetTy = std::invoke_result_t<Lambda, PP_TUPLE_GET_1((DFG_CODEGEN_OPERATION_LIST))*>;
+#define macro(cgOp) static_assert(std::is_same_v<RetTy, std::invoke_result_t<Lambda, cgOp*>>);
         PP_FOR_EACH(macro, DFG_CODEGEN_OPERATION_LIST)
 #undef macro
+
+#define macro(cgOp) +1
+        [[maybe_unused]] constexpr size_t x_numOpKinds = 0 PP_FOR_EACH(macro, DFG_CODEGEN_OPERATION_LIST);
+#undef macro
+        TestAssert(static_cast<size_t>(GetCodegenOpKind()) < x_numOpKinds);
 
         // Dispatch based on actual type
         // Note that we can't use static_cast since the derived classes haven't been defined yet,
@@ -97,6 +102,9 @@ public:
             PP_FOR_EACH(macro, DFG_CODEGEN_OPERATION_LIST)
 #undef macro
         }   /*switch*/
+
+        TestAssert(false);
+        __builtin_unreachable();
     }
 
     Kind GetCodegenOpKind() const { return m_codegenOpKind; }

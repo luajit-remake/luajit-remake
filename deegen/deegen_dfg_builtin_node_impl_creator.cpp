@@ -860,8 +860,7 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
     Value* fastPathAddr = cg->GetJitFastPathPtr();
     Value* slowPathAddr = cg->GetJitSlowPathPtr();
 
-    // This is a BuiltinNodeOperandsInfoBase pointer if m_shouldUseCustomInterface is true,
-    // or a NodeOperandConfigData pointer if m_shouldUseCustomInterface is false
+    // The NodeOperandConfigData pointer
     //
     Value* ssaOperandInfo = cg->GetNodeOperandConfigDataPtr();
 
@@ -893,18 +892,9 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
     }
     else
     {
-        if (m_shouldUseCustomInterface)
-        {
-            Value* outputSlot = CreateCallToDeegenCommonSnippet(cgMod.get(), "GetDfgBuiltinNodeOutputPhysicalSlot", { ssaOperandInfo }, entryBB);
-            ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
-            valList.push_back(outputSlot);
-        }
-        else
-        {
-            Value* outputSlot = CreateCallToDeegenCommonSnippet(cgMod.get(), "GetDfgNodePhysicalSlotForOutput", { ssaOperandInfo }, entryBB);
-            ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
-            valList.push_back(outputSlot);
-        }
+        Value* outputSlot = CreateCallToDeegenCommonSnippet(cgMod.get(), "GetDfgNodePhysicalSlotForOutput", { ssaOperandInfo }, entryBB);
+        ReleaseAssert(llvm_value_has_type<uint64_t>(outputSlot));
+        valList.push_back(outputSlot);
     }
 
     // Slot 101 (fallthroughAddr)
@@ -939,20 +929,10 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
         }
         else
         {
-            if (m_shouldUseCustomInterface)
-            {
-                Value* slot = CreateCallToDeegenCommonSnippet(
-                    cgMod.get(), "GetDfgBuiltinNodeInputPhysicalSlot", { ssaOperandInfo, CreateLLVMConstantInt<uint64_t>(ctx, opOrd) }, entryBB);
-                ReleaseAssert(llvm_value_has_type<uint64_t>(slot));
-                valList.push_back(slot);
-            }
-            else
-            {
-                Value* slot = CreateCallToDeegenCommonSnippet(
-                    cgMod.get(), "GetDfgPhysicalSlotForSSAInput", { ssaOperandInfo, CreateLLVMConstantInt<uint64_t>(ctx, opOrd) }, entryBB);
-                ReleaseAssert(llvm_value_has_type<uint64_t>(slot));
-                valList.push_back(slot);
-            }
+            Value* slot = CreateCallToDeegenCommonSnippet(
+                cgMod.get(), "GetDfgPhysicalSlotForSSAInput", { ssaOperandInfo, CreateLLVMConstantInt<uint64_t>(ctx, opOrd) }, entryBB);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(slot));
+            valList.push_back(slot);
         }
     }
 

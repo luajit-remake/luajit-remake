@@ -95,7 +95,7 @@ add_executable(fps
   fps_process_user_builtin_lib.cpp
   fps_process_bytecode_definition_for_interpreter.cpp
   fps_process_bytecode_definition_for_baseline_jit.cpp
-  fps_generate_baseline_jit_function_entry_logic.cpp
+  fps_generate_jit_function_entry_logic.cpp
   fps_process_bytecode_definition_for_dfg_jit.cpp
   fps_process_dfg_builtin_nodes.cpp
 )

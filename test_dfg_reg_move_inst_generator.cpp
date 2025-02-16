@@ -2,6 +2,7 @@
 
 #include "test_util_helper.h"
 #include "drt/dfg_reg_move_inst_generator.h"
+#include "drt/dfg_test_branch_inst_generator.h"
 #include "misc_llvm_helper.h"
 
 #include "zydis/zydis.h"
@@ -261,6 +262,79 @@ TEST(DfgRegMoveInstGen, RegSpillAndLoad)
                             baseReg.GetName(), static_cast<int>(offsetBytes), reg.GetName(), expectedInst.c_str(), instStr.c_str());
                     abort();
                 }
+            }
+        }
+    }
+}
+
+TEST(DfgTestBranchInstGen, Test)
+{
+    std::vector<X64Reg> regs = GetGprRegList();
+
+    for (X64Reg reg : regs)
+    {
+        std::vector<uint8_t> inst;
+        inst.resize(100, 0 /*value*/);
+
+        uint8_t* instEnd = inst.data();
+        EmitTestRegRegInstruction(instEnd /*inout*/, reg);
+
+        ReleaseAssert(instEnd > inst.data());
+        size_t instLen = SafeIntegerCast<size_t>(instEnd - inst.data());
+
+        ReleaseAssert(instLen == 3);
+
+        std::string instStr = FormatInstructionATT(inst, instLen);
+
+        std::string expectedInst = std::string("test %") + reg.GetName() + ", %" + reg.GetName();
+
+        expectedInst = ConvertStringToLowerCase(expectedInst);
+
+        if (expectedInst != instStr)
+        {
+            fprintf(stderr, "Test %s, %s, expected '%s', got '%s'\n",
+                    reg.GetName(), reg.GetName(), expectedInst.c_str(), instStr.c_str());
+            abort();
+        }
+    }
+}
+
+TEST(DfgTestBranchInstGen, CmpZero)
+{
+    std::vector<X64Reg> baseRegs = GetGprRegList();
+    std::vector<uint32_t> offsetsForTest { 1, 8, 16, 32, 64, 89, 122, 128, 233, 12345, 12345678, 0x7fffffff };
+
+    for (X64Reg reg : baseRegs)
+    {
+        if (reg == X64Reg::RSP || reg == X64Reg::R12)
+        {
+            continue;
+        }
+        for (uint32_t offsetBytes : offsetsForTest)
+        {
+            std::vector<uint8_t> inst;
+            inst.resize(100, 0 /*value*/);
+
+            uint8_t* instEnd = inst.data();
+            EmitI64CmpBaseImm32OffsetZeroInstruction(instEnd /*inout*/, reg, offsetBytes);
+
+            ReleaseAssert(instEnd > inst.data());
+            size_t instLen = SafeIntegerCast<size_t>(instEnd - inst.data());
+
+            ReleaseAssert(instLen == 8);
+
+            std::string instStr = FormatInstructionATT(inst, instLen);
+
+            std::string expectedInst = std::string("cmpq $0x00, ") +
+                std::to_string(offsetBytes) + "(%" + reg.GetName() + ")";
+
+            expectedInst = ConvertStringToLowerCase(expectedInst);
+
+            if (expectedInst != instStr)
+            {
+                fprintf(stderr, "I64Cmp 0, %s @ %d, expected '%s', got '%s'\n",
+                        reg.GetName(), static_cast<int>(offsetBytes), expectedInst.c_str(), instStr.c_str());
+                abort();
             }
         }
     }

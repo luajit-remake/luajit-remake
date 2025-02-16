@@ -33,6 +33,7 @@
 
 #include "cxx_symbol_demangler.h"
 #include "deegen_desugaring_level.h"
+#include "x64_multi_byte_nop_instruction.h"
 
 namespace dast
 {
@@ -2062,49 +2063,6 @@ void WriteCppStructMember(llvm::Value* ptr, llvm::Value* valueToWrite, llvm::Bas
     UnreachableInst* dummy = new UnreachableInst(ptr->getContext(), insertAtEnd);
     WriteCppStructMember<member_object_ptr>(ptr, valueToWrite, dummy);
     dummy->eraseFromParent();
-}
-
-// Populate multi-byte NOP instruction to an address range
-//
-inline void FillAddressRangeWithX64MultiByteNOPs(uint8_t* addr, size_t length)
-{
-    // From Intel's Manual:
-    //    https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2b-manual.pdf
-    //    Page 165, table 4-12, "Recommended Multi-Byte Sequence of NOP Instruction"
-    //
-    // AMD Manual recommends the same byte sequence.
-    //
-    static constexpr uint8_t nop1[] = { 0x90 };
-    static constexpr uint8_t nop2[] = { 0x66, 0x90 };
-    static constexpr uint8_t nop3[] = { 0x0F, 0x1F, 0x00 };
-    static constexpr uint8_t nop4[] = { 0x0F, 0x1F, 0x40, 0x00 };
-    static constexpr uint8_t nop5[] = { 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-    static constexpr uint8_t nop6[] = { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 };
-    static constexpr uint8_t nop7[] = { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 };
-    static constexpr uint8_t nop8[] = { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    static constexpr uint8_t nop9[] = { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-    // NOP 10-15: we use the NOP sequence from JavaScriptCore, see
-    //     https://sillycross.github.io/r/WebKit/Source/JavaScriptCore/assembler/X86Assembler.h.html#3990
-    //
-    static constexpr uint8_t nop10[] = { 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-    static constexpr uint8_t nop11[] = { 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-    static constexpr uint8_t nop12[] = { 0x66, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-    static constexpr uint8_t nop13[] = { 0x66, 0x66, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-    static constexpr uint8_t nop14[] = { 0x66, 0x66, 0x66, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-    static constexpr uint8_t nop15[] = { 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x02, 0x00, 0x00 };
-
-    static constexpr const uint8_t* nops[16] = {
-        nullptr, nop1, nop2, nop3, nop4, nop5, nop6, nop7, nop8, nop9, nop10, nop11, nop12, nop13, nop14, nop15
-    };
-    while (length > 0)
-    {
-        size_t choice = 15;
-        choice = std::min(choice, length);
-        memcpy(addr, nops[choice], choice);
-        length -= choice;
-        addr += choice;
-    }
 }
 
 // Utility functions for repatchable jumps (jmp imm32)

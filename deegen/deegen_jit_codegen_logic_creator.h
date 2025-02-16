@@ -394,8 +394,7 @@ struct DfgJitCodegenFnProto final : public JitCodegenFnProtoBase
 
     llvm::Value* GetPrimaryCodegenStatePtr() { return m_func->getArg(x_primaryCodegenStatePtr); }
 
-    // Note that for DFG guest language node, this is the NodeOperandConfigData* that holds the reg alloc info for the node.
-    // For DFG built-in node, this is a BuiltinNodeOperandsInfoBase* that holds the physical slot for each SSA operand and output
+    // This is the NodeOperandConfigData* that holds the various physical slot info for the node.
     //
     llvm::Value* GetNodeOperandConfigDataPtr() { return m_func->getArg(x_nodeOperandConfigDataPtr); }
 

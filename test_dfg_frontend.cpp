@@ -484,10 +484,10 @@ TEST(DfgFrontend, Parser_Stress_1)
             RunSpeculationAssignmentPass(graph.get());
 
             RunPhantomInsertionPass(graph.get());
-            std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
+            StackLayoutPlanningResult slp = RunStackLayoutPlanningPass(alloc, graph.get());
             RunRegisterBankAssignmentPass(graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
-            std::ignore = RunDfgBackend(graph.get());
+            std::ignore = RunDfgBackend(graph.get(), slp);
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
         }
     }

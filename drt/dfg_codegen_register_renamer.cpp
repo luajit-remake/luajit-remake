@@ -1,5 +1,5 @@
 #include "dfg_codegen_register_renamer.h"
-#include "dfg_reg_alloc_state.h"
+#include "dfg_reg_alloc_codegen_state.h"
 
 namespace dfg {
 

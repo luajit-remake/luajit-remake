@@ -226,7 +226,6 @@ set(UNIT_TEST_SRC
   test_llvm_effectful_function_checker.cpp
   test_dfg_jit_stencils.cpp
   test_zydis_register_parser.cpp
-  test_dfg_reg_alloc_state.cpp
   test_dfg_reg_move_inst_generator.cpp
   test_typemask_automata_generator.cpp
   test_strongly_connected_components.cpp

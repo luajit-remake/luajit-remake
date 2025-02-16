@@ -426,6 +426,12 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
                 fprintf(hdrFp, "    static constexpr size_t numCodegenFuncs = %d;\n", static_cast<int>(numSV));
                 fprintf(hdrFp, "    static constexpr const DfgVariantTraits* trait = &x_deegen_dfg_variant_%s;\n",
                         bii.m_bytecodeDef->GetBytecodeIdName().c_str());
+
+                bool slowPathDataHasRegConfigField = slowPathDataLayout->m_compactRegConfig.IsValid();
+                fprintf(hdrFp, "    static constexpr bool needRegConfigInSlowPathData = %s;\n",
+                        (slowPathDataHasRegConfigField ? "true" : "false"));
+                fprintf(hdrFp, "    static constexpr uint32_t slowPathDataLen = %d;\n",
+                        static_cast<int>(slowPathDataLayout->GetTotalLength()));
                 fprintf(hdrFp, "};\n");
             }
             else
@@ -466,6 +472,11 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
                 fprintf(hdrFp, "    static constexpr size_t numCodegenFuncs = 1;\n");
                 fprintf(hdrFp, "    static constexpr const DfgVariantTraits* trait = &x_deegen_dfg_variant_%s;\n",
                         bii.m_bytecodeDef->GetBytecodeIdName().c_str());
+
+                ReleaseAssert(!slowPathDataLayout->m_compactRegConfig.IsValid());
+                fprintf(hdrFp, "    static constexpr bool needRegConfigInSlowPathData = false;\n");
+                fprintf(hdrFp, "    static constexpr uint32_t slowPathDataLen = %d;\n",
+                        static_cast<int>(slowPathDataLayout->GetTotalLength()));
                 fprintf(hdrFp, "};\n");
 
                 fprintf(cppFp, "constexpr DfgVariantTraits x_deegen_dfg_variant_%s(\n", bii.m_bytecodeDef->GetBytecodeIdName().c_str());

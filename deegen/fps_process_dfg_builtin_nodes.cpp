@@ -293,7 +293,7 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
 
                     if (state.m_isCustomCgFnProtocol)
                     {
-                        fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, BuiltinNodeOperandsInfoBase*, uint64_t*, RegAllocStateForCodeGen*);\n\n",
+                        fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint64_t*, RegAllocStateForCodeGen*);\n\n",
                                 cgInfo.m_cgFnName.c_str());
                     }
                     else
@@ -350,7 +350,7 @@ static void ProcessDfgBuiltinNode(DfgBuiltinNodeProcessorState& state /*inout*/,
 
         if (state.m_isCustomCgFnProtocol)
         {
-            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, BuiltinNodeOperandsInfoBase*, uint64_t*, RegAllocStateForCodeGen*);\n\n",
+            fprintf(hdrFp, "extern \"C\" void %s(PrimaryCodegenState*, NodeOperandConfigData*, uint64_t*, RegAllocStateForCodeGen*);\n\n",
                     cgInfo.m_cgFnName.c_str());
         }
         else

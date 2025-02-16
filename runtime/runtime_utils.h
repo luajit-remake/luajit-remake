@@ -745,7 +745,12 @@ class alignas(8) DfgCodeBlock
 public:
     size_t GetStackRegSpillRegionOffset()
     {
-        return m_stackRegSpillRegionOffset;
+        return m_stackRegSpillRegionPhysicalSlot;
+    }
+
+    static size_t GetSlowPathDataStartOffset()
+    {
+        return offsetof_member_v<&DfgCodeBlock::m_slowPathData>;
     }
 
     UserHeapPointer<TableObject> m_globalObject;
@@ -759,11 +764,19 @@ public:
     // [ Tmps ]: storage locations for spilled SSA values
     // [ Range ]: scratch space for nodes that takes a list of operands that must be placed sequentially
     //
-    uint32_t m_stackRegSpillRegionOffset;
-    uint32_t m_stackLocalRegionOffset;
-    uint32_t m_stackTmpRegionOffset;
-    uint32_t m_stackRangedOpRegionOffset;
+    uint32_t m_stackRegSpillRegionPhysicalSlot;
 
+    void* m_jitCodeEntry;
+
+    CodeBlock* m_owner;
+
+    // The JIT region is [m_jitRegionStart, m_jitRegionStart + m_jitRegionSize)
+    //
+    void* m_jitRegionStart;
+    uint32_t m_jitRegionSize;
+    uint32_t m_slowPathDataStreamLength;
+
+    uint8_t m_slowPathData[0];
 };
 
 class FunctionObject;

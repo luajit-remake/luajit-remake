@@ -32,7 +32,7 @@ public:
         return std::move(m_module);
     }
 
-    struct BaselineJitCgResult
+    struct JitCodegenResult
     {
         size_t m_fastPathLen;
         size_t m_slowPathLen;
@@ -46,17 +46,17 @@ public:
 
     // Can only be called once
     //
-    BaselineJitCgResult WARN_UNUSED GetBaselineJitResult()
+    JitCodegenResult WARN_UNUSED GetJitCodegenResult()
     {
-        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT);
+        ReleaseAssert(m_tier == DeegenEngineTier::BaselineJIT || m_tier == DeegenEngineTier::DfgJIT);
         ReleaseAssert(m_module.get() != nullptr);
         return {
-            .m_fastPathLen = m_baselineJitFastPathLen,
-            .m_slowPathLen = m_baselineJitSlowPathLen,
-            .m_dataSecLen = m_baselineJitDataSecLen,
+            .m_fastPathLen = m_jitFastPathLen,
+            .m_slowPathLen = m_jitSlowPathLen,
+            .m_dataSecLen = m_jitDataSecLen,
             .m_module = std::move(m_module),
             .m_patchFnName = GetFunctionName(),
-            .m_asmSourceForAudit = m_baselineJitSourceAsmForAudit
+            .m_asmSourceForAudit = m_jitSourceAsmForAudit
         };
     }
 
@@ -69,7 +69,7 @@ private:
     // Automatically invoked by constructor
     //
     void Run(llvm::LLVMContext& ctx);
-    void GenerateBaselineJitStencil(std::unique_ptr<llvm::Module> srcModule);
+    void GenerateJitStencil(std::unique_ptr<llvm::Module> srcModule);
 
     bool m_generated;
     DeegenEngineTier m_tier;
@@ -77,12 +77,12 @@ private:
     size_t m_numSpecializedFixedParams;
     std::unique_ptr<llvm::Module> m_module;
 
-    // Only used by baseline JIT
+    // Only used by baseline JIT / DFG JIT
     //
-    size_t m_baselineJitFastPathLen;
-    size_t m_baselineJitSlowPathLen;
-    size_t m_baselineJitDataSecLen;
-    std::string m_baselineJitSourceAsmForAudit;
+    size_t m_jitFastPathLen;
+    size_t m_jitSlowPathLen;
+    size_t m_jitDataSecLen;
+    std::string m_jitSourceAsmForAudit;
 };
 
 }   // namespace dast

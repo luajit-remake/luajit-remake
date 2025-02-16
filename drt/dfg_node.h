@@ -2324,7 +2324,10 @@ private:
     ArenaPtr<Node> m_terminator;
 
 public:
-    ArenaPtr<BasicBlock> m_replacement;
+    union {
+        ArenaPtr<BasicBlock> m_replacement;
+        uint32_t m_ordInCodegenOrder;
+    };
 
     uint32_t m_numLocals;
     uint8_t m_numSuccessors;

@@ -1,29 +1,26 @@
 #include "dfg_slowpath_register_config_helper.h"
-#include "dfg_reg_alloc_state.h"
+#include "dfg_reg_alloc_codegen_state.h"
 #include "dfg_codegen_register_renamer.h"
 
 namespace dfg {
 
-void EncodeDfgRegAllocStateToSlowPathData(DfgRegAllocState& state, uint8_t* dest /*out*/)
+void EncodeDfgRegAllocStateToSlowPathData(const RegAllocAllRegPurposeInfo& regPurposeInfo, uint8_t* dest /*out*/)
 {
     using Traits = DfgSlowPathRegConfigDataTraits;
 
-    DfgRegAllocState::AllRegPurposeInfo info;
-    [[clang::always_inline]] info = state.GetAllRegPurposeInfo();
-
-    static_assert(info.x_length % Traits::x_packSize == 0);
-    static_assert(Traits::x_numElements * Traits::x_packSize == info.x_length);
+    static_assert(RegAllocAllRegPurposeInfo::x_length % Traits::x_packSize == 0);
+    static_assert(Traits::x_numElements * Traits::x_packSize == RegAllocAllRegPurposeInfo::x_length);
 
     static_assert(sizeof(Traits::PackType) * 8 >= 6 * Traits::x_packSize);
 
-    for (size_t seqOrd = 0; seqOrd < info.x_length; seqOrd += Traits::x_packSize)
+    for (size_t seqOrd = 0; seqOrd < regPurposeInfo.x_length; seqOrd += Traits::x_packSize)
     {
         Traits::PackType value = 0;
         for (size_t i = 0; i < Traits::x_packSize; i++)
         {
-            uint8_t regClass = static_cast<uint8_t>(info.m_data[seqOrd + i].first);
+            uint8_t regClass = static_cast<uint8_t>(regPurposeInfo.m_data[seqOrd + i].m_regClass);
             TestAssert(regClass < 8);
-            uint8_t ordInClass = info.m_data[seqOrd + i].second;
+            uint8_t ordInClass = regPurposeInfo.m_data[seqOrd + i].m_ordInClass;
             TestAssert(ordInClass < 8);
             value |= static_cast<Traits::PackType>(regClass) << (i * 6 + 3);
             value |= static_cast<Traits::PackType>(ordInClass) << (i * 6);

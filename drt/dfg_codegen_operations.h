@@ -3,7 +3,7 @@
 #include "common_utils.h"
 #include "dfg_codegen_operation_base.h"
 #include "dfg_reg_move_inst_generator.h"
-#include "dfg_reg_alloc_state.h"
+#include "dfg_reg_alloc_codegen_state.h"
 #include "dfg_variant_trait_table.h"
 
 namespace dfg {
@@ -14,9 +14,16 @@ struct __attribute__((__packed__)) CodegenRegMove final : CodegenOpBase
         : CodegenOpBase(this), m_srcReg(srcReg), m_dstReg(dstReg)
     { }
 
+    void* WARN_UNUSED GetStructEnd() { return this + 1; }
+
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         info.m_fastPathLength += GetRegisterMoveInstructionLength(m_srcReg, m_dstReg);
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        EmitRegisterRegisterMoveInst(pcs.m_fastPathAddr /*inout*/, m_srcReg, m_dstReg);
     }
 
     X64Reg m_srcReg;
@@ -31,9 +38,16 @@ struct __attribute__((__packed__)) CodegenRegLoad final : CodegenOpBase
         TestAssert(m_stackOffsetBytes <= 0x7fffffff);
     }
 
+    void* WARN_UNUSED GetStructEnd() { return this + 1; }
+
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         info.m_fastPathLength += GetRegisterSpillOrLoadInstructionLength(m_reg, m_stackOffsetBytes);
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        EmitRegisterLoadFromStackInst(pcs.m_fastPathAddr /*inout*/, m_reg, m_stackOffsetBytes);
     }
 
     X64Reg m_reg;
@@ -50,9 +64,16 @@ struct __attribute__((__packed__)) CodegenRegSpill final : CodegenOpBase
         TestAssert(m_offsetBytes <= 0x7fffffff);
     }
 
+    void* WARN_UNUSED GetStructEnd() { return this + 1; }
+
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         info.m_fastPathLength += GetRegisterStoreToMemBaseOffsetInstLength(m_srcReg, m_baseReg, m_offsetBytes);
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        EmitRegisterStoreToMemBaseOffsetInstruction(pcs.m_fastPathAddr /*inout*/, m_srcReg, m_baseReg, m_offsetBytes);
     }
 
     X64Reg m_srcReg;
@@ -78,6 +99,20 @@ inline void UpdateJITCodeSizeForCustomInterfaceStencil(JITCodeSizeInfo& info /*i
     info.Update(x_dfgBuiltinNodeCustomCgFnJitCodeSizeArray[idx]);
 }
 
+inline CodegenImplFn WARN_UNUSED GetCodegenImplFnForStandardInterfaceStencil(DfgCodegenFuncOrd funcOrd)
+{
+    size_t idx = static_cast<size_t>(funcOrd);
+    TestAssert(idx < x_dfgOpcodeCodegenImplFnTable.size());
+    return x_dfgOpcodeCodegenImplFnTable[idx];
+}
+
+inline CustomBuiltinNodeCodegenImplFn WARN_UNUSED GetCodegenImplFnForCustomInterfaceStencil(DfgCodegenFuncOrd funcOrd)
+{
+    size_t idx = static_cast<size_t>(funcOrd);
+    TestAssert(idx < x_dfgBuiltinNodeCustomCgFnArray.size());
+    return x_dfgBuiltinNodeCustomCgFnArray[idx];
+}
+
 struct __attribute__((__packed__)) CodegenOpRegAllocEnabled final : CodegenOpBase
 {
     CodegenOpRegAllocEnabled() : CodegenOpBase(this) { }
@@ -92,6 +127,15 @@ struct __attribute__((__packed__)) CodegenOpRegAllocEnabled final : CodegenOpBas
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         UpdateJITCodeSizeForStandardInterfaceStencil(info /*inout*/, m_operandConfig.GetCodegenFuncOrd());
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        CodegenImplFn implFn = GetCodegenImplFnForStandardInterfaceStencil(m_operandConfig.GetCodegenFuncOrd());
+        m_regConfig.AssertConsistency();
+        RegAllocStateForCodeGen cgState;
+        m_regConfig.PopulateCodegenState(cgState /*out*/);
+        implFn(&pcs, &m_operandConfig, m_nsd, &cgState);
     }
 
     uint8_t* m_nsd;
@@ -117,6 +161,12 @@ struct __attribute__((__packed__)) CodegenOpRegAllocDisabled final : CodegenOpBa
         UpdateJITCodeSizeForStandardInterfaceStencil(info /*inout*/, m_operandConfig.GetCodegenFuncOrd());
     }
 
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        CodegenImplFn implFn = GetCodegenImplFnForStandardInterfaceStencil(m_operandConfig.GetCodegenFuncOrd());
+        implFn(&pcs, &m_operandConfig, m_nsd, nullptr /*RegAllocStateForCodegen*/);
+    }
+
     uint8_t* m_nsd;
     // Must be last member since it has a trailing array
     //
@@ -137,6 +187,15 @@ struct __attribute__((__packed__)) CodegenCustomOpRegAllocEnabled final : Codege
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         UpdateJITCodeSizeForCustomInterfaceStencil(info /*inout*/, m_operandConfig.GetCodegenFuncOrd());
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        CustomBuiltinNodeCodegenImplFn implFn = GetCodegenImplFnForCustomInterfaceStencil(m_operandConfig.GetCodegenFuncOrd());
+        m_regConfig.AssertConsistency();
+        RegAllocStateForCodeGen cgState;
+        m_regConfig.PopulateCodegenState(cgState /*out*/);
+        implFn(&pcs, &m_operandConfig, m_literalData, &cgState);
     }
 
     uint64_t* m_literalData;
@@ -160,6 +219,12 @@ struct __attribute__((__packed__)) CodegenCustomOpRegAllocDisabled final : Codeg
     void UpdateJITCodeSize(JITCodeSizeInfo& info /*inout*/)
     {
         UpdateJITCodeSizeForCustomInterfaceStencil(info /*inout*/, m_operandConfig.GetCodegenFuncOrd());
+    }
+
+    void DoCodegen(PrimaryCodegenState& pcs /*inout*/)
+    {
+        CustomBuiltinNodeCodegenImplFn implFn = GetCodegenImplFnForCustomInterfaceStencil(m_operandConfig.GetCodegenFuncOrd());
+        implFn(&pcs, &m_operandConfig, m_literalData, nullptr /*RegAllocStateForCodeGen*/);
     }
 
     uint64_t* m_literalData;

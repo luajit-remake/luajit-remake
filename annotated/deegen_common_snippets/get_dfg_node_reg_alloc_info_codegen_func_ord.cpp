@@ -1,5 +1,5 @@
 #include "define_deegen_common_snippet.h"
-#include "dfg_reg_alloc_state.h"
+#include "dfg_reg_alloc_codegen_state.h"
 
 static uint16_t DeegenSnippet_GetDfgNodeOperandConfigDataCodegenFuncOrd(dfg::NodeOperandConfigData* node)
 {

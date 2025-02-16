@@ -74,8 +74,6 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_dfg_node_reg_alloc_info_codegen_func_ord.cpp
   get_end_of_call_frame_from_dfg_codeblock.cpp
   create_new_jit_generic_ic_for_dfg_jit.cpp
-  get_dfg_builtin_node_input_physical_slot.cpp
-  get_dfg_builtin_node_output_physical_slot.cpp
   get_kth_variadic_arg.cpp
   get_kth_variadic_result.cpp
   get_function_object_heap_ptr_from_stack_base.cpp
@@ -96,6 +94,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   get_input_prediction_mask_range_for_complex_node.cpp
   update_type_mask_for_prediction_propagation.cpp
   get_prediction_propagation_output_range_info.cpp
+  get_dfg_jit_codeblock_from_codeblock_heap_ptr.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT
