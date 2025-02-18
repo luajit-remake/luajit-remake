@@ -32,6 +32,7 @@ struct ConstructDfgOpcodeInfoTable : DfgConstEvalForEachOpcode<ConstructDfgOpcod
             };
             m_checkValidityFns[m_curIdx] = Info::checkValidFn;
             m_codegenImplFns[m_curIdx] = Info::codegenFn;
+            m_codegenImplFnDebugNames[m_curIdx] = Info::debugCodegenFnName;
             m_curIdx++;
         }
     }
@@ -47,6 +48,7 @@ struct ConstructDfgOpcodeInfoTable : DfgConstEvalForEachOpcode<ConstructDfgOpcod
     std::array<CodegenFnJitCodeSizeInfo, x_totalNumDfgUserNodeCodegenFuncs> m_jitCodeSizes;
     std::array<DfgVariantValidityCheckerFn, x_totalNumDfgUserNodeCodegenFuncs> m_checkValidityFns;
     std::array<CodegenImplFn, x_totalNumDfgUserNodeCodegenFuncs> m_codegenImplFns;
+    std::array<const char*, x_totalNumDfgUserNodeCodegenFuncs> m_codegenImplFnDebugNames;
 };
 
 inline constexpr ConstructDfgOpcodeInfoTable x_dfgOpcodeInfoTableData = ConstructDfgOpcodeInfoTable();
@@ -63,6 +65,10 @@ inline constexpr std::array<DfgVariantValidityCheckerFn, x_totalNumDfgUserNodeCo
 inline constexpr std::array<CodegenImplFn, x_totalNumDfgUserNodeCodegenFuncs + x_totalDfgBuiltinNodeStandardCgFns>
     x_dfgOpcodeCodegenImplFnTable = constexpr_std_array_concat(detail::x_dfgOpcodeInfoTableData.m_codegenImplFns,
                                                                x_dfgBuiltinNodeStandardCgFnArray);
+
+inline constexpr std::array<const char*, x_totalNumDfgUserNodeCodegenFuncs + x_totalDfgBuiltinNodeStandardCgFns>
+    x_dfgOpcodeCodegenFnDebugNameTable = constexpr_std_array_concat(detail::x_dfgOpcodeInfoTableData.m_codegenImplFnDebugNames,
+                                                                    x_dfgBuiltinNodeStandardCgFnDebugNameArray);
 
 inline constexpr auto x_dfgEdgeUseKindDebugNameArray = constexpr_std_array_concat(x_dfgEdgeUseKindBuiltinKindNames,
                                                                                   x_dfg_guest_language_usekind_debug_names);

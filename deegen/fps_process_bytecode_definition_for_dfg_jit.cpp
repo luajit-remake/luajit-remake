@@ -281,6 +281,8 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
             //
             std::unique_ptr<DfgJitSlowPathDataLayout> slowPathDataLayout;
 
+            std::string expectedCodegenFnNamePrefix = "__deegen_dfg_jit_codegen_";
+
             if (regAllocSuccess)
             {
                 bool bcHasRangeOperand = false;
@@ -384,6 +386,8 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
                             // TODO implement
                             fprintf(hdrFp, "    static constexpr DfgVariantValidityCheckerFn checkValidFn = nullptr;\n");
                             fprintf(hdrFp, "    static constexpr CodegenImplFn codegenFn = &%s;\n", cgi->m_resultFuncName.c_str());
+                            ReleaseAssert(cgi->m_resultFuncName.starts_with(expectedCodegenFnNamePrefix));
+                            fprintf(hdrFp, "    static constexpr const char* debugCodegenFnName = \"%s\";\n", cgi->m_resultFuncName.substr(expectedCodegenFnNamePrefix.length()).c_str());
                             printGenericIcTraitInfo(cgi->m_allGenericIcTraitDescs, jic->GetTotalNumGenericIcCases());
                             printJitCodeSizeInfo(*cgi);
                             fprintf(hdrFp, "};\n\n");
@@ -461,6 +465,8 @@ void FPS_GenerateDfgSpecializedBytecodeInfo()
                 // TODO implement
                 fprintf(hdrFp, "    static constexpr DfgVariantValidityCheckerFn checkValidFn = nullptr;\n");
                 fprintf(hdrFp, "    static constexpr CodegenImplFn codegenFn = &%s;\n", cgi.m_resultFuncName.c_str());
+                ReleaseAssert(cgi.m_resultFuncName.starts_with(expectedCodegenFnNamePrefix));
+                fprintf(hdrFp, "    static constexpr const char* debugCodegenFnName = \"%s\";\n", cgi.m_resultFuncName.substr(expectedCodegenFnNamePrefix.length()).c_str());
                 printGenericIcTraitInfo(cgi.m_allGenericIcTraitDescs, j->GetTotalNumGenericIcCases());
                 printJitCodeSizeInfo(cgi);
                 fprintf(hdrFp, "};\n\n");

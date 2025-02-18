@@ -575,6 +575,60 @@ struct BasicBlockTerminatorCodegenInfo
 #endif
     }
 
+#ifdef TESTBUILD
+    void DumpHumanReadableLog(PrimaryCodegenState& pcs, CodegenLogDumpContext& ctx)
+    {
+        fprintf(ctx.m_file, "   0x%llx:", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(pcs.m_fastPathAddr)));
+        TestAssert(m_kind != Kind::X_END_OF_ENUM);
+        if (m_kind == Kind::NoSuccessor)
+        {
+            fprintf(ctx.m_file, "  [Control Flow Ends]\n");
+        }
+        else if (m_kind == Kind::UncondBr)
+        {
+            if (m_isDefaultTargetFallthrough)
+            {
+                fprintf(ctx.m_file, "  [Fallthrough to BasicBlock #%u]\n", static_cast<unsigned int>(m_defaultTargetOrd));
+            }
+            else
+            {
+                fprintf(ctx.m_file, "  Branch -> BasicBlock #%u\n", static_cast<unsigned int>(m_defaultTargetOrd));
+            }
+        }
+        else
+        {
+            TestAssert(m_kind == Kind::CondBr);
+            TestAssert(m_isTestValueInRegInitialized);
+            if (m_isTestForNonZero)
+            {
+                fprintf(ctx.m_file, "  BranchIfNotZero ");
+            }
+            else
+            {
+                fprintf(ctx.m_file, "  BranchIfZero ");
+            }
+            if (m_isTestValueInReg)
+            {
+                fprintf(ctx.m_file, "%s", m_testReg.GetName());
+            }
+            else
+            {
+                fprintf(ctx.m_file, "stk[%u]", static_cast<unsigned int>(m_testPhysicalSlot));
+            }
+            fprintf(ctx.m_file, " -> BasicBlock #%u\n", static_cast<unsigned int>(m_branchTargetOrd));
+
+            if (m_isDefaultTargetFallthrough)
+            {
+                fprintf(ctx.m_file, "                  [Fallthrough to BasicBlock #%u]\n", static_cast<unsigned int>(m_defaultTargetOrd));
+            }
+            else
+            {
+                fprintf(ctx.m_file, "                  Branch -> BasicBlock #%u\n", static_cast<unsigned int>(m_defaultTargetOrd));
+            }
+        }
+    }
+#endif
+
     // Implementation later in this file since it needs access to BasicBlockCodegenInfo
     //
     void EmitJITCode(uint8_t*& addr /*inout*/, uint8_t* jitFastPathBaseAddr, TempVector<BasicBlockCodegenInfo>& bbOrder);
@@ -734,18 +788,23 @@ void BasicBlockTerminatorCodegenInfo::EmitJITCode(uint8_t*& addr /*inout*/, uint
 
 struct DfgBackend
 {
-    static DfgBackendResult Run(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
+    static DfgBackendResult Run(TempArenaAllocator& resultAlloc, Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
     {
-        DfgBackend impl(graph, stackLayoutPlanningResult);
+        DfgBackend impl(resultAlloc, graph, stackLayoutPlanningResult);
         impl.RunImpl();
-        return DfgBackendResult {
-            .m_dfgCodeBlock = impl.m_resultDcb
-        };
+        DfgBackendResult r;
+        r.m_dfgCodeBlock = impl.m_resultDcb;
+#ifdef TESTBUILD
+        r.m_codegenLogDump = impl.m_codegenLogDumpPtr;
+        r.m_codegenLogDumpSize = impl.m_codegenLogDumpSize;
+#endif
+        return r;
     }
 
 private:
-    DfgBackend(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
-        : m_passAlloc()
+    DfgBackend(TempArenaAllocator& resultAlloc, Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
+        : m_resultAlloc(resultAlloc)
+        , m_passAlloc()
         , m_bbAlloc()
         , m_stackLayoutPlanningResult(stackLayoutPlanningResult)
         , m_valueUseListBuilder(m_passAlloc, m_bbAlloc, graph)
@@ -770,6 +829,11 @@ private:
         , m_literalFieldToBeAddedByTotalFrameSlots(m_passAlloc)
         , m_bbOrder(m_passAlloc)
         , m_resultDcb(nullptr)
+#ifdef TESTBUILD
+        , m_codegenLogDumpContext()
+        , m_codegenLogDumpPtr(nullptr)
+        , m_codegenLogDumpSize(0)
+#endif
     {
         m_functionEntryTrait.m_emitterFn = nullptr;
     }
@@ -3217,7 +3281,7 @@ private:
         DfgCodeBlock* m_dcb;
     };
 
-    void CodegenBasicBlock(BasicBlockCodegenInfo* cbb, CodegenControlState& ccs /*inout*/)
+    void CodegenBasicBlock(BasicBlockCodegenInfo* cbb, [[maybe_unused]] size_t cbbIdx, CodegenControlState& ccs /*inout*/)
     {
         TestAssert(ccs.m_pcs.m_fastPathAddr == ccs.m_fastPathBaseAddr + cbb->m_fastPathStartOffset);
         TestAssert(ccs.m_pcs.m_slowPathAddr == ccs.m_slowPathBaseAddr + cbb->m_slowPathStartOffset);
@@ -3226,6 +3290,10 @@ private:
         TestAssert(ccs.m_pcs.m_slowPathDataOffset == cbb->m_slowPathDataStartOffset);
 
         TestAssertImp(cbb->m_isReachedByBackEdge, reinterpret_cast<uint64_t>(ccs.m_pcs.m_fastPathAddr) % 16 == 0);
+
+#ifdef TESTBUILD
+        fprintf(m_codegenLogDumpContext.m_file, "BasicBlock #%llu:\n", static_cast<unsigned long long>(cbbIdx));
+#endif
 
         ccs.m_pcs.m_compactedRegConfAddr = cbb->m_slowPathDataRegConfStream.data();
 
@@ -3245,6 +3313,15 @@ private:
                 [&]<typename CodegenOp>(CodegenOp* op) ALWAYS_INLINE -> void* /*nextCodegenOpAddr*/
                 {
                     static_assert(std::is_base_of_v<CodegenOpBase, CodegenOp>);
+#ifdef TESTBUILD
+                    // Generate the human-readable codegen log in test build
+                    //
+                    fprintf(m_codegenLogDumpContext.m_file, "   0x%llx:",
+                            static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(ccs.m_pcs.m_fastPathAddr)));
+                    op->DumpHumanReadableLog(m_codegenLogDumpContext);
+#endif
+                    // Generate JIT code and advance to the next codegen op
+                    //
                     op->DoCodegen(ccs.m_pcs /*inout*/);
                     return op->GetStructEnd();
                 });
@@ -3283,6 +3360,10 @@ private:
                                           ccs.m_fastPathBaseAddr,
                                           m_bbOrder);
 
+#ifdef TESTBUILD
+        cbb->m_terminatorInfo.DumpHumanReadableLog(ccs.m_pcs, m_codegenLogDumpContext);
+#endif
+
         if (cbb->m_addNopBytesAtEnd > 0)
         {
             TestAssert(cbb->m_addNopBytesAtEnd <= 15);
@@ -3295,6 +3376,10 @@ private:
         }
 
         TestAssertImp(cbb->m_shouldPadFastPathTo16ByteAlignmentAtEnd, reinterpret_cast<uint64_t>(ccs.m_pcs.m_fastPathAddr) % 16 == 0);
+
+#ifdef TESTBUILD
+        fprintf(m_codegenLogDumpContext.m_file, "\n");
+#endif
     }
 
     // Generate everything
@@ -3421,10 +3506,21 @@ private:
             ccs.m_pcs.m_dataSecAddr += m_functionEntryTrait.m_dataSecCodeLen;
         }
 
+#ifdef TESTBUILD
+        m_codegenLogDumpPtr = nullptr;
+        m_codegenLogDumpSize = 0;
+        m_codegenLogDumpContext.m_file = open_memstream(&m_codegenLogDumpPtr, &m_codegenLogDumpSize);
+        TestAssert(m_codegenLogDumpContext.m_file != nullptr);
+        m_codegenLogDumpContext.m_firstRegSpillPhysicalSlot = m_firstRegSpillSlot;
+        m_codegenLogDumpContext.m_constantTable = m_stackLayoutPlanningResult.m_constantTable.data();
+        m_codegenLogDumpContext.m_constantTableSize = m_stackLayoutPlanningResult.m_constantTable.size();
+#endif
+
         TestAssert(m_bbOrder.size() > 0);
-        for (BasicBlockCodegenInfo& cbb : m_bbOrder)
+        for (size_t cbbIdx = 0; cbbIdx < m_bbOrder.size(); cbbIdx++)
         {
-            CodegenBasicBlock(&cbb, ccs /*inout*/);
+            BasicBlockCodegenInfo* cbb = m_bbOrder.data() + cbbIdx;
+            CodegenBasicBlock(cbb, cbbIdx, ccs /*inout*/);
         }
 
         TestAssert(ccs.m_pcs.m_fastPathAddr == jitRegionStart + fastPathSectionEnd);
@@ -3456,6 +3552,30 @@ private:
         populateCodeGap(ccs.m_pcs.m_slowPathAddr);
 
         m_resultDcb = dcb;
+
+#ifdef TESTBUILD
+        // Finalize the human-readable log dump
+        // open_memstream use malloc to allocate the memory.
+        // We expect the result to be managed by a TempAllocator in consistent with the other places
+        // to avoid memory leak (even though this happens only in test build), so make a copy using our alloc
+        //
+        {
+            // Must close file to flush everything!
+            //
+            fclose(m_codegenLogDumpContext.m_file);
+            m_codegenLogDumpContext.m_file = nullptr;
+
+            // Need a terminating NULL
+            //
+            char* resultBuf = m_resultAlloc.AllocateArray<char>(m_codegenLogDumpSize + 1);
+            memcpy(resultBuf, m_codegenLogDumpPtr, m_codegenLogDumpSize);
+            resultBuf[m_codegenLogDumpSize] = '\0';
+            // Buffer managed by open_memstream should be freed by 'free'
+            //
+            free(m_codegenLogDumpPtr);
+            m_codegenLogDumpPtr = resultBuf;
+        }
+#endif
     }
 
     // Return the index of the block in m_bbOrder
@@ -3577,6 +3697,7 @@ private:
         DoCodegen();
     }
 
+    [[maybe_unused]] TempArenaAllocator& m_resultAlloc;
     TempArenaAllocator m_passAlloc;
     TempArenaAllocator m_bbAlloc;
     StackLayoutPlanningResult& m_stackLayoutPlanningResult;
@@ -3603,13 +3724,18 @@ private:
     TempVector<uint64_t*> m_literalFieldToBeAddedByTotalFrameSlots;
     TempVector<BasicBlockCodegenInfo> m_bbOrder;
     DfgCodeBlock* m_resultDcb;
+#ifdef TESTBUILD
+    CodegenLogDumpContext m_codegenLogDumpContext;
+    char* m_codegenLogDumpPtr;
+    size_t m_codegenLogDumpSize;
+#endif
 };
 
 }   // anonymous namespace
 
-DfgBackendResult WARN_UNUSED RunDfgBackend(Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
+DfgBackendResult WARN_UNUSED RunDfgBackend(TempArenaAllocator& resultAlloc, Graph* graph, StackLayoutPlanningResult& stackLayoutPlanningResult)
 {
-    return DfgBackend::Run(graph, stackLayoutPlanningResult);
+    return DfgBackend::Run(resultAlloc, graph, stackLayoutPlanningResult);
 }
 
 }   // namespace dfg

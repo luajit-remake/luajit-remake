@@ -58,12 +58,12 @@ static void DecodeDfgSlowPathDataToRegAllocState(const uint8_t* slowPathData, Re
 
         for (size_t i = 0; i < Traits::x_packSize; i++)
         {
-            RegClass regClass = static_cast<RegClass>(value & 7);
-            value >>= 3;
             uint8_t ordInClass = static_cast<uint8_t>(value & 7);
             value >>= 3;
+            RegClass regClass = static_cast<RegClass>(value & 7);
+            value >>= 3;
 
-            TestAssert(curRegSeqOrd < std::extent_v<decltype(x_dfg_reg_sequence_for_slow_path_data_reg_decode)>);
+            TestAssert(curRegSeqOrd < x_dfg_reg_sequence_for_slow_path_data_reg_decode.size());
             X64Reg reg = x_dfg_reg_sequence_for_slow_path_data_reg_decode[curRegSeqOrd];
 
             TestAssertImp(regClass != RegClass::X_END_OF_ENUM, RegAllocStateForCodeGen::IsRegisterCompatibleWithRegClass(reg, regClass));

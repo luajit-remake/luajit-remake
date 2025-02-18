@@ -264,6 +264,7 @@ bool WARN_UNUSED DfgRegAllocCCallAsmTransformPass::RunPass(std::string wrapperPr
                     std::vector<X64AsmLine> replacement;
                     for (X64Reg reg : regsToPush)
                     {
+                        ReleaseAssert(reg.IsGPR());
                         std::string inst = "\tpushq\t%" + ConvertStringToLowerCase(reg.GetName());
                         replacement.push_back(X64AsmLine::Parse(inst));
                     }
@@ -274,13 +275,31 @@ bool WARN_UNUSED DfgRegAllocCCallAsmTransformPass::RunPass(std::string wrapperPr
                     nl.m_prefixingText = "";
                     replacement.push_back(nl);
 
-                    std::vector<X64Reg> regsToPop = regsToPush;
-                    std::reverse(regsToPop.begin(), regsToPop.end());
-
-                    for (X64Reg reg : regsToPop)
+                    // After the call the register state is already what we want, so all we need to do is to adjust rsp pointer
+                    // 'pop' is usually slightly shorter in terms of instruction size ('add rsp, i8' is 4-bytes),
+                    // but I believe 'add rsp' should give better performance since we cannot find a scratch register here
+                    // to pop into (we can pop into their original registers, but that would cause a high unnecessary latency
+                    // before the register content becomes available)
+                    //
+                    bool useAddRsp = true;
+                    if (useAddRsp)
                     {
-                        std::string inst = "\tpopq\t%" + ConvertStringToLowerCase(reg.GetName());
-                        replacement.push_back(X64AsmLine::Parse(inst));
+                        if (regsToPush.size() > 0)
+                        {
+                            std::string restoreStackInst = "\taddq $" + std::to_string(regsToPush.size() * 8) + ", %rsp\n";
+                            replacement.push_back(X64AsmLine::Parse(restoreStackInst));
+                        }
+                    }
+                    else
+                    {
+                        std::vector<X64Reg> regsToPop = regsToPush;
+                        std::reverse(regsToPop.begin(), regsToPop.end());
+
+                        for (X64Reg reg : regsToPop)
+                        {
+                            std::string inst = "\tpopq\t%" + ConvertStringToLowerCase(reg.GetName());
+                            replacement.push_back(X64AsmLine::Parse(inst));
+                        }
                     }
 
                     ReleaseAssert(!replaceMap.count(i));
@@ -433,12 +452,38 @@ void DfgRegAllocCCallWrapperRequest::PrintAssemblyImpl(FILE* file)
     std::vector<X64Reg> regInStackOrder = m_info.GetGprArgShuffleList();
     std::reverse(regInStackOrder.begin(), regInStackOrder.end());
 
-    // The desired value of register regInStackOrder[i] is at stack offset (i+1)*8
+    // Current stack layout:
+    //
+    // lower addr ---> higher addr
+    // unused | retAddr |   v1   |   v2   | ...
+    //       rsp
+    //
+    // where v[i] is the desired value for register regInStackOrder[i]
+    // and rsp % 16 == 8 * regInStackOrder.size() % 16
+    //
+    // We push the original value of each register in regInStackOrder (they must be restored after the call)
     //
     for (size_t idx = 0; idx < regInStackOrder.size(); idx++)
     {
         X64Reg reg = regInStackOrder[idx];
-        size_t offsetBytes = 8 * (idx + 1);
+        ReleaseAssert(reg.IsGPR());
+        fprintf(file, "\tpush %%%s\n", ConvertStringToLowerCase(reg.GetName()).c_str());
+    }
+
+    // Now the stack looks like below:
+    //
+    // lower addr ---> higher addr
+    // unused |   rN   |   ..   |   r1   | retAddr |   v1   | ...
+    //       rsp
+    //
+    // with rsp being 16-byte aligned because rsp % 16 == 2 * 8 * regInStackOrder.size() % 16 == 0
+    //
+    // The desired value of register regInStackOrder[i] is at stack offset (regInStackOrder.size() + i + 1) * 8
+    //
+    for (size_t idx = 0; idx < regInStackOrder.size(); idx++)
+    {
+        X64Reg reg = regInStackOrder[idx];
+        size_t offsetBytes = 8 * (regInStackOrder.size() + idx + 1);
         fprintf(file, "\tmovq %d(%%rsp), %%%s\n", static_cast<int>(offsetBytes), ConvertStringToLowerCase(reg.GetName()).c_str());
     }
 
@@ -448,14 +493,10 @@ void DfgRegAllocCCallWrapperRequest::PrintAssemblyImpl(FILE* file)
     constexpr size_t x_sharedStubUsedBufferSize = x_dfg_reg_alloc_num_fprs * 16 + 8;
 
     size_t saveAreaLen = x_sharedStubUsedBufferSize + 16 * numExtraFprRegsToSave;
-    if (regInStackOrder.size() % 2 == 1)
-    {
-        saveAreaLen += 8;
-    }
 
     // Must satisfy x86-64 16-byte stack alignment ABI since we will call the original function using this rsp
     //
-    ReleaseAssert((saveAreaLen + regInStackOrder.size() * 8) % 16 == 8);
+    ReleaseAssert(saveAreaLen % 16 == 8);
 
     fprintf(file, "\tsubq $%d, %%rsp\n", static_cast<int>(saveAreaLen));
 
@@ -479,7 +520,7 @@ void DfgRegAllocCCallWrapperRequest::PrintAssemblyImpl(FILE* file)
             fprintf(file, "\tmovups %%xmm%d, %d(%%rsp)\n", static_cast<int>(fprOrd), static_cast<int>(curOffset));
             curOffset += 16;
         }
-        ReleaseAssert(curOffset + ((regInStackOrder.size() % 2 == 0) ? 0 : 8) == saveAreaLen);
+        ReleaseAssert(curOffset == saveAreaLen);
         ReleaseAssert(extraFprSaveLoc.size() == numExtraFprRegsToSave);
     }
 
@@ -497,6 +538,16 @@ void DfgRegAllocCCallWrapperRequest::PrintAssemblyImpl(FILE* file)
     fprintf(file, "\tcallq __deegen_dfg_preserve_most_c_wrapper_shared_epilogue_stub\n");
 
     fprintf(file, "\taddq $%d, %%rsp\n", static_cast<int>(saveAreaLen));
+
+    // Restore the original value of registers in regInStackOrder
+    //
+    for (size_t idx = regInStackOrder.size(); idx--;)
+    {
+        X64Reg reg = regInStackOrder[idx];
+        ReleaseAssert(reg.IsGPR());
+        fprintf(file, "\tpop %%%s\n", ConvertStringToLowerCase(reg.GetName()).c_str());
+    }
+
     fprintf(file, "\tretq\n");
 
     fprintf(file, "\n");

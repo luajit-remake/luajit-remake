@@ -487,9 +487,11 @@ TEST(DfgFrontend, Parser_Stress_1)
             StackLayoutPlanningResult slp = RunStackLayoutPlanningPass(alloc, graph.get());
             RunRegisterBankAssignmentPass(graph.get());
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
-            std::ignore = RunDfgBackend(graph.get(), slp);
+            std::ignore = RunDfgBackend(alloc, graph.get(), slp);
             ReleaseAssert(ValidateDfgIrGraph(graph.get()));
         }
+
+        FreeScriptModuleJITMemory(module.get());
     }
 }
 
@@ -573,6 +575,8 @@ static void TestDfgFrontendWithRealCallIcInfo(std::string fileName, int randomly
         std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
         ReleaseAssert(ValidateDfgIrGraph(graph.get()));
     }
+
+    FreeScriptModuleJITMemory(module.get());
 }
 
 TEST(DfgFrontend, Inlining_Stress_1)
@@ -709,6 +713,11 @@ static void TestDfgFrontendWithRandomCallIcInfo(VM* vm, std::vector<std::string>
         TempArenaAllocator alloc;
         std::ignore = RunStackLayoutPlanningPass(alloc, graph.get());
         ReleaseAssert(ValidateDfgIrGraph(graph.get()));
+    }
+
+    for (auto& m : allModules)
+    {
+        FreeScriptModuleJITMemory(m.get());
     }
 }
 

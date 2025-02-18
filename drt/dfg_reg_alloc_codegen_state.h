@@ -433,6 +433,71 @@ struct __attribute__((__packed__)) RegAllocRegConfig
 #endif
     }
 
+#ifdef TESTBUILD
+    void DumpScratchedRegisterInfo(FILE* file)
+    {
+        if (m_group1ScratchGprIdxMask != 0 || m_group2ScratchGprIdxMask != 0 || m_scratchFprIdxMask != 0)
+        {
+            uint32_t gprScratchMcMask = 0;
+            uint32_t fprScratchMcMask = 0;
+            TestAssert(m_group1ScratchGprIdxMask < (1U << x_dfg_reg_alloc_num_group1_gprs));
+            for (size_t i = 0; i < x_dfg_reg_alloc_num_group1_gprs; i++)
+            {
+                if (m_group1ScratchGprIdxMask & (1U << i))
+                {
+                    X64Reg reg = x_dfg_reg_alloc_gprs[x_dfg_reg_alloc_num_gprs - x_dfg_reg_alloc_num_group1_gprs + i];
+                    TestAssert(reg.IsGPR());
+                    TestAssert((gprScratchMcMask & (1U << reg.MachineOrd())) == 0);
+                    gprScratchMcMask |= (1U << reg.MachineOrd());
+                }
+            }
+            TestAssert(m_group2ScratchGprIdxMask < (1U << (x_dfg_reg_alloc_num_gprs - x_dfg_reg_alloc_num_group1_gprs)));
+            for (size_t i = 0; i < x_dfg_reg_alloc_num_gprs - x_dfg_reg_alloc_num_group1_gprs; i++)
+            {
+                if (m_group2ScratchGprIdxMask & (1U << i))
+                {
+                    X64Reg reg = x_dfg_reg_alloc_gprs[i];
+                    TestAssert(reg.IsGPR());
+                    TestAssert((gprScratchMcMask & (1U << reg.MachineOrd())) == 0);
+                    gprScratchMcMask |= (1U << reg.MachineOrd());
+                }
+            }
+            TestAssert(m_scratchFprIdxMask < (1U << x_dfg_reg_alloc_num_fprs));
+            for (size_t i = 0; i < x_dfg_reg_alloc_num_fprs; i++)
+            {
+                if (m_scratchFprIdxMask & (1U << i))
+                {
+                    X64Reg reg = x_dfg_reg_alloc_fprs[i];
+                    TestAssert(reg.IsFPR());
+                    TestAssert((fprScratchMcMask & (1U << reg.MachineOrd())) == 0);
+                    fprScratchMcMask |= (1U << reg.MachineOrd());
+                }
+            }
+            fprintf(file, " [Clobbers ");
+            bool isFirst = true;
+            while (gprScratchMcMask > 0)
+            {
+                uint32_t mcOrd = CountTrailingZeros(gprScratchMcMask);
+                gprScratchMcMask ^= (1U << mcOrd);
+                X64Reg reg = X64Reg::GPR(mcOrd);
+                if (!isFirst) { fprintf(file, ", "); }
+                isFirst = false;
+                fprintf(file, "%s", reg.GetName());
+            }
+            while (fprScratchMcMask > 0)
+            {
+                uint32_t mcOrd = CountTrailingZeros(fprScratchMcMask);
+                fprScratchMcMask ^= (1U << mcOrd);
+                X64Reg reg = X64Reg::FPR(mcOrd);
+                if (!isFirst) { fprintf(file, ", "); }
+                isFirst = false;
+                fprintf(file, "%s", reg.GetName());
+            }
+            fprintf(file, "]");
+        }
+    }
+#endif
+
     uint8_t m_group1ScratchGprIdxMask;
     uint8_t m_group1PassthruGprIdxMask;
     uint8_t m_group2ScratchGprIdxMask;
@@ -512,6 +577,74 @@ struct __attribute__((__packed__)) NodeOperandConfigData
         TestAssert(m_numInputOperands != static_cast<uint8_t>(-1));
         return reinterpret_cast<uint8_t*>(this) + GetAllocationSize(m_numInputOperands);
     }
+
+#ifdef TESTBUILD
+    void DumpKnowingRegAllocEnabled(FILE* file, const char* nodeName, uint16_t firstRegSpillPhysicalSlot)
+    {
+        TestAssert(firstRegSpillPhysicalSlot != static_cast<uint16_t>(-1));
+
+        auto getRegName = [&](uint16_t physicalSlot) WARN_UNUSED -> const char*
+        {
+            TestAssert(physicalSlot != static_cast<uint16_t>(-1));
+            TestAssert(firstRegSpillPhysicalSlot <= physicalSlot && physicalSlot < firstRegSpillPhysicalSlot + x_dfg_reg_alloc_num_gprs + x_dfg_reg_alloc_num_fprs);
+            size_t ordInSeq = physicalSlot - firstRegSpillPhysicalSlot;
+            X64Reg reg = GetDfgRegFromRegAllocSequenceOrd(ordInSeq);
+            return reg.GetName();
+        };
+        if (m_outputPhysicalSlot != static_cast<uint16_t>(-1) && m_brDecisionPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "<%s, %s> := ", getRegName(m_outputPhysicalSlot), getRegName(m_brDecisionPhysicalSlot));
+        }
+        else if (m_outputPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "%s := ", getRegName(m_outputPhysicalSlot));
+        }
+        else if (m_brDecisionPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "%s := ", getRegName(m_brDecisionPhysicalSlot));
+        }
+        fprintf(file, "%s(", nodeName);
+        for (size_t i = 0; i < m_numInputOperands; i++)
+        {
+            if (i > 0) { fprintf(file, ", "); }
+            fprintf(file, "%s", getRegName(m_inputOperandPhysicalSlots[i]));
+        }
+        if (m_rangeOperandPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            if (m_numInputOperands > 0) { fprintf(file, ", "); }
+            fprintf(file, "rangeStart=stk[%u]", static_cast<unsigned int>(m_rangeOperandPhysicalSlot));
+        }
+        fprintf(file, ")");
+    }
+
+    void DumpKnowingRegAllocDisabled(FILE* file, const char* nodeName)
+    {
+        if (m_outputPhysicalSlot != static_cast<uint16_t>(-1) && m_brDecisionPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "<stk[%u], stk[%u]> := ", static_cast<unsigned int>(m_outputPhysicalSlot), static_cast<unsigned int>(m_brDecisionPhysicalSlot));
+        }
+        else if (m_outputPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "stk[%u] := ", static_cast<unsigned int>(m_outputPhysicalSlot));
+        }
+        else if (m_brDecisionPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            fprintf(file, "stk[%u] := ", static_cast<unsigned int>(m_brDecisionPhysicalSlot));
+        }
+        fprintf(file, "%s(", nodeName);
+        for (size_t i = 0; i < m_numInputOperands; i++)
+        {
+            if (i > 0) { fprintf(file, ", "); }
+            fprintf(file, "stk[%u]", static_cast<unsigned int>(m_inputOperandPhysicalSlots[i]));
+        }
+        if (m_rangeOperandPhysicalSlot != static_cast<uint16_t>(-1))
+        {
+            if (m_numInputOperands > 0) { fprintf(file, ", "); }
+            fprintf(file, "rangeStart=stk[%u]", static_cast<unsigned int>(m_rangeOperandPhysicalSlot));
+        }
+        fprintf(file, ")");
+    }
+#endif
 
     // The codegen function ordinal that should be called to codegen this node
     //

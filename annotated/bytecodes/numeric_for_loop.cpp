@@ -38,13 +38,13 @@ static void NO_RETURN ForLoopInitSlowPath(TValue* base)
     // Note that the 'vals[2]' may be NaN, so '!(vals[2] > 0)' does not imply 'vals[2] <= 0'
     //
     bool loopConditionSatisfied = (vals[2] > 0 && vals[0] <= vals[1]) || (vals[2] <= 0 && vals[0] >= vals[1]);
+    base[3] = TValue::Create<tDouble>(vals[0]);
     if (!loopConditionSatisfied)
     {
         ReturnAndBranch();
     }
     else
     {
-        base[3] = TValue::Create<tDouble>(vals[0]);
         Return();
     }
 }
@@ -72,9 +72,9 @@ static void NO_RETURN ForLoopInitImpl(TValue* base)
 
         double start = base[0].As<tDoubleNotNaN>();
         double end = base[1].As<tDoubleNotNaN>();
+        base[3] = TValue::Create<tDouble>(start);
         if (start <= end)
         {
-            base[3] = TValue::Create<tDouble>(start);
             Return();
         }
         else
@@ -108,9 +108,9 @@ static void NO_RETURN ForLoopInitImpl(TValue* base)
 
         double start = base[0].As<tDoubleNotNaN>();
         double end = base[1].As<tDoubleNotNaN>();
+        base[3] = TValue::Create<tDouble>(start);
         if (start >= end)
         {
-            base[3] = TValue::Create<tDouble>(start);
             Return();
         }
         else
@@ -167,6 +167,9 @@ static void NO_RETURN ForLoopStepImpl(TValue* base)
         }
         else
         {
+            // Must always provide an output value since we declared so, even if it is not used
+            //
+            base[3] = TValue::Create<tDouble>(0);
             Return();
         }
     }
@@ -181,6 +184,9 @@ static void NO_RETURN ForLoopStepImpl(TValue* base)
         }
         else
         {
+            // Must always provide an output value since we declared so, even if it is not used
+            //
+            base[3] = TValue::Create<tDouble>(0);
             Return();
         }
     }

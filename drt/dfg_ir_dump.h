@@ -45,6 +45,8 @@ struct DumpIrOptions
     BasicBlock* highlightBB;
 };
 
+void DumpTValueValue(FILE* file, TValue val);
+
 // Produce a human-readable dump of the DFG IR graph, for testing and debug only
 //
 void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions = DumpIrOptions());

@@ -839,6 +839,7 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
 
     ReleaseAssert(m_nodeName != "");
     std::string cgFnName = "__deegen_dfg_codegen_builtin_node_" + m_nodeName + "_" + std::to_string(GetVariantOrd());
+    std::string prettyCgFnNameForDebug = m_nodePrettyNameForDebug + "_" + std::to_string(GetVariantOrd());
 
     std::unique_ptr<DfgJitCodegenFnProto> cg = DfgJitCodegenFnProto::Create(cgMod.get(), cgFnName);
 
@@ -1243,6 +1244,7 @@ void DfgBuiltinNodeImplCreator::DoLowering(bool forRegisterDemandTest)
     m_codegenResult.m_dataSecLength = cgResult.m_dataSecPreFixupCode.size();
     m_codegenResult.m_dataSecAlignment = cgResult.m_dataSecAlignment;
     m_codegenResult.m_cgFnName = cgFnName;
+    m_codegenResult.m_prettyCgFnNameForDebug = prettyCgFnNameForDebug;
     ReleaseAssert(cgFn->arg_size() == 4);
     m_codegenResult.m_mayProvideNullNsd = cgFn->getArg(2)->use_empty();
     m_codegenResult.m_mayProvideNullPhySlotInfo = cgFn->getArg(1)->use_empty();
@@ -1268,7 +1270,7 @@ void DfgBuiltinNodeCodegenProcessorBase::ProcessWithRegAllocDisabled(bool hasOut
     ReleaseAssert(!m_processed);
     m_processed = true;
 
-    DfgBuiltinNodeImplCreator impl(AssociatedNodeKind(), NodeName());
+    DfgBuiltinNodeImplCreator impl(AssociatedNodeKind(), NodeName(), PrettyNodeName());
     impl.SetVariantOrd(0);
     impl.SetupWithRegAllocDisabled(NumOperands(), hasOutput);
     GenerateImpl(&impl);
@@ -1347,7 +1349,7 @@ void DfgBuiltinNodeCodegenProcessorBase::ProcessWithRegAllocEnabled(std::unique_
             DfgNodeRegAllocSubVariant* sv = subVariantIt.get();
             if (sv != nullptr)
             {
-                DfgBuiltinNodeImplCreator impl(AssociatedNodeKind(), NodeName());
+                DfgBuiltinNodeImplCreator impl(AssociatedNodeKind(), NodeName(), PrettyNodeName());
                 impl.SetVariantOrd(cgFnOrd);
                 cgFnOrd++;
                 impl.SetupForRegAllocSubVariant(NumOperands(), sv);

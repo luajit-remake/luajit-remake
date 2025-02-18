@@ -2000,15 +2000,23 @@ std::vector<llvm::Value*> WARN_UNUSED DeegenStencilCodegenResult::BuildBytecodeO
     //
     {
         Value* nextBytecodePtr;
-        if (ifi->GetJitSlowPathDataLayoutBase()->IsLayoutFinalized())
+        if (ifi->IsBaselineJIT())
         {
-            nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddress().EmitGetValueLogic(slowPathData, insertAtEnd);
+            if (ifi->GetJitSlowPathDataLayoutBase()->IsLayoutFinalized())
+            {
+                nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddress().EmitGetValueLogic(slowPathData, insertAtEnd);
+            }
+            else
+            {
+                ReleaseAssert(insertAtEnd->getParent() != nullptr && insertAtEnd->getParent()->getParent() != nullptr);
+                nextBytecodePtr = slowPathDataLayout->GetFallthroughJitAddressUsingPlaceholder(
+                    insertAtEnd->getParent()->getParent() /*module*/, slowPathData, insertAtEnd);
+            }
         }
         else
         {
-            ReleaseAssert(insertAtEnd->getParent() != nullptr && insertAtEnd->getParent()->getParent() != nullptr);
-            nextBytecodePtr = JitSlowPathDataLayoutBase::GetFallthroughJitAddressUsingPlaceholder(
-                insertAtEnd->getParent()->getParent() /*module*/, slowPathData, insertAtEnd);
+            ReleaseAssert(ifi->IsDfgJIT());
+            nextBytecodePtr = slowPathDataLayout->AsDfg()->m_dfgFallthroughJitAddr.EmitGetValueLogic(slowPathData, insertAtEnd);
         }
         ReleaseAssert(llvm_value_has_type<void*>(nextBytecodePtr));
         Value* nextBytecodePtrI64 = new PtrToIntInst(nextBytecodePtr, llvm_type_of<uint64_t>(ctx), "", insertAtEnd);

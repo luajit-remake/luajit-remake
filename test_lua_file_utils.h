@@ -93,6 +93,27 @@ inline std::unique_ptr<ScriptModule> ParseLuaScriptOrFail(const std::string& fil
 }
 #endif
 
+// This isn't a full cleanup, it doesn't free IC JIT code, but it should be enough to
+// prevent spurious OOM in test due to running out of the 2GB lower address space.
+// But a better GC story is a prerequisite for a better approach, so use this makeshift workaround now.
+//
+inline void FreeScriptModuleJITMemory(ScriptModule* module)
+{
+    VM* vm = VM::GetActiveVMForCurrentThread();
+    for (UnlinkedCodeBlock* ucb : module->m_unlinkedCodeBlocks)
+    {
+        CodeBlock* cb = ucb->m_defaultCodeBlock;
+        if (cb->m_baselineCodeBlock != nullptr)
+        {
+            vm->GetJITMemoryAlloc()->Free(cb->m_baselineCodeBlock->m_jitRegionStart);
+        }
+        if (cb->m_dfgCodeBlock != nullptr)
+        {
+            vm->GetJITMemoryAlloc()->Free(cb->m_dfgCodeBlock->m_jitRegionStart);
+        }
+    }
+}
+
 inline void RunSimpleLuaTest(const std::string& filename, LuaTestOption testOption)
 {
     VM* vm = VM::Create();
@@ -108,4 +129,6 @@ inline void RunSimpleLuaTest(const std::string& filename, LuaTestOption testOpti
     std::string err = vmoutput.GetAndResetStdErr();
     AssertIsExpectedOutput(out);
     ReleaseAssert(err == "");
+
+    FreeScriptModuleJITMemory(module.get());
 }

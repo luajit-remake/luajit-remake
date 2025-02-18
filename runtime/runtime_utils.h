@@ -988,13 +988,14 @@ public:
     //
     // DEVNOTE: C library function must not use this function.
     //
-    static HeapPtr<Upvalue> ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
+    static Upvalue* ALWAYS_INLINE GetMutableUpvaluePtr(HeapPtr<FunctionObject> self, size_t ord)
     {
         Assert(ord < self->m_numUpvalues);
         Assert(!IsUpvalueImmutable(self, ord));
         TValue tv = TCGet(self->m_upvalues[ord]);
-        Assert(tv.IsPointer() && tv.GetHeapEntityType() == HeapEntityType::Upvalue);
-        return tv.AsPointer().As<Upvalue>();
+        Upvalue* uvPtr = reinterpret_cast<Upvalue*>(tv.m_value);
+        Assert(uvPtr->m_type == HeapEntityType::Upvalue);
+        return uvPtr;
     }
 
     // Get the value of an immutable upvalue
@@ -1024,7 +1025,7 @@ public:
         }
         else
         {
-            HeapPtr<Upvalue> uv = GetMutableUpvaluePtr(self, ord);
+            Upvalue* uv = GetMutableUpvaluePtr(self, ord);
             return *uv->m_ptr;
         }
     }
@@ -1079,7 +1080,7 @@ public:
     // The interpretation of each element in the list depends on whether the upvalue is immutable
     // (this information is recorded in the UnlinkedCodeBlock's upvalue metadata list):
     //
-    // 1. If the upvalue is not immutable, then the TValue must be a HeapPtr<Upvalue> object,
+    // 1. If the upvalue is not immutable, then the TValue must be a Upvalue* object (disguised as a TValue),
     //    and the value of the upvalue should be read from the Upvalue object.
     // 2. If the upvalue is immutable, then the TValue must not be a HeapPtr<Upvalue> (since upvalue
     //    objects are never exposed directly to user code). The TValue itself is simply the value of the upvalue.

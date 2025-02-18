@@ -3,6 +3,8 @@
 #include "common_utils.h"
 #include "deegen_dfg_builtin_node_impl_creator.h"
 
+std::string WARN_UNUSED DumpHumanReadableTypeSpeculationForUseKind(TypeMaskTy mask);
+
 namespace dast {
 
 // Common abstraction for processing constant-like node
@@ -476,7 +478,7 @@ struct DfgBuiltinNodeImplI64SubSaturateToZero final : DfgBuiltinNodeCodegenProce
 };
 
 // Allocate the function object and populate upvalues that comes from the enclosing function's upvalues
-// Two SSA operands: the UnlinkedCodeBlock (raw pointer), and the parent function object (HeapPtr)
+// Two SSA operands: parent function object (HeapPtr) and the UnlinkedCodeBlock (raw pointer)
 // One return value: the newly created function object (raw pointer)
 // This function disables reg alloc, but the return value is always returned in x_dfg_reg_alloc_gprs[0]
 //
@@ -819,6 +821,23 @@ struct DfgBuiltinNodeImplTypeCheck final : DfgBuiltinNodeCodegenProcessorBase
     virtual std::string NodeName() override
     {
         return "TypeCheck_" + std::to_string(m_checkMask.m_mask) + "_precond_" + std::to_string(m_precondMask.m_mask) + (m_shouldFlipResult ? "_flip" : "");
+    }
+
+    virtual std::string PrettyNodeName() override
+    {
+        std::string nameForPrecond = DumpHumanReadableTypeSpeculationForUseKind(m_precondMask.m_mask);
+        std::string nameForCheck = DumpHumanReadableTypeSpeculationForUseKind(m_checkMask.m_mask);
+        std::string name = "Check";
+        if (m_shouldFlipResult)
+        {
+            name += "Not";
+        }
+        name += nameForCheck;
+        if (m_precondMask.m_mask != x_typeMaskFor<tBoxedValueTop>)
+        {
+            name += "Knowing" + nameForPrecond;
+        }
+        return name;
     }
 
     virtual size_t NumOperands() override { return 1; }

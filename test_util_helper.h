@@ -44,13 +44,18 @@ namespace {
 
 const char* const x_expected_output_dir = "test_expected_output";
 
+inline std::string GetExpectedOutputFileNameForTestCase(const std::string& suiteName, const std::string& caseName, const std::string& suffix)
+{
+    return std::string(x_expected_output_dir) + std::string("/") +
+        suiteName + std::string(".") + caseName +
+        (suffix == "" ? "" : std::string(".") + suffix) + ".expected";
+}
+
 inline std::string GetExpectedOutputFileName(const std::string& suffix)
 {
     const char* namePart1 = ::testing::UnitTest::GetInstance()->current_test_info()->test_case_name();
     const char* namePart2 = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-    return std::string(x_expected_output_dir) + std::string("/") +
-           std::string(namePart1) + std::string(".") + std::string(namePart2) +
-           (suffix == "" ? "" : std::string(".") + suffix) + ".expected";
+    return GetExpectedOutputFileNameForTestCase(namePart1, namePart2, suffix);
 }
 
 inline void CreateExpectedOutputFolderIfNeeded()
@@ -115,9 +120,40 @@ inline void NO_RETURN DumpExpectedAndActualAndFail(const std::string& actual, co
 
 }   // anonymous namespace
 
+inline void AssertOutputAgreesWithExpectedOutputFile(std::string out, std::string filename)
+{
+    FILE* pFile = fopen(filename.c_str(), "r");
+    if (pFile == nullptr)
+    {
+        printf("!!! TEST CONFIGURATION ISSUE !!!\n");
+        printf("=============== Expected Output ===============\n");
+        printf("[ERROR] Failed to open expected output file %s, errno=%d (%s)\n", filename.c_str(), errno, strerror(errno));
+        printf("================ Actual Output ================\n");
+        for (size_t i = 0; i < out.length(); i++)
+        {
+            printf("%c", out[i]);
+        }
+        printf("\n");
+        printf("===============================================\n");
+        ReleaseAssert(false);
+    }
+    Auto(fclose(pFile));
+    size_t fileSize = GetFileSize(filename.c_str());
+    std::string expected(fileSize, ' ');
+    ReleaseAssert(fread(expected.data(), sizeof(char), fileSize, pFile) == fileSize);
+
+    TrimTrailingWhitespaces(expected);
+    TrimTrailingWhitespaces(out);
+
+    if (expected != out)
+    {
+        DumpExpectedAndActualAndFail(out, expected);
+    }
+}
+
 // Check the output against the expected output file of this test
 //
-inline void AssertIsExpectedOutput(std::string out, std::string suffix = "")
+inline void AssertIsExpectedOutput(const std::string& out, std::string suffix = "")
 {
     if (g_is_update_expected_mode)
     {
@@ -136,33 +172,7 @@ inline void AssertIsExpectedOutput(std::string out, std::string suffix = "")
     else
     {
         std::string filename = GetExpectedOutputFileName(suffix);
-        FILE* pFile = fopen(filename.c_str(), "r");
-        if (pFile == nullptr)
-        {
-            printf("!!! TEST CONFIGURATION ISSUE !!!\n");
-            printf("=============== Expected Output ===============\n");
-            printf("[ERROR] Failed to open expected output file %s, errno=%d (%s)\n", filename.c_str(), errno, strerror(errno));
-            printf("================ Actual Output ================\n");
-            for (size_t i = 0; i < out.length(); i++)
-            {
-                printf("%c", out[i]);
-            }
-            printf("\n");
-            printf("===============================================\n");
-            ReleaseAssert(false);
-        }
-        Auto(fclose(pFile));
-        size_t fileSize = GetFileSize(filename.c_str());
-        std::string expected(fileSize, ' ');
-        ReleaseAssert(fread(expected.data(), sizeof(char), fileSize, pFile) == fileSize);
-
-        TrimTrailingWhitespaces(expected);
-        TrimTrailingWhitespaces(out);
-
-        if (expected != out)
-        {
-            DumpExpectedAndActualAndFail(out, expected);
-        }
+        AssertOutputAgreesWithExpectedOutputFile(out, filename);
     }
 }
 

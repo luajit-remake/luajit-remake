@@ -4,7 +4,7 @@
 static void DeegenSnippet_PutUpvalueFromFunctionObject(HeapPtr<FunctionObject> func, size_t upvalueOrd, TValue valueToPut)
 {
     Assert(upvalueOrd < func->m_numUpvalues);
-    HeapPtr<Upvalue> uv = FunctionObject::GetMutableUpvaluePtr(func, upvalueOrd);
+    Upvalue* uv = FunctionObject::GetMutableUpvaluePtr(func, upvalueOrd);
     TValue* ptr = uv->m_ptr;
     *ptr = valueToPut;
 }

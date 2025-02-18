@@ -7,6 +7,72 @@ namespace dfg {
 
 using BCKind = DeegenBytecodeBuilder::BCKind;
 
+// TODO: unfortunately this is currently coupled with the guest language definition
+//
+void DumpTValueValue(FILE* file, TValue val)
+{
+    if (val.IsInt32())
+    {
+        fprintf(file, "Int32(%d)", static_cast<int>(val.AsInt32()));
+    }
+    else if (val.IsDouble())
+    {
+        double dbl = val.AsDouble();
+        char buf[x_default_tostring_buffersize_double];
+        StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
+        fprintf(file, "Double(%s)", buf);
+    }
+    else if (val.IsMIV())
+    {
+        // TODO: unfortunately this is currently coupled with the guest language definition
+        //
+        MiscImmediateValue miv = val.AsMIV();
+        if (miv.IsNil())
+        {
+            fprintf(file, "Nil");
+        }
+        else
+        {
+            Assert(miv.IsBoolean());
+            fprintf(file, "%s", (miv.GetBooleanValue() ? "True" : "False"));
+        }
+    }
+    else
+    {
+        // TODO: unfortunately this is currently coupled with the guest language definition
+        //
+        Assert(val.IsPointer());
+        UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
+        if (p->m_type == HeapEntityType::String)
+        {
+            HeapString* hs = reinterpret_cast<HeapString*>(p);
+            fprintf(file, "\"");
+            fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, file);
+            fprintf(file, "\"");
+        }
+        else
+        {
+            if (p->m_type == HeapEntityType::Function)
+            {
+                fprintf(file, "Function(0x");
+            }
+            else if (p->m_type == HeapEntityType::Table)
+            {
+                fprintf(file, "Table(0x");
+            }
+            else if (p->m_type == HeapEntityType::Thread)
+            {
+                fprintf(file, "Thread(0x");
+            }
+            else
+            {
+                fprintf(file, "(ObjectType%d)(0x", static_cast<int>(p->m_type));
+            }
+            fprintf(file, "%p)", static_cast<void*>(p));
+        }
+    }
+}
+
 void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions)
 {
     bool wellFormed;
@@ -310,66 +376,7 @@ void DumpDfgIrGraph(FILE* file, Graph* graph, const DumpIrOptions& dumpIrOptions
                         if (inputNode->IsConstantNode())
                         {
                             TValue val = inputNode->GetConstantNodeValue();
-                            if (val.IsInt32())
-                            {
-                                fprintf(file, "Int32(%d)", static_cast<int>(val.AsInt32()));
-                            }
-                            else if (val.IsDouble())
-                            {
-                                double dbl = val.AsDouble();
-                                char buf[x_default_tostring_buffersize_double];
-                                StringifyDoubleUsingDefaultLuaFormattingOptions(buf /*out*/, dbl);
-                                fprintf(file, "Double(%s)", buf);
-                            }
-                            else if (val.IsMIV())
-                            {
-                                // TODO: unfortunately this is currently coupled with the guest language definition
-                                //
-                                MiscImmediateValue miv = val.AsMIV();
-                                if (miv.IsNil())
-                                {
-                                    fprintf(file, "Nil");
-                                }
-                                else
-                                {
-                                    Assert(miv.IsBoolean());
-                                    fprintf(file, "%s", (miv.GetBooleanValue() ? "True" : "False"));
-                                }
-                            }
-                            else
-                            {
-                                // TODO: unfortunately this is currently coupled with the guest language definition
-                                //
-                                Assert(val.IsPointer());
-                                UserHeapGcObjectHeader* p = TranslateToRawPointer(val.AsPointer<UserHeapGcObjectHeader>().As());
-                                if (p->m_type == HeapEntityType::String)
-                                {
-                                    HeapString* hs = reinterpret_cast<HeapString*>(p);
-                                    fprintf(file, "\"");
-                                    fwrite(hs->m_string, sizeof(char), hs->m_length /*length*/, file);
-                                    fprintf(file, "\"");
-                                }
-                                else
-                                {
-                                    if (p->m_type == HeapEntityType::Function)
-                                    {
-                                        fprintf(file, "Function(0x");
-                                    }
-                                    else if (p->m_type == HeapEntityType::Table)
-                                    {
-                                        fprintf(file, "Table(0x");
-                                    }
-                                    else if (p->m_type == HeapEntityType::Thread)
-                                    {
-                                        fprintf(file, "Thread(0x");
-                                    }
-                                    else
-                                    {
-                                        fprintf(file, "(ObjectType%d)(0x", static_cast<int>(p->m_type));
-                                    }
-                                    fprintf(file, "%p)", static_cast<void*>(p));
-                                }
-                            }
+                            DumpTValueValue(file, val);
                         }
                         else if (inputNode->IsUnboxedConstantNode())
                         {

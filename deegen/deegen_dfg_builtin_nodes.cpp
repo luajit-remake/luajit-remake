@@ -266,7 +266,7 @@ void DfgBuiltinNodeImplCreateCapturedVar::GenerateImpl(DfgBuiltinNodeImplCreator
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "CreateClosedUpvalue", { val }, bb);
     ReleaseAssert(llvm_value_has_type<void*>(result));
 
-    impl->CreateDispatchToFallthrough(val /*outputVal*/, bb);
+    impl->CreateDispatchToFallthrough(result /*outputVal*/, bb);
 }
 
 void DfgBuiltinNodeImplGetCapturedVar::GenerateImpl(DfgBuiltinNodeImplCreator* impl)
@@ -447,8 +447,8 @@ void DfgBuiltinNodeImplCreateFunctionObject_AllocAndSetup::GenerateImpl(DfgBuilt
     Function* func = funcCtx->GetFunction();
     BasicBlock* bb = BasicBlock::Create(ctx, "", func);
 
-    Value* unlinkedCodeBlock = impl->EmitGetOperand(llvm_type_of<void*>(ctx), 0 /*opOrd*/, bb);
-    Value* parentFunc = impl->EmitGetOperand(llvm_type_of<HeapPtr<void>>(ctx), 1 /*opOrd*/, bb);
+    Value* parentFunc = impl->EmitGetOperand(llvm_type_of<HeapPtr<void>>(ctx), 0 /*opOrd*/, bb);
+    Value* unlinkedCodeBlock = impl->EmitGetOperand(llvm_type_of<void*>(ctx), 1 /*opOrd*/, bb);
 
     Value* result = CreateCallToDeegenCommonSnippet(impl->GetModule(), "CreateNewClosureForDfgAndFillUpvaluesFromParent", { unlinkedCodeBlock, parentFunc }, bb);
     ReleaseAssert(llvm_value_has_type<void*>(result));

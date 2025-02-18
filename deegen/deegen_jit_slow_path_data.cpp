@@ -193,6 +193,7 @@ llvm::Value* WARN_UNUSED JitSlowPathDataRawLiteral::EmitGetValueLogic(llvm::Valu
 
 JitSlowPathDataJitAddress JitSlowPathDataLayoutBase::GetFallthroughJitAddress()
 {
+    ReleaseAssert(!IsDfgJIT() && "this function must not be used by DFG!");
     // Cannot get length of the SlowPathData unless the layout has been finalized
     //
     ReleaseAssert(IsInitialized() && IsLayoutFinalized());
@@ -211,6 +212,7 @@ llvm::Value* WARN_UNUSED JitSlowPathDataLayoutBase::GetFallthroughJitAddressUsin
     using namespace llvm;
     LLVMContext& ctx = module->getContext();
 
+    ReleaseAssert(!IsDfgJIT() && "this function must not be used by DFG!");
     ReleaseAssert(llvm_value_has_type<void*>(slowPathDataPtr));
 
     if (module->getNamedValue(x_slow_path_data_length_placeholder_name) == nullptr)
@@ -404,6 +406,8 @@ void DfgJitSlowPathDataLayout::ComputeLayout(DfgJitImplCreator* ifi)
     // TODO: we need to adapt this when we support fully-inlined monomorphic IC
     //
     SetupGenericIcSiteArray(builder /*inout*/, ifi->GetBytecodeDef()->GetNumGenericICsInJitTier());
+
+    builder.AssignOffsetAndAdvance(m_dfgFallthroughJitAddr);
 
     if (ifi->HasBranchDecisionOutput())
     {

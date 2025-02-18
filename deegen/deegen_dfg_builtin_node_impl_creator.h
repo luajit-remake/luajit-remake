@@ -21,6 +21,7 @@ struct DfgBuiltinNodeVariantCodegenInfo
     size_t m_dataSecAlignment;
     std::unique_ptr<llvm::Module> m_cgMod;
     std::string m_cgFnName;
+    std::string m_prettyCgFnNameForDebug;
     std::unique_ptr<llvm::Module> m_implMod;    // for audit purpose
     std::vector<DfgRegAllocCCallWrapperRequest> m_ccwRequests;
     size_t m_variantOrd;
@@ -69,14 +70,16 @@ public:
             //
             ReleaseAssert(!m_shouldUseCustomInterface);
         }
+        m_nodePrettyNameForDebug = m_nodeName;
     }
 
     // Similar to above, but gives a custom name, instead of the default name (which is just the name of the NodeKind)
     //
-    DfgBuiltinNodeImplCreator(dfg::NodeKind associatedNodeKind, const std::string& nodeName)
+    DfgBuiltinNodeImplCreator(dfg::NodeKind associatedNodeKind, const std::string& nodeName, const std::string& nodePrettyNameForDebug)
         : DfgBuiltinNodeImplCreator(associatedNodeKind)
     {
         m_nodeName = nodeName;
+        m_nodePrettyNameForDebug = nodePrettyNameForDebug;
     }
 
 private:
@@ -388,6 +391,7 @@ private:
 
     dfg::NodeKind m_associatedNodeKind;
     std::string m_nodeName;
+    std::string m_nodePrettyNameForDebug;
     size_t m_numOperands;
     size_t m_variantOrd;
     bool m_shouldUseCustomInterface;
@@ -430,6 +434,13 @@ struct DfgBuiltinNodeCodegenProcessorBase
     {
         ReleaseAssert(AssociatedNodeKind() < dfg::NodeKind_FirstAvailableGuestLanguageNodeKind);
         return dfg::GetDfgBuiltinNodeKindName(AssociatedNodeKind());
+    }
+
+    // For debug logging purpose, a more human-readable name if possible
+    //
+    virtual std::string PrettyNodeName()
+    {
+        return NodeName();
     }
 
     // The total number of operands (including those not register-allocated)

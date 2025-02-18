@@ -230,6 +230,7 @@ set(UNIT_TEST_SRC
   test_typemask_automata_generator.cpp
   test_strongly_connected_components.cpp
   test_sorting_network.cpp
+  test_dfg_mvp.cpp
 )
 
 set(UNIT_TEST_LINK_LIBRARIES

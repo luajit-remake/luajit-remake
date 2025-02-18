@@ -186,8 +186,9 @@ std::pair<TValue* /*retStart*/, uint64_t /*numRet*/> VM::LaunchScript(ScriptModu
 UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndFillUpvalues(
     CodeBlock* cb, CoroutineRuntimeContext* rc, TValue* stackFrameBase, HeapPtr<FunctionObject> parent, size_t selfOrdinalInStackFrame)
 {
+    VM* vm = VM::GetActiveVMForCurrentThread();
     UnlinkedCodeBlock* ucb = cb->m_owner;
-    HeapPtr<FunctionObject> r = Create(VM::GetActiveVMForCurrentThread(), cb).As();
+    HeapPtr<FunctionObject> r = Create(vm, cb).As();
     Assert(TranslateToRawPointer(TCGet(parent->m_executable).As())->IsBytecodeFunction());
     Assert(cb->m_owner->m_parent == static_cast<HeapPtr<CodeBlock>>(TCGet(parent->m_executable).As())->m_owner);
     uint32_t numUpvalues = cb->m_numUpvalues;
@@ -196,11 +197,11 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
     {
         UpvalueMetadata& uvmt = upvalueInfo[ord];
         Assert(uvmt.m_immutabilityFieldFinalized);
-        TValue uv;
         if (uvmt.m_isParentLocal)
         {
             if (uvmt.m_isImmutable)
             {
+                TValue uv;
                 if (uvmt.m_slot == selfOrdinalInStackFrame)
                 {
                     uv = TValue::Create<tFunction>(r);
@@ -209,19 +210,23 @@ UserHeapPointer<FunctionObject> WARN_UNUSED NO_INLINE FunctionObject::CreateAndF
                 {
                     uv = stackFrameBase[uvmt.m_slot];
                 }
+                TCSet(r->m_upvalues[ord], uv);
             }
             else
             {
-                HeapPtr<Upvalue> uvPtr = Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable);
-                uv = TValue::CreatePointer(uvPtr);
+                Upvalue* uvPtr = TranslateToRawPointer(vm, Upvalue::Create(rc, stackFrameBase + uvmt.m_slot, uvmt.m_isImmutable));
+                TestAssert(uvPtr->m_type == HeapEntityType::Upvalue);
+                TValue tv;
+                tv.m_value = reinterpret_cast<uint64_t>(uvPtr);
+                TCSet(r->m_upvalues[ord], tv);
             }
         }
         else
         {
-            uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
+            TValue uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
+            AssertImp(!uvmt.m_isImmutable, reinterpret_cast<Upvalue*>(uv.m_value)->m_type == HeapEntityType::Upvalue);
+            TCSet(r->m_upvalues[ord], uv);
         }
-        AssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
-        TCSet(r->m_upvalues[ord], uv);
     }
     return r;
 }
@@ -248,7 +253,7 @@ FunctionObject* WARN_UNUSED NO_INLINE FunctionObject::CreateForDfgAndFillUpvalue
         if (!uvmt.m_isParentLocal)
         {
             TValue uv = FunctionObject::GetMutableUpvaluePtrOrImmutableUpvalue(parent, uvmt.m_slot);
-            TestAssertIff(!uvmt.m_isImmutable, (uv.IsPointer() && uv.GetHeapEntityType() == HeapEntityType::Upvalue));
+            TestAssertImp(!uvmt.m_isImmutable, reinterpret_cast<Upvalue*>(uv.m_value)->m_type == HeapEntityType::Upvalue);
             r->m_upvalues[ord] = uv;
         }
     }

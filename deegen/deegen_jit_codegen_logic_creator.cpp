@@ -1011,6 +1011,13 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
     bool consumedCompactedRegConfEntry = false;
     constexpr size_t x_compactedRegConfEntrySize = dfg::DfgSlowPathRegConfigDataTraits::x_slowPathDataCompactRegConfigInfoSizeBytes;
 
+    Value* advancedJitFastPathAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathBaseAddr,
+                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, fastPath.m_code.size()) }, "", entryBB);
+    Value* advancedJitSlowPathAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathBaseAddr,
+                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, slowPath.m_code.size()) }, "", entryBB);
+    Value* advancedJitDataSecAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), dataSecBaseAddr,
+                                                                      { CreateLLVMConstantInt<uint64_t>(ctx, dataSec.m_code.size()) }, "", entryBB);
+
     JitSlowPathDataLayoutBase* slowPathDataLayout = mainComponentJic->GetJitSlowPathDataLayoutBase();
     {
         // For assertion that we didn't forget to write a field
@@ -1122,6 +1129,15 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
                                                                 { CreateLLVMConstantInt<uint64_t>(ctx, offset) }, "", entryBB);
                 CreateCallToDeegenCommonSnippet(module.get(), "InitializeJitGenericIcSite", { addr }, entryBB);
             }
+            totalFieldsWritten++;
+        }
+
+        // Initialize fallthroughJitAddress (DFG only)
+        //
+        if (IsDfgVariant())
+        {
+            JitSlowPathDataJitAddress& field = slowPathDataLayout->AsDfg()->m_dfgFallthroughJitAddr;
+            field.EmitSetValueLogic(slowPathData, advancedJitFastPathAddr, entryBB);
             totalFieldsWritten++;
         }
 
@@ -1264,13 +1280,6 @@ void JitCodeGenLogicCreator::GenerateLogic(JitImplCreatorBase* mainComponentJic,
 
         m_numCondBrLatePatches = condBrPatchList.size();
     }
-
-    Value* advancedJitFastPathAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), fastPathBaseAddr,
-                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, fastPath.m_code.size()) }, "", entryBB);
-    Value* advancedJitSlowPathAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), slowPathBaseAddr,
-                                                                       { CreateLLVMConstantInt<uint64_t>(ctx, slowPath.m_code.size()) }, "", entryBB);
-    Value* advancedJitDataSecAddr = GetElementPtrInst::CreateInBounds(llvm_type_of<uint8_t>(ctx), dataSecBaseAddr,
-                                                                      { CreateLLVMConstantInt<uint64_t>(ctx, dataSec.m_code.size()) }, "", entryBB);
 
     // For baseline JIT, create logic that dispatches to next bytecode
     // For DFG JIT, create logic that updates the main codegen state

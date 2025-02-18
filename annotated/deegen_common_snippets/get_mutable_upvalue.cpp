@@ -5,7 +5,7 @@ static TValue DeegenSnippet_GetMutableUpvalueValue(uint64_t* stackBase, size_t u
 {
     StackFrameHeader* hdr = StackFrameHeader::Get(stackBase);
     Assert(upvalueOrd < hdr->m_func->m_numUpvalues);
-    HeapPtr<Upvalue> uvPtr = FunctionObject::GetMutableUpvaluePtr(hdr->m_func, upvalueOrd);
+    Upvalue* uvPtr = FunctionObject::GetMutableUpvaluePtr(hdr->m_func, upvalueOrd);
     return *(uvPtr->m_ptr);
 }
 

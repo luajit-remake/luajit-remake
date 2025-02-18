@@ -1,6 +1,7 @@
 #include "deegen_ast_return_value_accessor.h"
 #include "deegen_interpreter_bytecode_impl_creator.h"
 #include "runtime_utils.h"
+#include "deegen_dfg_jit_impl_creator.h"
 
 namespace dast {
 
@@ -36,7 +37,7 @@ AstReturnValueAccessor::AstReturnValueAccessor(Kind kind, llvm::CallInst* origin
         ReleaseAssert(llvm_value_has_type<void>(m_origin));
         break;
     }
-    }
+    }   /*switch*/
 }
 
 std::vector<AstReturnValueAccessor> WARN_UNUSED AstReturnValueAccessor::GetAllUseInFunction(llvm::Function* func)
@@ -185,6 +186,31 @@ void AstReturnValueAccessor::DoLoweringForInterpreterOrBaselineOrDfg(DeegenBytec
                 ifi->GetNumRet()
             },
             m_origin);
+
+        if (ifi->IsDfgJIT())
+        {
+            // For interpreter and baseline JIT, as part of our contract with the user-written parser, the variadic results
+            // may always sit where they are, even if they sit inside the current frame due to an in-plcae call
+            // (e.g., if the bytecode makes an in-place call, it's fine the variadic result sits at where the in-place call starts)
+            //
+            // However, in DFG we may generate spills and moves before the variadic results is consumed by the next bytecode,
+            // and these operations may grow the frame and clobber the variadic results.
+            // So we must make sure the variadic results are strictly after the end of our frame.
+            //
+            Value* numStackSlots = ifi->CallDeegenCommonSnippet("GetNumStackSlotsInDfgCodeBlock", { ifi->AsDfgJIT()->GetJitCodeBlock() }, m_origin);
+            ReleaseAssert(llvm_value_has_type<uint64_t>(numStackSlots));
+
+            ifi->CallDeegenCommonSnippet(
+                "MoveVariadicResultsForPrepend",
+                {
+                    ifi->GetStackBase(),
+                    ifi->GetCoroutineCtx(),
+                    CreateLLVMConstantInt<uint64_t>(ctx, 0) /*numExtraVals*/,
+                    numStackSlots /*numSlots*/,
+                    numStackSlots /*numExtraVals+numSlots*/
+                },
+                m_origin);
+        }
 
         ReleaseAssert(llvm_value_has_type<void>(m_origin));
         ReleaseAssert(m_origin->use_begin() == m_origin->use_end());

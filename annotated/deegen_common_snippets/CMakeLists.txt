@@ -95,6 +95,7 @@ SET(DEEGEN_COMMON_SNIPPET_IR_SOURCES
   update_type_mask_for_prediction_propagation.cpp
   get_prediction_propagation_output_range_info.cpp
   get_dfg_jit_codeblock_from_codeblock_heap_ptr.cpp
+  get_num_stack_slots_in_dfg_codeblock.cpp
 )
 
 add_library(deegen_common_snippet_ir_sources OBJECT

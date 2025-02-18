@@ -298,6 +298,7 @@ struct BaselineJitSlowPathDataLayout;
 struct DfgJitSlowPathDataLayout;
 
 struct JitSlowPathDataLayoutBuilder;
+class DeegenBytecodeImplCreatorBase;
 
 // Common data fields utilized by both baseline JIT slow path data and DFG JIT slow path data
 //
@@ -363,13 +364,17 @@ protected:
 
 public:
     // Returns the JIT address of the fallthrough bytecode, can only be used if SlowPathDataLayout is finalized
+    // This must not be used by DFG JIT, since in DFG, the start address of the next node with SlowPathData is not necessarily
+    // the end address of the current node, as there may be other operations (reg operations and others) in between!
     //
     JitSlowPathDataJitAddress GetFallthroughJitAddress();
 
     // Return the JIT address of the fallthrough bytecode, using an external constant to represent the value of SlowPathDataLayoutLength
     //
-    static llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::Instruction* insertBefore);
-    static llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::BasicBlock* insertAtEnd);
+    // Like above, this function must not be used by DFG JIT
+    //
+    llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::Instruction* insertBefore);
+    llvm::Value* WARN_UNUSED GetFallthroughJitAddressUsingPlaceholder(llvm::Module* module, llvm::Value* slowPathDataPtr, llvm::BasicBlock* insertAtEnd);
 
     static constexpr const char* x_slow_path_data_length_placeholder_name = "__placeholder_deegen_jit_slow_path_data_length";
 
@@ -522,9 +527,16 @@ struct DfgJitSlowPathDataLayout final : public JitSlowPathDataLayoutBase
     //
     JitSlowPathDataFieldBase m_compactRegConfig;
 
+    // The fallthrough JIT address of this bytecode
+    // Note that we must explicitly store this value in SlowPathData since there may be other logic between the end of this
+    // bytecode and the start address of the next bytecode.
+    //
+    JitSlowPathDataJitAddress m_dfgFallthroughJitAddr;
+
     bool IsLayoutEqual(DfgJitSlowPathDataLayout& other)
     {
         CHECK(IsLayoutBaseEqual(other));
+        CHECK(m_dfgFallthroughJitAddr.IsEqual(other.m_dfgFallthroughJitAddr));
         CHECK(m_condBrDecisionSlot.IsEqual(other.m_condBrDecisionSlot));
         CHECK(m_compactRegConfig.IsEqual(other.m_compactRegConfig));
         return true;

@@ -375,8 +375,15 @@ void JitImplCreatorBase::CreateWrapperFunction()
         }
         else
         {
-            JitSlowPathDataJitAddress fallthroughTargetFromSlowPathData = jitSlowPathDataLayout->GetFallthroughJitAddress();
-            fallthroughTarget = fallthroughTargetFromSlowPathData.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+            if (!IsDfgJIT())
+            {
+                JitSlowPathDataJitAddress fallthroughTargetFromSlowPathData = jitSlowPathDataLayout->GetFallthroughJitAddress();
+                fallthroughTarget = fallthroughTargetFromSlowPathData.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+            }
+            else
+            {
+                fallthroughTarget = jitSlowPathDataLayout->AsDfg()->m_dfgFallthroughJitAddr.EmitGetValueLogic(GetJitSlowPathData(), currentBlock);
+            }
         }
         ReleaseAssert(llvm_value_has_type<void*>(fallthroughTarget));
         m_valuePreserver.Preserve(x_fallthroughDest, fallthroughTarget);

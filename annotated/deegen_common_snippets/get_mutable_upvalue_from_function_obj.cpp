@@ -4,7 +4,7 @@
 static TValue DeegenSnippet_GetMutableUpvalueValueFromFunctionObject(HeapPtr<FunctionObject> func, size_t upvalueOrd)
 {
     Assert(upvalueOrd < func->m_numUpvalues);
-    HeapPtr<Upvalue> uvPtr = FunctionObject::GetMutableUpvaluePtr(func, upvalueOrd);
+    Upvalue* uvPtr = FunctionObject::GetMutableUpvaluePtr(func, upvalueOrd);
     return *(uvPtr->m_ptr);
 }
 
